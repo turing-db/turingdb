@@ -128,6 +128,7 @@ public:
     // Read the nodes, the relationships or the length of each named path of a chunk
     // (nl.path_elements)
     static void runPathElements(NLExecutionContext* context, NLFunctionData* data);
+    static NLPathReadFunction selectPathRead(const Column* paths);
 
     static void runGetNodeLabelSet(NLExecutionContext* context, NLFunctionData* data);
     static void runGetEdgeTypes(NLExecutionContext* context, NLFunctionData* data);
@@ -888,18 +889,21 @@ public:
     static NLUnwindElementEmitFunction selectListUnwindValueEmit(bool sourceIsNullable, ValueType valueType);
     static NLUnwindElementEmitFunction selectListUnwindNodeEmit(bool sourceIsNullable);
     static NLUnwindElementEmitFunction selectListUnwindEdgeEmit(bool sourceIsNullable);
+    static NLUnwindElementEmitFunction selectListUnwindPathEmit(bool sourceIsNullable);
     static NLUnwindElementEmitFunction selectTaggedUnwindElementEmit();
     static NLUnwindElementEmitFunction selectOptTaggedUnwindElementEmit();
     static NLCollectListEmitFunction selectCollectListEmit(ValueType valueType);
 
     // The reads an nl.make_list takes one element out of a column with: a nullable value
     // column gives the value it holds or a tagged null, an entity the ID it holds or that
-    // same null where an OPTIONAL MATCH left the ID invalid, a nested list the cell it
-    // holds in every row, a type-erased column the cell under the tag it already carries,
-    // and a column owning its characters a copy of them.
+    // same null where an OPTIONAL MATCH left the ID invalid, a path the IDs it runs through
+    // or that null where it holds none, a nested list the cell it holds in every row, a
+    // type-erased column the cell under the tag it already carries, and a column owning its
+    // characters a copy of them.
     static NLListItemReadFunction selectValueListItemRead(ValueType valueType);
     static NLListItemReadFunction selectNodeListItemRead();
     static NLListItemReadFunction selectEdgeListItemRead();
+    static NLListItemReadFunction selectPathListItemRead();
     static NLListItemReadFunction selectNestedListItemRead();
     static NLListItemReadFunction selectNestedMapListItemRead();
     static NLListItemReadFunction selectOptNestedListItemRead();
@@ -910,6 +914,7 @@ public:
     static NLMapValueReadFunction selectValueMapValueRead(ValueType valueType);
     static NLMapValueReadFunction selectNodeMapValueRead();
     static NLMapValueReadFunction selectEdgeMapValueRead();
+    static NLMapValueReadFunction selectPathMapValueRead();
     static NLMapValueReadFunction selectNestedListMapValueRead();
     static NLMapValueReadFunction selectOptNestedListMapValueRead();
     static NLMapValueReadFunction selectNestedMapValueRead();
@@ -964,6 +969,13 @@ public:
     static void selectCollectOptContainerHandlers(bool distinctValues,
                                                   NLCollectFoldFunction& fold,
                                                   NLCollectListEmitFunction& listEmit);
+
+    // The handlers a collect of a path column reads: each path is buffered as a tagged cell,
+    // and the null path is dropped as an invalid ID is.
+    static void selectCollectPathHandlers(bool distinctValues,
+                                          NLCollectFoldFunction& fold,
+                                          NLCollectListEmitFunction& listEmit);
+
     static void selectCollectOptTaggedHandlers(bool distinctValues,
                                                NLCollectFoldFunction& fold,
                                                NLCollectListEmitFunction& listEmit);

@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <algorithm>
 #include <bit>
 #include <functional>
 #include <string_view>
@@ -11,6 +12,7 @@
 #include "MapEntryView.h"
 
 #include "ID.h"
+#include "PathView.h"
 #include "list/EncodedList.h"
 #include "list/ListHash.h"
 #include "list/ListView.h"
@@ -75,6 +77,14 @@ size_t hashMapValue(MapEntryView entry) {
         case CellTag::MapView:
             return combine(seed, hashMap(entry.getValue().getAs<MapView>()));
         break;
+        case CellTag::Path: {
+            size_t hash = seed;
+            for (const uint64_t id : entry.getValue().getAs<PathView>().getIDs()) {
+                hash = combine(hash, hashValue(id));
+            }
+            return hash;
+        }
+        break;
         case CellTag::Null:
         case CellTag::INVALID:
             return seed;
@@ -132,6 +142,9 @@ bool sameMapValue(MapEntryView lhs, MapEntryView rhs) {
         break;
         case CellTag::MapView:
             return sameMap(lhs.getValue().getAs<MapView>(), rhs.getValue().getAs<MapView>());
+        break;
+        case CellTag::Path:
+            return std::ranges::equal(lhs.getValue().getAs<PathView>().getIDs(), rhs.getValue().getAs<PathView>().getIDs());
         break;
         case CellTag::Null:
         case CellTag::INVALID:

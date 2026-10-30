@@ -204,12 +204,13 @@ inline bool convertibleToValueType(EvaluatedType e) {
 }
 
 // The types a list is homogeneous in: the scalars a value column holds, the entities a
-// pattern binds - [n, m] is a list of nodes, as collect(n) gathers one - and the lists a
-// nesting is made of.
+// pattern binds - [n, m] is a list of nodes, as collect(n) gathers one - the paths it names,
+// and the lists a nesting is made of.
 inline bool namesAListElementType(EvaluatedType type) {
     return convertibleToValueType(type)
         || type == EvaluatedType::NodePattern
         || type == EvaluatedType::EdgePattern
+        || type == EvaluatedType::GraphPath
         || type == EvaluatedType::List;
 }
 
@@ -263,16 +264,12 @@ inline bool comparesAsNumbers(EvaluatedType a, EvaluatedType b) {
 // Whether two types can never hold equal values, which makes an equality between them
 // false on every row. A numeric pair is not disjoint - 32 equals 32.0 in Cypher - nor is a
 // string against a char, which compare as the characters they carry, nor an entity against
-// the integer its id is. A tagged cell holds the row's type, so the one type it is disjoint
-// from is a path, which no cell holds.
+// the integer its id is. A tagged cell holds the row's type, so it is disjoint from none.
 inline bool comparesAsDisjointTypes(EvaluatedType a, EvaluatedType b) {
     const bool comparesACell = namesATaggedCell(a) || namesATaggedCell(b);
-    const bool comparesAPath = a == EvaluatedType::GraphPath || b == EvaluatedType::GraphPath;
 
-    if (!namesAnEqualityOperand(a) || !namesAnEqualityOperand(b) || a == b) {
+    if (!namesAnEqualityOperand(a) || !namesAnEqualityOperand(b) || a == b || comparesACell) {
         return false;
-    } else if (comparesACell) {
-        return comparesAPath;
     }
 
     const TypePairBitset pair(a, b);

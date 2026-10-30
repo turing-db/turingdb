@@ -180,6 +180,7 @@ inline std::optional<double> cellNumber(const CellView cell) {
         case CellTag::DateTime:
         case CellTag::MapView:
         case CellTag::Duration:
+        case CellTag::Path:
         case CellTag::INVALID:
             return std::nullopt;
         break;

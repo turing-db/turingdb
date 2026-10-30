@@ -132,7 +132,7 @@ TuringAsyncClient::TuringAsyncClient(const std::string& remoteAddress,
     _remotePort(remotePort),
     _localMem(localMem),
     _inBuf(bufferCapacity),
-    _sink(_localMem, &_embeddingBuffer, &_listBuffer, &_mapBuffer),
+    _sink(_localMem, &_embeddingBuffer, &_pathBuffer, &_listBuffer, &_mapBuffer),
     _dfMan(std::make_unique<db::DataframeManager>()),
     _df(std::make_unique<db::Dataframe>()),
     _dataframeContainer(std::make_unique<TuringSinkColumnContainer>(_df.get(), _dfMan.get())),
@@ -668,6 +668,7 @@ void TuringAsyncClient::reset() {
     // live for the client's lifetime, so it is reset in place (which also resets the sink).
     _inBuf.reset();
     _embeddingBuffer.clear();
+    _pathBuffer.clear();
     _stringBuffer.clear();
     _listBuffer.clear();
     _mapBuffer.clear();

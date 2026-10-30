@@ -39,17 +39,15 @@ TEST_F(SubqueryCollectingAMapTest, collectsAListPerMatchOfAPatternComprehension)
     expectRows("MATCH (n:Person {name: 'Remy'}) RETURN [(n)-[:KNOWS_WELL]->(f) | [f.name]]", {{"[[Adam]]"}});
 }
 
-// Disabled: lowering reads the body's map column as a nullable value column, which only a
-// scalar column can be read as. collect() of a map is turned away earlier (TUR-100).
-TEST_F(SubqueryCollectingAMapTest, DISABLED_collectsAMapPerRowOfACollectSubquery) {
+TEST_F(SubqueryCollectingAMapTest, collectsAMapPerRowOfACollectSubquery) {
     expectRows("RETURN COLLECT { UNWIND [1, 2] AS x RETURN {a: x} }", {{"[{a: 1}, {a: 2}]"}});
 }
 
-TEST_F(SubqueryCollectingAMapTest, DISABLED_collectsAMapPerMatchOfACollectSubquery) {
+TEST_F(SubqueryCollectingAMapTest, collectsAMapPerMatchOfACollectSubquery) {
     expectRows("MATCH (n:Person {name: 'Remy'}) RETURN COLLECT { MATCH (n)-[:KNOWS_WELL]->(f) RETURN {name: f.name} }",
                {{"[{name: Adam}]"}});
 }
 
-TEST_F(SubqueryCollectingAMapTest, DISABLED_collectsAMapPerMatchOfAPatternComprehension) {
+TEST_F(SubqueryCollectingAMapTest, collectsAMapPerMatchOfAPatternComprehension) {
     expectRows("MATCH (n:Person {name: 'Remy'}) RETURN [(n)-[:KNOWS_WELL]->(f) | {name: f.name}]", {{"[{name: Adam}]"}});
 }

@@ -1,5 +1,7 @@
 #include "RawBuffer.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 
 using namespace db;
@@ -56,4 +58,5 @@ void RawBuffer<T, N>::clear() {
 namespace db {
 template class RawBuffer<char>;
 template class RawBuffer<float>;
+template class RawBuffer<uint64_t>;
 }

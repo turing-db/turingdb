@@ -5,6 +5,8 @@
 #include <span>
 #include <string_view>
 
+#include "PathView.h"
+
 using namespace db;
 
 template <typename E, typename V, size_t N>
@@ -30,4 +32,5 @@ void SpanBuffer<E, V, N>::clear() {
 namespace db {
 template class SpanBuffer<char, std::string_view>;
 template class SpanBuffer<float, std::span<const float>>;
+template class SpanBuffer<uint64_t, PathView>;
 }

@@ -2,12 +2,16 @@
 
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "GraphPath.h"
 #include "ID.h"
 #include "JsonEncoder.h"
 #include "LocalMemory.h"
+#include "PathView.h"
 #include "columns/ColumnVector.h"
+#include "list/ListBuffer.h"
+#include "list/ListView.h"
 
 namespace {
 
@@ -57,5 +61,39 @@ TEST(JsonEncoderPathTest, WritesAPathAsItsIDsInOrder) {
                                   "\"column_types\":[\"Path\"]},"
                                   "\"data\":[["
                                   "[[0,1,6,4,2],null,[7]]"
+                                  "]]}");
+}
+
+// A path a list holds is written as a path column's is, so a list of paths is an array of
+// arrays of IDs
+TEST(JsonEncoderPathTest, WritesTheIDsOfThePathsAListHolds) {
+    db::LocalMemory localMem;
+
+    const std::vector<uint64_t> oneHop {0, 0, 1};
+    const std::vector<uint64_t> noHop {7};
+
+    const std::vector<db::ListBuffer<>::ListItemVariant> elements {
+        db::PathView {oneHop},
+        db::PathView {noHop},
+    };
+
+    auto* lists = localMem.alloc<db::ColumnVector<db::ListView>>();
+    lists->push_back(localMem.listBuffer().insert(elements));
+
+    const std::string_view columnNames[] = {"paths"};
+    const db::Column* columns[] = {lists};
+
+    StringWriter writer;
+    db::JsonEncoder<StringWriter> encoder(writer);
+
+    encoder.start();
+    encoder.writeColumnHeaders(columnNames, columns);
+    encoder.writeColumns(columns, 0, lists->size());
+    encoder.finish();
+
+    EXPECT_EQ(writer.getOutput(), "{\"header\":{\"column_names\":[\"paths\"],"
+                                  "\"column_types\":[\"List\"]},"
+                                  "\"data\":[["
+                                  "[[[0,0,1], [7]]]"
                                   "]]}");
 }

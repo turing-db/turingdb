@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "GraphPath.h"
+#include "PathView.h"
 #include "ID.h"
 #include "LocalMemory.h"
 #include "NLHashJoinIndex.h"
@@ -1128,16 +1129,22 @@ enum class PathElementsKind {
     Length,
 };
 
+// The path one row of a column holds - a path column, or a column of tagged cells - and
+// nothing where that row holds a null
+using NLPathReadFunction = std::optional<PathView> (*)(const Column* paths, size_t row);
+
 // nl.path_elements data: one list of node IDs, one list of edge IDs or one hop count per
 // row, read off each path and null where the path is null. The lists are written into the
 // query's list buffer.
 class NLPathElementsData : public NLFunctionData {
 public:
     NLPathElementsData(const Column* paths,
+                       NLPathReadFunction read,
                        Column* output,
                        PathElementsKind kind,
                        QueryListBuffer* listBuffer)
         : _paths(paths),
+        _read(read),
         _output(output),
         _kind(kind),
         _listBuffer(listBuffer)
@@ -1145,12 +1152,14 @@ public:
     }
 
     const Column* getPaths() const { return _paths; }
+    NLPathReadFunction getRead() const { return _read; }
     Column* getOutput() const { return _output; }
     PathElementsKind getKind() const { return _kind; }
     QueryListBuffer* getListBuffer() const { return _listBuffer; }
 
 private:
     const Column* _paths {nullptr};
+    NLPathReadFunction _read {nullptr};
     Column* _output {nullptr};
     PathElementsKind _kind {PathElementsKind::Nodes};
     QueryListBuffer* _listBuffer {nullptr};

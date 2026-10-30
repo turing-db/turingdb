@@ -4,6 +4,7 @@
 #include <type_traits>
 
 #include "CellView.h"
+#include "PathView.h"
 #include "ListView.h"
 #include "map/MapView.h"
 
@@ -125,4 +126,5 @@ template CellView ListByteBuffer<>::write(CellTag, const EdgeID&);
 template CellView ListByteBuffer<>::write(CellTag, const types::DateTime::Primitive&);
 template CellView ListByteBuffer<>::write(CellTag, const types::Duration::Primitive&);
 template CellView ListByteBuffer<>::write(CellTag, const MapView&);
+template CellView ListByteBuffer<>::write(CellTag, const PathView&);
 }

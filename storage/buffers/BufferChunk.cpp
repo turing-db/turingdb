@@ -1,5 +1,6 @@
 #include "BufferChunk.h"
 
+#include <stdint.h>
 #include <stdlib.h>
 
 using namespace db;
@@ -26,4 +27,5 @@ BufferChunk<T, N>::~BufferChunk() {
 namespace db {
 template class BufferChunk<char>;
 template class BufferChunk<float>;
+template class BufferChunk<uint64_t>;
 }

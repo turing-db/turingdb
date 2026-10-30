@@ -204,8 +204,7 @@ TEST_F(JourneyParetoTest, DISABLED_readsTheStationOfALeg) {
     });
 }
 
-// Disabled: a path held in a map fails to execute (TUR-153).
-TEST_F(JourneyParetoTest, DISABLED_keepsThePathOfALeg) {
+TEST_F(JourneyParetoTest, keepsThePathOfALeg) {
     std::string query;
     findLegsFromOxford(query, "['DID', 'RDG', 'PAD']", 470, 500);
     query += "WITH {service: firstStop.service, path: leg1} AS leg ";

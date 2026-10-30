@@ -20,18 +20,17 @@ protected:
     }
 };
 
-// Disabled: lowering cannot read a path column into a map (TUR-153).
-TEST_F(MapHoldingAPathTest, DISABLED_returnsThePathTheMapHolds) {
+TEST_F(MapHoldingAPathTest, returnsThePathTheMapHolds) {
     expectRows("MATCH p=(:Person {name: 'Remy'})-[:KNOWS_WELL]->(:Person) WITH {path: p} AS m RETURN m.path",
                {{"(0), [0], (1)"}});
 }
 
-TEST_F(MapHoldingAPathTest, DISABLED_readsTheLengthOfThePathTheMapHolds) {
+TEST_F(MapHoldingAPathTest, readsTheLengthOfThePathTheMapHolds) {
     expectRows("MATCH p=(:Person {name: 'Remy'})-[:KNOWS_WELL]->(:Person) WITH {path: p} AS m RETURN length(m.path)",
                {{"1"}});
 }
 
-TEST_F(MapHoldingAPathTest, DISABLED_readsTheLengthOfThePathAListedMapHolds) {
+TEST_F(MapHoldingAPathTest, readsTheLengthOfThePathAListedMapHolds) {
     expectRows("MATCH p=(:Person {name: 'Remy'})-[:KNOWS_WELL]->(:Person) WITH [{path: p}] AS l RETURN length(l[0].path)",
                {{"1"}});
 }

@@ -15,6 +15,7 @@
 #include "map/MapView.h"
 
 #include "ID.h"
+#include "PathView.h"
 
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
@@ -27,7 +28,7 @@ using ListableTypesImpl =
                db::types::Double::Primitive, db::types::String::Primitive,
                db::types::Bool::Primitive, db::types::Embedding::Primitive, db::ListView,
                db::PropertyNull, db::NodeID, db::EdgeID, db::types::DateTime::Primitive, db::MapView,
-               db::types::Duration::Primitive>;
+               db::types::Duration::Primitive, db::PathView>;
 }
 
 namespace db {
