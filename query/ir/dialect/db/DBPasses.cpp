@@ -1297,8 +1297,9 @@ bool matchUnwindEqualityCross(CrossProduct product, UnwindEqualityCross& match) 
     const bool standsForTheElements = equalsOnlyTheElements(match._unwind, match._comparedColumn);
 
     // One element is what every row the filter keeps was compared equal to, whatever the
-    // compared column holds. Otherwise, or where a region spells the elements' type, an
-    // integer element is read back as toInteger of the value equal to it, a float one not at all.
+    // compared column holds, so it is read back as itself where no column stands for it.
+    // Several are read back from a column holding them, through toInteger where a region
+    // spells a type the column does not declare.
     size_t survivingColumns = 0;
     for (size_t index = 0; index < carried.size(); index++) {
         const bool holdsTheElements = carried[index] == match._unwoundColumn;
@@ -1311,8 +1312,8 @@ bool matchUnwindEqualityCross(CrossProduct product, UnwindEqualityCross& match) 
             const bool readsTheIDs = entityCompared && readsTheValues;
             const bool readsTheComparedColumn = !entityCompared && standsForTheElements && acceptsTheComparedType;
             const bool convertsTheStandIn = readsTheValues && !readsTheIDs && !readsTheComparedColumn;
-            const bool readsTheElement = convertsTheStandIn && unwindsOneElement && !readThroughABlockArgument(elements);
-            const bool readsTheIntegers = convertsTheStandIn && !readsTheElement && integerElements;
+            const bool readsTheElement = convertsTheStandIn && unwindsOneElement;
+            const bool readsTheIntegers = convertsTheStandIn && !unwindsOneElement && standsForTheElements && integerElements;
 
             if (elements.use_empty()) {
                 continue;
@@ -1448,11 +1449,8 @@ void fuseUnwindEquality(UnwindEqualityCross& match, mlir::OpBuilder& builder) {
         } else if (match._readsTheIntegers) {
             elements = builder.create<ToInteger>(loc, elementsType, standIn).getResult();
         } else {
-            MLIRContext* const context = builder.getContext();
-            const Type noneColumn = ColumnType::get(context, NoneType::get(context));
             ConstantOp element = builder.create<ConstantOp>(loc, match._unwind.getElements()[0]);
-
-            elements = builder.create<BroadcastConstant>(loc, noneColumn, element.getResult(), standIn).getResult();
+            elements = builder.create<BroadcastConstant>(loc, elementsType, element.getResult(), standIn).getResult();
         }
 
         for (const size_t index : elementsReadConverted) {

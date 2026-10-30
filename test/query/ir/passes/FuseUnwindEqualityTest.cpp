@@ -88,6 +88,74 @@ TEST_F(FuseUnwindEqualityTest, readsTheElementANodeReadOutOfAListEquals) {
     expectReadsTheElement(query);
 }
 
+TEST_F(FuseUnwindEqualityTest, readsTheElementANodeReadOutOfAListEqualsInARegion) {
+    const std::string_view query = "UNWIND [0] AS i MATCH (n) WHERE [n][0] = i "
+                                   "OPTIONAL MATCH (n)-[:KNOWS_WELL]->(m) RETURN i, m.name";
+
+    expectRows(query, {{"0", "Adam"}});
+    expectReadsTheElement(query);
+}
+
+TEST_F(FuseUnwindEqualityTest, readsTheElementAnEdgeReadOutOfAListEqualsInARegion) {
+    const std::string_view query = "UNWIND [0] AS i MATCH (a)-[e]->(b) WHERE [e][0] = i "
+                                   "OPTIONAL MATCH (b)-[:KNOWS_WELL]->(m) RETURN i, b.name, m.name";
+
+    expectRows(query, {{"0", "Adam", "Remy"}});
+    expectReadsTheElement(query);
+}
+
+TEST_F(FuseUnwindEqualityTest, readsTheElementInEveryRegionTakingIt) {
+    const std::string_view call = "UNWIND [0] AS i MATCH (n) WHERE [n][0] = i "
+                                  "CALL { WITH i RETURN i + 1 AS j } RETURN i, j";
+    const std::string_view exists = "UNWIND [0] AS i MATCH (n) WHERE [n][0] = i "
+                                    "RETURN i, EXISTS { MATCH (n)-[:KNOWS_WELL]->(m) WHERE id(m) = i + 1 }";
+    const std::string_view count = "UNWIND [0] AS i MATCH (n) WHERE [n][0] = i "
+                                   "RETURN i, COUNT { MATCH (n)-->(m) WHERE id(m) > i }";
+    const std::string_view collect = "UNWIND [0] AS i MATCH (n) WHERE [n][0] = i "
+                                     "RETURN i, COLLECT { MATCH (n)-[:KNOWS_WELL]->(m) RETURN id(m) + i }";
+    const std::string_view comprehension = "UNWIND [0] AS i MATCH (n) WHERE [n][0] = i "
+                                           "RETURN i, [(n)-[:KNOWS_WELL]->(m) | id(m) + i]";
+
+    expectRows(call, {{"0", "1"}});
+    expectReadsTheElement(call);
+
+    expectRows(exists, {{"0", "true"}});
+    expectReadsTheElement(exists);
+
+    expectRows(count, {{"0", "4"}});
+    expectReadsTheElement(count);
+
+    expectRows(collect, {{"0", "[1]"}});
+    expectReadsTheElement(collect);
+
+    expectRows(comprehension, {{"0", "[1]"}});
+    expectReadsTheElement(comprehension);
+}
+
+TEST_F(FuseUnwindEqualityTest, readsTheFloatElementInARegion) {
+    const std::string_view query = "UNWIND [32.0] AS x MATCH (n:Person) WHERE n.age = x "
+                                   "OPTIONAL MATCH (n)-[:KNOWS_WELL]->(m) RETURN n.name, x, m.name";
+
+    expectRows(query, {{"Remy", "32.000000", "Adam"}, {"Adam", "32.000000", "Remy"}});
+    expectReadsTheElement(query);
+}
+
+TEST_F(FuseUnwindEqualityTest, readsTheStringElementInARegion) {
+    const std::string_view query = "UNWIND ['Remy'] AS x MATCH (n:Person) WHERE n.name = x "
+                                   "OPTIONAL MATCH (n)-[:KNOWS_WELL]->(m) RETURN x, m.name";
+
+    expectRows(query, {{"Remy", "Adam"}});
+    expectReadsTheElement(query);
+}
+
+TEST_F(FuseUnwindEqualityTest, readsTheIntegerElementInARegion) {
+    const std::string_view query = "UNWIND [32] AS x MATCH (n:Person) WHERE n.age = x "
+                                   "OPTIONAL MATCH (n)-[:KNOWS_WELL]->(m) RETURN n.name, x, m.name";
+
+    expectRows(query, {{"Remy", "32", "Adam"}, {"Adam", "32", "Remy"}});
+    expectReadsTheElement(query);
+}
+
 TEST_F(FuseUnwindEqualityTest, readsAnIDAsTheIntegerElements) {
     const std::string_view query = "UNWIND [0, 1] AS i MATCH (n) WHERE id(n) = i RETURN i, n.name";
 

@@ -3197,8 +3197,9 @@ def BroadcastConstant : TuringOp<"broadcast_constant", [Pure]> {
 
       %x = db.broadcast_constant(%c) : (!db.column<i64>) -> !db.column<none>
 
-    The result element type is resolved during lowering, as for the arithmetic ops:
-    the rows are laid out as a nullable value column, present in every row.
+    The result names the value's element type, or none for lowering to resolve it, as
+    for the arithmetic ops. Either way the rows are laid out as a nullable value column,
+    present in every row.
   }];
 
   // The driver is the only optional operand, so MLIR tells it from the value without
