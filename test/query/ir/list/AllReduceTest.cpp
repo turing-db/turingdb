@@ -205,6 +205,50 @@ TEST_F(AllReduceTest, nestsAReduceInTheStep) {
     expectRows("RETURN allReduce(s = 0, l IN [[1,2],[3]] | s + reduce(t = 0, x IN l | t + x), s < 7)", {{"true"}});
 }
 
+// The LIMIT runs each COUNT one row at a time. Remy, Adam and Doruk count 2, 2 and 1.
+TEST_F(AllReduceTest, foldsAPerRowSubqueryInTheStep) {
+    expectRows("RETURN allReduce(total = 0, name IN ['Remy', 'Adam', 'Doruk'] | "
+               "total + COUNT { MATCH (q:Person)-[:INTERESTED_IN]->(i) WHERE q.name = name RETURN i LIMIT 2 }, total < 5)",
+               {{"false"}});
+
+    expectRows("RETURN allReduce(total = 0, name IN ['Remy', 'Adam', 'Doruk'] | "
+               "total + COUNT { MATCH (q:Person)-[:INTERESTED_IN]->(i) WHERE q.name = name RETURN i LIMIT 2 }, total <= 5)",
+               {{"true"}});
+}
+
+// Disabled: the second fold over a constant list is lowered above the property and edge type
+// handles the first one created, which its subquery reads (SiblingPerRowSubqueryTest).
+TEST_F(AllReduceTest, DISABLED_foldsPerRowSubqueriesInSiblingSteps) {
+    expectRows("RETURN allReduce(total = 0, name IN ['Remy', 'Adam', 'Doruk'] | "
+               "total + COUNT { MATCH (q:Person)-[:INTERESTED_IN]->(i) WHERE q.name = name RETURN i LIMIT 2 }, total < 5), "
+               "allReduce(total = 0, name IN ['Remy', 'Adam', 'Doruk'] | "
+               "total + COUNT { MATCH (q:Person)-[:INTERESTED_IN]->(i) WHERE q.name = name RETURN i LIMIT 2 }, total <= 5)",
+               {{"false", "true"}});
+}
+
+TEST_F(AllReduceTest, DISABLED_foldsAPerRowSubqueryBesideAReduce) {
+    expectRows("RETURN reduce(total = 0, name IN ['Remy', 'Adam', 'Doruk'] | "
+               "total + COUNT { MATCH (q:Person)-[:INTERESTED_IN]->(i) WHERE q.name = name RETURN i LIMIT 2 }) AS r, "
+               "allReduce(total = 0, name IN ['Remy', 'Adam', 'Doruk'] | "
+               "total + COUNT { MATCH (q:Person)-[:INTERESTED_IN]->(i) WHERE q.name = name RETURN i LIMIT 2 }, total <= 5) AS a",
+               {{"5", "true"}});
+}
+
+TEST_F(AllReduceTest, decidesAPerRowSubqueryInThePredicate) {
+    expectRows("MATCH (p:Person) "
+               "RETURN p.name, allReduce(s = 0, x IN range(1, 2) | x, x <= COUNT { MATCH (p)-[:INTERESTED_IN]->(i) RETURN i LIMIT 2 })",
+               {
+                   {"Remy", "true"},
+                   {"Adam", "true"},
+                   {"Maxime", "true"},
+                   {"Luc", "true"},
+                   {"Martina", "false"},
+                   {"Suhas", "true"},
+                   {"Cyrus", "true"},
+                   {"Doruk", "false"},
+               });
+}
+
 TEST_F(AllReduceTest, keepsAllReduceUsableAsAName) {
     expectRows("WITH 1 AS allReduce RETURN allReduce", {{"1"}});
 }
