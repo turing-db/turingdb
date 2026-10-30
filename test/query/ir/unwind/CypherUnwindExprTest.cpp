@@ -722,8 +722,7 @@ TEST_F(CypherUnwindExprTest, unwindsTaggedCellsBesideTheCellTheyCameFrom) {
 }
 
 TEST_F(CypherUnwindExprTest, sumsAHeterogeneousElement) {
-    // Mixed numeric tags are what leaves the list type-erased, and Cypher adds those to a
-    // float, so the cells reduce by tag into one.
+    // The cells are added by tag, and the float among them makes the sum a float
     expectRows("UNWIND [1, 2.5] AS v RETURN sum(v)", {{"3.500000"}});
 }
 
@@ -763,7 +762,7 @@ TEST_F(CypherUnwindExprTest, sumsAHeterogeneousElementPerGroup) {
 }
 
 TEST_F(CypherUnwindExprTest, sumsNoHeterogeneousCellToZero) {
-    expectRows("UNWIND [1, 'a'] AS v WITH v WHERE v IS NULL RETURN sum(v)", {{"0.000000"}});
+    expectRows("UNWIND [1, 'a'] AS v WITH v WHERE v IS NULL RETURN sum(v)", {{"0"}});
 }
 
 TEST_F(CypherUnwindExprTest, collectsEachTagOfAHeterogeneousElement) {

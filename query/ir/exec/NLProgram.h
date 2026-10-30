@@ -2410,14 +2410,14 @@ public:
     void setCount(size_t count) { _count = count; }
     void addCount(size_t count) { _count += count; }
 
-    // A min/max accumulator holds one extreme, so a new one is copied into the spare store
-    // and the stores flip at once
-    NLCompactingValueStore& extremeValues() { return _extremeValues; }
+    // A min/max or tagged sum accumulator holds one value, so a new one is copied into the
+    // spare store and the stores flip at once
+    NLCompactingValueStore& accumulatorValues() { return _accumulatorValues; }
 
 private:
     Column* _accumulator {nullptr};
     size_t _count {0};
-    NLCompactingValueStore _extremeValues;
+    NLCompactingValueStore _accumulatorValues;
 };
 
 // Handlers of one aggregate, selected during translation from the reduction and
@@ -2577,7 +2577,7 @@ using NLGroupAggregateGrowFunction = void (*)(Column* accumulator,
 // value type. The parameters are the union of what any reduction needs, so each fold
 // reads only its own: sum/min/max ignore counts, count ignores the accumulator, only
 // the distinct kinds touch the tally of already-charged (group, value) pairs, and only
-// min/max copy the extremes they keep into values.
+// min/max and a sum of tagged cells copy the values they keep into values.
 using NLGroupAggregateFoldFunction = void (*)(Column* accumulator,
                                               std::vector<uint64_t>& counts,
                                               const Column* input,
@@ -2696,9 +2696,9 @@ public:
     // The group keys the key buffers hold, copied in as NLSortState::values' are
     NLValueStore& keyValues() { return _keyValues; }
 
-    // The extremes the min/max accumulators hold
-    NLValueStore& extremeValues() { return _extremeValues.getActive(); }
-    void compactExtremeValues();
+    // The values the min/max and tagged sum accumulators hold
+    NLValueStore& accumulatorValues() { return _accumulatorValues.getActive(); }
+    void compactAccumulatorValues();
 
     // Scratch reused per update step: the row key being built, the per-row group
     // index map, and the incoming rows that created a new group this step.
@@ -2717,7 +2717,7 @@ private:
 
     NLGroupTable _groupTable;
     NLValueStore _keyValues;
-    NLCompactingValueStore _extremeValues;
+    NLCompactingValueStore _accumulatorValues;
 
     std::string _key;
     std::vector<size_t> _groupIndices;
@@ -3029,10 +3029,10 @@ public:
     NLValueStore& keyValues() { return _keyValues; }
     NLValueStore& collectedValues() { return _collectedValues; }
 
-    // The extremes the side min/max accumulators hold, compacted as
+    // The values the side min/max and tagged sum accumulators hold, compacted as
     // NLGroupAggregateState's are
-    NLValueStore& extremeValues() { return _extremeValues.getActive(); }
-    void compactExtremeValues();
+    NLValueStore& accumulatorValues() { return _accumulatorValues.getActive(); }
+    void compactAccumulatorValues();
 
     // Scratch reused per update step: the row key being built, the per-row group index
     // map, and the incoming rows that created a new group this step.
@@ -3054,7 +3054,7 @@ private:
     ListBuffer<> _listBuffer;
     NLValueStore _keyValues;
     NLValueStore _collectedValues;
-    NLCompactingValueStore _extremeValues;
+    NLCompactingValueStore _accumulatorValues;
 
     std::vector<NLGroupAggregateState::Aggregate> _aggregates;
 

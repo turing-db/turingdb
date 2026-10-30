@@ -805,12 +805,12 @@ public:
     static NLAggregateResetFunction selectAggregateReset(AggregateKind kind, ValueType accumulatorType);
     static NLAggregateUpdateFunction selectAggregateUpdate(AggregateKind kind, ValueType inputType);
 
-    // The siblings reading a type-erased input column: sum and avg reduce its numeric
-    // cells into the f64 accumulator, whatever tags they carry, and min/max keep the
-    // winning cell in a tagged cell accumulator, which the reset and result below handle.
+    // The siblings reading a type-erased input column. avg reduces its numeric cells into
+    // the f64 accumulator. sum and min/max keep a tagged cell accumulator, which the reset
+    // and result below handle: sum's holds an integer until a float joins it.
     static NLAggregateUpdateFunction selectTaggedAggregateUpdate(AggregateKind kind);
     static NLAggregateUpdateFunction selectOptTaggedAggregateUpdate(AggregateKind kind);
-    static NLAggregateResetFunction selectTaggedAggregateReset();
+    static NLAggregateResetFunction selectTaggedAggregateReset(AggregateKind kind);
     static NLAggregateResultFunction selectTaggedAggregateResult();
     static NLAggregateResultFunction selectAggregateResult(AggregateKind kind, ValueType resultType);
 
@@ -830,7 +830,7 @@ public:
     // The siblings reading a type-erased input column, as selectTaggedAggregateUpdate's are
     static NLGroupAggregateFoldFunction selectTaggedGroupAggregateFold(GroupAggregateKind kind);
     static NLGroupAggregateFoldFunction selectOptTaggedGroupAggregateFold(GroupAggregateKind kind);
-    static NLGroupAggregateGrowFunction selectTaggedGroupAggregateGrow();
+    static NLGroupAggregateGrowFunction selectTaggedGroupAggregateGrow(GroupAggregateKind kind);
     static NLGroupAggregateEmitFunction selectTaggedGroupAggregateEmit();
     static NLGroupAggregateFoldFunction selectGroupCountAllFold();
     static NLGroupAggregateFoldFunction selectGroupCountDistinctFold(ValueType inputType);
