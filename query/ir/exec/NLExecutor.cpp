@@ -577,6 +577,35 @@ void unwindListValidIDEmit(const Column* source,
     }
 }
 
+// The path sibling of unwindListValidIDEmit: a path column spells a null path as one holding
+// no node, so the tagged null a list holds drains back into one.
+template <typename SourceColumn>
+void unwindListPathEmit(const Column* source,
+                        const ColumnVector<size_t>* rows,
+                        const ColumnVector<size_t>* positions,
+                        Column* output) {
+    const SourceColumn* lists = static_cast<const SourceColumn*>(source);
+    const std::vector<size_t>& rowsRaw = rows->getRaw();
+    const std::vector<size_t>& positionsRaw = positions->getRaw();
+
+    std::vector<GraphPath>& outputRaw = static_cast<ColumnVector<GraphPath>*>(output)->getRaw();
+    outputRaw.resize(rowsRaw.size());
+
+    for (size_t index = 0; index < rowsRaw.size(); index++) {
+        const CellView element = sourceList(lists, rowsRaw[index]).elements()[positionsRaw[index]];
+        const CellTag tag = element.getTag();
+
+        if (tag == CellTag::Null) {
+            outputRaw[index].clear();
+            continue;
+        }
+
+        bioassert(tag == CellTag::Path, "Unwound element of a list of paths is not a path.");
+
+        outputRaw[index].assign(element.getAs<PathView>());
+    }
+}
+
 // The rows one tagged cell unwinds into: a tagged list its elements, a tagged null none,
 // and any other tagged scalar the single row it is.
 size_t taggedCellRowCount(const CellView element) {
@@ -2193,9 +2222,9 @@ bool caseTestOptTaggedCell(const Column* condition, size_t row) {
 }
 
 template <typename IDType>
-ListView listPathEntities(const GraphPath& path,
+ListView listPathEntities(const PathView path,
                           size_t count,
-                          IDType (GraphPath::*readEntity)(size_t) const,
+                          IDType (PathView::*readEntity)(size_t) const,
                           CellTag tag,
                           QueryListBuffer& buffer) {
     ListWriteCursor cursor = buffer.reserveList(count, count * sizeof(IDType));
@@ -2207,20 +2236,59 @@ ListView listPathEntities(const GraphPath& path,
     return cursor.getView();
 }
 
-void readPathElements(const std::vector<GraphPath>& paths,
+std::optional<PathView> columnPath(const Column* paths, size_t row) {
+    const GraphPath& path = (*static_cast<const ColumnVector<GraphPath>*>(paths))[row];
+    if (path.isNull()) {
+        return std::nullopt;
+    }
+
+    return PathView {path.getIDs()};
+}
+
+// The path a tagged cell holds, or nothing where it holds a null. Anything else is a path
+// function applied to something that is no path, which only the cell's tag tells per row.
+std::optional<PathView> taggedPath(const CellView cell) {
+    const CellTag tag = cell.getTag();
+
+    if (tag == CellTag::Path) {
+        return cell.getAs<PathView>();
+    } else if (tag == CellTag::Null) {
+        return std::nullopt;
+    }
+
+    throw IRException("nodes(), relationships() and length() read a path, and this row holds a value that is not one");
+}
+
+std::optional<PathView> taggedColumnPath(const Column* paths, size_t row) {
+    return taggedPath((*static_cast<const ColumnVector<CellView>*>(paths))[row]);
+}
+
+std::optional<PathView> optTaggedColumnPath(const Column* paths, size_t row) {
+    const std::optional<CellView>& cell = (*static_cast<const ColumnOptVector<CellView>*>(paths))[row];
+    if (!cell.has_value()) {
+        return std::nullopt;
+    }
+
+    return taggedPath(*cell);
+}
+
+void readPathElements(const Column* paths,
+                      NLPathReadFunction read,
                       PathElementsKind kind,
                       Column* output,
                       QueryListBuffer& listBuffer) {
+    const size_t rowCount = paths->size();
+
     if (kind == PathElementsKind::Length) {
         std::vector<std::optional<uint64_t>>& lengths = static_cast<ColumnOptVector<uint64_t>*>(output)->getRaw();
-        lengths.resize(paths.size());
+        lengths.resize(rowCount);
 
-        for (size_t row = 0; row < paths.size(); row++) {
-            const GraphPath& path = paths[row];
-            if (path.isNull()) {
+        for (size_t row = 0; row < rowCount; row++) {
+            const std::optional<PathView> path = read(paths, row);
+            if (!path) {
                 lengths[row] = std::nullopt;
             } else {
-                lengths[row] = path.getLength();
+                lengths[row] = path->getLength();
             }
         }
 
@@ -2228,16 +2296,16 @@ void readPathElements(const std::vector<GraphPath>& paths,
     }
 
     std::vector<std::optional<ListView>>& lists = static_cast<ColumnOptVector<ListView>*>(output)->getRaw();
-    lists.resize(paths.size());
+    lists.resize(rowCount);
 
-    for (size_t row = 0; row < paths.size(); row++) {
-        const GraphPath& path = paths[row];
-        if (path.isNull()) {
+    for (size_t row = 0; row < rowCount; row++) {
+        const std::optional<PathView> path = read(paths, row);
+        if (!path) {
             lists[row] = std::nullopt;
         } else if (kind == PathElementsKind::Nodes) {
-            lists[row] = listPathEntities(path, path.getNodeCount(), &GraphPath::getNode, CellTag::NodeID, listBuffer);
+            lists[row] = listPathEntities(*path, path->getNodeCount(), &PathView::getNode, CellTag::NodeID, listBuffer);
         } else {
-            lists[row] = listPathEntities(path, path.getLength(), &GraphPath::getEdge, CellTag::EdgeID, listBuffer);
+            lists[row] = listPathEntities(*path, path->getLength(), &PathView::getEdge, CellTag::EdgeID, listBuffer);
         }
     }
 }
@@ -2383,6 +2451,15 @@ void caseWriteNullEntity(Column* result, size_t resultRow, const Column* value, 
     static_cast<ColumnVector<ID>*>(result)->getRaw()[resultRow] = ID {};
 }
 
+void caseWriteNullPath(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
+    static_cast<ColumnVector<GraphPath>*>(result)->getRaw()[resultRow].clear();
+}
+
+void caseWritePathCell(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
+    std::vector<GraphPath>& results = static_cast<ColumnVector<GraphPath>*>(result)->getRaw();
+    results[resultRow] = static_cast<const ColumnVector<GraphPath>*>(value)->getRaw()[valueRow];
+}
+
 void caseWriteNullTaggedCell(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
     static_cast<ColumnVector<CellView>*>(result)->getRaw()[resultRow] = CellView::nullElement();
 }
@@ -2524,6 +2601,15 @@ template <typename ID>
 void caseResetEntityColumn(Column* result, size_t rowCount) {
     std::vector<ID>& results = static_cast<ColumnVector<ID>*>(result)->getRaw();
     results.assign(rowCount, ID {});
+}
+
+void caseResetPathColumn(Column* result, size_t rowCount) {
+    std::vector<GraphPath>& results = static_cast<ColumnVector<GraphPath>*>(result)->getRaw();
+    results.resize(rowCount);
+
+    for (GraphPath& path : results) {
+        path.clear();
+    }
 }
 
 // 3-way compare two rows of a type-erased column of tagged scalars. Cells need not share
@@ -2691,6 +2777,13 @@ void distinctKeyAppendOptColumn(const Column* column, size_t row, std::string& k
 
 void distinctAppendElementBytes(std::string& key, CellView element);
 
+// The count fixes how many IDs follow it, so they need no separator.
+void distinctAppendPathBytes(std::string& key, std::span<const uint64_t> ids) {
+    const size_t idCount = ids.size();
+    key.append(reinterpret_cast<const char*>(&idCount), sizeof(idCount));
+    key.append(reinterpret_cast<const char*>(ids.data()), ids.size_bytes());
+}
+
 // Serialize a nested list into the row key as its length then its elements, so a list
 // never keys the same as the concatenation of its neighbours.
 void distinctAppendListBytes(std::string& key, const ListView list) {
@@ -2857,6 +2950,12 @@ void distinctAppendElementBytes(std::string& key, const CellView element) {
             return;
         break;
 
+        case CellTag::Path:
+            key.push_back(static_cast<char>(tag));
+            distinctAppendPathBytes(key, element.getAs<PathView>().getIDs());
+            return;
+        break;
+
         case CellTag::INVALID:
             throw IRException("cannot dedup by an untagged element");
         break;
@@ -2944,15 +3043,10 @@ void distinctKeyAppendMapColumn(const Column* column, size_t row, std::string& k
     distinctAppendMapBytes(key, raw[row]);
 }
 
-// The null path has no ID, so it keys as count 0, apart from every path. The count
-// fixes how many IDs follow it, so they need no separator.
+// The null path has no ID, so it keys as count 0, apart from every path.
 void distinctKeyAppendPathColumn(const Column* column, size_t row, std::string& key) {
     const std::vector<GraphPath>& raw = static_cast<const ColumnVector<GraphPath>*>(column)->getRaw();
-    const std::span<const uint64_t> ids = raw[row].getIDs();
-
-    const size_t idCount = ids.size();
-    key.append(reinterpret_cast<const char*>(&idCount), sizeof(idCount));
-    key.append(reinterpret_cast<const char*>(ids.data()), ids.size_bytes());
+    distinctAppendPathBytes(key, raw[row].getIDs());
 }
 
 void distinctKeyAppendOptListColumn(const Column* column, size_t row, std::string& key) {
@@ -3054,6 +3148,17 @@ uint64_t hashKeyValue(ListView list) {
     return mixKeyBits(hashList(list));
 }
 
+uint64_t hashKeyValue(PathView path) {
+    const std::span<const uint64_t> ids = path.getIDs();
+    uint64_t hash = mixKeyBits(ids.size());
+
+    for (const uint64_t id : ids) {
+        hash = mixKeyBits(hash ^ id);
+    }
+
+    return hash;
+}
+
 // A tagged cell hashes as its value does in a column of that value's type
 uint64_t hashKeyValue(CellView cell) {
     switch (cell.getTag()) {
@@ -3103,6 +3208,10 @@ uint64_t hashKeyValue(CellView cell) {
 
         case CellTag::Duration:
             return hashKeyValue(cell.getAs<types::Duration::Primitive>());
+        break;
+
+        case CellTag::Path:
+            return hashKeyValue(cell.getAs<PathView>());
         break;
 
         case CellTag::Null:
@@ -4717,6 +4826,64 @@ void collectValidIDFoldDistinct(Column* values,
     }
 }
 
+// The path sibling of collectValidIDFold: the path an OPTIONAL MATCH left where its pattern
+// missed holds no node, which is how a null path is spelled, so it is dropped. A kept path is
+// copied into the store as a tagged cell, so its lists emit as a type-erased collect's do.
+void collectPathFold(Column* values,
+                     const Column* input,
+                     const std::vector<size_t>& groups,
+                     std::vector<std::vector<size_t>>& groupPositions,
+                     NLGroupDistinctTally& distinct,
+                     NLValueStore& store) {
+    auto& valuesRaw = static_cast<ColumnVector<CellView>*>(values)->getRaw();
+    const std::vector<GraphPath>& inputRaw = static_cast<const ColumnVector<GraphPath>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const GraphPath& path = inputRaw[row];
+        if (path.isNull()) {
+            continue;
+        }
+
+        ListBuffer<>::ListItemVariant item {PathView {path.getIDs()}};
+
+        const size_t position = valuesRaw.size();
+        valuesRaw.push_back(store.ownCell(item));
+        groupPositions[groups[row]].push_back(position);
+    }
+}
+
+void collectPathFoldDistinct(Column* values,
+                             const Column* input,
+                             const std::vector<size_t>& groups,
+                             std::vector<std::vector<size_t>>& groupPositions,
+                             NLGroupDistinctTally& distinct,
+                             NLValueStore& store) {
+    auto& valuesRaw = static_cast<ColumnVector<CellView>*>(values)->getRaw();
+    const std::vector<GraphPath>& inputRaw = static_cast<const ColumnVector<GraphPath>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const GraphPath& path = inputRaw[row];
+        if (path.isNull()) {
+            continue;
+        }
+
+        const size_t group = groups[row];
+
+        distinct.beginKey(group);
+        distinctAppendPathBytes(distinct.getKey(), path.getIDs());
+
+        if (!distinct.insertIfNew()) {
+            continue;
+        }
+
+        ListBuffer<>::ListItemVariant item {PathView {path.getIDs()}};
+
+        const size_t position = valuesRaw.size();
+        valuesRaw.push_back(store.ownCell(item));
+        groupPositions[group].push_back(position);
+    }
+}
+
 // The list- or map-buffer value a tagged cell holds, read back as the type its tag names, so
 // a collect of type-erased cells buffers each one under the type it came in with.
 template <typename Item>
@@ -4774,6 +4941,10 @@ Item taggedItem(const CellView element) {
 
         case CellTag::MapView:
             return Item {element.getAs<MapView>()};
+        break;
+
+        case CellTag::Path:
+            return Item {element.getAs<PathView>()};
         break;
 
         case CellTag::INVALID:
@@ -5388,6 +5559,19 @@ Item validIDItem(const Column* input, size_t row, NLStepBuffers*) {
     }
 
     return Item {id};
+}
+
+// The path sibling of validIDItem: the path an OPTIONAL MATCH left where its pattern missed
+// holds no node, and is stored as the tagged null. A kept path views the IDs its column holds
+// for the step, as a string element views the characters of its column.
+template <typename Item>
+Item pathItem(const Column* input, size_t row, NLStepBuffers*) {
+    const GraphPath& path = (*static_cast<const ColumnVector<GraphPath>*>(input))[row];
+    if (path.isNull()) {
+        return Item {PropertyNull {}};
+    }
+
+    return Item {PathView {path.getIDs()}};
 }
 
 // The sibling of valueItem for a type-erased column: the cell already carries the tag its
@@ -6326,24 +6510,23 @@ void NLExecutor::runCreateNode(NLExecutionContext* context, NLFunctionData* data
     const size_t rowCount = createData->getRowCount();
     const LabelSetHandle labelsetHandle = createData->getLabelSetHandle();
 
+    const std::vector<NLCreateNodeData::Property>& properties = createData->properties();
+    std::vector<CommitWriteBuffer::UntypedProperties> extracted(properties.size());
+
+    for (size_t index = 0; index < properties.size(); index++) {
+        const NLCreateNodeData::Property& property = properties[index];
+        extractColumnProperties(property._values, rowCount, property._propertyTypeID, extracted[index]);
+    }
+
     // Must extract this value before adding in the loop
     const size_t numPendingNodes = writeBuffer->numPendingNodes();
 
     for (size_t row = 0; row < rowCount; row++) {
         CommitWriteBuffer::PendingNode& node = writeBuffer->newPendingNode();
         node.labelsetHandle = labelsetHandle;
-    }
 
-    CommitWriteBuffer::UntypedProperties propsBuffer;
-
-    for (const NLCreateNodeData::Property& prop : createData->properties()) {
-        extractColumnProperties(prop._values, rowCount, prop._propertyTypeID, propsBuffer);
-
-        for (size_t row = 0; row < rowCount; row++) {
-            CommitWriteBuffer::PendingNode& pendingNode =
-                writeBuffer->getPendingNode(numPendingNodes + row);
-            CommitWriteBuffer::UntypedProperties& properties = pendingNode.properties;
-            properties.push_back(propsBuffer[row]);
+        for (const CommitWriteBuffer::UntypedProperties& values : extracted) {
+            node.properties.push_back(values[row]);
         }
     }
 
@@ -6388,6 +6571,14 @@ void NLExecutor::runCreateEdge(NLExecutionContext* context, NLFunctionData* data
     const PendingRows srcRows(srcPending, srcIsPending, firstPendingNodeID, numPendingNodes);
     const PendingRows tgtRows(tgtPending, tgtIsPending, firstPendingNodeID, numPendingNodes);
 
+    const std::vector<NLCreateEdgeData::Property>& properties = createData->properties();
+    std::vector<CommitWriteBuffer::UntypedProperties> extracted(properties.size());
+
+    for (size_t index = 0; index < properties.size(); index++) {
+        const NLCreateEdgeData::Property& property = properties[index];
+        extractColumnProperties(property._values, rowCount, property._propertyTypeID, extracted[index]);
+    }
+
     // Must extract this value before adding in the loop
     const size_t numPendingEdges = writeBuffer->numPendingEdges();
 
@@ -6397,15 +6588,9 @@ void NLExecutor::runCreateEdge(NLExecutionContext* context, NLFunctionData* data
 
         CommitWriteBuffer::PendingEdge& edge = writeBuffer->newPendingEdge(srcNode, tgtNode);
         edge.edgeType = edgeTypeID;
-    }
 
-    CommitWriteBuffer::UntypedProperties propsBuffer;
-
-    for (const NLCreateEdgeData::Property& prop : createData->properties()) {
-        extractColumnProperties(prop._values, rowCount, prop._propertyTypeID, propsBuffer);
-
-        for (size_t row = 0; row < rowCount; row++) {
-            writeBuffer->getPendingEdge(numPendingEdges + row).properties.push_back(propsBuffer[row]);
+        for (const CommitWriteBuffer::UntypedProperties& values : extracted) {
+            edge.properties.push_back(values[row]);
         }
     }
 
@@ -8077,7 +8262,7 @@ void NLExecutor::runPathElements(NLExecutionContext* context, NLFunctionData* da
     QueryListBuffer& listBuffer = *elements->getListBuffer();
     listBuffer.clear();
 
-    readPathElements(static_cast<const ColumnVector<GraphPath>*>(paths)->getRaw(), kind, output, listBuffer);
+    readPathElements(paths, elements->getRead(), kind, output, listBuffer);
 }
 
 void NLExecutor::runMakePath(NLExecutionContext* context, NLFunctionData* data) {
@@ -9305,6 +9490,24 @@ NLListItemReadFunction NLExecutor::selectEdgeListItemRead() {
     return &validIDItem<ListBuffer<>::ListItemVariant, EdgeID>;
 }
 
+NLPathReadFunction NLExecutor::selectPathRead(const Column* paths) {
+    const ColumnKind::Code kind = paths->getKind();
+
+    if (kind == ColumnVector<GraphPath>::staticKind()) {
+        return &columnPath;
+    } else if (kind == ColumnVector<CellView>::staticKind()) {
+        return &taggedColumnPath;
+    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
+        return &optTaggedColumnPath;
+    }
+
+    throw IRException("nodes(), relationships() and length() read a path column, or a column of tagged cells");
+}
+
+NLListItemReadFunction NLExecutor::selectPathListItemRead() {
+    return &pathItem<ListBuffer<>::ListItemVariant>;
+}
+
 NLListItemReadFunction NLExecutor::selectNestedListItemRead() {
     return &plainItem<ListBuffer<>::ListItemVariant, ListView>;
 }
@@ -9334,6 +9537,10 @@ NLMapValueReadFunction NLExecutor::selectNodeMapValueRead() {
 
 NLMapValueReadFunction NLExecutor::selectEdgeMapValueRead() {
     return &validIDItem<MapBuffer<>::MapItemVariant, EdgeID>;
+}
+
+NLMapValueReadFunction NLExecutor::selectPathMapValueRead() {
+    return &pathItem<MapBuffer<>::MapItemVariant>;
 }
 
 NLMapValueReadFunction NLExecutor::selectNestedListMapValueRead() {
@@ -9460,6 +9667,14 @@ NLCaseWriteFn NLExecutor::selectEntityCaseWrite(NLChunkKind kind, bool untypedNu
     }
 
     throw IRException("Only a node or an edge column can hold a selection over entities");
+}
+
+NLCaseResetFn NLExecutor::selectPathCaseReset() {
+    return &caseResetPathColumn;
+}
+
+NLCaseWriteFn NLExecutor::selectPathCaseWrite(bool untypedNull) {
+    return untypedNull ? &caseWriteNullPath : &caseWritePathCell;
 }
 
 NLCaseWriteFn NLExecutor::selectCaseWrite(ValueType valueType,
@@ -10999,6 +11214,11 @@ NLUnwindElementEmitFunction NLExecutor::selectListUnwindEdgeEmit(bool sourceIsNu
                             : &unwindListValidIDEmit<ColumnVector<ListView>, EdgeID>;
 }
 
+NLUnwindElementEmitFunction NLExecutor::selectListUnwindPathEmit(bool sourceIsNullable) {
+    return sourceIsNullable ? &unwindListPathEmit<ColumnOptVector<ListView>>
+                            : &unwindListPathEmit<ColumnVector<ListView>>;
+}
+
 NLUnwindElementCountFunction NLExecutor::selectTaggedUnwindElementCount() {
     return &unwindTaggedElementCount;
 }
@@ -11160,6 +11380,13 @@ void NLExecutor::selectCollectTaggedHandlers(bool distinctValues,
                                              NLCollectListEmitFunction& listEmit) {
     fold = distinctValues ? &collectTaggedFoldDistinct<CellView>
                           : &collectTaggedFold<CellView>;
+    listEmit = &collectTaggedListEmit;
+}
+
+void NLExecutor::selectCollectPathHandlers(bool distinctValues,
+                                           NLCollectFoldFunction& fold,
+                                           NLCollectListEmitFunction& listEmit) {
+    fold = distinctValues ? &collectPathFoldDistinct : &collectPathFold;
     listEmit = &collectTaggedListEmit;
 }
 

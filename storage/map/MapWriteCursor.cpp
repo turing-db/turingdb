@@ -3,6 +3,7 @@
 #include <cstring>
 
 #include "ID.h"
+#include "PathView.h"
 #include "list/ListView.h"
 #include "map/MapView.h"
 #include "metadata/PropertyNull.h"
@@ -57,6 +58,7 @@ template MapEntryView MapWriteCursor::writeValue(CellTag, const types::String::P
 template MapEntryView MapWriteCursor::writeValue(CellTag, const types::Embedding::Primitive&);
 template MapEntryView MapWriteCursor::writeValue(CellTag, const ListView&);
 template MapEntryView MapWriteCursor::writeValue(CellTag, const MapView&);
+template MapEntryView MapWriteCursor::writeValue(CellTag, const PathView&);
 
 // The fixed-width values. A decoder reading a wire whose layout already matches the stored one
 // copies these through writeValueBytes instead; a caller holding the value itself, with no such

@@ -9,6 +9,8 @@
 #include <type_traits>
 #include <utility>
 
+#include "PathView.h"
+
 namespace net::proto {
 
 // The member-function contract the decode functions (Decoders.h) impose on the column
@@ -50,9 +52,11 @@ concept ProtoDecodeSink = VectorColumn<typename Sink::template ColumnVector<uint
             size_t count,
             char* bytes,
             float* floats,
+            uint64_t* pathIDs,
             uint64_t scalarValue,
             std::string_view stringValue,
             std::span<const float> embeddingValue,
+            db::PathView pathValue,
             std::string_view columnName) {
     { sink.template alloc<typename Sink::template ColumnVector<uint64_t>>() } -> std::same_as<typename Sink::Column*>;
 
@@ -60,11 +64,14 @@ concept ProtoDecodeSink = VectorColumn<typename Sink::template ColumnVector<uint
     { sink.getStringView(bytes, count) } -> std::same_as<std::string_view>;
     { sink.allocEmbedding(count) } -> std::same_as<float*>;
     { sink.getEmbeddingView(floats, count) } -> std::same_as<std::span<const float>>;
+    { sink.allocPathIDs(count) } -> std::same_as<uint64_t*>;
+    { sink.getPathView(pathIDs, count) } -> std::same_as<db::PathView>;
 
     { sink.beginList(count, count) } -> std::same_as<typename Sink::ListView>;
     { sink.beginNestedList(count, count) } -> std::same_as<typename Sink::CellView>;
     { sink.writeListValue(stringValue) } -> std::same_as<typename Sink::CellView>;
     { sink.writeListValue(embeddingValue) } -> std::same_as<typename Sink::CellView>;
+    { sink.writeListValue(pathValue) } -> std::same_as<typename Sink::CellView>;
     { sink.writeCellBytes(bytes, count) } -> std::same_as<typename Sink::CellView>;
 
     { sink.beginMap(count, count) } -> std::same_as<typename Sink::MapView>;
@@ -73,6 +80,7 @@ concept ProtoDecodeSink = VectorColumn<typename Sink::template ColumnVector<uint
     { sink.writeMapValue(scalarValue) };
     { sink.writeMapValue(stringValue) };
     { sink.writeMapValue(embeddingValue) };
+    { sink.writeMapValue(pathValue) };
     { sink.writeMapValueBytes(bytes, count) };
     { sink.topMapExpectsValue() } -> std::convertible_to<bool>;
 

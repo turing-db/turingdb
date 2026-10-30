@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdint.h>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -44,12 +45,16 @@ public:
 
     TuringSink(db::LocalMemory* localMemory,
                ChunkedBuffer<float>* embeddingBuffer,
+               ChunkedBuffer<uint64_t>* pathBuffer,
                db::ListBuffer<>* listBuffer,
                db::MapBuffer<>* mapBuffer);
     ~TuringSink();
 
     float* allocEmbedding(size_t numFloats) { return _embeddingBuffer->alloc(numFloats); }
     std::span<const float> getEmbeddingView(float* data, size_t numFloats) { return _embeddingBuffer->getView(data, numFloats); }
+
+    uint64_t* allocPathIDs(size_t idCount) { return _pathBuffer->alloc(idCount); }
+    db::PathView getPathView(uint64_t* ids, size_t idCount) { return db::PathView {_pathBuffer->getView(ids, idCount)}; }
 
     char* allocString(size_t size) { return _stringBuffer->allocUninit(size); }
     static std::string_view getStringView(char* data, size_t size) { return {data, size}; }
@@ -70,6 +75,10 @@ public:
 
     db::CellView writeListValue(std::span<const float> value) {
         return listCursor().writeValue<db::types::Embedding::Primitive>(db::TypeToCellTag<db::types::Embedding::Primitive>::Tag, value);
+    }
+
+    db::CellView writeListValue(db::PathView value) {
+        return listCursor().writeValue<db::PathView>(db::TypeToCellTag<db::PathView>::Tag, value);
     }
 
     db::CellView writeCellBytes(const char* bytes, size_t byteSize) {
@@ -104,6 +113,7 @@ public:
 private:
     db::LocalMemory* _localMemory {nullptr};
     ChunkedBuffer<float>* _embeddingBuffer {nullptr};
+    ChunkedBuffer<uint64_t>* _pathBuffer {nullptr};
     db::StringBuffer* _stringBuffer {nullptr};
     db::QueryListBuffer* _listBuffer {nullptr};
     db::MapBuffer<>* _mapBuffer {nullptr};

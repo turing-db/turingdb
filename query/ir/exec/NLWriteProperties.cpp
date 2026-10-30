@@ -3,6 +3,7 @@
 #include <optional>
 #include <string_view>
 #include <variant>
+#include <vector>
 
 #include <spdlog/fmt/bundled/format.h>
 
@@ -15,6 +16,9 @@
 #include "columns/ColumnVector.h"
 #include "CellView.h"
 #include "CellUtils.h"
+#include "list/ListView.h"
+#include "map/MapEntryView.h"
+#include "map/MapView.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
 #include "views/GraphView.h"
@@ -24,6 +28,44 @@
 using namespace db;
 
 namespace {
+
+// A path is a value of the query that matched it, not one a graph stores: a property
+// holding one anywhere inside a list or a map is turned away, as Neo4j turns it away
+void throwIfAnyHoldsAPath(std::vector<CellView>& pending) {
+    while (!pending.empty()) {
+        const CellView cell = pending.back();
+        pending.pop_back();
+
+        const CellTag tag = cell.getTag();
+
+        if (tag == CellTag::Path) {
+            throw IRException("A property value cannot hold a path, in a list or a map or on its own");
+        } else if (tag == CellTag::ListView) {
+            const ListView list = cell.getAs<ListView>();
+            pending.insert(pending.end(), list.begin(), list.end());
+        } else if (tag == CellTag::MapView) {
+            for (const MapEntryView entry : cell.getAs<MapView>()) {
+                pending.push_back(entry.getValue());
+            }
+        }
+    }
+}
+
+void throwIfHoldsAPath(ListView list) {
+    std::vector<CellView> pending(list.begin(), list.end());
+    throwIfAnyHoldsAPath(pending);
+}
+
+void throwIfHoldsAPath(MapView map) {
+    std::vector<CellView> pending;
+    pending.reserve(map.size());
+
+    for (const MapEntryView entry : map) {
+        pending.push_back(entry.getValue());
+    }
+
+    throwIfAnyHoldsAPath(pending);
+}
 
 class ConstPropertyExtractor {
 public:
@@ -65,6 +107,7 @@ public:
     void operator()(const ColumnConst<ListView>* typed) {
         _buf.clear();
         _buf.reserve(_rowCount);
+        throwIfHoldsAPath(typed->getRaw());
         const types::List::OwningPrimitive encoded(typed->getRaw());
         for (size_t i = 0; i < _rowCount; i++) {
             _buf.emplace_back(_propID, encoded);
@@ -106,6 +149,7 @@ public:
 
         std::optional<types::List::OwningPrimitive> owned;
         if (value.has_value()) {
+            throwIfHoldsAPath(*value);
             owned.emplace(*value);
         }
 
@@ -115,6 +159,7 @@ public:
     void operator()(const ColumnConst<MapView>* typed) {
         _buf.clear();
         _buf.reserve(_rowCount);
+        throwIfHoldsAPath(typed->getRaw());
         const types::Map::OwningPrimitive encoded(typed->getRaw());
         for (size_t i = 0; i < _rowCount; i++) {
             _buf.emplace_back(_propID, encoded);
@@ -175,6 +220,7 @@ public:
         _buf.clear();
         _buf.reserve(typed->size());
         for (const ListView val : *typed) {
+            throwIfHoldsAPath(val);
             _buf.emplace_back(_propID, types::List::OwningPrimitive(val));
         }
     }
@@ -183,6 +229,7 @@ public:
         _buf.clear();
         _buf.reserve(typed->size());
         for (const MapView val : *typed) {
+            throwIfHoldsAPath(val);
             _buf.emplace_back(_propID, types::Map::OwningPrimitive(val));
         }
     }
@@ -237,6 +284,7 @@ public:
                 continue;
             }
 
+            throwIfHoldsAPath(*val);
             _buf.emplace_back(_propID, types::List::OwningPrimitive(*val));
         }
     }
@@ -252,6 +300,7 @@ public:
                 continue;
             }
 
+            throwIfHoldsAPath(*val);
             _buf.emplace_back(_propID, types::Map::OwningPrimitive(*val));
         }
     }
@@ -303,6 +352,8 @@ std::string_view cellTypeName(CellTag tag) {
         return "Node";
     } else if (tag == CellTag::EdgeID) {
         return "Edge";
+    } else if (tag == CellTag::Path) {
+        return "Path";
     }
 
     for (size_t index = static_cast<size_t>(ValueType::Invalid) + 1; index < static_cast<size_t>(ValueType::_SIZE); index++) {
@@ -346,9 +397,11 @@ void stageListElementAsItsType(const CellView element,
         }
         break;
         case ValueType::List:
+            throwIfHoldsAPath(element.getAs<types::List::Primitive>());
             value = std::optional<types::List::OwningPrimitive> {std::in_place, element.getAs<types::List::Primitive>()};
         break;
         case ValueType::Map:
+            throwIfHoldsAPath(element.getAs<types::Map::Primitive>());
             value = std::optional<types::Map::OwningPrimitive> {std::in_place, element.getAs<types::Map::Primitive>()};
         break;
         case ValueType::Invalid:

@@ -81,6 +81,7 @@ const CELL_TAG_EDGE_ID = 9;
 const CELL_TAG_DATETIME = 10;
 const CELL_TAG_MAP_VIEW = 11;
 const CELL_TAG_DURATION = 12;
+const CELL_TAG_PATH = 13;
 
 // Mirrors db::QueryStatus::Status (base/QueryStatus.h); the ERROR packet's first
 // payload byte indexes into this.
@@ -322,6 +323,12 @@ export class NestedReader {
                 this._cursor = start + size;
                 // slice() lands the floats in a fresh, aligned buffer.
                 return new Float32Array(this._bytes.slice(start, start + size).buffer);
+            }
+            case CELL_TAG_PATH: {
+                const size = this._view.getUint32(payload, true);
+                const start = payload + 4;
+                this._cursor = start + size;
+                return Array.from(new BigUint64Array(this._bytes.slice(start, start + size).buffer));
             }
             case CELL_TAG_LIST_VIEW:
                 this._cursor = payload;

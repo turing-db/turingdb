@@ -220,6 +220,12 @@ void FunctionDecls::initDefault() {
     collectEdges->setIsAggregate(true);
     collectEdges->setCollectsItsArgument(true);
 
+    FunctionSignature* collectPaths = createFunction("collect");
+    collectPaths->setArguments({EvaluatedType::GraphPath});
+    collectPaths->setReturnTypes({{EvaluatedType::List}});
+    collectPaths->setIsAggregate(true);
+    collectPaths->setCollectsItsArgument(true);
+
     // A list collects into a list of lists: one level deeper over the same innermost
     // elements, so unwinding it twice hands those elements back with their own type.
     FunctionSignature* collectLists = createFunction("collect");
@@ -607,6 +613,17 @@ void FunctionDecls::initDefault() {
     relationshipsPath->setArguments({EvaluatedType::GraphPath});
     relationshipsPath->setReturnTypes({{EvaluatedType::List}});
     relationshipsPath->setReturnedListShape(ListShape(EvaluatedType::EdgePattern, 1));
+
+    // The same reads of a value whose type is known per row, a path held in a list among them
+    FunctionSignature* nodesCell = createFunction("nodes");
+    nodesCell->setArguments({EvaluatedType::Any});
+    nodesCell->setReturnTypes({{EvaluatedType::List}});
+    nodesCell->setReturnedListShape(ListShape(EvaluatedType::NodePattern, 1));
+
+    FunctionSignature* relationshipsCell = createFunction("relationships");
+    relationshipsCell->setArguments({EvaluatedType::Any});
+    relationshipsCell->setReturnTypes({{EvaluatedType::List}});
+    relationshipsCell->setReturnedListShape(ListShape(EvaluatedType::EdgePattern, 1));
 
     // A conversion and its OrNull sibling convert the same argument types, and a type-erased
     // cell per row. Where no rule converts the value, the sibling answers null and the

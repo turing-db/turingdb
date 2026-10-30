@@ -13,6 +13,7 @@
 #include "CellView.h"
 #include "GraphPath.h"
 #include "ID.h"
+#include "PathView.h"
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnMask.h"
@@ -109,12 +110,7 @@ void appendElementsText(const Sequence& elements, std::string& text) {
 }
 
 // A path, read as its nodes and edges in order: a node as (id), an edge as [id]
-void appendValueText(const GraphPath& path, std::string& text) {
-    if (path.isNull()) {
-        text += "null";
-        return;
-    }
-
+void appendValueText(PathView path, std::string& text) {
     const std::span<const uint64_t> ids = path.getIDs();
 
     for (size_t position = 0; position < ids.size(); position++) {
@@ -128,6 +124,15 @@ void appendValueText(const GraphPath& path, std::string& text) {
             fmt::format_to(std::back_inserter(text), "[{}]", ids[position]);
         }
     }
+}
+
+void appendValueText(const GraphPath& path, std::string& text) {
+    if (path.isNull()) {
+        text += "null";
+        return;
+    }
+
+    appendValueText(PathView {path.getIDs()}, text);
 }
 
 void appendValueText(types::Embedding::Primitive embedding, std::string& text) {

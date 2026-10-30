@@ -20,6 +20,7 @@
 #include "map/MapEntryView.h"
 #include "map/MapView.h"
 #include "ID.h"
+#include "PathView.h"
 
 using namespace db;
 
@@ -93,6 +94,19 @@ void appendCell(std::string& out, CellView element) {
         break;
         case CellTag::MapView:
             appendMapValue(out, element.getAs<MapView>());
+        break;
+        case CellTag::Path: {
+            out += '[';
+            bool firstID = true;
+            for (const uint64_t id : element.getAs<PathView>().getIDs()) {
+                if (!firstID) {
+                    out += ',';
+                }
+                firstID = false;
+                out += fmt::format("{}", id);
+            }
+            out += ']';
+        }
         break;
         case CellTag::Null:
         case CellTag::INVALID:

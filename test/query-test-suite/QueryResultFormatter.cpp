@@ -8,6 +8,7 @@
 
 #include "BioAssert.h"
 #include "GraphPath.h"
+#include "PathView.h"
 #include "ID.h"
 #include "CellView.h"
 #include "CellUtils.h"
@@ -41,11 +42,7 @@ namespace {
     return value;
 }
 
-[[maybe_unused]] std::string valueToString(const db::GraphPath& value) {
-    if (value.isNull()) {
-        return "null";
-    }
-
+[[maybe_unused]] std::string valueToString(const db::PathView value) {
     const std::span<const uint64_t> ids = value.getIDs();
 
     std::string result = "[";
@@ -63,6 +60,14 @@ namespace {
 
     result += "]";
     return result;
+}
+
+[[maybe_unused]] std::string valueToString(const db::GraphPath& value) {
+    if (value.isNull()) {
+        return "null";
+    }
+
+    return valueToString(db::PathView {value.getIDs()});
 }
 
 [[maybe_unused]] std::string valueToString(const std::string_view& value) {

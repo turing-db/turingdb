@@ -84,6 +84,27 @@ const Pattern* getPredicatePattern(const Expr* expr) {
     return static_cast<const ExistsExpr*>(expr)->getPredicatePattern();
 }
 
+// `p = (a)-->(b)` names the path of a pattern comprehension: it parses as an equality between
+// a bare variable and the pattern
+const BinaryExpr* getNamedPathHead(const Expr* head) {
+    if (head->getKind() != Expr::Kind::BINARY || head->isParenthesized()) {
+        return nullptr;
+    }
+
+    const BinaryExpr* binary = static_cast<const BinaryExpr*>(head);
+    const Expr* variable = binary->getLHS();
+
+    const bool namesAPath = binary->getOperator() == BinaryOperator::Equal
+                            && variable->getKind() == Expr::Kind::SYMBOL
+                            && !variable->isParenthesized()
+                            && getPredicatePattern(binary->getRHS());
+    if (!namesAPath) {
+        return nullptr;
+    }
+
+    return binary;
+}
+
 bool appendHopOperand(CypherAST* ast, Expr* operand, const SourceLocation& location, PatternElement* hop) {
     if (operand->isParenthesized()) {
         NodePattern* node = NodePattern::fromExpr(ast, operand);
@@ -581,7 +602,8 @@ Expr* ParserUtils::createComprehension(CypherAST* ast,
                                        Expr* projection,
                                        const SourceLocation& headLocation) {
     const BinaryExpr* listHead = getListComprehensionHead(head);
-    const Pattern* predicatePattern = getPredicatePattern(head);
+    const BinaryExpr* namedPathHead = getNamedPathHead(head);
+    const Pattern* predicatePattern = getPredicatePattern(namedPathHead ? namedPathHead->getRHS() : head);
 
     const bool walksAPath = predicatePattern
                             && projection
@@ -604,6 +626,11 @@ Expr* ParserUtils::createComprehension(CypherAST* ast,
         Pattern* pattern = Pattern::create(ast);
         for (PatternElement* element : predicatePattern->elements()) {
             pattern->addElement(element);
+        }
+
+        if (namedPathHead) {
+            Symbol* pathSymbol = static_cast<SymbolExpr*>(namedPathHead->getLHS())->getSymbol();
+            pattern->elements().front()->setPathSymbol(pathSymbol);
         }
 
         pattern->setWhere(where);

@@ -1673,6 +1673,8 @@ NLUnwindElementEmitFunction NLTranslator::selectListUnwindEmit(mlir::Type chunkT
         return NLExecutor::selectListUnwindNodeEmit(sourceIsNullable);
     } else if (mlir::isa<storage::EdgeIDType>(elementType)) {
         return NLExecutor::selectListUnwindEdgeEmit(sourceIsNullable);
+    } else if (mlir::isa<storage::PathType>(elementType)) {
+        return NLExecutor::selectListUnwindPathEmit(sourceIsNullable);
     }
 
     return NLExecutor::selectListUnwindElementEmit(sourceIsNullable);
@@ -2564,6 +2566,7 @@ void NLTranslator::translatePathElements(nl::PathElements elements, NLStmtContai
     _valueSlots[elements.getResult()] = output;
 
     NLPathElementsData* data = _program->allocFunctionData<NLPathElementsData>(paths,
+                                                                               NLExecutor::selectPathRead(paths),
                                                                                output,
                                                                                kind,
                                                                                &_program->allocStepBuffers()->listBuffer());
@@ -3504,6 +3507,8 @@ NLListItemReadFunction NLTranslator::selectListItemRead(mlir::Type chunkType) {
         return NLExecutor::selectNodeListItemRead();
     } else if (mlir::isa<storage::EdgeIDType>(elementType)) {
         return NLExecutor::selectEdgeListItemRead();
+    } else if (mlir::isa<storage::PathType>(elementType)) {
+        return NLExecutor::selectPathListItemRead();
     } else if (mlir::isa<storage::ListType>(elementType)) {
         return NLExecutor::selectNestedListItemRead();
     } else if (mlir::isa<storage::MapType>(elementType)) {
@@ -3550,6 +3555,8 @@ NLMapValueReadFunction NLTranslator::selectMapValueRead(mlir::Type chunkType) {
         return NLExecutor::selectNodeMapValueRead();
     } else if (mlir::isa<storage::EdgeIDType>(elementType)) {
         return NLExecutor::selectEdgeMapValueRead();
+    } else if (mlir::isa<storage::PathType>(elementType)) {
+        return NLExecutor::selectPathMapValueRead();
     } else if (mlir::isa<storage::MapType>(elementType)) {
         return NLExecutor::selectNestedMapValueRead();
     } else if (mlir::isa<storage::ListType>(elementType)) {
@@ -4174,6 +4181,8 @@ NLCaseResetFn NLTranslator::selectCaseResetForChunkType(mlir::Type chunkType) {
 
     if (isEntityIDElement(elementType)) {
         return NLExecutor::selectEntityCaseReset(chunkKindFromElementType(elementType));
+    } else if (mlir::isa<storage::PathType>(elementType)) {
+        return NLExecutor::selectPathCaseReset();
     } else if (isAnyChunk(chunkType)) {
         return NLExecutor::selectTaggedCellReset();
     }
@@ -4202,6 +4211,8 @@ NLCaseWriteFn NLTranslator::selectCaseWriteForChunkType(mlir::Type resultChunkTy
     if (isEntityIDElement(resultElement)) {
         return NLExecutor::selectEntityCaseWrite(chunkKindFromElementType(resultElement),
                                                  isUntypedNullChunk(valueChunkType));
+    } else if (mlir::isa<storage::PathType>(resultElement)) {
+        return NLExecutor::selectPathCaseWrite(isUntypedNullChunk(valueChunkType));
     }
 
     return NLExecutor::selectCaseWrite(nullableChunkValueType(resultChunkType),
@@ -5976,6 +5987,14 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
             NLCollectFoldFunction fold = nullptr;
             NLCollectListEmitFunction listEmit = nullptr;
             NLExecutor::selectCollectTaggedHandlers(isDistinct, fold, listEmit);
+
+            value._buffer = allocCellColumn();
+            value._fold = fold;
+            value._listEmit = listEmit;
+        } else if (mlir::isa<storage::PathType>(element)) {
+            NLCollectFoldFunction fold = nullptr;
+            NLCollectListEmitFunction listEmit = nullptr;
+            NLExecutor::selectCollectPathHandlers(isDistinct, fold, listEmit);
 
             value._buffer = allocCellColumn();
             value._fold = fold;

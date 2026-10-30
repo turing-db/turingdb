@@ -14,6 +14,8 @@
 
 #include "metadata/PropertyType.h"
 
+#include "PathView.h"
+
 namespace db {
 
 class DataPartMerger;
@@ -32,6 +34,7 @@ public:
     using MapKeyValuePair = MapBuffer<>::MapKeyValuePair;
     using ViewVector = std::vector<MapView>;
     using EmbeddingBuffer = SpanBuffer<float, types::Embedding::Primitive>;
+    using PathBuffer = SpanBuffer<uint64_t, PathView>;
 
     MapContainer();
     ~MapContainer();
@@ -78,11 +81,13 @@ private:
     std::unique_ptr<MapBuffer<>> _maps;
     std::unique_ptr<StringBuffer> _strings;
     std::unique_ptr<EmbeddingBuffer> _embeddings;
+    std::unique_ptr<PathBuffer> _paths;
     ListContainer _lists;
     ViewVector _views;
 
     MapKeyValuePair own(const MapKeyValuePair& entry);
     MapKeyValuePair ownedEntry(MapEntryView entry);
+    PathBuffer& getPaths();
 };
 
 }

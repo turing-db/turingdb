@@ -1895,14 +1895,19 @@ def MakePath : TuringOp<"make_path", [Pure]> {
 /**
 * PathElements
 */
-def PathElements : TuringOp<"path_elements", [Pure, ConstantThroughOperands]> {
+def PathElements : TuringOp<"path_elements", [NoMemoryEffect,
+                                               DeclareOpInterfaceMethods<ConditionallySpeculatable>,
+                                               ConstantThroughOperands]> {
   let summary = "Read the nodes, the relationships or the length of each named path";
 
   let description = [{
     `nodes(p)`, `relationships(p)` and `length(p)` over the path a named pattern
     element binds: one list of node IDs, one list of edge IDs or one hop count per row,
     read off the path db.make_path laid out, or off the path db.shortest_path
-    found.
+    found. A path held in a list reaches it too, as the element a reduce or a
+    comprehension binds, whose column type lowering resolves, or as a tagged cell: a
+    tagged cell holding anything but a path or a null raises, so the op is speculatable
+    over a path column alone.
 
       %ns = db.path_elements(%p) kind nodes
               : (!db.column<!storage.path>) -> !db.column<!storage.nullable<!storage.list<!storage.node_id>>>
@@ -1915,7 +1920,7 @@ def PathElements : TuringOp<"path_elements", [Pure, ConstantThroughOperands]> {
     length and db.expand_path for the two lists.
   }];
 
-  let arguments = (ins ColumnPath:$path, PathElementsKind:$kind);
+  let arguments = (ins Column:$path, PathElementsKind:$kind);
   let results   = (outs Column:$result);
 
   let assemblyFormat = [{
@@ -1923,6 +1928,12 @@ def PathElements : TuringOp<"path_elements", [Pure, ConstantThroughOperands]> {
   }];
 
   let hasVerifier = 1;
+
+  let extraClassDefinition = [{
+    ::mlir::Speculation::Speculatability $cppClass::getSpeculatability() {
+      return speculatableOverElement<::mlir::storage::PathType>(getPath());
+    }
+  }];
 }
 
 /**

@@ -23,6 +23,7 @@ ListContainer::ListContainer(ListContainer&& other) noexcept
     : _lists(std::move(other._lists)),
     _strings(std::move(other._strings)),
     _embeddings(std::move(other._embeddings)),
+    _paths(std::move(other._paths)),
     _maps(std::move(other._maps)),
     _views(std::move(other._views))
 {
@@ -32,6 +33,7 @@ ListContainer& ListContainer::operator=(ListContainer&& other) noexcept {
     _lists = std::move(other._lists);
     _strings = std::move(other._strings);
     _embeddings = std::move(other._embeddings);
+    _paths = std::move(other._paths);
     _maps = std::move(other._maps);
     _views = std::move(other._views);
     return *this;
@@ -60,6 +62,9 @@ void ListContainer::clear() {
     _lists->clear();
     _strings->clear();
     _embeddings->clear();
+    if (_paths) {
+        _paths->clear();
+    }
     if (_maps) {
         _maps->clear();
     }
@@ -107,6 +112,14 @@ ListContainer::ListItemVariant ListContainer::ownedItem(CellView element) {
     return dispatcher.execute(asVariant, element);
 }
 
+ListContainer::PathBuffer& ListContainer::getPaths() {
+    if (!_paths) {
+        _paths = std::make_unique<PathBuffer>();
+    }
+
+    return *_paths;
+}
+
 ListContainer::ListItemVariant ListContainer::own(const ListItemVariant& element) {
     const auto copyPayload = [this](const auto& value) -> ListItemVariant {
         using T = std::decay_t<decltype(value)>;
@@ -115,6 +128,8 @@ ListContainer::ListItemVariant ListContainer::own(const ListItemVariant& element
             return _strings->insert(value);
         } else if constexpr (std::same_as<T, types::Embedding::Primitive>) {
             return _embeddings->insert(value);
+        } else if constexpr (std::same_as<T, PathView>) {
+            return getPaths().insert(value.getIDs());
         } else {
             return value;
         }

@@ -367,6 +367,13 @@ void ReadStmtAnalyzer::analyzeNamedPath(PatternElement* element) {
                    element);
     }
 
+    // A SET analyzes the pattern comprehension it assigns twice, and the reads of the path
+    // hold the declaration the first pass bound
+    if (VarDecl* bound = element->getPathDecl()) {
+        _ctxt->declareAlias(name, bound);
+        return;
+    }
+
     VarDecl* decl = _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::GraphPath, name);
     element->setPathDecl(decl);
 }

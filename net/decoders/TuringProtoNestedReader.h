@@ -21,7 +21,7 @@ namespace net::proto {
  * The tag is glanced (not yet consumed) by the caller; this visitor consumes the tag
  * together with its value once enough is buffered. Returns true if the value was fully
  * consumed, false if the read buffer ran dry: either before the value could start (nothing
- * consumed, retried next time) or partway through a String/Embedding payload (the value is
+ * consumed, retried next time) or partway through a String/Embedding/Path payload (the value is
  * already appended and its bytes resume via @ref _bufferState).
  *
  * Both containers reserve their space up front, so a fixed-width value's wire layout
@@ -66,6 +66,21 @@ struct NestedValueReadVisitor {
             const size_t numFloats = checkedElementCount<float>(numBytes, "embedding");
             float* dest = _sink->allocEmbedding(numFloats);
             const T view = _sink->getEmbeddingView(dest, numFloats);
+            writeValue(view);
+
+            return readVarLenPayload(_context, reinterpret_cast<char*>(dest), numBytes);
+        } else if constexpr (std::is_same_v<T, db::PathView>) {
+            if (_context->_inBuf->readable() < tagSize + sizeof(WireSize)) {
+                return false;
+            }
+            _context->_inBuf->increaseReadOffset(tagSize);
+
+            WireSize numBytes = 0;
+            _context->_inBuf->readData(&numBytes, sizeof(numBytes));
+
+            const size_t idCount = checkedElementCount<uint64_t>(numBytes, "path");
+            uint64_t* dest = _sink->allocPathIDs(idCount);
+            const T view = _sink->getPathView(dest, idCount);
             writeValue(view);
 
             return readVarLenPayload(_context, reinterpret_cast<char*>(dest), numBytes);

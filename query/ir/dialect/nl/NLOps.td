@@ -1360,7 +1360,8 @@ def PathElements : NLOp<"path_elements", [Pure, RowAlignedThroughOperands]> {
     Imperative counterpart of db.path_elements: one list of node IDs, one list of edge
     IDs or one hop count per row, read off the path nl.make_path laid out or the path
     nl.shortest_path found, and null on the rows whose path is null - the paths an
-    OPTIONAL MATCH missed.
+    OPTIONAL MATCH missed. A chunk of tagged cells reads the path each cell holds, null
+    where it holds a null.
 
       %ns = nl.path_elements(%p) kind nodes
               : (!nl.chunk<!storage.path>) -> !nl.chunk<!storage.nullable<!storage.list<!storage.node_id>>>

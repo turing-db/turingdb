@@ -211,6 +211,10 @@ private:
             return;
         }
 
+        encodeValue(PathView {value.getIDs()});
+    }
+
+    void encodeValue(const PathView value) {
         const std::span<const uint64_t> ids = value.getIDs();
 
         _writer.write('[');

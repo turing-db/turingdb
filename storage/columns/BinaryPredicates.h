@@ -1014,10 +1014,8 @@ struct TuringIn {
             if (scalarMap) {
                 return (*this)(*scalarMap, elements);
             }
-        } else if constexpr (TypedInternalID<Scalar>) {
-            if (!scalar.isValid()) {
-                return std::nullopt;
-            }
+        } else if (!holdsAValue(scalar)) {
+            return std::nullopt;
         }
 
         bool unknown = false;

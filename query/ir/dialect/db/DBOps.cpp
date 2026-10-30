@@ -846,6 +846,11 @@ LogicalResult PathLength::verify() {
 }
 
 LogicalResult PathElements::verify() {
+    const Type path = columnElement(getPath());
+    if (!isa<storage::PathType, storage::AnyType, NoneType>(path)) {
+        return emitOpError("reads a path column, a column of tagged cells, or a column whose type lowering resolves");
+    }
+
     const auto column = dyn_cast<ColumnType>(getResult().getType());
     const auto nullable = column ? dyn_cast<storage::NullableType>(column.getType()) : storage::NullableType();
     if (!nullable) {

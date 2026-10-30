@@ -9,6 +9,7 @@
 #include "MapEntryView.h"
 
 #include "ID.h"
+#include "PathView.h"
 #include "list/EncodedList.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
@@ -82,6 +83,12 @@ void encodeValue(MapEntryView entry, std::vector<std::byte>& out) {
         break;
         case CellTag::MapView:
             encodeMap(entry.getValue().getAs<MapView>(), out);
+        break;
+        case CellTag::Path: {
+            const std::span<const uint64_t> ids = entry.getValue().getAs<PathView>().getIDs();
+            appendValue<uint64_t>(out, ids.size());
+            appendBytes(out, ids.data(), ids.size_bytes());
+        }
         break;
         case CellTag::INVALID:
             throw FatalException("Cannot encode a map entry with an invalid type tag");
@@ -217,6 +224,9 @@ private:
             case CellTag::MapView:
                 return decodeMap();
             break;
+            case CellTag::Path:
+                return decodePath();
+            break;
             case CellTag::INVALID:
             break;
         }
@@ -236,6 +246,13 @@ private:
         const std::span<const std::byte> payload = readPayload(count * sizeof(float));
 
         return {reinterpret_cast<const float*>(payload.data()), count};
+    }
+
+    PathView decodePath() {
+        const uint64_t count = read<uint64_t>();
+        const std::span<const std::byte> payload = readPayload(count * sizeof(uint64_t));
+
+        return PathView {reinterpret_cast<const uint64_t*>(payload.data()), count};
     }
 
     ListView decodeList() {

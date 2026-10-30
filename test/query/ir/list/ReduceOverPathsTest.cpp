@@ -116,8 +116,7 @@ TEST_F(ReduceOverPathsTest, foldsNoLength) {
 }
 
 // The folds above over the paths themselves.
-// Disabled: collect() has no overload for a path.
-TEST_F(ReduceOverPathsTest, DISABLED_findsTheLongestOfTheCollectedPaths) {
+TEST_F(ReduceOverPathsTest, findsTheLongestOfTheCollectedPaths) {
     std::string query(PATHS_OF_EACH_PERSON);
     query += "WITH n, collect(p) AS paths ";
     query += "RETURN n.name, reduce(longest = 0, p IN paths | CASE WHEN length(p) > longest THEN length(p) ELSE longest END), "
@@ -136,8 +135,7 @@ TEST_F(ReduceOverPathsTest, DISABLED_findsTheLongestOfTheCollectedPaths) {
 }
 
 // Remy has two longest paths, so only what they share is read off the one kept.
-// Disabled: collect() has no overload for a path.
-TEST_F(ReduceOverPathsTest, DISABLED_keepsTheLongestPathAsTheAccumulator) {
+TEST_F(ReduceOverPathsTest, keepsTheLongestPathAsTheAccumulator) {
     std::string query(PATHS_OF_EACH_PERSON);
     query += "WITH n, collect(p) AS paths ";
     query += "WITH n, reduce(longest = null, p IN paths | "
@@ -156,19 +154,17 @@ TEST_F(ReduceOverPathsTest, DISABLED_keepsTheLongestPathAsTheAccumulator) {
     });
 }
 
-// Disabled: collect() has no overload for a path.
-TEST_F(ReduceOverPathsTest, DISABLED_collectsThePathsOfAPerson) {
+TEST_F(ReduceOverPathsTest, collectsThePathsOfAPerson) {
     expectRows("MATCH p=(:Person {name: 'Remy'})-[:INTERESTED_IN]->(:Interest) RETURN [x IN collect(p) | length(x)]",
                {{"[1, 1, 1]"}});
 }
 
-// Disabled: lowering cannot read a path column into a list.
-TEST_F(ReduceOverPathsTest, DISABLED_foldsAListOfOnePath) {
+TEST_F(ReduceOverPathsTest, foldsAListOfOnePath) {
     expectRows("MATCH p=(:Person {name: 'Remy'})-[:INTERESTED_IN]->(:Interest) RETURN reduce(total = 0, x IN [p] | total + length(x))",
                {{"1"}, {"1"}, {"1"}});
 }
 
-TEST_F(ReduceOverPathsTest, DISABLED_foldsAListLiteralOfPaths) {
+TEST_F(ReduceOverPathsTest, foldsAListLiteralOfPaths) {
     expectRows("MATCH p=(r:Person {name: 'Remy'})-[:KNOWS_WELL]->(:Person)-[:INTERESTED_IN]->(:Interest {name: 'Bio'}), "
                "q=(r)-[:INTERESTED_IN]->(:Interest {name: 'Ghosts'}) "
                "RETURN reduce(longest = 0, x IN [p, q] | CASE WHEN length(x) > longest THEN length(x) ELSE longest END), "
@@ -176,14 +172,13 @@ TEST_F(ReduceOverPathsTest, DISABLED_foldsAListLiteralOfPaths) {
                {{"2", "3"}});
 }
 
-// Disabled: a COLLECT subquery that returns a path trips the codegen assertion 'readsAPath'.
-TEST_F(ReduceOverPathsTest, DISABLED_collectsThePathsOfACollectSubquery) {
+TEST_F(ReduceOverPathsTest, collectsThePathsOfACollectSubquery) {
     expectRows("MATCH (n:Person {name: 'Remy'}) "
                "RETURN [x IN COLLECT { MATCH q=(n)-[:INTERESTED_IN]->(:Interest) RETURN q } | length(x)]",
                {{"[1, 1, 1]"}});
 }
 
-TEST_F(ReduceOverPathsTest, DISABLED_foldsThePathsOfACollectSubquery) {
+TEST_F(ReduceOverPathsTest, foldsThePathsOfACollectSubquery) {
     expectRows("MATCH (n:Person {name: 'Remy'}) "
                "RETURN reduce(total = 0, x IN COLLECT { "
                "MATCH q=(n)-[:KNOWS_WELL*0..1]->(:Person)-[:INTERESTED_IN]->(:Interest) RETURN q "
@@ -191,21 +186,20 @@ TEST_F(ReduceOverPathsTest, DISABLED_foldsThePathsOfACollectSubquery) {
                {{"7"}});
 }
 
-// Disabled: the parser takes no path name in a pattern comprehension.
-TEST_F(ReduceOverPathsTest, DISABLED_collectsThePathsOfAPatternComprehension) {
+TEST_F(ReduceOverPathsTest, collectsThePathsOfAPatternComprehension) {
     expectRows("MATCH (n:Person {name: 'Remy'}) "
                "RETURN [x IN [q = (n)-[:INTERESTED_IN]->(:Interest) | q] | length(x)]",
                {{"[1, 1, 1]"}});
 }
 
-TEST_F(ReduceOverPathsTest, DISABLED_foldsThePathsOfAPatternComprehension) {
+TEST_F(ReduceOverPathsTest, foldsThePathsOfAPatternComprehension) {
     expectRows("MATCH (n:Person {name: 'Remy'}) "
                "RETURN reduce(total = 0, x IN [q = (n)-[:KNOWS_WELL*0..1]->(:Person)-[:INTERESTED_IN]->(:Interest) | q] "
                "| total + length(x))",
                {{"7"}});
 }
 
-TEST_F(ReduceOverPathsTest, DISABLED_decidesOverThePathsOfAPatternComprehension) {
+TEST_F(ReduceOverPathsTest, decidesOverThePathsOfAPatternComprehension) {
     expectRows("MATCH (n:Person {name: 'Remy'}) "
                "RETURN allReduce(total = 0, x IN [q = (n)-[:INTERESTED_IN]->(:Interest) | q] | total + length(x), total < 3)",
                {{"false"}});
