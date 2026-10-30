@@ -91,3 +91,7 @@ A list element or a map value may be a path, tagged `CellTag::Path`. Its value i
 them out, held in a buffer beside the elements. The query buffers view the IDs of the path
 column they read from, and `ListContainer`, `MapContainer` and `NLValueStore` copy them into a
 `SpanBuffer<uint64_t, PathView>` of their own, the way they copy an embedding's floats.
+
+A path is a value of the query that matched it, so a property cannot hold one: a write of a list
+or a map holding a path, at any depth, is rejected. `EncodedList` and `EncodedMap` still encode a
+path, as its ID count then its IDs, since they also compare query values.
