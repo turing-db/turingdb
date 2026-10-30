@@ -13,6 +13,10 @@ bool mlir::isNullLiteralType(Type elementType) {
     return nullable && isa<NoneType>(nullable.getValueType());
 }
 
+bool mlir::holdsItsOwnNull(Type elementType) {
+    return isa<storage::AnyType, storage::NodeIDType, storage::EdgeIDType, storage::PathType>(elementType);
+}
+
 LogicalResult mlir::verifyComparesNoNullLiteral(Operation* op, Type lhsElementType, Type rhsElementType) {
     if (isNullLiteralType(lhsElementType) || isNullLiteralType(rhsElementType)) {
         return op->emitOpError("compares against the null literal, which is null on every row: "

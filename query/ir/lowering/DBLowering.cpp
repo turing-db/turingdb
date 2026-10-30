@@ -748,12 +748,6 @@ mlir::Type selectedValueElement(mlir::OpBuilder& builder, mlir::Type lhs, mlir::
     return mlir::Type {};
 }
 
-// Whether a column of @param element spells a null as a value of its own: the invalid ID of
-// an entity, the tag of a cell, or the path with no node
-bool holdsItsOwnNull(mlir::Type element) {
-    return mlir::isa<storage::AnyType, storage::NodeIDType, storage::EdgeIDType, storage::PathType>(element);
-}
-
 // Whether a column can hold the null literal beside its values: in the optional a nullable
 // chunk wraps them in, or in a value of its own
 bool holdsItsNull(mlir::Type chunkType) {
@@ -6425,14 +6419,12 @@ mlir::Type DBLowering::caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks
         return _builder.getIntegerType(64);
     }
 
-    // A node or an edge is selected as the entity it is rather than as its ID's integer,
-    // so the selection answers a column the rest of the query still reads as an entity.
-    const bool isEntity = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(unified);
+    // A node, an edge or a path is selected as what it is rather than as an ID's integer,
+    // so the selection answers a column the rest of the query still reads as one.
     const bool isValue = elementTypeToValueType(unified) != ValueType::Invalid;
-    const bool isAny = mlir::isa<storage::AnyType>(unified);
 
-    if (!isEntity && !isValue && !isAny) {
-        throw IRException("db.case requires value or entity branches");
+    if (!isValue && !holdsItsOwnNull(unified)) {
+        throw IRException("db.case requires value, entity or path branches");
     }
 
     return unified;

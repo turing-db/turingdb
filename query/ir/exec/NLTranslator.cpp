@@ -4206,10 +4206,10 @@ NLCaseResetFn NLTranslator::selectCaseResetForChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
 
-    if (isEntityIDElement(elementType)) {
-        return NLExecutor::selectEntityCaseReset(chunkKindFromElementType(elementType));
-    } else if (isAnyChunk(chunkType)) {
+    if (isAnyChunk(chunkType)) {
         return NLExecutor::selectTaggedCellReset();
+    } else if (holdsItsOwnNull(elementType)) {
+        return NLExecutor::selectOwnNullCaseReset(chunkKindFromElementType(elementType));
     }
 
     return NLExecutor::selectCaseReset(nullableChunkValueType(chunkType));
@@ -4233,9 +4233,9 @@ NLCaseWriteFn NLTranslator::selectCaseWriteForChunkType(mlir::Type resultChunkTy
     const auto resultChunk = mlir::cast<nl::ChunkType>(resultChunkType);
     const mlir::Type resultElement = resultChunk.getElementType();
 
-    if (isEntityIDElement(resultElement)) {
-        return NLExecutor::selectEntityCaseWrite(chunkKindFromElementType(resultElement),
-                                                 isUntypedNullChunk(valueChunkType));
+    if (holdsItsOwnNull(resultElement)) {
+        return NLExecutor::selectOwnNullCaseWrite(chunkKindFromElementType(resultElement),
+                                                  isUntypedNullChunk(valueChunkType));
     }
 
     return NLExecutor::selectCaseWrite(nullableChunkValueType(resultChunkType),

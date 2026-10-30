@@ -492,12 +492,12 @@ public:
                                          bool nullable,
                                          bool untypedNull);
 
-    // The entity siblings of the two above, for a selection whose branches are nodes or
-    // edges: an entity column carries its null in the ID rather than in an optional, so
-    // the reset writes the invalid ID and the write copies the branch's ID across
-    static NLCaseResetFn selectEntityCaseReset(NLChunkKind kind);
+    // The siblings of the two above for a selection whose branches are nodes, edges or
+    // paths: such a column carries its null in a value of its own rather than in an
+    // optional, so the reset writes that null and the write copies the branch's cell across
+    static NLCaseResetFn selectOwnNullCaseReset(NLChunkKind kind);
 
-    static NLCaseWriteFn selectEntityCaseWrite(NLChunkKind kind, bool untypedNull);
+    static NLCaseWriteFn selectOwnNullCaseWrite(NLChunkKind kind, bool untypedNull);
 
     // Lay a constant chunk's single value out over the driving relation's rows
     // (nl.broadcast_constant), so a fold that walks rows is handed the step's rows

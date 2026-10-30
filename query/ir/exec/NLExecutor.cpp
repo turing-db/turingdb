@@ -2375,19 +2375,19 @@ void caseWriteNull(Column* result, size_t resultRow, const Column* value, size_t
     static_cast<ColumnOptVector<Primitive>*>(result)->getRaw()[resultRow] = std::nullopt;
 }
 
-template <typename ID>
-void caseWriteNullEntity(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
-    static_cast<ColumnVector<ID>*>(result)->getRaw()[resultRow] = ID {};
+template <typename Element>
+void caseWriteOwnNull(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
+    static_cast<ColumnVector<Element>*>(result)->getRaw()[resultRow] = Element {};
 }
 
 void caseWriteNullTaggedCell(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
     static_cast<ColumnVector<CellView>*>(result)->getRaw()[resultRow] = CellView::nullElement();
 }
 
-template <typename ID>
-void caseWriteEntityCell(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
-    std::vector<ID>& results = static_cast<ColumnVector<ID>*>(result)->getRaw();
-    results[resultRow] = static_cast<const ColumnVector<ID>*>(value)->getRaw()[valueRow];
+template <typename Element>
+void caseWriteOwnNullCell(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
+    std::vector<Element>& results = static_cast<ColumnVector<Element>*>(result)->getRaw();
+    results[resultRow] = static_cast<const ColumnVector<Element>*>(value)->getRaw()[valueRow];
 }
 
 void writeCell(Column* result,
@@ -2515,12 +2515,13 @@ void caseResetColumn(Column* result, size_t rowCount) {
     results.assign(rowCount, std::optional<Primitive> {});
 }
 
-// A default-constructed ID is the invalid one, which is how an entity column spells an
-// absent row: the reset leaves every row null, as the optional one above does
-template <typename ID>
-void caseResetEntityColumn(Column* result, size_t rowCount) {
-    std::vector<ID>& results = static_cast<ColumnVector<ID>*>(result)->getRaw();
-    results.assign(rowCount, ID {});
+// A default-constructed ID is the invalid one and a default-constructed path the one with
+// no node, which is how those columns spell an absent row: the reset leaves every row null,
+// as the optional one above does
+template <typename Element>
+void caseResetOwnNullColumn(Column* result, size_t rowCount) {
+    std::vector<Element>& results = static_cast<ColumnVector<Element>*>(result)->getRaw();
+    results.assign(rowCount, Element {});
 }
 
 // 3-way compare two rows of a type-erased column of tagged scalars. Cells need not share
@@ -9521,24 +9522,28 @@ NLUnaryFn NLExecutor::selectIsNotTrue(const Column* operand, bool untypedNull, L
     return &applyIsNotTrueOnBoolColumn;
 }
 
-NLCaseResetFn NLExecutor::selectEntityCaseReset(NLChunkKind kind) {
+NLCaseResetFn NLExecutor::selectOwnNullCaseReset(NLChunkKind kind) {
     if (kind == NLChunkKind::NodeID) {
-        return &caseResetEntityColumn<NodeID>;
+        return &caseResetOwnNullColumn<NodeID>;
     } else if (kind == NLChunkKind::EdgeID) {
-        return &caseResetEntityColumn<EdgeID>;
+        return &caseResetOwnNullColumn<EdgeID>;
+    } else if (kind == NLChunkKind::Path) {
+        return &caseResetOwnNullColumn<GraphPath>;
     }
 
-    throw IRException("Only a node or an edge column can hold a selection over entities");
+    throw IRException("Only a node, an edge or a path column holds its own null");
 }
 
-NLCaseWriteFn NLExecutor::selectEntityCaseWrite(NLChunkKind kind, bool untypedNull) {
+NLCaseWriteFn NLExecutor::selectOwnNullCaseWrite(NLChunkKind kind, bool untypedNull) {
     if (kind == NLChunkKind::NodeID) {
-        return untypedNull ? &caseWriteNullEntity<NodeID> : &caseWriteEntityCell<NodeID>;
+        return untypedNull ? &caseWriteOwnNull<NodeID> : &caseWriteOwnNullCell<NodeID>;
     } else if (kind == NLChunkKind::EdgeID) {
-        return untypedNull ? &caseWriteNullEntity<EdgeID> : &caseWriteEntityCell<EdgeID>;
+        return untypedNull ? &caseWriteOwnNull<EdgeID> : &caseWriteOwnNullCell<EdgeID>;
+    } else if (kind == NLChunkKind::Path) {
+        return untypedNull ? &caseWriteOwnNull<GraphPath> : &caseWriteOwnNullCell<GraphPath>;
     }
 
-    throw IRException("Only a node or an edge column can hold a selection over entities");
+    throw IRException("Only a node, an edge or a path column holds its own null");
 }
 
 NLCaseWriteFn NLExecutor::selectCaseWrite(ValueType valueType,

@@ -1127,6 +1127,8 @@ private:
 
     mlir::Value nullConstantColumn();
 
+    mlir::Value createCase(mlir::ValueRange conditions, mlir::ValueRange values, mlir::Value defaultValue);
+
     // The one-element list a column makes, the shape a scalar takes to join a list
     mlir::Value singletonList(mlir::Value column);
 

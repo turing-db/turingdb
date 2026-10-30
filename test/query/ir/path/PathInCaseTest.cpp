@@ -89,3 +89,37 @@ TEST_F(PathInCaseTest, readsTheLengthOfAPathACoalesceGives) {
     expectRows("MATCH pt = (a)-[:KNOWS_WELL]->(b) RETURN a.name, length(coalesce(CASE WHEN a.name = 'Remy' THEN pt END, pt))",
                {{"Remy", "1"}, {"Adam", "1"}, {"Ghosts", "1"}});
 }
+
+TEST_F(PathInCaseTest, returnsThePathACaseGives) {
+    expectRows("MATCH pt = (a)-[:KNOWS_WELL]->(b) RETURN a.name, CASE WHEN a.name = 'Remy' THEN pt END",
+               {{"Remy", "(0), [0], (1)"}, {"Adam", "null"}, {"Ghosts", "null"}});
+}
+
+TEST_F(PathInCaseTest, readsTheRelationshipsOfThePathACaseSelects) {
+    expectRows("MATCH pt = (a)-[:KNOWS_WELL]->(b) MATCH qt = (b)-[:KNOWS_WELL]->(c) "
+               "RETURN a.name, relationships(CASE WHEN a.name = 'Remy' THEN pt ELSE qt END)",
+               {{"Remy", "0"}, {"Adam", "0"}, {"Ghosts", "0"}});
+}
+
+TEST_F(PathInCaseTest, readsTheLengthOfAShortestPathACaseGives) {
+    expectRows("MATCH (n {name: 'Adam'}), (m {name: 'Ghosts'}) "
+               "SHORTESTPATH(n, m, duration, d, p) "
+               "RETURN length(CASE WHEN d < 100 THEN p END), length(CASE WHEN d > 100 THEN p END)",
+               {{"2", "null"}});
+}
+
+TEST_F(PathInCaseTest, typesTheCaseAsThePathItSelects) {
+    StringRowSink sink;
+    QueryStatus status;
+    runQuery("EXPLAIN (db) MATCH pt = (a)-[:KNOWS_WELL]->(b) RETURN length(CASE WHEN a.name = 'Remy' THEN pt END)", sink, status);
+    ASSERT_TRUE(status.isOk()) << status.getError();
+
+    std::string dump;
+    for (const StringRowSink::Row& row : sink.getRows()) {
+        if (row.front() == "db") {
+            dump = row.back();
+        }
+    }
+
+    EXPECT_NE(dump.find("-> !db.column<!storage.path>"), std::string::npos) << dump;
+}

@@ -3507,18 +3507,25 @@ def Case : TuringOp<"case", [Pure, ConstantThroughOperands, AttrSizedOperandSegm
     A Cypher CASE is a db.lazy_case instead, which computes a branch only over the rows
     that reach it.
 
-    The result element type is resolved during lowering, as for the arithmetic ops: the
-    branches promote against each other into one nullable value column, or - when they are
-    all nodes, or all edges - into the entity column they already are, which carries the
-    null of an unmatched row in its ID. A selection walks rows, so - unlike the arithmetic
-    ops - it is not constant through its operands: the constants among them are laid out
-    over the driving relation during lowering.
+    The result is the one element every value holds, nullable unless it holds its own
+    null, the null literal holding whatever the others do. Nodes, edges and paths are
+    selected into the column they already are, which carries the null of an unmatched row
+    in a value of its own. A result of none is resolved during lowering, as for the
+    arithmetic ops: the branches promote against each other into one nullable value
+    column. A selection walks rows, so - unlike the arithmetic ops - it is not constant
+    through its operands: the constants among them are laid out over the driving relation
+    during lowering.
   }];
 
   let arguments = (ins Variadic<Column>:$conditions,
                        Variadic<Column>:$values,
                        Optional<Column>:$defaultValue);
   let results = (outs Column:$result);
+
+  let extraClassDeclaration = [{
+    // The value of every branch, then the default
+    void collectSelectedValues(::llvm::SmallVectorImpl<::mlir::Value>& values);
+  }];
 
   let hasVerifier = 1;
 
@@ -3561,13 +3568,18 @@ def LazyCase : TuringOp<"lazy_case", [Pure, ConstantThroughOperands]> {
     subject against each WHEN value as the condition. The subject is computed once over
     every row and, unless it is a constant, carried as the last column.
 
-    The result element type is resolved during lowering, as db.case's is.
+    The result is typed as db.case's is, over the values the value regions yield.
   }];
 
   let arguments = (ins Variadic<Column>:$columns_to_filter);
   let results   = (outs Column:$result);
 
   let regions = (region VariadicRegion<SizedRegion<1>>:$branches);
+
+  let extraClassDeclaration = [{
+    // The value each WHEN's value region yields, then the ELSE's
+    void collectSelectedValues(::llvm::SmallVectorImpl<::mlir::Value>& values);
+  }];
 
   let hasVerifier = 1;
 

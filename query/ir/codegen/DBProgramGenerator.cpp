@@ -39,6 +39,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/SaveAndRestore.h"
 
+#include "DBColumnElement.h"
 #include "DBDialect.h"
 #include "DBOps.h"
 #include "DBPassPipeline.h"
@@ -8248,12 +8249,7 @@ void DBProgramGenerator::translateMapProjectionExpr(const Expr* expr, const MapP
 
     const mlir::Value holdsABase = _opBuilder.create<mlir::db::IsNotNullOp>(loc, boolType, base).getResult();
 
-    _part._exprMap[expr] = _opBuilder.create<mlir::db::Case>(loc,
-                                                             noneType,
-                                                             mlir::ValueRange {holdsABase},
-                                                             mlir::ValueRange {map},
-                                                             mlir::Value {})
-                               .getResult();
+    _part._exprMap[expr] = createCase(mlir::ValueRange {holdsABase}, mlir::ValueRange {map}, mlir::Value {});
 }
 
 void DBProgramGenerator::generateFoldRegion(mlir::Region& region,
@@ -8948,7 +8944,13 @@ void DBProgramGenerator::translateCaseExpr(const Expr* expr, const CaseExpr* cas
 
     dropUnreadCarriedColumns(caseOp, caseOp.getColumnsToFilter());
 
-    _part._exprMap[expr] = caseOp.getResult();
+    llvm::SmallVector<mlir::Value> selected;
+    caseOp.collectSelectedValues(selected);
+
+    mlir::Value result = caseOp.getResult();
+    result.setType(allocColumnType(selectedColumnElement(_mlirCtxt, selected)));
+
+    _part._exprMap[expr] = result;
 }
 
 void DBProgramGenerator::generateCaseRegion(mlir::Region& region,
@@ -9469,6 +9471,21 @@ mlir::Value DBProgramGenerator::nullConstantColumn() {
     const mlir::db::ColumnType resultType = allocColumnType(valueAttr.getType());
 
     return _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(), resultType, valueAttr).getResult();
+}
+
+mlir::Value DBProgramGenerator::createCase(mlir::ValueRange conditions, mlir::ValueRange values, mlir::Value defaultValue) {
+    llvm::SmallVector<mlir::Value> selected(values.begin(), values.end());
+    if (defaultValue) {
+        selected.push_back(defaultValue);
+    }
+
+    const mlir::db::ColumnType resultType = allocColumnType(selectedColumnElement(_mlirCtxt, selected));
+
+    return _opBuilder.create<mlir::db::Case>(_opBuilder.getUnknownLoc(),
+                                             resultType,
+                                             conditions,
+                                             values,
+                                             defaultValue).getResult();
 }
 
 mlir::Value DBProgramGenerator::constantBool(bool value) {
@@ -10287,7 +10304,6 @@ void DBProgramGenerator::translateCoalesce(const Expr* expr, const ExprChain* ar
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
-    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
     const size_t branchCount = arguments.size() - 1;
 
@@ -10305,12 +10321,7 @@ void DBProgramGenerator::translateCoalesce(const Expr* expr, const ExprChain* ar
 
     const llvm::ArrayRef<mlir::Value> branches = llvm::ArrayRef<mlir::Value>(arguments).drop_back();
 
-    _part._exprMap[expr] = _opBuilder.create<mlir::db::Case>(loc,
-                                                             noneType,
-                                                             conditions,
-                                                             branches,
-                                                             arguments.back())
-                               .getResult();
+    _part._exprMap[expr] = createCase(conditions, branches, arguments.back());
 }
 
 mlir::db::Collect DBProgramGenerator::createCollect(llvm::ArrayRef<mlir::Value> keyColumns,
@@ -10506,16 +10517,10 @@ mlir::Value DBProgramGenerator::translateRowPercentile(const FunctionInvocation*
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
-    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
     const mlir::Value holdsAValue = _opBuilder.create<mlir::db::IsNotNullOp>(loc, boolType, valueColumn).getResult();
 
-    return _opBuilder.create<mlir::db::Case>(loc,
-                                             noneType,
-                                             mlir::ValueRange {holdsAValue},
-                                             mlir::ValueRange {percentile},
-                                             mlir::Value {})
-        .getResult();
+    return createCase(mlir::ValueRange {holdsAValue}, mlir::ValueRange {percentile}, mlir::Value {});
 }
 
 void DBProgramGenerator::generateKeylessAggregates(const Projection* projection) {

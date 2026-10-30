@@ -7,10 +7,12 @@
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Value.h"
+#include "mlir/IR/ValueRange.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 
 #include "DBTypes.h"
+#include "NullLiteralType.h"
 #include "StorageTypes.h"
 
 using namespace db;
@@ -230,6 +232,39 @@ mlir::Type db::declaredColumnElement(mlir::Value column) {
     const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
 
     return nullable ? nullable.getValueType() : element;
+}
+
+mlir::Type db::selectedColumnElement(mlir::MLIRContext* context, mlir::ValueRange values) {
+    mlir::Type shared;
+
+    for (const mlir::Value value : values) {
+        const mlir::Type declared = mlir::cast<mlir::db::ColumnType>(value.getType()).getType();
+        if (mlir::isNullLiteralType(declared)) {
+            continue;
+        }
+
+        // A mask and a boolean value hold the same truth value, the i1 lowering reads both as
+        mlir::Type element = declaredColumnElement(value);
+        if (mlir::isa<storage::BoolType>(element)) {
+            element = mlir::IntegerType::get(context, 1);
+        }
+
+        const bool unresolved = mlir::isa<mlir::NoneType>(element);
+        const bool disagrees = shared && shared != element;
+        if (unresolved || disagrees) {
+            return mlir::NoneType::get(context);
+        }
+
+        shared = element;
+    }
+
+    if (!shared) {
+        return mlir::NoneType::get(context);
+    } else if (mlir::holdsItsOwnNull(shared)) {
+        return shared;
+    }
+
+    return storage::NullableType::get(context, shared);
 }
 
 mlir::Type db::unaryFunctionElement(mlir::Operation* function, mlir::Type inputElement) {

@@ -17,7 +17,7 @@ namespace {
 
 // MATCH (n) RETURN CASE WHEN n.age > 30 THEN 1 ELSE 0 END, with the branch operands
 // spelled by the caller so a well-formed selection and a malformed one differ only there.
-std::string caseProgram(const char* branches) {
+std::string caseProgram(const char* branches, const char* resultType = "!db.column<none>") {
     return "func.func @main() {\n"
            "  %n = db.scan_nodes() : !db.column<!storage.node_id>\n"
            "  %age = db.get_node_properties(%n, \"age\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>\n"
@@ -28,7 +28,9 @@ std::string caseProgram(const char* branches) {
            "  %pick = db.case("
            + std::string(branches)
            + "\n"
-             "  db.output(%pick) : !db.column<none>\n"
+             "  db.output(%pick) : "
+           + std::string(resultType)
+           + "\n"
              "  return\n"
              "}\n";
 }
@@ -49,6 +51,16 @@ const char* const twoConditionsOneValue
 
 // No branch at all, which selects nothing
 const char* const noBranch = "{}, {}, %zero) : (!db.column<i64>) -> !db.column<none>";
+
+// The result named as the nullable integer the two integer values select into
+const char* const resultTheValuesSelectInto
+    = "{%old}, {%one}, %zero) : (!db.column<!storage.bool>, !db.column<i64>, !db.column<i64>) "
+      "-> !db.column<!storage.nullable<i64>>";
+
+// The result named as a plain integer, where the integers select into a nullable one
+const char* const resultHoldingNoNull
+    = "{%old}, {%one}, %zero) : (!db.column<!storage.bool>, !db.column<i64>, !db.column<i64>) "
+      "-> !db.column<i64>";
 
 }
 
@@ -121,6 +133,14 @@ TEST_F(CaseOpTest, verifierRejectsUnpairedBranches) {
 
 TEST_F(CaseOpTest, verifierRejectsABranchlessSelection) {
     EXPECT_FALSE(parse(caseProgram(noBranch)));
+}
+
+TEST_F(CaseOpTest, verifierAcceptsTheResultItsValuesSelectInto) {
+    EXPECT_TRUE(parse(caseProgram(resultTheValuesSelectInto, "!db.column<!storage.nullable<i64>>")));
+}
+
+TEST_F(CaseOpTest, verifierRejectsAResultItsValuesDoNotSelectInto) {
+    EXPECT_FALSE(parse(caseProgram(resultHoldingNoNull, "!db.column<i64>")));
 }
 
 int main(int argc, char** argv) {
