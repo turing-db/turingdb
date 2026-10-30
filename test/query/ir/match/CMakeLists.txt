@@ -88,4 +88,8 @@ add_call_v3_test(test_query_ir_non_reserved_keyword NonReservedKeywordTest.cpp)
 
 add_call_v3_test(test_query_ir_reserved_keyword ReservedKeywordTest.cpp)
 
+add_turing_test(test_query_ir_supplier_keyword SupplierKeywordTest.cpp)
+target_sources(test_query_ir_supplier_keyword PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_supplier_keyword PRIVATE ${IR_TEST_DIR})
+
 add_call_v3_test(test_query_ir_token_whitespace TokenWhitespaceTest.cpp)
