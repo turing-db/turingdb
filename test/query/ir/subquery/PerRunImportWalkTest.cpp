@@ -106,3 +106,29 @@ TEST_F(PerRunImportWalkTest, sizesAGroupRelationshipVariable) {
                "CALL (r) { WITH count(*) AS c RETURN size(r) AS n } RETURN b.name, n",
                {{"Adam", "1"}, {"Remy", "2"}});
 }
+
+TEST_F(PerRunImportWalkTest, selectsTheWalkInACase) {
+    expectRows("MATCH (:Person {name: 'Remy'})-[e:KNOWS_WELL*1..2]->(b) CALL (e) { WITH count(*) AS c RETURN CASE WHEN size(e) > 1 THEN e END AS k } RETURN b.name, size(k)",
+               {{"Adam", "null"}, {"Remy", "2"}});
+}
+
+TEST_F(PerRunImportWalkTest, readsTheEndsOfTheWalk) {
+    expectRows("MATCH (:Person {name: 'Remy'})-[e:KNOWS_WELL*1..2]->(b) CALL (e) { WITH count(*) AS c RETURN head(e).duration AS h, last(e).duration AS l, size(tail(e)) AS t } RETURN b.name, h, l, t",
+               {{"Adam", "20", "20", "0"}, {"Remy", "20", "20", "1"}});
+}
+
+TEST_F(PerRunImportWalkTest, concatenatesAndComparesTheWalk) {
+    expectRows("MATCH (:Person {name: 'Remy'})-[e:KNOWS_WELL*1..2]->(b) CALL (e) { WITH count(*) AS c RETURN size(e + e) AS s, size(coalesce(e, [])) AS k, e = e AS q } RETURN b.name, s, k, q",
+               {{"Adam", "2", "1", "true"}, {"Remy", "4", "2", "true"}});
+}
+
+TEST_F(PerRunImportWalkTest, readsTheEndsOfAGroupRelationshipVariable) {
+    expectRows("MATCH (:Person {name: 'Remy'}) ((x)-[r:KNOWS_WELL]->(y)){1,2} (b) "
+               "CALL (r) { WITH count(*) AS c RETURN last(r).duration AS l, size(CASE WHEN size(r) > 1 THEN r END) AS k } RETURN b.name, l, k",
+               {{"Adam", "20", "null"}, {"Remy", "20", "2"}});
+}
+
+TEST_F(PerRunImportWalkTest, readsTheWalkAsAListInABodyRunOverEveryRow) {
+    expectRows("MATCH (:Person {name: 'Remy'})-[e:KNOWS_WELL*1..2]->(b) CALL (e) { RETURN last(e).duration AS l, size(CASE WHEN size(e) > 1 THEN e END) AS k, size(e + e) AS s } RETURN b.name, l, k, s",
+               {{"Adam", "20", "null", "2"}, {"Remy", "20", "2", "4"}});
+}
