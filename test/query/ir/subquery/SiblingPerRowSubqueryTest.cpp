@@ -8,8 +8,8 @@
 
 using namespace turing::test;
 
-// Two expressions of one projection that each run a subquery one row at a time inside the
-// elements of a list. The LIMIT makes the COUNT run per row: Remy counts 2 and Doruk 1.
+// Two expressions that each run a subquery one row at a time inside the elements of a list.
+// The LIMIT makes the COUNT run per row: Remy counts 2 and Doruk 1.
 class SiblingPerRowSubqueryTest : public CallV3Test {
 protected:
     static constexpr std::string_view COUNT_INTERESTS =
@@ -33,9 +33,7 @@ TEST_F(SiblingPerRowSubqueryTest, countsInTwoComprehensionsOverARowsList) {
     expectRows(query, {{"[2, 1]", "[2, 1]"}});
 }
 
-// Disabled: lowering puts the second comprehension over a constant list at the top of the
-// function, above the property and edge type handles the first one created and both read.
-TEST_F(SiblingPerRowSubqueryTest, DISABLED_countsInTwoComprehensionsOverAConstantList) {
+TEST_F(SiblingPerRowSubqueryTest, countsInTwoComprehensionsOverAConstantList) {
     std::string query = "RETURN [name IN ['Remy', 'Doruk'] | ";
     query += COUNT_INTERESTS;
     query += "] AS a, [name IN ['Remy', 'Doruk'] | ";
@@ -45,7 +43,27 @@ TEST_F(SiblingPerRowSubqueryTest, DISABLED_countsInTwoComprehensionsOverAConstan
     expectRows(query, {{"[2, 1]", "[2, 1]"}});
 }
 
-TEST_F(SiblingPerRowSubqueryTest, DISABLED_countsInTwoReducesOverAConstantList) {
+TEST_F(SiblingPerRowSubqueryTest, countsInTwoComprehensionsAroundAConstant) {
+    std::string query = "RETURN [name IN ['Remy'] | ";
+    query += COUNT_INTERESTS;
+    query += "] AS a, 1 AS one, [name IN ['Doruk'] | ";
+    query += COUNT_INTERESTS;
+    query += "] AS b";
+
+    expectRows(query, {{"[2]", "1", "[1]"}});
+}
+
+TEST_F(SiblingPerRowSubqueryTest, countsInComprehensionsOfTwoClauses) {
+    std::string query = "WITH [name IN ['Remy'] | ";
+    query += COUNT_INTERESTS;
+    query += "] AS a RETURN a, [name IN ['Doruk'] | ";
+    query += COUNT_INTERESTS;
+    query += "] AS b";
+
+    expectRows(query, {{"[2]", "[1]"}});
+}
+
+TEST_F(SiblingPerRowSubqueryTest, countsInTwoReducesOverAConstantList) {
     std::string query = "RETURN reduce(total = 0, name IN ['Remy', 'Doruk'] | total + ";
     query += COUNT_INTERESTS;
     query += ") AS a, reduce(total = 0, name IN ['Remy', 'Doruk'] | total + ";
@@ -55,7 +73,7 @@ TEST_F(SiblingPerRowSubqueryTest, DISABLED_countsInTwoReducesOverAConstantList) 
     expectRows(query, {{"3", "3"}});
 }
 
-TEST_F(SiblingPerRowSubqueryTest, DISABLED_countsInAReduceBesideAComprehensionOverAConstantList) {
+TEST_F(SiblingPerRowSubqueryTest, countsInAReduceBesideAComprehensionOverAConstantList) {
     std::string query = "RETURN reduce(total = 0, name IN ['Remy', 'Doruk'] | total + ";
     query += COUNT_INTERESTS;
     query += ") AS a, [name IN ['Remy', 'Doruk'] | ";

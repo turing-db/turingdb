@@ -1116,7 +1116,7 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     _entryBlock = nlFunction.addEntryBlock();
 
     // Create the ReturnOp of the target function right away
-    setInsertionToEntryBlockStart();
+    _builder.setInsertionPointToStart(_entryBlock);
     _builder.create<mlir::func::ReturnOp>(loc);
 
     // Lower each operation of the db function. Top-level scans root their loop
@@ -1124,6 +1124,7 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     _valueMap.clear();
     _propertyTypes.clear();
     _edgeTypeSets.clear();
+    _lastHoisted = nullptr;
     _constantColumns.clear();
     _rootBlock = _entryBlock;
     _innermostLoopBody = nullptr;
@@ -1188,10 +1189,20 @@ void DBLowering::hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock
     // Hoist one nl.limit handle per db.limit to the top of the hoist block, where
     // each dominates the loops, the update and the truncate that read it.
     if (!limits.empty()) {
-        _builder.setInsertionPointToStart(hoistBlock);
+        const bool hoistsIntoTheEntryBlock = hoistBlock == _entryBlock;
+        if (hoistsIntoTheEntryBlock) {
+            setInsertionAfterHoisted();
+        } else {
+            _builder.setInsertionPointToStart(hoistBlock);
+        }
+
         for (mlir::db::Limit limit : limits) {
             nl::Limit limitOp = _builder.create<nl::Limit>(loc, limit.getCount());
             _limitHandles[limit.getOperation()] = limitOp.getState();
+
+            if (hoistsIntoTheEntryBlock) {
+                _lastHoisted = limitOp.getOperation();
+            }
         }
     }
 
@@ -3878,12 +3889,14 @@ mlir::Value DBLowering::getOrCreatePropertyTypeHandle(llvm::StringRef propertyNa
         return existing->second;
     }
 
-    // The handle reads no chunk, so it sits at the very top of the entry block,
-    // above every loop, where it dominates all the fetches that use it.
-    setInsertionToEntryBlockStart();
+    // The handle reads no chunk, so it joins the entry block's hoisted run, above every
+    // loop, where it dominates all the fetches that use it.
+    setInsertionAfterHoisted();
 
     nl::GetPropertyType handleOp = _builder.create<nl::GetPropertyType>(_builder.getUnknownLoc(),
                                                                         _builder.getStringAttr(propertyName));
+    _lastHoisted = handleOp.getOperation();
+
     const mlir::Value handle = handleOp.getResult();
     _propertyTypes[propertyName] = handle;
 
@@ -3892,17 +3905,19 @@ mlir::Value DBLowering::getOrCreatePropertyTypeHandle(llvm::StringRef propertyNa
 
 mlir::Value DBLowering::getOrCreateEdgeTypeSetHandle(mlir::ArrayAttr edgeTypeNames) {
     // The edge sibling of getOrCreatePropertyTypeHandle: dedup per set of names and
-    // hoist the handle to the top of the entry block, above every loop, so a by-type
+    // hoist the handle into the entry block's hoisted run, above every loop, so a by-type
     // hop nested in a loop reuses one resolved handle rather than re-carrying them.
     const auto existing = _edgeTypeSets.find(edgeTypeNames);
     if (existing != _edgeTypeSets.end()) {
         return existing->second;
     }
 
-    setInsertionToEntryBlockStart();
+    setInsertionAfterHoisted();
 
     nl::GetEdgeTypeSet handleOp = _builder.create<nl::GetEdgeTypeSet>(_builder.getUnknownLoc(),
                                                                      edgeTypeNames);
+    _lastHoisted = handleOp.getOperation();
+
     const mlir::Value handle = handleOp.getResult();
     _edgeTypeSets[edgeTypeNames] = handle;
 
@@ -4794,12 +4809,13 @@ void DBLowering::lowerCountScanRows(mlir::db::CountScanRows countScanRows) {
     // The tally comes from the graph's node counts rather than from a relation, so the op
     // reads no column and is loop-invariant: hoist it the way lowerConstant hoists a
     // constant, where it dominates every loop a later op may emit from.
-    setInsertionToEntryBlockStart();
+    setInsertionAfterHoisted();
 
     nl::CountScanRows rows = _builder.create<nl::CountScanRows>(_builder.getUnknownLoc(),
                                                                 countScanRows.getLabelsAttr(),
                                                                 countScanRows.getPropertyAttr(),
                                                                 countScanRows.getPropertyScanAttr());
+    _lastHoisted = rows.getOperation();
 
     _valueMap[countScanRows.getResult()] = rows.getResult();
     _innermostCardinality = rows.getResult();
@@ -6075,15 +6091,15 @@ void DBLowering::lowerConstant(mlir::db::ConstantOp constant) {
     // Constants are loop-invariant so hoist, each behind the ones hoisted before it: an op
     // goes after its own operands, and landing in front of an earlier constant would put it
     // - and every region hanging under it - above a constant its body still reads.
-    setInsertionAfterHoistedConstants();
+    setInsertionAfterHoisted();
 
     nl::Constant nlConstant = _builder.create<nl::Constant>(_builder.getUnknownLoc(), constant.getValue());
     _valueMap[constant.getResult()] = nlConstant.getResult();
-    _lastHoistedConstant = nlConstant.getOperation();
+    _lastHoisted = nlConstant.getOperation();
 }
 
 void DBLowering::lowerCurrentDateTime(mlir::db::CurrentDateTime currentDateTime) {
-    setInsertionAfterHoistedConstants();
+    setInsertionAfterHoisted();
 
     const nl::ChunkType resultType
         = nl::ChunkType::get(_builder.getContext(), storage::DateTimeType::get(_builder.getContext()));
@@ -6092,20 +6108,26 @@ void DBLowering::lowerCurrentDateTime(mlir::db::CurrentDateTime currentDateTime)
         = _builder.create<nl::CurrentDateTime>(_builder.getUnknownLoc(), resultType);
 
     _valueMap[currentDateTime.getResult()] = lowered.getResult();
-    _lastHoistedConstant = lowered.getOperation();
+    _lastHoisted = lowered.getOperation();
 }
 
-void DBLowering::setInsertionAfterHoistedConstants() {
-    if (_lastHoistedConstant) {
-        _builder.setInsertionPointAfter(_lastHoistedConstant);
+void DBLowering::setInsertionAfterHoisted() {
+    if (_lastHoisted) {
+        _builder.setInsertionPointAfter(_lastHoisted);
     } else {
         _builder.setInsertionPointToStart(_entryBlock);
     }
 }
 
-void DBLowering::setInsertionToEntryBlockStart() {
-    _builder.setInsertionPointToStart(_entryBlock);
-    _lastHoistedConstant = nullptr;
+void DBLowering::setInsertionBelowHoisted(mlir::Operation* lastOperandDef) {
+    const bool operandFollowsTheRun = lastOperandDef
+                                   && (!_lastHoisted || _lastHoisted->isBeforeInBlock(lastOperandDef));
+
+    if (operandFollowsTheRun) {
+        _builder.setInsertionPointAfter(lastOperandDef);
+    } else {
+        setInsertionAfterHoisted();
+    }
 }
 
 void DBLowering::lowerBroadcastConstant(mlir::db::BroadcastConstant broadcast) {
@@ -6696,10 +6718,12 @@ void DBLowering::setInsertionForUnaryOp(mlir::Value operandChunk) {
         setInsertionInto(deepestOwnerBlock({operandChunk}, _rootBlock));
     } else if (insertBlock != constantBlock) {
         _builder.setInsertionPointToStart(constantBlock);
+    } else if (constantBlock == _entryBlock) {
+        setInsertionBelowHoisted(operandDef);
     } else if (operandDef) {
         _builder.setInsertionPointAfter(operandDef);
     } else {
-        setInsertionToEntryBlockStart();
+        setInsertionAfterHoisted();
     }
 }
 
@@ -6750,9 +6774,9 @@ void DBLowering::lowerHeadOrLast(mlir::Operation& operation) {
 
     const int64_t position = mlir::isa<mlir::db::Head>(operation) ? 0 : -1;
 
-    setInsertionAfterHoistedConstants();
+    setInsertionAfterHoisted();
     nl::Constant positionConstant = _builder.create<nl::Constant>(_builder.getUnknownLoc(), _builder.getI64IntegerAttr(position));
-    _lastHoistedConstant = positionConstant.getOperation();
+    _lastHoisted = positionConstant.getOperation();
 
     const mlir::Value positionChunk = positionConstant.getResult();
     const mlir::Type resultElement = binaryResultElement(BinaryResultKind::Index, listChunkType, positionChunk.getType());
@@ -7212,8 +7236,8 @@ void DBLowering::setInsertionForBinaryOp(mlir::Value lhs, mlir::Value rhs) {
 
 void DBLowering::setInsertionForNaryOp(llvm::ArrayRef<mlir::Value> operands) {
     // If every operand is a top-level constant (in `_entryBlock`), then place the op
-    // after the last defined constant. Otherwise place the op in the more deeply nested
-    // block.
+    // after the last defined constant, below the hoisted run. Otherwise place the op in
+    // the more deeply nested block.
     mlir::Value deepest = operands.front();
     for (const mlir::Value operand : operands.drop_front()) {
         if (deeperBlock(deepest, operand) != ownerBlock(deepest)) {
@@ -7256,12 +7280,12 @@ void DBLowering::setInsertionForNaryOp(llvm::ArrayRef<mlir::Value> operands) {
         }
     }
 
-    if (lastDef) {
+    if (constantBlock == _entryBlock) {
+        setInsertionBelowHoisted(lastDef);
+    } else if (lastDef) {
         _builder.setInsertionPointAfter(lastDef);
-    } else if (constantBlock != _entryBlock) {
-        _builder.setInsertionPointToStart(constantBlock);
     } else {
-        setInsertionToEntryBlockStart();
+        _builder.setInsertionPointToStart(constantBlock);
     }
 }
 
@@ -7498,21 +7522,16 @@ mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinali
     const nl::ChunkType resultType = nl::ChunkType::get(context, resultElement);
 
     // With no relation driving the projection the value is laid out over the single row
-    // that projection is, behind the constants hoisted so far: a layout read from a loop
-    // nested under it must not sit below that nest.
+    // that projection is, behind the constants and handles hoisted so far: a layout read
+    // from a loop nested under it must not sit below that nest.
+    mlir::Operation* const definition = chunk.getDefiningOp();
+
     if (cardinality) {
         setInsertionInto(ownerBlock(cardinality));
+    } else if (definition->getBlock() == _entryBlock) {
+        setInsertionBelowHoisted(definition);
     } else {
-        mlir::Operation* layoutPoint = chunk.getDefiningOp();
-
-        const bool constantsFollow = _lastHoistedConstant
-                                  && _lastHoistedConstant->getBlock() == layoutPoint->getBlock()
-                                  && layoutPoint->isBeforeInBlock(_lastHoistedConstant);
-        if (constantsFollow) {
-            layoutPoint = _lastHoistedConstant;
-        }
-
-        _builder.setInsertionPointAfter(layoutPoint);
+        _builder.setInsertionPointAfter(definition);
     }
 
     nl::BroadcastConstant broadcast = _builder.create<nl::BroadcastConstant>(_builder.getUnknownLoc(), resultType, chunk, cardinality);
