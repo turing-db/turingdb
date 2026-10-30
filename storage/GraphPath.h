@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "ID.h"
+#include "PathView.h"
 
 namespace db {
 
@@ -27,6 +28,7 @@ public:
     void start(NodeID node);
     void addHop(EdgeID edge, NodeID node);
     void setNodeCount(size_t nodeCount);
+    void assign(PathView path);
     void clear();
 
     bool isNull() const { return _ids.empty(); }

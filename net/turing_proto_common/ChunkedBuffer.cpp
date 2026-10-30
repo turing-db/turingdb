@@ -1,5 +1,7 @@
 #include "ChunkedBuffer.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 
 using namespace net::proto;
@@ -54,4 +56,5 @@ void ChunkedBuffer<T>::clear() {
 namespace net::proto {
 template class ChunkedBuffer<float>;
 template class ChunkedBuffer<char>;
+template class ChunkedBuffer<uint64_t>;
 }

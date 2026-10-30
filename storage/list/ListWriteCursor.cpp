@@ -2,6 +2,7 @@
 
 #include <cstring>
 
+#include "PathView.h"
 #include "list/ListBuffer.h"
 #include "metadata/PropertyType.h"
 
@@ -64,6 +65,7 @@ template CellView ListWriteCursor::writeValue(CellTag, const types::String::Prim
 template CellView ListWriteCursor::writeValue(CellTag, const types::Embedding::Primitive&);
 template CellView ListWriteCursor::writeValue(CellTag, const ListView&);
 template CellView ListWriteCursor::writeValue(CellTag, const MapView&);
+template CellView ListWriteCursor::writeValue(CellTag, const PathView&);
 
 // The fixed-width elements. A decoder reading a wire whose layout already matches the
 // stored one copies these through writeRaw instead; a caller holding the value itself,

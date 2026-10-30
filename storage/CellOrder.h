@@ -4,6 +4,8 @@
 #include <optional>
 
 #include "ID.h"
+#include "GraphPath.h"
+#include "PathView.h"
 #include "CellView.h"
 #include "list/ListView.h"
 
@@ -16,11 +18,12 @@ namespace db {
 /**
  * @brief Orders two elements of a @ref ListByteBuffer, which need not share a type.
  *
- * Follows Cypher's orderability across types - MAP < NODE < EDGE < LIST < DATETIME < DURATION <
+ * Follows Cypher's orderability across types - MAP < NODE < EDGE < LIST < PATH < DATETIME < DURATION <
  * STRING < BOOLEAN < NUMBER < NULL - so a null sorts after every value and two elements of one type compare
  * by their own order: entities by their ID, numbers numerically whatever they are tagged
- * as, strings lexicographically, lists element-wise. An embedding has no order, so <=>
- * throws on one; == still compares embeddings element-wise, at any depth.
+ * as, strings lexicographically, lists element-wise, paths by their IDs in path order. An
+ * embedding has no order, so <=> throws on one; == still compares embeddings element-wise,
+ * at any depth.
  */
 std::strong_ordering operator<=>(CellView lhs, CellView rhs);
 bool operator==(CellView lhs, CellView rhs);
@@ -70,6 +73,8 @@ bool operator==(CellView element, NodeID value);
 bool operator==(CellView element, EdgeID value);
 bool operator==(CellView element, ListView value);
 bool operator==(CellView element, MapView value);
+bool operator==(CellView element, PathView value);
+bool operator==(CellView element, const GraphPath& value);
 
 /**
  * @brief Orders an element of a @ref ListByteBuffer against a value of a known type.

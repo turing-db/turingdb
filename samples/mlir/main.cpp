@@ -486,6 +486,7 @@ private:
             break;
 
             case CellTag::MapView:
+            case CellTag::Path:
             case CellTag::INVALID:
                 std::cout << "?";
             break;

@@ -6,6 +6,7 @@
 #include "map/MapView.h"
 
 #include "ID.h"
+#include "PathView.h"
 
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
@@ -56,6 +57,9 @@ struct CellTagDispatcher {
             break;
             case CellTag::MapView:
                 return executor.template operator()<MapView>(view);
+            break;
+            case CellTag::Path:
+                return executor.template operator()<PathView>(view);
             break;
 
             case CellTag::INVALID:
@@ -132,6 +136,11 @@ struct TypeToCellTag<types::Duration::Primitive> {
 template <>
 struct TypeToCellTag<MapView> {
     static constexpr CellTag Tag = CellTag::MapView;
+};
+
+template <>
+struct TypeToCellTag<PathView> {
+    static constexpr CellTag Tag = CellTag::Path;
 };
 
 }

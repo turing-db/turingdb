@@ -139,6 +139,7 @@ private:
     // Proto packet payload for the current chunk; passed to TuringProtoDecoder unmodified.
     net::proto::TuringProtoInBuf _inBuf;
     net::proto::ChunkedBuffer<float> _embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> _pathBuffer;
     net::proto::ChunkedBuffer<char> _stringBuffer;
     db::ListBuffer<> _listBuffer;
     db::MapBuffer<> _mapBuffer;

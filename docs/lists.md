@@ -83,3 +83,11 @@ A view cannot leave the buffers that built it, so a list that has to outlive the
 (`storage/list/EncodedList.h`): a self-describing byte sequence carrying the whole value, nested lists and
 payloads included. It is the owning form the write buffer stages a `CREATE` / `SET` value in until the commit
 builds its datapart, and the same encoding the dumper writes to disk and the loader reads back.
+
+## Paths
+
+A list element or a map value may be a path, tagged `CellTag::Path`. Its value is a `PathView`
+(`storage/PathView.h`): a span over the path's IDs, node, edge, node, ... as `GraphPath` lays
+them out, held in a buffer beside the elements. The query buffers view the IDs of the path
+column they read from, and `ListContainer`, `MapContainer` and `NLValueStore` copy them into a
+`SpanBuffer<uint64_t, PathView>` of their own, the way they copy an embedding's floats.

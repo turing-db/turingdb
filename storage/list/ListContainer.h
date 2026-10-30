@@ -13,6 +13,8 @@
 
 #include "metadata/PropertyType.h"
 
+#include "PathView.h"
+
 namespace db {
 
 class DataPartMerger;
@@ -24,7 +26,7 @@ class MapContainer;
  * A @ref ListBuffer on its own does not own a list: a string or embedding element keeps
  * only a view of its payload, and a list handed over by a query points into buffers that
  * query frees. Everything that enters here is copied into buffers this container owns -
- * payloads into @ref _strings and @ref _embeddings, nested lists recursively - so the
+ * payloads into @ref _strings, @ref _embeddings and @ref _paths, nested lists recursively - so the
  * views it hands out stay valid for as long as it does, as @ref StringContainer's and
  * @ref EmbeddingContainer's do for theirs.
  */
@@ -35,6 +37,7 @@ public:
     using ListItemVariant = ListBuffer<>::ListItemVariant;
     using ViewVector = std::vector<ListView>;
     using EmbeddingBuffer = SpanBuffer<float, types::Embedding::Primitive>;
+    using PathBuffer = SpanBuffer<uint64_t, PathView>;
 
     ListContainer();
     ~ListContainer();
@@ -85,11 +88,13 @@ private:
     std::unique_ptr<ListBuffer<>> _lists;
     std::unique_ptr<StringBuffer> _strings;
     std::unique_ptr<EmbeddingBuffer> _embeddings;
+    std::unique_ptr<PathBuffer> _paths;
     std::unique_ptr<MapContainer> _maps;
     ViewVector _views;
 
     ListItemVariant own(const ListItemVariant& element);
     ListItemVariant ownedItem(CellView element);
+    PathBuffer& getPaths();
 };
 
 }

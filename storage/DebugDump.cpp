@@ -6,6 +6,7 @@
 
 #include "CellView.h"
 #include "CellUtils.h"
+#include "GraphPath.h"
 
 #include "map/MapEntryView.h"
 #include "map/MapView.h"
@@ -109,3 +110,20 @@ void DebugDump::dump(std::ostream& out, MapView map) {
     out << "}\n";
 }
 
+void DebugDump::dump(std::ostream& out, PathView path) {
+    const std::span<const uint64_t> ids = path.getIDs();
+
+    for (size_t position = 0; position < ids.size(); position++) {
+        if (position > 0) {
+            out << ", ";
+        }
+
+        if (GraphPath::isNodeAt(position)) {
+            out << '(' << ids[position] << ')';
+        } else {
+            out << '[' << ids[position] << ']';
+        }
+    }
+
+    out << '\n';
+}

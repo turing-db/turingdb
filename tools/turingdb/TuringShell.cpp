@@ -49,6 +49,7 @@
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
 #include "GraphPath.h"
+#include "PathView.h"
 
 #include "CellTag.h"
 #include "map/MapEntryView.h"
@@ -530,12 +531,7 @@ std::string TuringShell::composePrompt() {
              : fmt::format("{}:{}@{}(detached {})> ", basePrompt, _graphName, _changeID, _hash);
 }
 
-void asString(std::string& out, const db::GraphPath& path) {
-    if (path.isNull()) {
-        out += "null";
-        return;
-    }
-
+void asString(std::string& out, const db::PathView path) {
     const std::span<const uint64_t> ids = path.getIDs();
     for (size_t position = 0; position < ids.size(); position++) {
         if (position > 0) {
@@ -548,6 +544,15 @@ void asString(std::string& out, const db::GraphPath& path) {
             out += fmt::format("[{}]", ids[position]);
         }
     }
+}
+
+void asString(std::string& out, const db::GraphPath& path) {
+    if (path.isNull()) {
+        out += "null";
+        return;
+    }
+
+    asString(out, db::PathView {path.getIDs()});
 }
 
 void asString(std::string& out, db::ValueType v) {

@@ -16,9 +16,9 @@
 namespace net::proto {
 
 /// Dispatched on a list element's runtime tag to return the size of the object
-/// the tag maps to, so the client knows how much to allocate. For String and
-/// Embedding this is the size of the view object (std::string_view / std::span),
-/// not the length of the data it points to.
+/// the tag maps to, so the client knows how much to allocate. For String, Embedding
+/// and Path this is the size of the view object (std::string_view / std::span /
+/// PathView), not the length of the data it points to.
 struct CellByteSizeVisitor {
     template <typename T>
     size_t operator()(const db::CellView elem) const {
@@ -77,7 +77,7 @@ inline WireSize computeMapByteSize(std::span<const db::MapEntryView> entries) {
 }
 
 /// Dispatched on a value's runtime tag to write [tag][value] for fixed types, or
-/// [tag][numBytes][data] for variable-length types (String, Embedding). The tag and the
+/// [tag][numBytes][data] for variable-length types (String, Embedding, Path). The tag and the
 /// fixed framing are kept within a single chunk (checkRemainingAndFlush) so the decoder,
 /// which reads each unit atomically, never sees them split across a packet boundary; the
 /// variable payload that follows still streams across chunks via copyVarLenData.
@@ -109,6 +109,15 @@ struct ElementWriteVisitor {
             _outBuf->copyFixedLenData(&tag, tagSize);
             _outBuf->copyFixedLenData(&numBytes, sizeof(numBytes));
             _outBuf->copyVarLenData(value.data(), numBytes);
+        } else if constexpr (std::is_same_v<T, db::PathView>) {
+            const std::span<const uint64_t> ids = view.getAs<T>().getIDs();
+            bioassert(ids.size_bytes() <= MAX_WIRE_SIZE, "Path element exceeds maximum wire size");
+            const WireSize numBytes = static_cast<WireSize>(ids.size_bytes());
+
+            _outBuf->checkRemainingAndFlush(tagSize + sizeof(numBytes));
+            _outBuf->copyFixedLenData(&tag, tagSize);
+            _outBuf->copyFixedLenData(&numBytes, sizeof(numBytes));
+            _outBuf->copyVarLenData(ids.data(), numBytes);
         } else if constexpr (db::IsListView<T>) {
             const T value = view.getAs<T>();
 

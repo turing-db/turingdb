@@ -333,6 +333,22 @@ public:
         write(std::to_string(v.getValue()));
     }
 
+    void writeValue(PathView path) {
+        write('[');
+
+        bool first = true;
+        for (const uint64_t id : path.getIDs()) {
+            if (!first) {
+                write(',');
+            }
+
+            first = false;
+            write(std::to_string(id));
+        }
+
+        write(']');
+    }
+
     void writeValue(CellView element) {
         const auto writeTyped = [this]<typename T>(const CellView view) {
             this->writeValue(view.getAs<T>());

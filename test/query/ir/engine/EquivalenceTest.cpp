@@ -32,6 +32,7 @@
 
 #include "Graph.h"
 #include "GraphPath.h"
+#include "PathView.h"
 #include "ID.h"
 #include "QueryConfig.h"
 #include "SimpleGraph.h"
@@ -78,11 +79,7 @@ std::string valueToString(const std::string_view value) {
     return std::string(value);
 }
 
-std::string valueToString(const GraphPath& value) {
-    if (value.isNull()) {
-        return "null";
-    }
-
+std::string valueToString(const PathView value) {
     const std::span<const uint64_t> ids = value.getIDs();
 
     std::string result = "[";
@@ -100,6 +97,14 @@ std::string valueToString(const GraphPath& value) {
 
     result += "]";
     return result;
+}
+
+std::string valueToString(const GraphPath& value) {
+    if (value.isNull()) {
+        return "null";
+    }
+
+    return valueToString(PathView {value.getIDs()});
 }
 
 std::string valueToString(const ValueType value) {

@@ -450,6 +450,7 @@ db::QueryStatus TuringClient::sendQuery(const std::string& query,
     recvHttpResponseHeaders();
 
     _embeddingBuffer.clear();
+    _pathBuffer.clear();
     _stringBuffer.clear();
     _listBuffer.clear();
     _mapBuffer.clear();
@@ -459,7 +460,7 @@ db::QueryStatus TuringClient::sendQuery(const std::string& query,
     db::QueryStatus res;
     std::vector<DecodedColumnSchema> columnSchemas;
     db::Dataframe df;
-    TuringSink sink(_localMem, &_embeddingBuffer, &_listBuffer, &_mapBuffer);
+    TuringSink sink(_localMem, &_embeddingBuffer, &_pathBuffer, &_listBuffer, &_mapBuffer);
     TuringSinkColumnContainer dataframeContainer(&df, &dfMan);
     TuringProtoDecoder<TuringSink> decoder(&_inBuf, &sink, columnSchemas);
 
