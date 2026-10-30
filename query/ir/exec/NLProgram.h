@@ -1292,7 +1292,7 @@ public:
     Column* getOutput() const { return _output; }
     PropertyTypeID getPropertyTypeID() const { return _propertyTypeID; }
 
-    // The rows holding a write-buffer offset rather than an ID the graph knows, or null
+    // The rows naming an entity this change wrote, by the ID it will commit as, or null
     // for an input no merge produced. Such a row reads its value out of the write buffer.
     // A column a create produced is such a row throughout, which is what _allPending says.
     const ColumnMask* getPending() const { return _pending; }

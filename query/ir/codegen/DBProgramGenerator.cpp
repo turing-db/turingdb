@@ -4646,8 +4646,8 @@ void DBProgramGenerator::collectMergeNode(const NodePattern* nodePattern, MergeP
         mlir::Value pending = findPendingMask(node._decl);
 
         // A CREATE's entities are provisional and in no graph a merge reads, so the merge
-        // is told every row is one: unmasked, it would match against whichever committed
-        // node the provisional ID collides with
+        // is told every row is one: unmasked, it would look each up in the graph, which
+        // holds no node under the ID it will commit as
         if (!pending && isPendingThroughout(node._decl)) {
             pending = constantBool(true);
         }

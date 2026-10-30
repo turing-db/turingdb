@@ -1393,9 +1393,9 @@ def GetNodeProperties : NLOp<"get_node_properties", [Pure, RowAlignedThroughOper
   // The node chunk, the property handle and the optional pending mask are all
   // buildable, so their types are omitted; only the nullable value chunk type is
   // spelled, after the colon. `pending` is the mask an nl.merge produced beside its
-  // node chunk: such a row holds a write-buffer offset rather than an ID the graph
-  // knows, so its value is read out of the write buffer rather than off the node the
-  // offset collides with - null there when the write set the property on none.
+  // node chunk: such a row names a node this change wrote by the ID it will commit as,
+  // past every node the graph holds, so its value is read out of the write buffer -
+  // null there when the write set the property on none.
   // `all_pending` says that of every row without a mask, which an nl.create_node's
   // chunk is.
   let arguments = (ins NLNodeIDChunk:$input_nodes,

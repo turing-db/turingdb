@@ -1877,10 +1877,10 @@ def GetNodeProperties : TuringOp<"get_node_properties", [Pure]> {
     property is a deterministic read of the graph, so the op is Pure.
 
     `pending`, when present, is the mask a db.merge produced beside its node
-    column: those rows hold an offset into the change's write buffer rather than
-    an ID the graph knows, so their value is read out of that buffer instead of off
-    whatever node the offset would collide with - null there when the write set the
-    property on none of them.
+    column: those rows name a node this change wrote by the ID it will commit as,
+    past every node the graph holds, so their value is read out of the change's write
+    buffer rather than off the graph - null there when the write set the property on
+    none of them.
 
       %v = db.get_node_properties(%n, "age") pending %mask
              : (!db.column<!storage.node_id>, !db.column<!storage.bool>) -> !db.column<!storage.nullable<i64>>
@@ -1931,7 +1931,8 @@ def GetEdgeProperties : TuringOp<"get_edge_properties", [Pure]> {
     get_node_properties' is.
 
     `pending` is get_node_properties' mask, over edges: a row a db.merge wrote
-    holds a write-buffer offset, and its value is read out of the write buffer.
+    names the edge by the ID it will commit as, and its value is read out of the
+    write buffer.
     `all_pending` is its maskless form, which a db.create_edge's column is.
   }];
 
@@ -3591,12 +3592,12 @@ def Merge : TuringOp<"merge", [AttrSizedOperandSegments]> {
 
     The results pair each entity the op looks up with a boolean mask, nodes in chain
     order then hops: the entity's ID column, then the rows of it that are pending -
-    written by this change and not committed, so an offset into the write buffer rather
-    than an ID the graph holds. A bound node has no pair of its own: its rows came in
-    through `bound_nodes` and come back through the carry set, re-indexed like every
-    other column in flight. After those pairs comes the boolean column saying which rows
-    the op wrote the whole pattern for - what ON CREATE and ON MATCH select on - then the
-    carry set.
+    written by this change and not committed, so named by the ID they will commit as,
+    which the graph holds nothing under. A bound node has no pair of its own: its rows
+    came in through `bound_nodes` and come back through the carry set, re-indexed like
+    every other column in flight. After those pairs comes the boolean column saying
+    which rows the op wrote the whole pattern for - what ON CREATE and ON MATCH select
+    on - then the carry set.
     `carried_columns` mirrors db.get_out_edges': the columns in flight, handed back
     re-indexed onto the rows the merge emitted, so a row the op emitted twice repeats
     them and one it emitted nothing for drops them.
@@ -3698,8 +3699,8 @@ def DeleteNode : TuringOp<"delete_node"> {
       db.delete_node(%n) detach : (!db.column<!storage.node_id>) -> ()
 
     `pending` is the mask a db.merge produced beside its node column: those rows
-    hold an offset into the change's write buffer rather than an ID the graph
-    knows, so the change drops the write instead of tombstoning an ID.
+    name a node this change wrote by the ID it will commit as, so the change drops
+    the write instead of tombstoning an ID.
     `all_pending` says that of every row, which a db.create_node's column is.
   }];
 
