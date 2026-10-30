@@ -4285,7 +4285,7 @@ def CollectSubquery : TuringOp<"collect_subquery", [Pure]> {
         ^bb0(%pIn: !db.column<!storage.node_id>, %tag: !db.column<ui64>):
           %s, %e, %et, %k, %tag2 = db.get_out_edges(%pIn, {%tag}) : ...
           %name = db.get_node_properties(%k) {property = "name"} : ...
-          db.collect_subquery_yield %tag2, %name, {} : !db.column<none>
+          db.collect_subquery_yield tag %tag2, %name, {} : !db.column<none>
       }) : (!db.column<!storage.node_id>) -> !db.column<none>
 
     The result's type is the body's to decide and is resolved during lowering, as
@@ -4326,8 +4326,10 @@ def CollectSubqueryYield : TuringOp<"collect_subquery_yield", [Pure, Terminator,
 
   let arguments = (ins Optional<ColumnRowTags>:$tag, Column:$value, Variadic<Column>:$columns);
 
+  // The tag and the value are both operands, so the tag is spelled behind a keyword that
+  // tells the parser which of the two it is reading
   let assemblyFormat = [{
-    ($tag^ `,`)? $value `,` `{` $columns `}` attr-dict `:` qualified(type($value))
+    (`tag` $tag^ `,`)? $value `,` `{` $columns `}` attr-dict `:` qualified(type($value))
     (`,` `{` qualified(type($columns))^ `}`)?
   }];
 }

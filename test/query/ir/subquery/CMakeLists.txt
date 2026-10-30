@@ -232,3 +232,6 @@ add_call_v3_test(test_query_ir_subquery_collecting_a_map SubqueryCollectingAMapT
 
 # Two expressions of one projection that each run a subquery per row inside the elements of a list.
 add_call_v3_test(test_query_ir_sibling_per_row_subquery SiblingPerRowSubqueryTest.cpp)
+
+# The textual form of db.collect_subquery_yield prints and parses back, with a tag or none.
+add_ir_tests(test_query_ir_collect_subquery_yield_format CollectSubqueryYieldFormatTest.cpp)
