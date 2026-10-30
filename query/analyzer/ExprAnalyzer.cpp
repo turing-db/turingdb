@@ -2110,6 +2110,10 @@ void ExprAnalyzer::analyzePatternComprehensionExpr(PatternComprehensionExpr* exp
     std::vector<std::string_view> enclosingVariables;
 
     for (const PatternElement* element : pattern->elements()) {
+        if (const Symbol* pathSymbol = element->getPathSymbol()) {
+            ownVariables.push_back(pathSymbol->getName());
+        }
+
         for (const EntityPattern* entity : element->getEntities()) {
             const Symbol* symbol = entity->getSymbol();
 
@@ -2143,6 +2147,12 @@ void ExprAnalyzer::analyzePatternComprehensionExpr(PatternComprehensionExpr* exp
     PatternComprehensionExpr::OwnDecls ownDecls;
     for (const EntityPattern* entity : ownEntities) {
         ownDecls.push_back(entity->getDecl());
+    }
+
+    for (const PatternElement* element : pattern->elements()) {
+        if (const VarDecl* pathDecl = element->getPathDecl()) {
+            ownDecls.push_back(pathDecl);
+        }
     }
 
     expr->setOwnDecls(ownDecls);
