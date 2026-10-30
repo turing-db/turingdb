@@ -1312,36 +1312,27 @@ struct ValueListIndexSelector {
     }
 };
 
-// The entity sibling of applyValueListIndex: an ID column spells a null entity as an
-// invalid ID, so a position past the end - or the tagged null a list holds for an entity
-// an OPTIONAL MATCH did not match - reads back as one rather than as an absent optional.
-template <typename IDType, typename LhsCol, typename RhsCol>
-void applyEntityListIndex(Column* result, const Column* lhs, const Column* rhs, NLStepBuffers*) {
-    const auto& lists = static_cast<const LhsCol*>(lhs)->getRaw();
-    const RhsCol* indices = static_cast<const RhsCol*>(rhs);
-
-    std::vector<IDType>& ids = static_cast<ColumnVector<IDType>*>(result)->getRaw();
-    ids.assign(lists.size(), IDType {});
-
-    for (size_t row = 0; row < lists.size(); row++) {
-        std::optional<IDType> id;
-        if constexpr (std::is_same_v<LhsCol, ColumnOptVector<ListView>>) {
-            if (lists[row].has_value()) {
-                id = ValueListIndex<IDType> {}(*lists[row], (*indices)[row]);
-            }
-        } else {
-            id = ValueListIndex<IDType> {}(lists[row], (*indices)[row]);
-        }
-
-        if (id.has_value()) {
-            ids[row] = *id;
-        }
+// The entity sibling of ValueListIndex: an ID column spells a null entity as an invalid
+// ID, so a position past the end - or the tagged null a list holds for an entity an
+// OPTIONAL MATCH did not match - reads back as one rather than as an absent optional.
+template <typename IDType>
+struct EntityListIndex {
+    template <typename List, typename Index>
+    IDType operator()(const List& list, const Index& index) const {
+        return ValueListIndex<IDType> {}(list, index).value_or(IDType {});
     }
+};
+
+template <typename IDType, typename ResCol, typename LhsCol, typename RhsCol>
+void applyEntityListIndex(Column* result, const Column* lhs, const Column* rhs, NLStepBuffers*) {
+    using Lists = typename InnerTypeHelper<LhsCol>::type;
+    using Indices = typename InnerTypeHelper<RhsCol>::type;
+
+    BinaryOpExecutor<EntityListIndex<IDType>, IDType, Lists, Indices>::apply(static_cast<ResCol*>(result),
+                                                                            static_cast<const LhsCol*>(lhs),
+                                                                            static_cast<const RhsCol*>(rhs));
 }
 
-// A collect over a pattern variable gathers into a plain list column, and nodes() and
-// relationships() read a path into a nullable one: those are the shapes an entity is read
-// out of, and any other leaves the kernel unselected.
 template <typename IDType>
 struct EntityListIndexSelector {
     LocalMemory* _memory {nullptr};
@@ -1350,11 +1341,17 @@ struct EntityListIndexSelector {
 
     template <typename LhsCol, typename RhsCol>
     void operator()(const LhsCol*, const RhsCol*) {
-        constexpr bool readsAListColumn = std::is_same_v<LhsCol, ColumnVector<ListView>>
-                                       || std::is_same_v<LhsCol, ColumnOptVector<ListView>>;
-        if constexpr (readsAListColumn) {
-            _result = _memory->alloc<ColumnVector<IDType>>();
-            _fn = &applyEntityListIndex<IDType, LhsCol, RhsCol>;
+        using Lists = typename InnerTypeHelper<LhsCol>::type;
+        using Indices = typename InnerTypeHelper<RhsCol>::type;
+
+        constexpr bool readsAList = std::is_same_v<TypeUtils::unwrap_optional_t<Lists>, ListView>;
+        constexpr bool readsConstants = std::is_same_v<LhsCol, ColumnConst<Lists>>
+                                     && std::is_same_v<RhsCol, ColumnConst<Indices>>;
+        using ResCol = std::conditional_t<readsConstants, ColumnConst<IDType>, ColumnVector<IDType>>;
+
+        if constexpr (readsAList) {
+            _result = _memory->alloc<ResCol>();
+            _fn = &applyEntityListIndex<IDType, ResCol, LhsCol, RhsCol>;
         }
     }
 };
@@ -9618,7 +9615,7 @@ NLBinaryFn NLExecutor::selectEntityListIndex(NLChunkKind kind,
     }
 
     if (!selected) {
-        throw IRException("An entity is read out of a plain list column, not out of a constant or a type-erased one");
+        throw IRException("An entity is read out of a list column, not out of a type-erased one");
     }
 
     return selected;

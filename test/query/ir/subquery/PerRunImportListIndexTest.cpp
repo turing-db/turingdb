@@ -88,6 +88,47 @@ TEST_F(PerRunImportListIndexTest, takesTheHeadOfAnImportedListOfNodes) {
                everyPersonOnce);
 }
 
+TEST_F(PerRunImportListIndexTest, takesTheLastOfAnImportedListOfNodes) {
+    expectRows("MATCH (p:Person) WITH [p] AS ps CALL (ps) { RETURN last(ps).name AS s, count(*) AS c } RETURN s, c",
+               everyPersonOnce);
+}
+
+TEST_F(PerRunImportListIndexTest, indexesAnImportedListByAPositionBoundInTheBody) {
+    expectRows("MATCH (p:Person) WITH [p] AS ps CALL (ps) { UNWIND [0, -1] AS i RETURN ps[i].name AS s, count(*) AS c } RETURN s, c",
+               {{"Remy", "2"},
+                {"Adam", "2"},
+                {"Maxime", "2"},
+                {"Luc", "2"},
+                {"Martina", "2"},
+                {"Suhas", "2"},
+                {"Cyrus", "2"},
+                {"Doruk", "2"}});
+}
+
+TEST_F(PerRunImportListIndexTest, readsNullPastTheEndOfAnImportedList) {
+    expectRows("MATCH (p:Person) WITH [p] AS ps CALL (ps) { RETURN ps[5] AS n, count(*) AS c } RETURN n, c",
+               {{"null", "1"},
+                {"null", "1"},
+                {"null", "1"},
+                {"null", "1"},
+                {"null", "1"},
+                {"null", "1"},
+                {"null", "1"},
+                {"null", "1"}});
+}
+
+TEST_F(PerRunImportListIndexTest, readsTheNullAnImportedListHolds) {
+    expectRows("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) WITH [f] AS fs CALL (fs) { RETURN fs[0] IS NULL AS n, count(*) AS c } RETURN n, c",
+               {{"false", "1"},
+                {"false", "1"},
+                {"true", "1"},
+                {"true", "1"},
+                {"true", "1"},
+                {"true", "1"},
+                {"true", "1"},
+                {"true", "1"}});
+}
+
 TEST_F(PerRunImportListIndexTest, indexesAnImportedListOfEdges) {
     expectRows("MATCH (a)-[e:KNOWS_WELL]->(b) WITH [e] AS es CALL (es) { RETURN es[0].duration AS d, count(*) AS c } RETURN d, c",
                {{"20", "1"}, {"20", "1"}, {"200", "1"}});
