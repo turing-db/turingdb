@@ -102,3 +102,29 @@ TEST_F(PerRunImportAggregatesTest, collectsAndCountsWhatAFilterLeaves) {
                 {"Cyrus", "", "0"},
                 {"Doruk", "", "0"}});
 }
+
+TEST_F(PerRunImportAggregatesTest, collectsTheImportBesideEveryReduction) {
+    expectRows("MATCH (p:Person) CALL (p) { "
+               "RETURN collect(p.name) AS k, avg(p.age) AS a, stDev(p.age) AS d, sum(DISTINCT p.age) AS s, count(DISTINCT p.age) AS c "
+               "} RETURN p.name, k, a, d, s, c",
+               {{"Remy", "Remy", "32", "0", "32", "1"},
+                {"Adam", "Adam", "32", "0", "32", "1"},
+                {"Maxime", "Maxime", "null", "0", "0", "0"},
+                {"Luc", "Luc", "null", "0", "0", "0"},
+                {"Martina", "Martina", "null", "0", "0", "0"},
+                {"Suhas", "Suhas", "null", "0", "0", "0"},
+                {"Cyrus", "Cyrus", "null", "0", "0", "0"},
+                {"Doruk", "Doruk", "null", "0", "0", "0"}});
+}
+
+TEST_F(PerRunImportAggregatesTest, takesAPercentileOfTheImportBesideACount) {
+    expectRows("MATCH (p:Person) CALL (p) { RETURN percentileDisc(p.age, 0.5) AS q, count(*) AS c } RETURN p.name, q, c",
+               {{"Remy", "32", "1"},
+                {"Adam", "32", "1"},
+                {"Maxime", "null", "1"},
+                {"Luc", "null", "1"},
+                {"Martina", "null", "1"},
+                {"Suhas", "null", "1"},
+                {"Cyrus", "null", "1"},
+                {"Doruk", "null", "1"}});
+}

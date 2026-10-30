@@ -1213,10 +1213,13 @@ private:
                                     llvm::ArrayRef<mlir::Value> aggregateColumns = {},
                                     llvm::ArrayRef<mlir::storage::GroupAggregateKind> aggregateKinds = {});
 
-    // The collects a keyless projection returns, built as one op so a single drain emits
-    // them all. One collect needs no help: its own translation is that op.
-    void emitKeylessCollect(llvm::ArrayRef<const FunctionInvocationExpr*> collectExprs,
-                            llvm::ArrayRef<AggregateArguments> collectArguments);
+    // Every aggregate of a keyless projection that gathers values, built as one db.collect
+    // as a grouped projection's are: the lists and the reductions beside them read the rows
+    // of one accumulator, and a single drain emits them all.
+    void emitKeylessCollect(llvm::ArrayRef<const FunctionInvocationExpr*> aggregateExprs,
+                            llvm::ArrayRef<AggregateArguments> arguments);
+
+    mlir::storage::GroupAggregateKind groupAggregateKind(const FunctionInvocation* invocation) const;
 
     // What an aggregate gathering its values answers from @param listColumn, the list of a
     // group's values: collect the list itself, percentileCont and percentileDisc its percentile.

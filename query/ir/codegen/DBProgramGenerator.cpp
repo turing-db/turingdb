@@ -10350,18 +10350,34 @@ mlir::db::Collect DBProgramGenerator::createCollect(llvm::ArrayRef<mlir::Value> 
     return collectOp;
 }
 
-void DBProgramGenerator::emitKeylessCollect(llvm::ArrayRef<const FunctionInvocationExpr*> collectExprs,
-                                            llvm::ArrayRef<AggregateArguments> collectArguments) {
+void DBProgramGenerator::emitKeylessCollect(llvm::ArrayRef<const FunctionInvocationExpr*> aggregateExprs,
+                                            llvm::ArrayRef<AggregateArguments> arguments) {
+    llvm::SmallVector<const FunctionInvocationExpr*> collectExprs;
     llvm::SmallVector<mlir::Value> valueColumns;
     llvm::SmallVector<mlir::Value> percentileColumns;
     llvm::SmallVector<std::optional<size_t>> percentileIndices;
 
-    for (const AggregateArguments& arguments : collectArguments) {
-        valueColumns.push_back(arguments._values);
+    llvm::SmallVector<const FunctionInvocationExpr*> reductionExprs;
+    llvm::SmallVector<mlir::Value> aggregateColumns;
+    llvm::SmallVector<mlir::storage::GroupAggregateKind> aggregateKinds;
 
-        if (arguments._rowPercentile) {
+    for (size_t aggregateIndex = 0; aggregateIndex < aggregateExprs.size(); aggregateIndex++) {
+        const FunctionInvocationExpr* aggregateExpr = aggregateExprs[aggregateIndex];
+        const AggregateArguments& aggregateArguments = arguments[aggregateIndex];
+
+        if (!gathersItsValues(aggregateExpr)) {
+            reductionExprs.push_back(aggregateExpr);
+            aggregateColumns.push_back(aggregateArguments._values);
+            aggregateKinds.push_back(groupAggregateKind(aggregateExpr->getFunctionInvocation()));
+            continue;
+        }
+
+        collectExprs.push_back(aggregateExpr);
+        valueColumns.push_back(aggregateArguments._values);
+
+        if (aggregateArguments._rowPercentile) {
             percentileIndices.push_back(percentileColumns.size());
-            percentileColumns.push_back(arguments._rowPercentile);
+            percentileColumns.push_back(aggregateArguments._rowPercentile);
         } else {
             percentileIndices.push_back(std::nullopt);
         }
@@ -10370,16 +10386,19 @@ void DBProgramGenerator::emitKeylessCollect(llvm::ArrayRef<const FunctionInvocat
     llvm::SmallVector<int64_t> distinctValues;
     collectDistinctValueIndices(collectExprs, distinctValues);
 
-    const llvm::SmallVector<mlir::storage::GroupAggregateKind> percentileKinds(percentileColumns.size(),
-                                                                               mlir::storage::GroupAggregateKind::First);
+    aggregateColumns.append(percentileColumns.begin(), percentileColumns.end());
+    aggregateKinds.append(percentileColumns.size(), mlir::storage::GroupAggregateKind::First);
 
-    mlir::db::Collect collectOp = createCollect({}, valueColumns, distinctValues, percentileColumns, percentileKinds);
+    mlir::db::Collect collectOp = createCollect({}, valueColumns, distinctValues, aggregateColumns, aggregateKinds);
     const mlir::ResultRange results = collectOp.getResults();
 
-    for (size_t collectIndex = 0; collectIndex < collectExprs.size(); collectIndex++) {
+    const size_t collectCount = collectExprs.size();
+    const size_t reductionCount = reductionExprs.size();
+
+    for (size_t collectIndex = 0; collectIndex < collectCount; collectIndex++) {
         const FunctionInvocationExpr* collectExpr = collectExprs[collectIndex];
         const std::optional<size_t> percentileIndex = percentileIndices[collectIndex];
-        const mlir::Value groupPercentile = percentileIndex ? results[collectExprs.size() + *percentileIndex] : mlir::Value {};
+        const mlir::Value groupPercentile = percentileIndex ? results[collectCount + reductionCount + *percentileIndex] : mlir::Value {};
         const mlir::Value reducedColumn = reduceGatheredValues(collectExpr->getFunctionInvocation(),
                                                                results[collectIndex],
                                                                groupPercentile);
@@ -10393,6 +10412,43 @@ void DBProgramGenerator::emitKeylessCollect(llvm::ArrayRef<const FunctionInvocat
             _part._projectedColumns[collectDecl] = reducedColumn;
         }
     }
+
+    for (size_t reductionIndex = 0; reductionIndex < reductionCount; reductionIndex++) {
+        _part._exprMap[reductionExprs[reductionIndex]] = results[collectCount + reductionIndex];
+    }
+}
+
+mlir::storage::GroupAggregateKind DBProgramGenerator::groupAggregateKind(const FunctionInvocation* invocation) const {
+    const std::string_view funcName = invocation->getSignature()->getFullName();
+    const Expr* argExpr = invocation->getArguments()->front();
+
+    // Dropping repeated values cannot move an extremum, so min(DISTINCT x) is min(x)
+    // and takes the plain kind. The others reduce each of a group's distinct values
+    // once, which is a kind of its own, spelled as the function's name with the
+    // modifier appended
+    const bool isExtremum = funcName == "min" || funcName == "max";
+    const bool reducesDistinctValues = invocation->isDistinct() && !isExtremum;
+
+    const bool countsRows = argExpr->getType() == EvaluatedType::Wildcard;
+
+    // count(*) reads no value, so a null of the column it is anchored on is a row
+    // all the same: that is a kind of its own
+    std::string kindName {funcName};
+    std::ranges::transform(kindName, kindName.begin(), [](unsigned char letter) {
+        return static_cast<char>(tolower(letter));
+    });
+    if (countsRows) {
+        kindName += "_rows";
+    } else if (reducesDistinctValues) {
+        kindName += "_distinct";
+    }
+
+    const std::optional<mlir::storage::GroupAggregateKind> kind = mlir::storage::symbolizeGroupAggregateKind(kindName);
+    if (!kind) {
+        throwError(fmt::format("Unsupported aggregate function: {}", funcName), argExpr);
+    }
+
+    return *kind;
 }
 
 mlir::Value DBProgramGenerator::reduceGatheredValues(const FunctionInvocation* invocation,
@@ -10471,26 +10527,17 @@ void DBProgramGenerator::generateKeylessAggregates(const Projection* projection)
                                     arguments[aggregateIndex]);
     }
 
-    llvm::SmallVector<const FunctionInvocationExpr*> collectExprs;
-    llvm::SmallVector<AggregateArguments> collectArguments;
-    for (size_t aggregateIndex = 0; aggregateIndex < aggregateExprs.size(); aggregateIndex++) {
-        if (gathersItsValues(aggregateExprs[aggregateIndex])) {
-            collectExprs.push_back(aggregateExprs[aggregateIndex]);
-            collectArguments.push_back(arguments[aggregateIndex]);
-        }
-    }
+    const bool gathersValues = llvm::any_of(aggregateExprs, [](const FunctionInvocationExpr* aggregateExpr) {
+        return gathersItsValues(aggregateExpr);
+    });
 
-    const bool collectsSeveralLists = collectExprs.size() > 1;
-    if (collectsSeveralLists) {
-        emitKeylessCollect(collectExprs, collectArguments);
+    if (gathersValues) {
+        emitKeylessCollect(aggregateExprs, arguments);
+        return;
     }
 
     for (size_t aggregateIndex = 0; aggregateIndex < aggregateExprs.size(); aggregateIndex++) {
         const FunctionInvocationExpr* aggregateExpr = aggregateExprs[aggregateIndex];
-        if (collectsSeveralLists && gathersItsValues(aggregateExpr)) {
-            continue;
-        }
-
         emitAggregate(aggregateExpr, aggregateExpr->getFunctionInvocation(), arguments[aggregateIndex]);
     }
 }
@@ -10686,36 +10733,12 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
             continue;
         }
 
-        // Dropping repeated values cannot move an extremum, so min(DISTINCT x) is min(x)
-        // and takes the plain kind. The others reduce each of a group's distinct values
-        // once, which is a kind of its own, spelled as the function's name with the
-        // modifier appended
-        const bool isExtremum = funcName == "min" || funcName == "max";
-        const bool reducesDistinctValues = invocation->isDistinct() && !isExtremum;
-
-        const bool countsRows = argExpr->getType() == EvaluatedType::Wildcard;
-
-        // count(*) reads no value, so a null of the column it is anchored on is a row
-        // all the same: that is a kind of its own
-        std::string kindName {funcName};
-        std::ranges::transform(kindName, kindName.begin(), [](unsigned char letter) {
-            return static_cast<char>(tolower(letter));
-        });
-        if (countsRows) {
-            kindName += "_rows";
-        } else if (reducesDistinctValues) {
-            kindName += "_distinct";
-        }
-
-        const std::optional<mlir::storage::GroupAggregateKind> kind = mlir::storage::symbolizeGroupAggregateKind(kindName);
-        if (!kind) {
-            throwError(fmt::format("Unsupported aggregate function: {}", funcName), argExpr);
-        }
+        const mlir::storage::GroupAggregateKind kind = groupAggregateKind(invocation);
 
         const mlir::Value inputColumn = translateAggregateInput(argExpr, &variableColumns);
 
         aggInputColumns.push_back(readWalkEntities(argExpr, inputColumn));
-        aggKinds.push_back(*kind);
+        aggKinds.push_back(kind);
         aggFuncExprs.push_back(funcExpr);
     }
 
