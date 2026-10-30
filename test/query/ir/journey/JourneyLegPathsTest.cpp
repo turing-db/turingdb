@@ -42,6 +42,37 @@ protected:
 
         expectRows(query, {{"S10", "497", "DID", "3"}});
     }
+
+    // F1 has no arrival, so its comparison is null and the CASE drops it
+    void expectKeepsTheLegsArrivingBefore505() {
+        std::string query;
+        collectLegsFromOxford(query);
+        query += "WITH reduce(kept = [], l IN legs | CASE WHEN nodes(l)[-2].arrive < 505 THEN kept + l ELSE kept END) AS kept "
+                 "UNWIND kept AS l "
+                 "RETURN nodes(l)[1].service, nodes(l)[-2].arrive, length(l)";
+
+        expectRows(query, {
+            {"S5", "500", "3"},
+            {"S7", "502", "3"},
+            {"S10", "497", "3"},
+        });
+    }
+
+    // In order of departure, a leg is kept only when it arrives before the leg kept last:
+    // S5 at 500, then S10 at 497
+    void expectKeepsTheLegsThatArriveEarlierThanTheLastKept() {
+        std::string query;
+        findLegsFromOxford(query, "['DID', 'RDG', 'PAD']", 470, 500);
+        query += "WITH leg1, firstStop.depart AS departure, firstStop.service AS service "
+                 "ORDER BY departure, service "
+                 "WITH collect(leg1) AS legs "
+                 "WITH reduce(kept = [], l IN legs | "
+                 "CASE WHEN size(kept) = 0 OR nodes(l)[-2].arrive < nodes(kept[-1])[-2].arrive THEN kept + l "
+                 "ELSE kept END) AS kept "
+                 "RETURN [l IN kept | nodes(l)[1].service]";
+
+        expectRows(query, {{"[S5, S10]"}});
+    }
 };
 
 TEST_F(JourneyLegPathsTest, foldsOverTheCollectedLegs) {
@@ -50,6 +81,14 @@ TEST_F(JourneyLegPathsTest, foldsOverTheCollectedLegs) {
 
 TEST_F(JourneyLegPathsTest, keepsTheEarliestArrivingLegAsTheAccumulator) {
     expectKeepsTheEarliestArrival();
+}
+
+TEST_F(JourneyLegPathsTest, keepsTheLegsArrivingBefore505) {
+    expectKeepsTheLegsArrivingBefore505();
+}
+
+TEST_F(JourneyLegPathsTest, keepsTheLegsThatArriveEarlierThanTheLastKept) {
+    expectKeepsTheLegsThatArriveEarlierThanTheLastKept();
 }
 
 TEST_F(JourneyLegPathsTest, foldsOverTheLegsOfEachInterchange) {
@@ -73,4 +112,6 @@ TEST_F(JourneyLegPathsTest, foldsOverLegsCollectedAcrossSteps) {
 
     expectFoldsOverTheLegs();
     expectKeepsTheEarliestArrival();
+    expectKeepsTheLegsArrivingBefore505();
+    expectKeepsTheLegsThatArriveEarlierThanTheLastKept();
 }
