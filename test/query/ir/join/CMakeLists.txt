@@ -59,3 +59,12 @@ target_include_directories(test_query_ir_comma_pattern_join_keys PRIVATE ${IR_TE
 add_turing_test(test_query_ir_multi_pattern_join MultiPatternJoinTest.cpp)
 target_sources(test_query_ir_multi_pattern_join PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
 target_include_directories(test_query_ir_multi_pattern_join PRIVATE ${IR_TEST_DIR})
+
+# Joins and hops read after writes that delete, detach and rebase edges, in either pattern order.
+add_ir_tests(test_query_ir_edge_statistics_after_writes EdgeStatisticsAfterWritesTest.cpp)
+
+# A hash join answers the same whichever side it builds, over null, mixed-type and duplicate keys.
+add_ir_tests(test_query_ir_hash_join_build_side HashJoinBuildSideTest.cpp)
+
+# A LIMIT past an aggregate does not cut the product it reads, so it keeps no product from fusing.
+add_ir_tests(test_query_ir_hash_join_limit_past_aggregate HashJoinLimitPastAggregateTest.cpp)

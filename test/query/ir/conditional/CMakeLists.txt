@@ -36,3 +36,6 @@ add_turing_test(test_query_ir_conditional_subquery_expression ConditionalSubquer
 
 # A WHEN branch walking to the end set fuse_explore_end_set scans ahead of the function.
 add_turing_test(test_query_ir_conditional_explore_end_set ConditionalExploreEndSetTest.cpp)
+
+# WHEN bodies decided by list predicates, folds and exists(), and walking to bound end nodes.
+add_ir_tests(test_query_ir_conditional_body_composition ConditionalBodyCompositionTest.cpp)
