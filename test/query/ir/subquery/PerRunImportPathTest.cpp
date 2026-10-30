@@ -76,3 +76,23 @@ TEST_F(PerRunImportPathTest, readsTheRelationshipsOfTheReturnedPathPastAWith) {
                "WITH k RETURN size(relationships(k))",
                {{"1"}, {"1"}, {"1"}});
 }
+
+TEST_F(PerRunImportPathTest, readsTheLengthOfAPathTheBodyFilters) {
+    expectRows("MATCH pt = (a)-[:KNOWS_WELL]->(b) CALL (pt) { WITH count(*) AS c WHERE c > 0 RETURN pt AS k } "
+               "RETURN length(k)",
+               {{"1"}, {"1"}, {"1"}});
+}
+
+TEST_F(PerRunImportPathTest, readsTheLengthOfAPathEveryUnionBranchReturns) {
+    expectRows("MATCH pt = (a)-[:KNOWS_WELL]->(b) "
+               "CALL (pt) { WITH count(*) AS c RETURN pt AS k UNION WITH count(*) AS c RETURN pt AS k } "
+               "RETURN length(k)",
+               {{"1"}, {"1"}, {"1"}});
+}
+
+TEST_F(PerRunImportPathTest, readsTheNodesOfAPathTheBodyPublishesPastItsAggregate) {
+    expectRows("MATCH pt = (a)-[:KNOWS_WELL]->(b) "
+               "CALL (pt) { WITH count(*) AS c WITH pt RETURN [n IN nodes(pt) | n.name] AS names } "
+               "RETURN names",
+               {{"Remy, Adam"}, {"Adam, Remy"}, {"Ghosts, Remy"}});
+}

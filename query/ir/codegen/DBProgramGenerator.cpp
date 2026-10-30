@@ -2750,18 +2750,15 @@ void DBProgramGenerator::filterConstantScope(mlir::Value predicate) {
     }
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
-    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
     const mlir::Value noDriver;
 
-    const mlir::Value mask =
-        _opBuilder.create<mlir::db::BroadcastConstant>(loc, noneType, predicate, noDriver).getResult();
+    const mlir::Value mask = _opBuilder.create<mlir::db::BroadcastConstant>(loc, predicate, noDriver).getResult();
 
     llvm::SmallVector<mlir::Value> columnsToFilter;
     llvm::SmallVector<mlir::Type> resultTypes;
     for (const VariableDependency* var : constantVars) {
         const mlir::Value column = _part._varMap.at(var).back();
-        const mlir::Value laidOut =
-            _opBuilder.create<mlir::db::BroadcastConstant>(loc, noneType, column, noDriver).getResult();
+        const mlir::Value laidOut = _opBuilder.create<mlir::db::BroadcastConstant>(loc, column, noDriver).getResult();
 
         columnsToFilter.push_back(laidOut);
         resultTypes.push_back(laidOut.getType());
@@ -5337,9 +5334,7 @@ mlir::Value DBProgramGenerator::alignConstantToDriver(mlir::Value column) {
         return column;
     }
 
-    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
-
-    return _opBuilder.create<mlir::db::BroadcastConstant>(_opBuilder.getUnknownLoc(), noneType, column, driver).getResult();
+    return _opBuilder.create<mlir::db::BroadcastConstant>(_opBuilder.getUnknownLoc(), column, driver).getResult();
 }
 
 void DBProgramGenerator::alignConstantOperandsToDriver(mlir::Block::iterator first, mlir::Block::iterator last) {
@@ -5351,7 +5346,6 @@ void DBProgramGenerator::alignConstantOperandsToDriver(mlir::Block::iterator fir
     const auto isConstant = [this](mlir::Value value) { return yieldsConstantColumn(value, _constantColumns); };
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
-    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
     const mlir::OpBuilder::InsertionGuard insertionGuard(_opBuilder);
 
     for (mlir::Operation& op : llvm::make_range(first, last)) {
@@ -5363,7 +5357,7 @@ void DBProgramGenerator::alignConstantOperandsToDriver(mlir::Block::iterator fir
 
         _opBuilder.setInsertionPoint(&op);
         for (mlir::OpOperand& operand : op.getOpOperands()) {
-            operand.set(_opBuilder.create<mlir::db::BroadcastConstant>(loc, noneType, operand.get(), driver).getResult());
+            operand.set(_opBuilder.create<mlir::db::BroadcastConstant>(loc, operand.get(), driver).getResult());
         }
     }
 }
@@ -5601,13 +5595,12 @@ void DBProgramGenerator::generateOutput(const Projection* projection, const Unio
 
 void DBProgramGenerator::broadcastUnionProjection(llvm::SmallVectorImpl<mlir::Value>& projected) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
-    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
     const mlir::Value driver = resolveProjectionDriver(projected);
 
     for (mlir::Value& column : projected) {
         if (yieldsConstantColumn(column, _constantColumns)) {
-            column = _opBuilder.create<mlir::db::BroadcastConstant>(loc, noneType, column, driver).getResult();
+            column = _opBuilder.create<mlir::db::BroadcastConstant>(loc, column, driver).getResult();
         }
     }
 }
@@ -7082,10 +7075,9 @@ void DBProgramGenerator::broadcastConstantProjection(llvm::SmallVectorImpl<mlir:
     }
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
-    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
     for (mlir::Value& column : projected) {
-        column = _opBuilder.create<mlir::db::BroadcastConstant>(loc, noneType, column, driver).getResult();
+        column = _opBuilder.create<mlir::db::BroadcastConstant>(loc, column, driver).getResult();
     }
 }
 
@@ -9867,11 +9859,9 @@ mlir::Value DBProgramGenerator::translateEntityTypeExpr(const EntityTypeExpr* ty
     const bool writtenTypesUnknown = written && !(isNode ? written->_labelsKnown : written->_edgeTypeKnown);
     const bool boundAtRuntime = labelExpr->holdsParameter() || writtenTypesUnknown;
     if (writtenTypesKnown && !boundAtRuntime) {
-        const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
         const mlir::Value answer = constantBool(writtenEntityPasses(*written, labelExpr, isNode));
 
         return _opBuilder.create<mlir::db::BroadcastConstant>(_opBuilder.getUnknownLoc(),
-                                                              noneType,
                                                               answer,
                                                               resolveEntityColumn(entityDecl)).getResult();
     }

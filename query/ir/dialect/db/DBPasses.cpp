@@ -1450,7 +1450,7 @@ void fuseUnwindEquality(UnwindEqualityCross& match, mlir::OpBuilder& builder) {
             elements = builder.create<ToInteger>(loc, elementsType, standIn).getResult();
         } else {
             ConstantOp element = builder.create<ConstantOp>(loc, match._unwind.getElements()[0]);
-            elements = builder.create<BroadcastConstant>(loc, elementsType, element.getResult(), standIn).getResult();
+            elements = builder.create<BroadcastConstant>(loc, element.getResult(), standIn).getResult();
         }
 
         for (const size_t index : elementsReadConverted) {
