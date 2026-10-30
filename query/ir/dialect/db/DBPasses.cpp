@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <algorithm>
+#include <map>
 #include <memory>
 #include <optional>
 #include <tuple>
@@ -280,6 +281,17 @@ bool isEdgeHop(Operation* op) {
                GetInEdgesByTypeAndLabel>(op);
 }
 
+bool isEdgeScan(Operation* op) {
+    return isa<ScanEdges,
+               ScanEdgesByType,
+               ScanOutEdgesByLabelSrc,
+               ScanInEdgesByLabelTgt,
+               ScanOutEdgesByLabelTgt,
+               ScanInEdgesByLabelSrc,
+               ScanOutEdgesByLabelSrcTgt,
+               ScanInEdgesByLabelSrcTgt>(op);
+}
+
 bool isReverseHop(Operation* op) {
     return isa<GetInEdges, GetInEdgesByType, GetInEdgesByLabel, GetInEdgesByTypeAndLabel>(op);
 }
@@ -294,6 +306,10 @@ size_t hopReachedResult(Operation* hop) {
 }
 
 constexpr size_t hopFixedResultCount = 4;
+
+constexpr size_t EDGE_IDS_RESULT = 1;
+constexpr size_t EDGE_TYPES_RESULT = 2;
+constexpr size_t EDGE_TARGETS_RESULT = 3;
 
 // srcids, tgtids and paths; the carry set follows
 constexpr size_t pathFixedResultCount = 3;
@@ -4111,18 +4127,6 @@ bool collectScanLabels(ArrayAttr labelNames, const ::db::GraphMetadata& metadata
     return resolvesEveryLabel;
 }
 
-// The nodes carrying every one of these labels, none when the schema lacks one of them.
-size_t estimateLabelledNodes(ArrayAttr labelNames,
-                             const ::db::GraphMetadata& metadata,
-                             const ::db::CardinalityEstimation& estimation) {
-    ::db::LabelSet labels;
-    if (!collectScanLabels(labelNames, metadata, labels)) {
-        return 0;
-    }
-
-    return estimation.estimateNodeCount(labels);
-}
-
 // The edges the index keyed by one end's labels holds under these labels, which is what a
 // scan of it walks, and none when the schema lacks one of them.
 size_t estimateIndexedEdges(ArrayAttr labelNames,
@@ -7764,6 +7768,80 @@ constexpr double MEMBERSHIP_SELECTIVITY_CEILING = 0.5;
 
 using KnownLabels = llvm::DenseMap<Value, ::db::LabelSet>;
 
+// The edges a hop walks as far as the estimate tells them apart: the labels known on the
+// node it leaves and on the node it reaches, and the types it keeps, every type until one
+// is named
+struct HopEdges {
+    ::db::LabelSet _near;
+    ::db::LabelSet _far;
+    llvm::SmallVector<::db::EdgeTypeID, 2> _types;
+    bool _isTyped {false};
+    bool _leavesSource {true};
+    bool _walksBoth {false};
+};
+
+// The hop a walk last took at a node, and whether the node is the source of its edges
+struct NodeSide {
+    Operation* _hop {nullptr};
+    bool _isOut {true};
+};
+
+// What an estimate walking a pattern's ops knows of its rows: the labels each node carries,
+// the edges each hop walked, found from the hop and from the node it reached, and the hop
+// the walk last took at each node
+struct WalkKnowledge {
+    KnownLabels _labels;
+    llvm::DenseMap<Operation*, HopEdges> _hops;
+    llvm::DenseMap<Value, Operation*> _reachingHops;
+    llvm::DenseMap<Value, NodeSide> _lastSides;
+};
+
+// What a hop makes and reads per row it reads
+struct HopEstimate {
+    double _rows {0};
+    double _edgesRead {0};
+};
+
+// The edge types a list of names stands for, a name the schema lacks standing for no edge
+void collectEdgeTypes(ArrayAttr names, const ::db::GraphMetadata& metadata, llvm::SmallVectorImpl<::db::EdgeTypeID>& edgeTypes) {
+    const ::db::EdgeTypeMap& edgeTypeMap = metadata.edgeTypes();
+    for (const Attribute nameAttr : names) {
+        const StringAttr name = dyn_cast<StringAttr>(nameAttr);
+        if (!name) {
+            continue;
+        }
+
+        const llvm::StringRef nameRef = name.getValue();
+        const std::optional<::db::EdgeTypeID> edgeType = edgeTypeMap.get(std::string_view(nameRef.data(), nameRef.size()));
+        if (edgeType && !llvm::is_contained(edgeTypes, *edgeType)) {
+            edgeTypes.push_back(*edgeType);
+        }
+    }
+}
+
+// The hop or edge scan a column of edge types was read from: its own type column, or the
+// types of its edge column
+Operation* findTypedHop(Value edgeTypes, llvm::function_ref<Value(Value)> nodeOf) {
+    Value column = nodeOf(edgeTypes);
+    size_t resultIndex = EDGE_TYPES_RESULT;
+    if (GetEdgeTypes read = column.getDefiningOp<GetEdgeTypes>()) {
+        column = nodeOf(read.getInputEdges());
+        resultIndex = EDGE_IDS_RESULT;
+    }
+
+    const OpResult result = dyn_cast<OpResult>(column);
+    if (!result || result.getResultNumber() != resultIndex) {
+        return nullptr;
+    }
+
+    Operation* const owner = result.getOwner();
+    if (!isEdgeHop(owner) && !isEdgeScan(owner)) {
+        return nullptr;
+    }
+
+    return owner;
+}
+
 class RowEstimator {
 public:
     explicit RowEstimator(const ::db::GraphView& view)
@@ -7785,89 +7863,166 @@ public:
         return static_cast<double>(_estimation.estimateNodeCount(labels));
     }
 
-    double getLabelledNodes(ArrayAttr labelNames) const {
-        return static_cast<double>(estimateLabelledNodes(labelNames, _metadata, _estimation));
-    }
+    // The nodes a scan reads: those carrying every label @param labelNames names, every node
+    // when it names none, whose labels go into @param knowledge for the column @param nodes
+    double scanNodes(Value nodes, ArrayAttr labelNames, WalkKnowledge& knowledge) const {
+        if (!labelNames) {
+            return _nodeCount;
+        }
 
-    double getIndexedEdges(ArrayAttr labelNames, bool indexedByTarget) const {
-        return static_cast<double>(estimateIndexedEdges(labelNames, indexedByTarget, _metadata, _estimation));
-    }
-
-    // The average degree of nodes known to carry @param labels, in the direction the hop walks
-    double getHopFanOut(Operation* hop, bool walksBackward, const ::db::LabelSet& labels) const {
-        const ArrayAttr edgeTypes = hop->getAttrOfType<ArrayAttr>("edge_types");
-        const double nodes = getLabelledNodes(labels);
-        if ((edgeTypes && edgeTypes.empty()) || nodes == 0) {
+        ::db::LabelSet labels;
+        if (!collectScanLabels(labelNames, _metadata, labels)) {
             return 0;
         }
 
-        const bool walksBoth = isa<GetEdges>(hop);
-        const bool readsInEdges = isReverseHop(hop) != walksBackward;
+        knowledge._labels[nodes] = labels;
 
-        double edges = 0;
-        if (labels.empty()) {
-            edges = walksBoth ? 2 * _edgeCount : _edgeCount;
+        return getLabelledNodes(labels);
+    }
+
+    // The rows an edge scan makes: the edges of the types @param typeNames names, every type
+    // when it names none, from the nodes carrying every label @param sourceNames names to
+    // those carrying every label @param targetNames names, an end with no names being any
+    // node. What it walked goes into @param knowledge, as a hop out of its sources would.
+    double scanEdges(Operation* scan,
+                     ArrayAttr sourceNames,
+                     ArrayAttr targetNames,
+                     ArrayAttr typeNames,
+                     WalkKnowledge& knowledge) const {
+        HopEdges edges;
+        const bool resolvesSource = !sourceNames || collectScanLabels(sourceNames, _metadata, edges._near);
+        const bool resolvesTarget = !targetNames || collectScanLabels(targetNames, _metadata, edges._far);
+        if (typeNames) {
+            narrowTypes(typeNames, edges);
+        }
+
+        const Value sources = scan->getResult(0);
+        const Value targets = scan->getResult(EDGE_TARGETS_RESULT);
+
+        knowledge._labels[sources] = edges._near;
+        knowledge._labels[targets] = edges._far;
+        knowledge._hops[scan] = edges;
+        knowledge._reachingHops[targets] = scan;
+        knowledge._lastSides[sources] = NodeSide {._hop = scan, ._isOut = true};
+        knowledge._lastSides[targets] = NodeSide {._hop = scan, ._isOut = false};
+
+        if (!resolvesSource || !resolvesTarget) {
+            return 0;
+        }
+
+        return countHopEdges(edges);
+    }
+
+    // The rows a hop makes and the edges it reads per row it reads: the edges it walks per
+    // node carrying the labels known on @param from, of its own types or else of @param
+    // keptTypes, which a filter of its type column keeps, and every edge on that side of the
+    // node, since a node's edges of one type are scattered through all of them. A node the
+    // walk took a hop at before has the edges of the nodes that hop leads to, not the
+    // average. What it walked goes into @param knowledge.
+    HopEstimate walkHop(Operation* hop,
+                        bool walksBackward,
+                        Value from,
+                        Value to,
+                        ArrayAttr keptTypes,
+                        WalkKnowledge& knowledge) const {
+        HopEdges edges;
+        edges._near = knowledge._labels.lookup(from);
+        edges._far = knowledge._labels.lookup(to);
+        edges._leavesSource = isReverseHop(hop) == walksBackward;
+        edges._walksBoth = isa<GetEdges>(hop);
+
+        bool reachesLabelledNodes = true;
+        if (isEdgeHop(hop)) {
+            const ArrayAttr hopTypes = hop->getAttrOfType<ArrayAttr>("edge_types");
+            const ArrayAttr types = hopTypes ? hopTypes : keptTypes;
+            if (types) {
+                narrowTypes(types, edges);
+            }
+
+            const ArrayAttr reachedLabels = hop->getAttrOfType<ArrayAttr>("labels");
+            if (reachedLabels && !walksBackward) {
+                reachesLabelledNodes = collectScanLabels(reachedLabels, _metadata, edges._far);
+            }
+        }
+
+        HopEdges read;
+        read._near = edges._near;
+        read._leavesSource = edges._leavesSource;
+        read._walksBoth = edges._walksBoth;
+
+        const bool relatesToEarlierHops = isEdgeHop(hop) && !edges._walksBoth;
+
+        double rowsLift = 1;
+        double readLift = 1;
+        const auto previous = knowledge._lastSides.find(from);
+        if (relatesToEarlierHops && previous != knowledge._lastSides.end()) {
+            const NodeSide previousSide = previous->second;
+            const HopEdges& previousEdges = knowledge._hops.find(previousSide._hop)->second;
+            const ::db::DegreeSelection previousDegree = selectionOf(previousEdges, previousSide._isOut);
+
+            rowsLift = getDegreeLift(edges._near, previousDegree, selectionOf(edges, edges._leavesSource));
+            readLift = getDegreeLift(edges._near, previousDegree, selectionOf(read, read._leavesSource));
+        }
+
+        knowledge._labels[to] = edges._far;
+        knowledge._hops[hop] = edges;
+        knowledge._reachingHops[to] = hop;
+
+        if (relatesToEarlierHops) {
+            knowledge._lastSides[from] = NodeSide {._hop = hop, ._isOut = edges._leavesSource};
+            knowledge._lastSides[to] = NodeSide {._hop = hop, ._isOut = !edges._leavesSource};
         } else {
-            if (walksBoth || !readsInEdges) {
-                edges += static_cast<double>(_estimation.estimateOutEdgeCount(labels));
-            }
-            if (walksBoth || readsInEdges) {
-                edges += static_cast<double>(_estimation.estimateInEdgeCount(labels));
-            }
+            knowledge._lastSides.erase(from);
+            knowledge._lastSides.erase(to);
         }
 
-        return edges / nodes;
+        const double nodes = getLabelledNodes(edges._near);
+        if (nodes == 0) {
+            return HopEstimate {};
+        }
+
+        HopEstimate estimate;
+        estimate._edgesRead = readLift * countHopEdges(read) / nodes;
+        if (reachesLabelledNodes) {
+            estimate._rows = rowsLift * countHopEdges(edges) / nodes;
+        }
+
+        return estimate;
     }
 
-    // The share of nodes carrying @param known that a label check keeps, which then adds the
-    // labels every alternative asks for to @param known
-    double keepLabelled(ArrayAttr alternatives, ::db::LabelSet& known) const {
-        const double knownNodes = getLabelledNodes(known);
-        if (knownNodes == 0) {
-            return 0;
+    // The share of rows a label check on @param node keeps, which then adds the labels every
+    // alternative asks for to what @param knowledge knows of the node
+    double keepLabelled(ArrayAttr alternatives, Value node, WalkKnowledge& knowledge) const {
+        const double kept = shareLabelled(alternatives, node, knowledge);
+
+        ::db::LabelSet shared;
+        addSharedLabels(alternatives, shared);
+        knowledge._labels[node].merge(shared);
+
+        const auto reaching = knowledge._reachingHops.find(node);
+        if (reaching != knowledge._reachingHops.end()) {
+            knowledge._hops[reaching->second]._far.merge(shared);
         }
 
-        double kept = 0;
-        for (const Attribute alternative : alternatives) {
-            ::db::LabelSet labels;
-            if (collectScanLabels(cast<ArrayAttr>(alternative), _metadata, labels)) {
-                labels.merge(known);
-                kept += getLabelledNodes(labels);
-            }
-        }
-
-        llvm::DenseSet<Attribute> sharedNames;
-        addSharedLabelNames(alternatives, sharedNames);
-
-        const ::db::LabelMap& labelMap = _metadata.labels();
-        for (const Attribute name : sharedNames) {
-            const StringAttr nameAttr = dyn_cast<StringAttr>(name);
-            if (!nameAttr) {
-                continue;
-            }
-
-            const llvm::StringRef nameRef = nameAttr.getValue();
-            const std::optional<::db::LabelID> label = labelMap.get(std::string_view(nameRef.data(), nameRef.size()));
-            if (label) {
-                known.set(*label);
-            }
-        }
-
-        return std::min(1.0, kept / knownNodes);
+        return kept;
     }
 
-    // @param nodeOf names the node a column holds, whose labels @param known keeps
-    double getSelectivity(Value mask, llvm::function_ref<Value(Value)> nodeOf, KnownLabels& known) const {
+    // @param nodeOf names the node a column holds, whose labels @param knowledge keeps
+    double getSelectivity(Value mask, llvm::function_ref<Value(Value)> nodeOf, WalkKnowledge& knowledge) const {
         llvm::SmallVector<Value, 4> conjuncts;
         collectConjuncts(mask, conjuncts);
 
         double kept = 1;
         for (const Value conjunct : conjuncts) {
             const LabelCheck check = readLabelCheck(conjunct);
+            CheckEdgeTypeConstraint typeCheck = conjunct.getDefiningOp<CheckEdgeTypeConstraint>();
+
             if (check._alternatives) {
-                kept *= keepLabelled(check._alternatives, known[nodeOf(check._nodes)]);
+                kept *= keepLabelled(check._alternatives, nodeOf(check._nodes), knowledge);
+            } else if (typeCheck) {
+                kept *= keepTyped(typeCheck, nodeOf, knowledge);
             } else {
-                kept *= getPredicateSelectivity(conjunct, nodeOf, known);
+                kept *= getPredicateSelectivity(conjunct, nodeOf, knowledge);
             }
         }
 
@@ -7875,10 +8030,18 @@ public:
     }
 
 private:
+    // The edge counts and degree products asked for, read off the graph once each: the walks
+    // the estimate compares ask for the same ones over and over
+    using StatisticKey = llvm::SmallVector<uint64_t, 16>;
+
+    static constexpr uint64_t EDGE_COUNT_KEY = 0;
+    static constexpr uint64_t DEGREE_PRODUCTS_KEY = 1;
+
     const ::db::GraphMetadata& _metadata;
     ::db::CardinalityEstimation _estimation;
     double _nodeCount {0};
     double _edgeCount {0};
+    mutable std::map<StatisticKey, double> _statistics;
 
     struct LabelCheck {
         ArrayAttr _alternatives;
@@ -7899,13 +8062,227 @@ private:
         return LabelCheck {._alternatives = check.getAlternatives(), ._nodes = labelSet.getInputNodes()};
     }
 
+    static void appendLabels(const ::db::LabelSet& labels, StatisticKey& key) {
+        for (const uint64_t word : labels.integers()) {
+            key.push_back(word);
+        }
+    }
+
+    static void appendDegree(const ::db::DegreeSelection& degree, StatisticKey& key) {
+        key.push_back(degree._isOut ? 1 : 0);
+        key.push_back(degree._isEveryType ? 1 : 0);
+        key.push_back(degree._edgeTypes.size());
+        for (const ::db::EdgeTypeID edgeType : degree._edgeTypes) {
+            key.push_back(edgeType.getValue());
+        }
+    }
+
+    double countEdges(const ::db::LabelSet& source, const HopEdges& edges, const ::db::LabelSet& target) const {
+        StatisticKey key {EDGE_COUNT_KEY};
+        appendLabels(source, key);
+        appendLabels(target, key);
+        appendDegree(selectionOf(edges, true), key);
+
+        const auto [known, isNew] = _statistics.try_emplace(key, 0);
+        if (!isNew) {
+            return known->second;
+        }
+
+        double count = 0;
+        if (!edges._isTyped) {
+            count = static_cast<double>(_estimation.estimateEdgeCount(source, target));
+        } else {
+            for (const ::db::EdgeTypeID edgeType : edges._types) {
+                count += static_cast<double>(_estimation.estimateEdgeCount(source, edgeType, target));
+            }
+        }
+
+        known->second = count;
+
+        return count;
+    }
+
+    double sumDegreeProducts(const ::db::LabelSet& labels,
+                             const ::db::DegreeSelection& first,
+                             const ::db::DegreeSelection& second) const {
+        StatisticKey key {DEGREE_PRODUCTS_KEY};
+        appendLabels(labels, key);
+        appendDegree(first, key);
+        appendDegree(second, key);
+
+        const auto [known, isNew] = _statistics.try_emplace(key, 0);
+        if (isNew) {
+            known->second = static_cast<double>(_estimation.estimateDegreeProducts(labels, first, second));
+        }
+
+        return known->second;
+    }
+
+    double countHopEdges(const HopEdges& edges) const {
+        const ::db::LabelSet& source = edges._leavesSource ? edges._near : edges._far;
+        const ::db::LabelSet& target = edges._leavesSource ? edges._far : edges._near;
+
+        double count = countEdges(source, edges, target);
+        if (edges._walksBoth) {
+            count += countEdges(target, edges, source);
+        }
+
+        return count;
+    }
+
+    static ::db::DegreeSelection selectionOf(const HopEdges& edges, bool isOut) {
+        return ::db::DegreeSelection {._edgeTypes = edges._types, ._isEveryType = !edges._isTyped, ._isOut = isOut};
+    }
+
+    // The edges @param degree selects on the nodes carrying @param labels
+    double countSelectedEdges(const ::db::LabelSet& labels, const ::db::DegreeSelection& degree) const {
+        HopEdges edges;
+        edges._near = labels;
+        edges._types.assign(degree._edgeTypes.begin(), degree._edgeTypes.end());
+        edges._isTyped = !degree._isEveryType;
+        edges._leavesSource = degree._isOut;
+
+        return countHopEdges(edges);
+    }
+
+    // How many times the label set's average of the edges @param next selects a node carrying
+    // @param labels has when the walk took the edges @param previous selects there before:
+    // a walk comes to a node with many edges more often than to one with few
+    double getDegreeLift(const ::db::LabelSet& labels,
+                         const ::db::DegreeSelection& previous,
+                         const ::db::DegreeSelection& next) const {
+        const double nodes = getLabelledNodes(labels);
+        const double previousEdges = countSelectedEdges(labels, previous);
+        const double nextEdges = countSelectedEdges(labels, next);
+        if (nodes == 0 || previousEdges == 0 || nextEdges == 0) {
+            return 1;
+        }
+
+        const double products = sumDegreeProducts(labels, previous, next);
+
+        return (products / previousEdges) / (nextEdges / nodes);
+    }
+
+    // Keeps the types of @param edges the names ask for, every one of them when the edges
+    // were of any type
+    void narrowTypes(ArrayAttr typeNames, HopEdges& edges) const {
+        llvm::SmallVector<::db::EdgeTypeID, 2> named;
+        collectEdgeTypes(typeNames, _metadata, named);
+
+        if (edges._isTyped) {
+            llvm::erase_if(edges._types, [&named](::db::EdgeTypeID edgeType) {
+                return !llvm::is_contained(named, edgeType);
+            });
+        } else {
+            edges._types.assign(named.begin(), named.end());
+            edges._isTyped = true;
+        }
+    }
+
+    void addSharedLabels(ArrayAttr alternatives, ::db::LabelSet& labels) const {
+        llvm::DenseSet<Attribute> sharedNames;
+        addSharedLabelNames(alternatives, sharedNames);
+
+        const ::db::LabelMap& labelMap = _metadata.labels();
+        for (const Attribute name : sharedNames) {
+            const StringAttr nameAttr = dyn_cast<StringAttr>(name);
+            if (!nameAttr) {
+                continue;
+            }
+
+            const llvm::StringRef nameRef = nameAttr.getValue();
+            const std::optional<::db::LabelID> label = labelMap.get(std::string_view(nameRef.data(), nameRef.size()));
+            if (label) {
+                labels.set(*label);
+            }
+        }
+    }
+
+    // The share of nodes carrying @param known that carry the labels of one alternative
+    double shareLabelled(ArrayAttr alternatives, const ::db::LabelSet& known) const {
+        const double knownNodes = getLabelledNodes(known);
+        if (knownNodes == 0) {
+            return 0;
+        }
+
+        double kept = 0;
+        for (const Attribute alternative : alternatives) {
+            ::db::LabelSet labels;
+            if (collectScanLabels(cast<ArrayAttr>(alternative), _metadata, labels)) {
+                labels.merge(known);
+                kept += getLabelledNodes(labels);
+            }
+        }
+
+        return std::min(1.0, kept / knownNodes);
+    }
+
+    // A node a hop reached is checked among the edges that hop walked, so a type that only
+    // ever reaches nodes of a label keeps all of them; any other among the nodes it is
+    // known to carry the labels of
+    double shareLabelled(ArrayAttr alternatives, Value node, const WalkKnowledge& knowledge) const {
+        const auto reaching = knowledge._reachingHops.find(node);
+        if (reaching == knowledge._reachingHops.end()) {
+            return shareLabelled(alternatives, knowledge._labels.lookup(node));
+        }
+
+        const HopEdges& edges = knowledge._hops.find(reaching->second)->second;
+        const double walked = countHopEdges(edges);
+        if (walked == 0) {
+            return 0;
+        }
+
+        double kept = 0;
+        for (const Attribute alternative : alternatives) {
+            HopEdges labelled = edges;
+            if (collectScanLabels(cast<ArrayAttr>(alternative), _metadata, labelled._far)) {
+                kept += countHopEdges(labelled);
+            }
+        }
+
+        return std::min(1.0, kept / walked);
+    }
+
+    // The share of rows a type check keeps: of the edges its hop walked, or of the graph's
+    // when no hop the estimate walked made them
+    double shareTyped(CheckEdgeTypeConstraint check,
+                      llvm::function_ref<Value(Value)> nodeOf,
+                      const WalkKnowledge& knowledge) const {
+        Operation* const hop = findTypedHop(check.getEdgeTypeIds(), nodeOf);
+        const auto walkedEdges = hop ? knowledge._hops.find(hop) : knowledge._hops.end();
+
+        HopEdges edges = walkedEdges != knowledge._hops.end() ? walkedEdges->second : HopEdges {};
+        const double walked = countHopEdges(edges);
+        if (walked == 0) {
+            return 0;
+        }
+
+        narrowTypes(check.getEdgeTypes(), edges);
+
+        return countHopEdges(edges) / walked;
+    }
+
+    double keepTyped(CheckEdgeTypeConstraint check,
+                     llvm::function_ref<Value(Value)> nodeOf,
+                     WalkKnowledge& knowledge) const {
+        const double kept = shareTyped(check, nodeOf, knowledge);
+
+        Operation* const hop = findTypedHop(check.getEdgeTypeIds(), nodeOf);
+        const auto walkedEdges = hop ? knowledge._hops.find(hop) : knowledge._hops.end();
+        if (walkedEdges != knowledge._hops.end()) {
+            narrowTypes(check.getEdgeTypes(), walkedEdges->second);
+        }
+
+        return kept;
+    }
+
     // An equality naming a node keeps one node of those it compares, as one on a key does
-    double getEqualitySelectivity(EqOp equality, llvm::function_ref<Value(Value)> nodeOf, KnownLabels& known) const {
+    double getEqualitySelectivity(EqOp equality, llvm::function_ref<Value(Value)> nodeOf, const WalkKnowledge& knowledge) const {
         double nodes = 0;
         for (const Value side : {equality.getLhs(), equality.getRhs()}) {
             const Value nodeColumn = comparedNodeColumn(side);
             if (nodeColumn) {
-                nodes = std::max(nodes, getLabelledNodes(known.lookup(nodeOf(nodeColumn))));
+                nodes = std::max(nodes, getLabelledNodes(knowledge._labels.lookup(nodeOf(nodeColumn))));
             }
         }
 
@@ -7922,27 +8299,28 @@ private:
         return std::min(MEMBERSHIP_SELECTIVITY_CEILING, EQUALITY_SELECTIVITY * static_cast<double>(elements.size()));
     }
 
-    double getLeafSelectivity(Value predicate, llvm::function_ref<Value(Value)> nodeOf, KnownLabels& known) const {
+    double getLeafSelectivity(Value predicate, llvm::function_ref<Value(Value)> nodeOf, const WalkKnowledge& knowledge) const {
         Operation* const def = predicate.getDefiningOp();
 
         if (EqOp equality = dyn_cast_or_null<EqOp>(def)) {
-            return getEqualitySelectivity(equality, nodeOf, known);
+            return getEqualitySelectivity(equality, nodeOf, knowledge);
         } else if (isa_and_nonnull<NeqOp>(def)) {
             return 1 - EQUALITY_SELECTIVITY;
         } else if (isa_and_nonnull<GtOp, LtOp, GteOp, LteOp>(def)) {
             return RANGE_SELECTIVITY;
         } else if (InOp membership = dyn_cast_or_null<InOp>(def)) {
             return getMembershipSelectivity(membership);
+        } else if (CheckEdgeTypeConstraint typeCheck = dyn_cast_or_null<CheckEdgeTypeConstraint>(def)) {
+            return shareTyped(typeCheck, nodeOf, knowledge);
         } else if (const LabelCheck check = readLabelCheck(predicate); check._alternatives) {
-            ::db::LabelSet labels = known.lookup(nodeOf(check._nodes));
-            return keepLabelled(check._alternatives, labels);
+            return shareLabelled(check._alternatives, nodeOf(check._nodes), knowledge);
         }
 
         return 1;
     }
 
     // A flat OR or AND chain is as long as the query, so the walk keeps its own stack
-    double getPredicateSelectivity(Value predicate, llvm::function_ref<Value(Value)> nodeOf, KnownLabels& known) const {
+    double getPredicateSelectivity(Value predicate, llvm::function_ref<Value(Value)> nodeOf, const WalkKnowledge& knowledge) const {
         llvm::DenseMap<Value, double> kept;
         llvm::SmallVector<Value> pending {predicate};
 
@@ -7955,7 +8333,7 @@ private:
 
             Operation* const def = current.getDefiningOp();
             if (!isa_and_nonnull<AndOp, OrOp, XorOp, NotOp>(def)) {
-                kept[current] = getLeafSelectivity(current, nodeOf, known);
+                kept[current] = getLeafSelectivity(current, nodeOf, knowledge);
                 pending.pop_back();
                 continue;
             }
@@ -7996,69 +8374,45 @@ private:
 // filter or a hop reads a column rather than making one. A listed set of IDs is its own
 // count, a literal list one row per element, a by-label scan what the graph holds under
 // those labels, and a property scan the share of those an equality keeps.
-std::optional<double> estimateSourceRows(Operation* op, const RowEstimator& estimator) {
+std::optional<double> estimateSourceRows(Operation* op, const RowEstimator& estimator, WalkKnowledge& knowledge) {
     if (ConstScanNodes constScan = dyn_cast<ConstScanNodes>(op)) {
         return static_cast<double>(constScan.getNodeIDs().size());
     } else if (UnwindConst unwind = dyn_cast<UnwindConst>(op)) {
         return static_cast<double>(unwind.getElements().size());
     } else if (ScanNodesByLabel byLabel = dyn_cast<ScanNodesByLabel>(op)) {
-        return estimator.getLabelledNodes(byLabel.getLabels());
-    } else if (isa<ScanNodes>(op)) {
-        return estimator.getNodeCount();
+        return estimator.scanNodes(byLabel.getResult(), byLabel.getLabels(), knowledge);
+    } else if (ScanNodes scan = dyn_cast<ScanNodes>(op)) {
+        return estimator.scanNodes(scan.getResult(), ArrayAttr(), knowledge);
     } else if (ScanNodesByPropertyValue byValue = dyn_cast<ScanNodesByPropertyValue>(op)) {
         const std::optional<ArrayAttr> labels = byValue.getLabels();
-        const double scanned = labels ? estimator.getLabelledNodes(*labels) : estimator.getNodeCount();
+        const double scanned = estimator.scanNodes(byValue->getResult(0), labels ? *labels : ArrayAttr(), knowledge);
 
         return scanned * EQUALITY_SELECTIVITY;
     } else if (EdgeScanLabels scanLabels; readEdgeScanLabels(op, scanLabels)) {
-        const double nodeCount = estimator.getNodeCount();
-        if (nodeCount == 0) {
-            return 0;
-        }
-
-        const bool indexedByTarget = scanLabels._indexedByTarget;
-        const ArrayAttr indexedLabels = indexedByTarget ? scanLabels._target : scanLabels._source;
-        const ArrayAttr otherLabels = indexedByTarget ? scanLabels._source : scanLabels._target;
-
-        // The other end's labels keep the share of the walked edges they select of the nodes,
-        // the two ends' labels taken as independent.
-        double rows = estimator.getEdgeCount();
-        if (indexedLabels) {
-            rows = estimator.getIndexedEdges(indexedLabels, indexedByTarget);
-        }
-
-        if (otherLabels) {
-            rows = estimator.getLabelledNodes(otherLabels) * rows / nodeCount;
-        }
-
-        return rows;
+        return estimator.scanEdges(op, scanLabels._source, scanLabels._target, ArrayAttr(), knowledge);
     } else if (ScanEdgesByType byType = dyn_cast<ScanEdgesByType>(op)) {
-        if (byType.getEdgeTypes().empty()) {
-            return 0;
-        }
-
-        return estimator.getEdgeCount();
+        return estimator.scanEdges(op, ArrayAttr(), ArrayAttr(), byType.getEdgeTypes(), knowledge);
     }
 
     return std::nullopt;
 }
 
 // The ratio an op multiplies the rows it reads by, and nothing when it hands them on as
-// they come. A hop makes the graph's average degree of rows per row it reads - all the db
-// level can say of a hop out of a node it cannot name - and an undirected one walks both
-// directions, so twice that. It is a ratio rather than a count because a graph with fewer
-// edges than nodes has a hop shrink its input rather than grow it. An unwind makes a row
-// per element of each row's list, whose length is a property of the rows themselves: no
-// statistic of the graph measures it, so it reads at the figure an uncountable source
-// does - where a literal list, whose elements are in the IR, is counted exactly instead.
-std::optional<double> estimateRowMultiplier(Operation* op, const RowEstimator& estimator) {
+// they come. A hop makes a row per edge it walks of the nodes it reads, of the types and to
+// the labels it keeps, and an undirected one walks both directions. It is a ratio rather
+// than a count because a graph with fewer edges than nodes has a hop shrink its input
+// rather than grow it. An unwind makes a row per element of each row's list, whose length
+// is a property of the rows themselves: no statistic of the graph measures it, so it reads
+// at the figure an uncountable source does - where a literal list, whose elements are in
+// the IR, is counted exactly instead.
+std::optional<double> estimateRowMultiplier(Operation* op, const RowEstimator& estimator, WalkKnowledge& knowledge) {
     if (isa<Unwind>(op)) {
         return static_cast<double>(uncountableRows);
     } else if (!isEdgeHop(op)) {
         return std::nullopt;
     }
 
-    return estimator.getHopFanOut(op, false, ::db::LabelSet {});
+    return estimator.walkHop(op, false, op->getOperand(0), op->getResult(hopReachedResult(op)), ArrayAttr(), knowledge)._rows;
 }
 
 struct RegionRows {
@@ -8078,7 +8432,7 @@ double estimateRegionRows(const RegionRows& region) {
 // source's rows.
 double estimateFactorRows(Region& factor, const RowEstimator& estimator) {
     llvm::DenseMap<Region*, RegionRows> regionRows;
-    KnownLabels known;
+    WalkKnowledge knowledge;
 
     const auto columnItself = [](Value column) {
         return column;
@@ -8103,18 +8457,18 @@ double estimateFactorRows(Region& factor, const RowEstimator& estimator) {
         rows._countedASource = rows._countedASource || nested._countedASource;
 
         if (FilterOp filter = dyn_cast<FilterOp>(op)) {
-            rows._rows *= estimator.getSelectivity(filter.getMask(), columnItself, known);
+            rows._rows *= estimator.getSelectivity(filter.getMask(), columnItself, knowledge);
             return;
         }
 
-        const std::optional<double> seeded = estimateSourceRows(op, estimator);
+        const std::optional<double> seeded = estimateSourceRows(op, estimator, knowledge);
         if (seeded) {
             rows._countedASource = true;
             rows._rows *= *seeded;
             return;
         }
 
-        const std::optional<double> multiplier = estimateRowMultiplier(op, estimator);
+        const std::optional<double> multiplier = estimateRowMultiplier(op, estimator, knowledge);
         if (multiplier) {
             rows._rows *= *multiplier;
         }
@@ -9800,9 +10154,10 @@ struct RerootPatternAtSeed : public impl::RerootPatternAtSeedBase<RerootPatternA
     }
 };
 
-// The estimate counts no edge per type and no label pair across an edge, so it moves a
-// pattern off the root the query wrote only when another start costs this much less
-constexpr double REROOT_GAIN_FACTOR = 2;
+// The estimate counts rows and edges read rather than time, and a walk off the written root
+// reads the nodes after its first hop out of their order, so a pattern moves off the root
+// the query wrote only when another start costs this much less
+constexpr double REROOT_GAIN_FACTOR = 1.3;
 
 // A pattern rooted at a scan up to the first op reading it that is not rebuilt with it, and
 // the walk out of the node making the fewest rows, scanned by the labels its filters ask for
@@ -9919,9 +10274,28 @@ bool fusesIntoScanByPropertyValue(FilterOp filter, Value start, const SeedPatter
     });
 }
 
-// The rows a walk builds, summed over the ops it emits: the scan of its first node, then
-// each filter and each hop. A property equality in the first filter makes that scan and
-// filter one scan by property value, which emits only the rows the filter keeps.
+// The types each hop of the pattern keeps by a filter of its own type column, which a later
+// pass fuses into the hop
+void collectHopTypeChecks(const SeedPattern& pattern, llvm::DenseMap<Operation*, ArrayAttr>& hopTypes) {
+    for (FilterOp filter : pattern._filters) {
+        CheckEdgeTypeConstraint check = filter.getMask().getDefiningOp<CheckEdgeTypeConstraint>();
+        const OpResult edgeTypes = check ? dyn_cast<OpResult>(check.getEdgeTypeIds()) : OpResult();
+        if (!edgeTypes) {
+            continue;
+        }
+
+        Operation* const hop = edgeTypes.getOwner();
+        if (isEdgeHop(hop) && edgeTypes.getResultNumber() == EDGE_TYPES_RESULT) {
+            hopTypes[hop] = check.getEdgeTypes();
+        }
+    }
+}
+
+// The work a walk does: the rows each op it emits builds, the scan of its first node, then
+// each filter and each hop, and the edges each hop reads. A property equality in the first
+// filter makes that scan and filter one scan by property value, which emits only the rows
+// the filter keeps, and a hop emits only the edges of the types its own filter keeps, as
+// the by-type hop it becomes, though it reads every edge of the nodes it leaves.
 double estimateWalkCost(const SeedPattern& pattern,
                         Value start,
                         ArrayAttr startLabels,
@@ -9931,10 +10305,13 @@ double estimateWalkCost(const SeedPattern& pattern,
         return patternOrigin(column, pattern);
     };
 
-    KnownLabels known;
+    llvm::DenseMap<Operation*, ArrayAttr> hopTypes;
+    collectHopTypeChecks(pattern, hopTypes);
+
+    WalkKnowledge knowledge;
     double rows = estimator.getNodeCount();
     if (startLabels) {
-        rows *= estimator.keepLabelled(ArrayAttr::get(startLabels.getContext(), {startLabels}), known[start]);
+        rows *= estimator.keepLabelled(ArrayAttr::get(startLabels.getContext(), {startLabels}), start, knowledge);
     }
 
     const bool startsWithFilter = !events.empty() && events.front()._kind == WalkEvent::Kind::Filter;
@@ -9945,19 +10322,27 @@ double estimateWalkCost(const SeedPattern& pattern,
         switch (event._kind) {
             case WalkEvent::Kind::RootLabels: {
                 const ArrayAttr rootLabels = cast<ScanNodesByLabel>(pattern._root).getLabels();
-                rows *= estimator.keepLabelled(ArrayAttr::get(rootLabels.getContext(), {rootLabels}), known[pattern._root->getResult(0)]);
+                rows *= estimator.keepLabelled(ArrayAttr::get(rootLabels.getContext(), {rootLabels}), pattern._root->getResult(0), knowledge);
             }
             break;
             case WalkEvent::Kind::Filter: {
                 FilterOp filter = event._filter;
-                rows *= estimator.getSelectivity(filter.getMask(), nodeOf, known);
+                rows *= estimator.getSelectivity(filter.getMask(), nodeOf, knowledge);
             }
             break;
-            case WalkEvent::Kind::Forward:
-                rows *= estimator.getHopFanOut(event._step->_op, false, known.lookup(event._step->_from));
+            case WalkEvent::Kind::Forward: {
+                const PatternStep& step = *event._step;
+                const HopEstimate hop = estimator.walkHop(step._op, false, step._from, step._to, hopTypes.lookup(step._op), knowledge);
+                cost += rows * hop._edgesRead;
+                rows *= hop._rows;
+            }
             break;
-            case WalkEvent::Kind::Backward:
-                rows *= estimator.getHopFanOut(event._step->_op, true, known.lookup(event._step->_to));
+            case WalkEvent::Kind::Backward: {
+                const PatternStep& step = *event._step;
+                const HopEstimate hop = estimator.walkHop(step._op, true, step._to, step._from, hopTypes.lookup(step._op), knowledge);
+                cost += rows * hop._edgesRead;
+                rows *= hop._rows;
+            }
             break;
         }
 

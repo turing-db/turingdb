@@ -111,7 +111,7 @@ TEST_F(ConstantRowsPassesTest, fusesEdgeScansUnderAConstantProjection) {
         {"MATCH (a)-[e:KNOWS_WELL]->(b)", "db.scan_edges_by_type", 3},
         {"MATCH (a:Person)-[e:KNOWS_WELL]->(b)", "db.get_out_edges_by_type", 2},
         {"MATCH (a:Person)-[e]->(b)", "db.scan_out_edges_by_label_src", 17},
-        {"MATCH (a)-[e]->(b:Interest)", "db.scan_out_edges_by_label_tgt", 15},
+        {"MATCH (a)-[e]->(b:Interest)", "db.scan_in_edges_by_label_tgt", 15},
         {"MATCH (a {name: 'Remy'})-[e]->(b:Interest)", "db.get_out_edges_by_label", 3},
         {"MATCH (a:Person)-[e:KNOWS_WELL]->(b:Person)", "db.get_in_edges_by_type_and_label", 2},
     };
