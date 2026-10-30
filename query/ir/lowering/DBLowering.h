@@ -184,6 +184,11 @@ private:
     // not left in the loop body - just a record of which block is innermost.
     mlir::Block* _innermostLoopBody {nullptr};
 
+    // The region of an op over a list's elements, a fold, a hop or a computed unwind being
+    // lowered. Its op already sits in the block above, so an op lowered for the region into
+    // a block enclosing it must go ahead of that op, not at the end of the block.
+    mlir::Block* _innermostRegionBody {nullptr};
+
     // Defines the cardinality of the innermost loop, used for projection
     mlir::Value _innermostCardinality;
 

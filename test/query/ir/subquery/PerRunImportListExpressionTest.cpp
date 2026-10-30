@@ -102,3 +102,81 @@ TEST_F(PerRunImportListExpressionTest, countsUnderAWhenOnAnAllReduceOverTheRow) 
                 {"Cyrus", "0"},
                 {"Doruk", "0"}});
 }
+
+TEST_F(PerRunImportListExpressionTest, filtersAComprehensionOnTheImport) {
+    expectRows("MATCH (p:Person) CALL (p) { WITH count(*) AS c RETURN [x IN [1, 2] WHERE x < p.age | p.name] AS k } RETURN p.name, k",
+               {{"Remy", "Remy, Remy"},
+                {"Adam", "Adam, Adam"},
+                {"Maxime", ""},
+                {"Luc", ""},
+                {"Martina", ""},
+                {"Suhas", ""},
+                {"Cyrus", ""},
+                {"Doruk", ""}});
+}
+
+TEST_F(PerRunImportListExpressionTest, nestsAComprehensionOverTheImport) {
+    expectRows("MATCH (p:Person) CALL (p) { WITH count(*) AS c RETURN [x IN [1] | [y IN [2] | p.name]] AS k } RETURN k",
+               {{"[Remy]"},
+                {"[Adam]"},
+                {"[Maxime]"},
+                {"[Luc]"},
+                {"[Martina]"},
+                {"[Suhas]"},
+                {"[Cyrus]"},
+                {"[Doruk]"}});
+}
+
+TEST_F(PerRunImportListExpressionTest, branchesOnTheImportInAComprehension) {
+    expectRows("MATCH (p:Person) CALL (p) { WITH count(*) AS c "
+               "RETURN [x IN [1] | CASE WHEN p.age > 1 THEN p.name ELSE 'none' END] AS k } RETURN k",
+               {{"Remy"},
+                {"Adam"},
+                {"none"},
+                {"none"},
+                {"none"},
+                {"none"},
+                {"none"},
+                {"none"}});
+}
+
+TEST_F(PerRunImportListExpressionTest, addsAnElementToAPropertyOfTheImport) {
+    expectRows("MATCH (p:Person) CALL (p) { WITH count(*) AS c RETURN [x IN [1] | x + p.age] AS k } RETURN p.name, k",
+               {{"Remy", "33"},
+                {"Adam", "33"},
+                {"Maxime", "null"},
+                {"Luc", "null"},
+                {"Martina", "null"},
+                {"Suhas", "null"},
+                {"Cyrus", "null"},
+                {"Doruk", "null"}});
+}
+
+TEST_F(PerRunImportListExpressionTest, decidesASingleOverTheImport) {
+    expectRows("MATCH (p:Person) CALL (p) { WITH count(*) AS c RETURN single(x IN [1, 40] WHERE x > p.age) AS k } RETURN p.name, k",
+               {{"Remy", "true"},
+                {"Adam", "true"},
+                {"Maxime", "null"},
+                {"Luc", "null"},
+                {"Martina", "null"},
+                {"Suhas", "null"},
+                {"Cyrus", "null"},
+                {"Doruk", "null"}});
+}
+
+TEST_F(PerRunImportListExpressionTest, unwindsAComprehensionOverTheImport) {
+    expectRows("MATCH (p:Person) CALL (p) { WITH count(*) AS c UNWIND [x IN [1, 2] | p.name] AS y RETURN y } RETURN y",
+               {{"Remy"}, {"Remy"},
+                {"Adam"}, {"Adam"},
+                {"Maxime"}, {"Maxime"},
+                {"Luc"}, {"Luc"},
+                {"Martina"}, {"Martina"},
+                {"Suhas"}, {"Suhas"},
+                {"Cyrus"}, {"Cyrus"},
+                {"Doruk"}, {"Doruk"}});
+}
+
+TEST_F(PerRunImportListExpressionTest, readsAPropertyOfAnImportedEdgeInAComprehension) {
+    expectRows("MATCH ()-[e:KNOWS_WELL]->() CALL (e) { WITH count(*) AS c RETURN [x IN [1] | e.duration] AS k } RETURN k",
+               {{"20"}, {"20"}, {"200"}});
+}

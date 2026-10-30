@@ -1126,6 +1126,7 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     _constantColumns.clear();
     _rootBlock = _entryBlock;
     _innermostLoopBody = nullptr;
+    _innermostRegionBody = nullptr;
     _innermostCardinality = mlir::Value();
     _limitHandles.clear();
     _loopLimitHandle.clear();
@@ -1946,8 +1947,10 @@ void DBLowering::lowerUnwindComputed(mlir::db::UnwindComputed unwind) {
     mlir::Operation* const placeholderYield = _builder.create<nl::UnwindYield>(loc, runCardinality);
 
     mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    mlir::Block* const previousInnermostRegionBody = _innermostRegionBody;
     const mlir::Value previousInnermostCardinality = _innermostCardinality;
     _innermostLoopBody = nlSource;
+    _innermostRegionBody = nlSource;
     _innermostCardinality = runCardinality;
 
     mlir::Value sourceChunk;
@@ -1961,6 +1964,7 @@ void DBLowering::lowerUnwindComputed(mlir::db::UnwindComputed unwind) {
     }
 
     _innermostLoopBody = previousInnermostLoopBody;
+    _innermostRegionBody = previousInnermostRegionBody;
     _innermostCardinality = previousInnermostCardinality;
 
     _builder.setInsertionPointToEnd(nlSource);
@@ -2033,8 +2037,10 @@ mlir::Operation* DBLowering::lowerElementBody(mlir::Block& dbBody,
     // The rows the body computes over are the elements of one row's list, so a constant it
     // reads is laid out over those rather than over the rows the op is read on
     mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    mlir::Block* const previousInnermostRegionBody = _innermostRegionBody;
     const mlir::Value previousInnermostCardinality = _innermostCardinality;
     _innermostLoopBody = nlBody;
+    _innermostRegionBody = nlBody;
     _innermostCardinality = elementChunk;
 
     for (mlir::Operation& operation : dbBody) {
@@ -2049,6 +2055,7 @@ mlir::Operation* DBLowering::lowerElementBody(mlir::Block& dbBody,
     }
 
     _innermostLoopBody = previousInnermostLoopBody;
+    _innermostRegionBody = previousInnermostRegionBody;
     _innermostCardinality = previousInnermostCardinality;
 
     // ComprehensionYield::verify guarantees both, so an empty one here means unverified
@@ -2163,8 +2170,10 @@ mlir::Operation* DBLowering::lowerFoldRegion(mlir::Block& dbBlock, mlir::Block* 
     }
 
     mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    mlir::Block* const previousInnermostRegionBody = _innermostRegionBody;
     const mlir::Value previousInnermostCardinality = _innermostCardinality;
     _innermostLoopBody = nlBlock;
+    _innermostRegionBody = nlBlock;
     _innermostCardinality = elementChunk;
 
     for (mlir::Operation& operation : dbBlock.without_terminator()) {
@@ -2174,6 +2183,7 @@ mlir::Operation* DBLowering::lowerFoldRegion(mlir::Block& dbBlock, mlir::Block* 
     valueChunk = mapValue(dbBlock.getTerminator()->getOperand(0));
 
     _innermostLoopBody = previousInnermostLoopBody;
+    _innermostRegionBody = previousInnermostRegionBody;
     _innermostCardinality = previousInnermostCardinality;
 
     valueChunk = rowAlignedChunk(valueChunk, elementChunk);
@@ -7066,8 +7076,10 @@ void DBLowering::lowerHopRegion(mlir::Block& dbHop, mlir::Region& nlHop, size_t 
     // laid out over those rather than over the rows the walk is read on
     const mlir::Value edges = nlBlock->getArgument(mlir::hopEdgeArgument(step));
     mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    mlir::Block* const previousInnermostRegionBody = _innermostRegionBody;
     const mlir::Value previousInnermostCardinality = _innermostCardinality;
     _innermostLoopBody = nlBlock;
+    _innermostRegionBody = nlBlock;
     _innermostCardinality = edges;
 
     mlir::Value mask;
@@ -7080,6 +7092,7 @@ void DBLowering::lowerHopRegion(mlir::Block& dbHop, mlir::Region& nlHop, size_t 
     }
 
     _innermostLoopBody = previousInnermostLoopBody;
+    _innermostRegionBody = previousInnermostRegionBody;
     _innermostCardinality = previousInnermostCardinality;
 
     _builder.setInsertionPoint(placeholder);
@@ -7189,9 +7202,17 @@ void DBLowering::buildLoopForSource(mlir::Value iterator, mlir::Operation* dbOp)
 
 void DBLowering::setInsertionInto(mlir::Block* block) {
     // The next op goes before the block's terminator, after the siblings already lowered
-    // here - or, in a block enclosing the root, before the nest the root's factor reads it
-    // from.
-    mlir::Operation* const nest = block->findAncestorOpInBlock(*_rootBlock->getParentOp());
+    // here - or, in a block enclosing the region being lowered or the root, before the op
+    // holding it.
+    mlir::Operation* nest = nullptr;
+    if (_innermostRegionBody) {
+        nest = block->findAncestorOpInBlock(*_innermostRegionBody->getParentOp());
+    }
+
+    if (!nest) {
+        nest = block->findAncestorOpInBlock(*_rootBlock->getParentOp());
+    }
+
     _builder.setInsertionPoint(nest ? nest : block->getTerminator());
 }
 
