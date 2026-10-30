@@ -186,21 +186,20 @@ TEST_F(ReduceOverPathsTest, foldsThePathsOfACollectSubquery) {
                {{"7"}});
 }
 
-// Disabled: the parser takes no path name in a pattern comprehension.
-TEST_F(ReduceOverPathsTest, DISABLED_collectsThePathsOfAPatternComprehension) {
+TEST_F(ReduceOverPathsTest, collectsThePathsOfAPatternComprehension) {
     expectRows("MATCH (n:Person {name: 'Remy'}) "
                "RETURN [x IN [q = (n)-[:INTERESTED_IN]->(:Interest) | q] | length(x)]",
                {{"[1, 1, 1]"}});
 }
 
-TEST_F(ReduceOverPathsTest, DISABLED_foldsThePathsOfAPatternComprehension) {
+TEST_F(ReduceOverPathsTest, foldsThePathsOfAPatternComprehension) {
     expectRows("MATCH (n:Person {name: 'Remy'}) "
                "RETURN reduce(total = 0, x IN [q = (n)-[:KNOWS_WELL*0..1]->(:Person)-[:INTERESTED_IN]->(:Interest) | q] "
                "| total + length(x))",
                {{"7"}});
 }
 
-TEST_F(ReduceOverPathsTest, DISABLED_decidesOverThePathsOfAPatternComprehension) {
+TEST_F(ReduceOverPathsTest, decidesOverThePathsOfAPatternComprehension) {
     expectRows("MATCH (n:Person {name: 'Remy'}) "
                "RETURN allReduce(total = 0, x IN [q = (n)-[:INTERESTED_IN]->(:Interest) | q] | total + length(x), total < 3)",
                {{"false"}});
