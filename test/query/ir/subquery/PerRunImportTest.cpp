@@ -1,7 +1,11 @@
 #include <gtest/gtest.h>
 
 #include <fstream>
+#include <string>
 #include <string_view>
+
+#include "QueryStatus.h"
+#include "versioning/ChangeID.h"
 
 #include "TuringTestEnv.h"
 #include "WriteQueryTest.h"
@@ -20,6 +24,16 @@ protected:
 
         std::ofstream file(path.get());
         file << content;
+    }
+
+    void expectWriteError(std::string_view query, std::string_view expectedError) {
+        ChangeID changeID;
+        openChange(changeID);
+
+        const QueryStatus status = runWrite(query, changeID);
+        ASSERT_FALSE(status.isOk()) << "query: " << query << "\nexpected it to fail";
+        EXPECT_NE(status.getError().find(expectedError), std::string::npos)
+            << "query: " << query << "\nerror: " << status.getError();
     }
 };
 
@@ -179,6 +193,32 @@ TEST_F(PerRunImportTest, readsAMergedImportAfterAWritingSegment) {
                     "CALL (n) { UNWIND [1] AS k RETURN k NEXT CREATE (:Tally) NEXT RETURN n.name AS name } "
                     "RETURN name",
                     {{"z"}});
+}
+
+// What the write ahead of the body knows of an import holds past a segment that writes, so a
+// read the engine turns away everywhere else is turned away there too
+TEST_F(PerRunImportTest, rejectsAnOptionalMatchOverACreatedImportPastAWritingSegment) {
+    expectWriteError("CREATE (n:Fresh {name: 'm'})-[:R]->(:Other) WITH n "
+                     "CALL (n) { UNWIND [1] AS k RETURN k NEXT CREATE (:T) "
+                     "NEXT OPTIONAL MATCH (n)-[:R]->(o) RETURN o IS NULL AS missing } "
+                     "RETURN missing",
+                     "An OPTIONAL MATCH cannot read what a CREATE in the same query wrote: 'n'");
+}
+
+TEST_F(PerRunImportTest, rejectsAnOptionalMatchOverAMergedImportPastAWritingSegment) {
+    expectWriteError("MERGE (n:Fresh {name: 'q'}) WITH n "
+                     "CALL (n) { UNWIND [1] AS k RETURN k NEXT CREATE (:T) "
+                     "NEXT OPTIONAL MATCH (n)-[:R]->(o) RETURN o IS NULL AS missing } "
+                     "RETURN missing",
+                     "An OPTIONAL MATCH cannot read what a MERGE in the same query wrote: 'n'");
+}
+
+TEST_F(PerRunImportTest, rejectsAPatternComprehensionOverACreatedImportPastAWritingSegment) {
+    expectWriteError("CREATE (n:Fresh {name: 'm'})-[:R]->(:Other) WITH n "
+                     "CALL (n) { UNWIND [1] AS k RETURN k NEXT CREATE (:T) "
+                     "NEXT RETURN [(n)-[:R]->(o) | o] AS os } "
+                     "RETURN size(os)",
+                     "A pattern comprehension cannot read what a CREATE in the same query wrote: 'n'");
 }
 
 TEST_F(PerRunImportTest, readsTheCSVRowAfterTheCallOfAWritingSegment) {
