@@ -498,6 +498,11 @@ private:
     // value per row of it
     mlir::Value typedNullChunk(mlir::Value chunk, mlir::Type chunkType);
 
+    // The null literal laid out over rows is a column no kernel reads a value of, so an op
+    // reads it as the nullable column of @param valueElement it needs there. Any other
+    // @param chunk, the null constant among them, is handed back as it is.
+    mlir::Value laidOutNullAs(mlir::Value chunk, mlir::Type valueElement);
+
     // Lower a db.optional_match into an nl.optional_buffer, the pattern's own loop nest,
     // an nl.optional_collect at its deepest point and an nl.optional_drain loop yielding
     // the matched rows then one null-padded row per input row the pattern missed. A

@@ -3376,7 +3376,14 @@ void NLTranslator::translateBroadcastConstant(nl::BroadcastConstant broadcast, N
 }
 
 void NLTranslator::translateRowConstant(nl::RowConstant rowConstant, NLStmtContainer* body) {
-    const Column* row = getColumn(rowConstant.getRow());
+    const mlir::Value rowValue = rowConstant.getRow();
+
+    if (isUntypedNullChunk(rowValue.getType())) {
+        _valueSlots[rowConstant.getResult()] = _memory->alloc<ColumnConst<PropertyNull>>();
+        return;
+    }
+
+    const Column* row = getColumn(rowValue);
 
     Column* result = nullptr;
     const NLUnaryFn read = NLExecutor::selectRowConstant(row, _memory, result);

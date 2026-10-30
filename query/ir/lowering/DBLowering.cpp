@@ -4666,6 +4666,21 @@ mlir::Value DBLowering::typedNullChunk(mlir::Value chunk, mlir::Type chunkType) 
     return _builder.create<nl::ToNullable>(_builder.getUnknownLoc(), chunkType, chunk).getResult();
 }
 
+mlir::Value DBLowering::laidOutNullAs(mlir::Value chunk, mlir::Type valueElement) {
+    const bool laidOutNull = isUntypedNullChunk(chunk.getType())
+                          && !yieldsConstantColumn(chunk, _constantColumns);
+    const bool namesAType = !mlir::isa<mlir::NoneType>(valueElement);
+
+    if (!laidOutNull || !namesAType) {
+        return chunk;
+    }
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const nl::ChunkType chunkType = nl::ChunkType::get(context, storage::NullableType::get(context, valueElement));
+
+    return typedNullChunk(chunk, chunkType);
+}
+
 // The shared seen-set is hoisted to the top of the root block, above every branch's
 // loops, so it is emptied once per step of that block and dominates each branch's filter -
 // the same placement lowerRemoveDuplicates gives a dedup's private set.
@@ -6382,6 +6397,17 @@ void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
         }
     }
 
+    if constexpr (CONNECTS_TRUTH_VALUES) {
+        lhsChunk = laidOutNullAs(lhsChunk, _builder.getI1Type());
+        rhsChunk = laidOutNullAs(rhsChunk, _builder.getI1Type());
+    } else if (readsScalarOperands) {
+        const mlir::Type lhsElement = chunkValueElement(_builder, lhsChunk.getType());
+        const mlir::Type rhsElement = chunkValueElement(_builder, rhsChunk.getType());
+
+        lhsChunk = laidOutNullAs(lhsChunk, rhsElement);
+        rhsChunk = laidOutNullAs(rhsChunk, lhsElement);
+    }
+
     const mlir::Type resultElement = binaryResultElement(kind, lhsChunk.getType(), rhsChunk.getType());
     const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultElement);
 
@@ -6412,11 +6438,10 @@ mlir::Type DBLowering::caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks
         unified = shared ? shared : storage::AnyType::get(_builder.getContext());
     }
 
-    // Every branch is the null literal, so no branch says what the column holds. The rows
-    // are all absent whichever type carries them, so they ride the integer column an
-    // untyped null is laid out over anywhere else.
+    // Every branch is the null literal, so no branch says what the column holds: the
+    // selection is that literal, laid out over its rows
     if (!unified) {
-        return _builder.getIntegerType(64);
+        return _builder.getNoneType();
     }
 
     // A node, an edge or a path is selected as what it is rather than as an ID's integer,
@@ -6675,7 +6700,7 @@ void DBLowering::filterCaseRows(mlir::Value mask,
 }
 
 void DBLowering::lowerNot(mlir::db::NotOp notOp) {
-    const mlir::Value operandChunk = mapValue(notOp.getOperand());
+    const mlir::Value operandChunk = laidOutNullAs(mapValue(notOp.getOperand()), _builder.getI1Type());
 
     const mlir::Type operandType = operandChunk.getType();
 

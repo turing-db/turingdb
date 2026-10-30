@@ -80,3 +80,23 @@ TEST_F(NullOperandOverRowsTest, filtersOnALogicalOperatorOverTheNull) {
     expectRows("MATCH (n:Interest) WHERE n.name IN ['Bio', 'Gym'] WITH n, null AS x WHERE x OR n.isReal RETURN n.name",
                {{"Gym"}});
 }
+
+TEST_F(NullOperandOverRowsTest, combinesWithABooleanReadPerRowPastAnotherMatch) {
+    expectRows("MATCH (n:Interest) WHERE n.name IN ['Bio', 'Gym'] WITH null AS x MATCH (m:Interest) WHERE m.name IN ['Bio', 'Gym'] RETURN m.name, x OR m.isReal, NOT x",
+               {{"Bio", "null", "null"}, {"Bio", "null", "null"}, {"Gym", "true", "null"}, {"Gym", "true", "null"}});
+}
+
+TEST_F(NullOperandOverRowsTest, combinesInASubqueryRunOncePerRow) {
+    expectRows("MATCH (n:Interest) WHERE n.name IN ['Bio', 'Gym'] WITH null AS x CALL { WITH x RETURN x OR true AS y UNION RETURN false AS y } RETURN y",
+               {{"true"}, {"false"}, {"true"}, {"false"}});
+}
+
+TEST_F(NullOperandOverRowsTest, combinesInAListComprehension) {
+    expectRows("MATCH (n:Interest) WHERE n.name IN ['Bio', 'Gym'] WITH null AS x RETURN [v IN [true, false] | v OR x]",
+               {{"true, null"}, {"true, null"}});
+}
+
+TEST_F(NullOperandOverRowsTest, combinesACaseOfNullBranchesAsTheNull) {
+    expectRows("MATCH (n:Interest) WHERE n.name IN ['Bio', 'Gym'] RETURN n.name, (CASE WHEN n.isReal THEN null END) OR true, NOT (CASE WHEN n.isReal THEN null END)",
+               {{"Bio", "true", "null"}, {"Gym", "true", "null"}});
+}
