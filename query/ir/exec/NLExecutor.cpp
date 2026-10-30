@@ -6382,24 +6382,23 @@ void NLExecutor::runCreateNode(NLExecutionContext* context, NLFunctionData* data
     const size_t rowCount = createData->getRowCount();
     const LabelSetHandle labelsetHandle = createData->getLabelSetHandle();
 
+    const std::vector<NLCreateNodeData::Property>& properties = createData->properties();
+    std::vector<CommitWriteBuffer::UntypedProperties> extracted(properties.size());
+
+    for (size_t index = 0; index < properties.size(); index++) {
+        const NLCreateNodeData::Property& property = properties[index];
+        extractColumnProperties(property._values, rowCount, property._propertyTypeID, extracted[index]);
+    }
+
     // Must extract this value before adding in the loop
     const size_t numPendingNodes = writeBuffer->numPendingNodes();
 
     for (size_t row = 0; row < rowCount; row++) {
         CommitWriteBuffer::PendingNode& node = writeBuffer->newPendingNode();
         node.labelsetHandle = labelsetHandle;
-    }
 
-    CommitWriteBuffer::UntypedProperties propsBuffer;
-
-    for (const NLCreateNodeData::Property& prop : createData->properties()) {
-        extractColumnProperties(prop._values, rowCount, prop._propertyTypeID, propsBuffer);
-
-        for (size_t row = 0; row < rowCount; row++) {
-            CommitWriteBuffer::PendingNode& pendingNode =
-                writeBuffer->getPendingNode(numPendingNodes + row);
-            CommitWriteBuffer::UntypedProperties& properties = pendingNode.properties;
-            properties.push_back(propsBuffer[row]);
+        for (const CommitWriteBuffer::UntypedProperties& values : extracted) {
+            node.properties.push_back(values[row]);
         }
     }
 
@@ -6444,6 +6443,14 @@ void NLExecutor::runCreateEdge(NLExecutionContext* context, NLFunctionData* data
     const PendingRows srcRows(srcPending, srcIsPending, firstPendingNodeID, numPendingNodes);
     const PendingRows tgtRows(tgtPending, tgtIsPending, firstPendingNodeID, numPendingNodes);
 
+    const std::vector<NLCreateEdgeData::Property>& properties = createData->properties();
+    std::vector<CommitWriteBuffer::UntypedProperties> extracted(properties.size());
+
+    for (size_t index = 0; index < properties.size(); index++) {
+        const NLCreateEdgeData::Property& property = properties[index];
+        extractColumnProperties(property._values, rowCount, property._propertyTypeID, extracted[index]);
+    }
+
     // Must extract this value before adding in the loop
     const size_t numPendingEdges = writeBuffer->numPendingEdges();
 
@@ -6453,15 +6460,9 @@ void NLExecutor::runCreateEdge(NLExecutionContext* context, NLFunctionData* data
 
         CommitWriteBuffer::PendingEdge& edge = writeBuffer->newPendingEdge(srcNode, tgtNode);
         edge.edgeType = edgeTypeID;
-    }
 
-    CommitWriteBuffer::UntypedProperties propsBuffer;
-
-    for (const NLCreateEdgeData::Property& prop : createData->properties()) {
-        extractColumnProperties(prop._values, rowCount, prop._propertyTypeID, propsBuffer);
-
-        for (size_t row = 0; row < rowCount; row++) {
-            writeBuffer->getPendingEdge(numPendingEdges + row).properties.push_back(propsBuffer[row]);
+        for (const CommitWriteBuffer::UntypedProperties& values : extracted) {
+            edge.properties.push_back(values[row]);
         }
     }
 
