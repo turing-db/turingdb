@@ -12,6 +12,7 @@
 
 #include "datapart/EdgeRecord.h"
 #include "CellTag.h"
+#include "PathView.h"
 #include "metadata/LabelMap.h"
 #include "reader/GraphReader.h"
 #include "versioning/CommitWriteBuffer.h"
@@ -203,11 +204,13 @@ TaggedSizeFunction::ResultType TaggedSizeFunction::operator()(const ArgType cell
         return static_cast<types::Int64::Primitive>(cell.getAs<ListView>().size());
     } else if (tag == CellTag::String) {
         return characterCount(cell.getAs<types::String::Primitive>());
+    } else if (tag == CellTag::Path) {
+        return static_cast<types::Int64::Primitive>(cell.getAs<PathView>().getLength());
     } else if (tag == CellTag::Null) {
         return std::nullopt;
     }
 
-    throw TuringException("size() and length() read a list or a string, and this row holds a value that is neither");
+    throw TuringException("size() and length() read a list, a string or a path, and this row holds a value that is none of them");
 }
 
 StringSizeFunction::ResultType StringSizeFunction::operator()(const ArgType string) const {

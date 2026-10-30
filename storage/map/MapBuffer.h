@@ -11,6 +11,7 @@
 #include "MapWriteCursor.h"
 
 #include "ID.h"
+#include "PathView.h"
 #include "list/ListView.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
@@ -22,7 +23,7 @@ using MappableTypesImpl =
                db::types::Double::Primitive, db::types::Bool::Primitive,
                db::types::String::Primitive, db::types::Embedding::Primitive,
                db::ListView, db::MapView, db::PropertyNull, db::NodeID, db::EdgeID,
-               db::types::DateTime::Primitive, db::types::Duration::Primitive>;
+               db::types::DateTime::Primitive, db::types::Duration::Primitive, db::PathView>;
 }
 
 namespace db {

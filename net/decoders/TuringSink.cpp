@@ -7,10 +7,12 @@ using namespace net::proto;
 
 TuringSink::TuringSink(db::LocalMemory* localMemory,
                        ChunkedBuffer<float>* embeddingBuffer,
+                       ChunkedBuffer<uint64_t>* pathBuffer,
                        db::ListBuffer<>* listBuffer,
                        db::MapBuffer<>* mapBuffer)
     : _localMemory(localMemory),
     _embeddingBuffer(embeddingBuffer),
+    _pathBuffer(pathBuffer),
     _stringBuffer(&_localMemory->stringBuffer()),
     _listBuffer(listBuffer),
     _mapBuffer(mapBuffer)

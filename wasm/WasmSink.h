@@ -120,6 +120,9 @@ public:
     float* allocEmbedding(size_t numFloats);
     std::span<const float> getEmbeddingView(float* data, size_t numFloats);
 
+    uint64_t* allocPathIDs(size_t idCount);
+    db::PathView getPathView(uint64_t* ids, size_t idCount);
+
     char* allocString(size_t size);
     std::string_view getStringView(char* data, size_t size);
 
@@ -127,6 +130,7 @@ public:
     CellView beginNestedList(size_t elementCount, size_t byteSize);
     CellView writeListValue(std::string_view value);
     CellView writeListValue(std::span<const float> value);
+    CellView writeListValue(db::PathView value);
     CellView writeCellBytes(const char* bytes, size_t byteSize);
 
     MapView beginMap(size_t entryCount, size_t byteSize);
@@ -134,6 +138,7 @@ public:
     void writeMapKey(std::string_view key);
     void writeMapValue(std::string_view value);
     void writeMapValue(std::span<const float> value);
+    void writeMapValue(db::PathView value);
 
     template <typename T>
     void writeMapValue(const T& value) {
@@ -171,7 +176,7 @@ private:
         bool _keyPending {false};
     };
 
-    // The decoder hands over an embedding view before filling its floats (the payload
+    // The decoder hands over an embedding or a path view before filling its payload (which
     // may still be in flight across packets), so the copy into the reserved list slot
     // waits until the list bytes are read.
     struct DeferredPayload {
@@ -181,6 +186,7 @@ private:
     };
 
     net::proto::ChunkedBuffer<float> _embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> _pathBuffer;
     net::proto::ChunkedBuffer<char> _stringBuffer;
     std::vector<char> _nestedBytes;
     std::vector<std::string_view> _nestedStrings;

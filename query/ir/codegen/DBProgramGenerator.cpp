@@ -1884,10 +1884,6 @@ void DBProgramGenerator::buildNamedPathItems(const Projection* projection, llvm:
 }
 
 mlir::Value DBProgramGenerator::pathElementsColumn(mlir::Value column, mlir::storage::PathElementsKind kind) {
-    const auto columnType = mlir::dyn_cast<mlir::db::ColumnType>(column.getType());
-    const bool readsAPath = columnType && mlir::isa<mlir::storage::PathType>(columnType.getType());
-    bioassert(readsAPath, "A named path is read off the path its element built or the path a SHORTESTPATH found");
-
     const mlir::Type resultType = pathElementsType(_mlirCtxt, kind);
     const mlir::db::ColumnType nullableType =
         allocColumnType(mlir::storage::NullableType::get(_mlirCtxt, resultType));
@@ -10070,8 +10066,12 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
         return;
     }
 
+    // length() of a tagged cell reads a string or a list as well, so it is a size; nodes() and
+    // relationships() of one read a path or nothing
     const Expr* const pathExpr = args && args->size() == 1 ? args->front() : nullptr;
-    const bool readsANamedPath = pathExpr && pathExpr->getType() == EvaluatedType::GraphPath;
+    const EvaluatedType pathType = pathExpr ? pathExpr->getType() : EvaluatedType::Invalid;
+    const bool readsATaggedPath = pathType == EvaluatedType::Any && (funcName == "nodes" || funcName == "relationships");
+    const bool readsANamedPath = pathType == EvaluatedType::GraphPath || readsATaggedPath;
     if (readsANamedPath) {
         // Beside `RETURN p` the path rides the handle column of its walk, which reads as
         // the entities it runs through

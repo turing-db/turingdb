@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdint.h>
 #include <deque>
 #include <optional>
 #include <span>
@@ -63,6 +64,9 @@ public:
     float* allocEmbedding(size_t numFloats);
     static std::span<const float> getEmbeddingView(float* data, size_t numFloats) { return {data, numFloats}; }
 
+    uint64_t* allocPathIDs(size_t idCount);
+    static db::PathView getPathView(uint64_t* ids, size_t idCount) { return db::PathView {ids, idCount}; }
+
     char* allocString(size_t size);
     static std::string_view getStringView(char* data, size_t size) { return {data, size}; }
 
@@ -74,6 +78,7 @@ public:
 
     db::CellView writeListValue(std::string_view value);
     db::CellView writeListValue(std::span<const float> value);
+    db::CellView writeListValue(db::PathView value);
     db::CellView writeCellBytes(const char* bytes, size_t byteSize);
 
     db::MapView beginMap(size_t entryCount, size_t byteSize);

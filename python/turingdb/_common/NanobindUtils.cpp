@@ -236,6 +236,12 @@ struct ValueToPyObject {
             return duration(element.getAs<T>());
         } else if constexpr (std::is_same_v<T, db::types::DateTime::Primitive>) {
             return dateTime(element.getAs<T>());
+        } else if constexpr (std::is_same_v<T, db::PathView>) {
+            nb::list ids;
+            for (const uint64_t id : element.getAs<T>().getIDs()) {
+                ids.append(nb::cast(id));
+            }
+            return ids;
         } else {
             return toPy(element.getAs<T>());
         }

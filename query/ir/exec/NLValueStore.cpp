@@ -48,6 +48,12 @@ MapView NLValueStore::own(MapView map) {
     return getLists().getMaps().copy(map);
 }
 
+PathView NLValueStore::own(PathView path) {
+    _valueCount++;
+
+    return getPaths().insert(path.getIDs());
+}
+
 CellView NLValueStore::own(CellView element) {
     _valueCount++;
 
@@ -118,6 +124,10 @@ void NLValueStore::clear() {
         _embeddings->clear();
     }
 
+    if (_paths) {
+        _paths->clear();
+    }
+
     if (_lists) {
         _lists->clear();
     }
@@ -137,6 +147,14 @@ ListContainer::EmbeddingBuffer& NLValueStore::getEmbeddings() {
     }
 
     return *_embeddings;
+}
+
+ListContainer::PathBuffer& NLValueStore::getPaths() {
+    if (!_paths) {
+        _paths = std::make_unique<ListContainer::PathBuffer>();
+    }
+
+    return *_paths;
 }
 
 ListContainer& NLValueStore::getLists() {

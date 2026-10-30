@@ -180,6 +180,10 @@ struct PairRestrictions<Op> {
         CellKindPairs<MapView>::Pairs,
         CellKindPairs<NodeID>::Pairs,
         CellKindPairs<EdgeID>::Pairs,
+        std::tuple<
+            KindPair<CellView, GraphPath>,
+            KindPair<std::optional<CellView>, GraphPath>
+        >,
 
         // Equality against a map value, which holds its own type as a list element does
 
@@ -521,6 +525,14 @@ struct PairRestrictions<Op> {
         TaggedMembershipKindPairs<CellView>::Pairs,
         TaggedMembershipKindPairs<ListView>::Pairs,
         TaggedMembershipKindPairs<MapView>::Pairs,
+
+        // A path column holds its null in the path, so it has no optional sibling
+        std::tuple<
+            KindPair<GraphPath, ListView>,
+            KindPair<GraphPath, std::optional<ListView>>,
+            KindPair<GraphPath, CellView>,
+            KindPair<GraphPath, std::optional<CellView>>
+        >,
 
         std::tuple<
             KindPair<PropertyNull, ListView>,

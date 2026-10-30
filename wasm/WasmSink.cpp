@@ -34,6 +34,14 @@ std::span<const float> WasmSink::getEmbeddingView(float* data, size_t numFloats)
     return _embeddingBuffer.getView(data, numFloats);
 }
 
+uint64_t* WasmSink::allocPathIDs(size_t idCount) {
+    return _pathBuffer.alloc(idCount);
+}
+
+db::PathView WasmSink::getPathView(uint64_t* ids, size_t idCount) {
+    return db::PathView {_pathBuffer.getView(ids, idCount)};
+}
+
 char* WasmSink::allocString(size_t size) {
     return _stringBuffer.alloc(size);
 }
@@ -72,6 +80,11 @@ WasmCellView WasmSink::writeListValue(std::span<const float> value) {
     return appendDeferredPayload(db::CellTag::Embedding, reinterpret_cast<const char*>(value.data()), value.size_bytes());
 }
 
+WasmCellView WasmSink::writeListValue(db::PathView value) {
+    const std::span<const uint64_t> ids = value.getIDs();
+    return appendDeferredPayload(db::CellTag::Path, reinterpret_cast<const char*>(ids.data()), ids.size_bytes());
+}
+
 WasmCellView WasmSink::writeCellBytes(const char* bytes, size_t byteSize) {
     const CellView element {appendBytes(bytes, byteSize)};
     countElementWritten();
@@ -106,6 +119,10 @@ void WasmSink::writeMapValue(std::string_view value) {
 }
 
 void WasmSink::writeMapValue(std::span<const float> value) {
+    writeListValue(value);
+}
+
+void WasmSink::writeMapValue(db::PathView value) {
     writeListValue(value);
 }
 
@@ -159,6 +176,7 @@ std::span<const std::string_view> WasmSink::getNestedStrings() const {
 
 void WasmSink::reset() {
     _embeddingBuffer.clear();
+    _pathBuffer.clear();
     _stringBuffer.clear();
     _nestedBytes.clear();
     _nestedStrings.clear();

@@ -7,6 +7,8 @@
 #include <type_traits>
 
 #include "ID.h"
+#include "GraphPath.h"
+#include "PathView.h"
 #include "CellTag.h"
 #include "NumberOrder.h"
 
@@ -27,6 +29,7 @@ enum class CellOrderClass {
     Node,
     Edge,
     List,
+    Path,
     DateTime,
     Duration,
     String,
@@ -81,6 +84,10 @@ CellOrderClass orderClassOf(CellTag tag) {
 
         case CellTag::MapView:
             return CellOrderClass::Map;
+        break;
+
+        case CellTag::Path:
+            return CellOrderClass::Path;
         break;
 
         case CellTag::INVALID:
@@ -194,6 +201,14 @@ std::strong_ordering compareValues(const Lhs lhs, const Rhs rhs) {
 
         case CellOrderClass::List:
             return valueOf<ListView>(lhs) <=> valueOf<ListView>(rhs);
+        break;
+
+        case CellOrderClass::Path: {
+            const std::span<const uint64_t> lhsIDs = valueOf<PathView>(lhs).getIDs();
+            const std::span<const uint64_t> rhsIDs = valueOf<PathView>(rhs).getIDs();
+
+            return std::lexicographical_compare_three_way(lhsIDs.begin(), lhsIDs.end(), rhsIDs.begin(), rhsIDs.end());
+        }
         break;
 
         case CellOrderClass::String:
@@ -581,6 +596,15 @@ bool db::operator==(const CellView element, const ListView value) {
 bool db::operator==(const CellView element, const MapView value) {
     return element.getTag() == CellTag::MapView
         && element.getAs<MapView>() == value;
+}
+
+bool db::operator==(const CellView element, const PathView value) {
+    return element.getTag() == CellTag::Path
+        && std::ranges::equal(element.getAs<PathView>().getIDs(), value.getIDs());
+}
+
+bool db::operator==(const CellView element, const GraphPath& value) {
+    return element == PathView {value.getIDs()};
 }
 
 std::strong_ordering db::operator<=>(const CellView element, const types::Int64::Primitive value) {

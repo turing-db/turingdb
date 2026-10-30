@@ -35,6 +35,11 @@ void GraphPath::setNodeCount(size_t nodeCount) {
     _ids.resize(idCountOf(nodeCount));
 }
 
+void GraphPath::assign(PathView path) {
+    const std::span<const uint64_t> ids = path.getIDs();
+    _ids.assign(ids.begin(), ids.end());
+}
+
 size_t GraphPath::idCountOf(size_t nodeCount) {
     return nodeCount == 0 ? 0 : 2 * nodeCount - 1;
 }

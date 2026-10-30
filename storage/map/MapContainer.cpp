@@ -22,6 +22,7 @@ MapContainer::MapContainer(MapContainer&& other) noexcept
     : _maps(std::move(other._maps)),
     _strings(std::move(other._strings)),
     _embeddings(std::move(other._embeddings)),
+    _paths(std::move(other._paths)),
     _lists(std::move(other._lists)),
     _views(std::move(other._views))
 {
@@ -31,6 +32,7 @@ MapContainer& MapContainer::operator=(MapContainer&& other) noexcept {
     _maps = std::move(other._maps);
     _strings = std::move(other._strings);
     _embeddings = std::move(other._embeddings);
+    _paths = std::move(other._paths);
     _lists = std::move(other._lists);
     _views = std::move(other._views);
     return *this;
@@ -63,6 +65,9 @@ void MapContainer::clear() {
     _maps->clear();
     _strings->clear();
     _embeddings->clear();
+    if (_paths) {
+        _paths->clear();
+    }
     _lists.clear();
     _views.clear();
 }
@@ -94,6 +99,14 @@ MapContainer::MapKeyValuePair MapContainer::ownedEntry(MapEntryView entry) {
     return {entry.getKey(), CellTagDispatcher {value.getTag()}.execute(asVariant, value)};
 }
 
+MapContainer::PathBuffer& MapContainer::getPaths() {
+    if (!_paths) {
+        _paths = std::make_unique<PathBuffer>();
+    }
+
+    return *_paths;
+}
+
 MapContainer::MapKeyValuePair MapContainer::own(const MapKeyValuePair& entry) {
     const auto copyPayload = [this](const auto& value) -> MapBuffer<>::MapItemVariant {
         using T = std::decay_t<decltype(value)>;
@@ -102,6 +115,8 @@ MapContainer::MapKeyValuePair MapContainer::own(const MapKeyValuePair& entry) {
             return _strings->insert(value);
         } else if constexpr (std::same_as<T, types::Embedding::Primitive>) {
             return _embeddings->insert(value);
+        } else if constexpr (std::same_as<T, PathView>) {
+            return getPaths().insert(value.getIDs());
         } else {
             return value;
         }

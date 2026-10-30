@@ -114,6 +114,7 @@ add_turing_test(test_storage_stringindex StringIndexTest.cpp)
 add_turing_test(test_storage_listorder ListOrderTest.cpp)
 add_turing_test(test_storage_listindexoperator ListIndexOperatorTest.cpp)
 add_turing_test(test_storage_path_trie list/PathTrieTest.cpp)
+add_turing_test(test_storage_path_cell list/PathCellTest.cpp)
 
 add_turing_test(test_storage_dump_propertycontainerdumper dump/PropertyContainerDumperTest.cpp)
 add_turing_test(test_storage_dump_propertydumpformat dump/PropertyDumpFormatTest.cpp)

@@ -48,7 +48,7 @@ protected:
         DecodeContext context;
         context._inBuf = &inBuf;
 
-        TuringSink sink(&_localMemory, &_embeddingBuffer, &_listBuffer, &_mapBuffer);
+        TuringSink sink(&_localMemory, &_embeddingBuffer, &_pathBuffer, &_listBuffer, &_mapBuffer);
         ColumnConst<MapView>* column = _localMemory.alloc<ColumnConst<MapView>>();
 
         ASSERT_TRUE((ConstColumnDecoder<MapView, TuringSink>::decode(&context, &sink, column)));
@@ -60,6 +60,7 @@ protected:
     TuringProtoOutBuf _outBuf {BUFFER_CAPACITY};
     LocalMemory _localMemory;
     ChunkedBuffer<float> _embeddingBuffer;
+    ChunkedBuffer<uint64_t> _pathBuffer;
     ListBuffer<> _listBuffer;
     MapBuffer<> _mapBuffer;
 };

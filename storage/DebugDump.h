@@ -5,6 +5,7 @@
 #include <ostream>
 
 #include "ID.h"
+#include "PathView.h"
 
 #include "metadata/PropertyType.h"
 #include "metadata/PropertyNull.h"
@@ -74,6 +75,8 @@ public:
 
     static void dump(std::ostream& out, MapView map);
     static void dump(std::ostream& out, MapEntryView view, bool isInMap = false);
+
+    static void dump(std::ostream& out, PathView path);
 
 private:
     static void dumpImpl(std::ostream& out, uint64_t data);

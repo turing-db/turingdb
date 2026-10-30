@@ -24,6 +24,7 @@
 #include "TuringProtoInBuf.h"
 #include "TuringProtoOutBuf.h"
 #include "GraphPath.h"
+#include "PathView.h"
 #include "LocalMemory.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnMask.h"
@@ -140,6 +141,7 @@ size_t countPacketsOfType(const std::vector<FramedPacket>& packets,
 void decodeChunkPackets(const std::vector<FramedPacket>& packets,
                         db::LocalMemory* localMem,
                         net::proto::ChunkedBuffer<float>* embeddingBuffer,
+                        net::proto::ChunkedBuffer<uint64_t>* pathBuffer,
                         net::proto::ChunkedBuffer<char>* stringBuffer,
                         db::ListBuffer<>* listBuffer,
                         db::MapBuffer<>* mapBuffer,
@@ -149,7 +151,7 @@ void decodeChunkPackets(const std::vector<FramedPacket>& packets,
     const size_t maxPayloadSize =
         std::transform_reduce(packets.begin(), packets.end(), size_t {0}, [](size_t lhs, size_t rhs) { return std::max(lhs, rhs); }, [](const FramedPacket& packet) { return packet._bytes.size() - net::proto::ProtoHeader::wireSize(); });
     net::proto::TuringProtoInBuf inBuf(maxPayloadSize);
-    net::proto::TuringSink sink(localMem, embeddingBuffer, listBuffer, mapBuffer);
+    net::proto::TuringSink sink(localMem, embeddingBuffer, pathBuffer, listBuffer, mapBuffer);
     net::proto::TuringSinkColumnContainer decodedContainer(decoded, dfMan);
     net::proto::TuringProtoDecoder<net::proto::TuringSink> decoder(&inBuf, &sink, *schemas);
     schemas->clear();
@@ -232,12 +234,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsNumericColumnsAcrossChunkSizes) {
         expectPacketSequence(packets, true);
 
         net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<uint64_t> pathBuffer;
         net::proto::ChunkedBuffer<char> stringBuffer;
         db::ListBuffer<> listBuffer;
         db::MapBuffer<> mapBuffer;
         db::Dataframe decoded;
         std::vector<net::proto::DecodedColumnSchema> schemas;
-        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
         ASSERT_EQ(decoded.cols().size(), 2u);
         EXPECT_EQ(decoded.getLogicalRowCount(), 6u);
@@ -291,12 +294,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsDateTimeColumnsAcrossChunkSizes) {
         expectPacketSequence(packets, true);
 
         net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<uint64_t> pathBuffer;
         net::proto::ChunkedBuffer<char> stringBuffer;
         db::ListBuffer<> listBuffer;
         db::MapBuffer<> mapBuffer;
         db::Dataframe decoded;
         std::vector<net::proto::DecodedColumnSchema> schemas;
-        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
         ASSERT_EQ(decoded.cols().size(), 2u);
         EXPECT_EQ(decoded.getLogicalRowCount(), 4u);
@@ -351,12 +355,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsEntityIDColumnsAsOptionalVectors) {
         expectPacketSequence(packets, true);
 
         net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<uint64_t> pathBuffer;
         net::proto::ChunkedBuffer<char> stringBuffer;
         db::ListBuffer<> listBuffer;
         db::MapBuffer<> mapBuffer;
         db::Dataframe decoded;
         std::vector<net::proto::DecodedColumnSchema> schemas;
-        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
         ASSERT_EQ(decoded.cols().size(), 2u);
         EXPECT_EQ(decoded.getLogicalRowCount(), 4u);
@@ -412,12 +417,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsDurationColumnsAcrossChunkSizes) {
         expectPacketSequence(packets, true);
 
         net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<uint64_t> pathBuffer;
         net::proto::ChunkedBuffer<char> stringBuffer;
         db::ListBuffer<> listBuffer;
         db::MapBuffer<> mapBuffer;
         db::Dataframe decoded;
         std::vector<net::proto::DecodedColumnSchema> schemas;
-        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
         ASSERT_EQ(decoded.cols().size(), 2u);
         EXPECT_EQ(decoded.getLogicalRowCount(), 4u);
@@ -459,12 +465,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsMaskColumns) {
     expectPacketSequence(packets, true);
 
     net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::MapBuffer<> mapBuffer;
     db::Dataframe decoded;
     std::vector<net::proto::DecodedColumnSchema> schemas;
-    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 1u);
     EXPECT_EQ(decoded.getLogicalRowCount(), 4u);
@@ -511,12 +518,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalStringColumnsAcrossChunkSizes) 
         expectPacketSequence(packets, true);
 
         net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<uint64_t> pathBuffer;
         net::proto::ChunkedBuffer<char> stringBuffer;
         db::ListBuffer<> listBuffer;
         db::MapBuffer<> mapBuffer;
         db::Dataframe decoded;
         std::vector<net::proto::DecodedColumnSchema> schemas;
-        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
         ASSERT_EQ(decoded.cols().size(), 2u);
         EXPECT_EQ(decoded.getLogicalRowCount(), 4u);
@@ -580,12 +588,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalListColumnsAcrossChunkSizes) {
         expectPacketSequence(packets, true);
 
         net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<uint64_t> pathBuffer;
         net::proto::ChunkedBuffer<char> stringBuffer;
         db::ListBuffer<> listBuffer;
         db::MapBuffer<> mapBuffer;
         db::Dataframe decoded;
         std::vector<net::proto::DecodedColumnSchema> schemas;
-        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
         ASSERT_EQ(decoded.cols().size(), 1u);
         EXPECT_EQ(decoded.getLogicalRowCount(), 4u);
@@ -649,12 +658,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalMapColumnsAcrossChunkSizes) {
         expectPacketSequence(packets, true);
 
         net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<uint64_t> pathBuffer;
         net::proto::ChunkedBuffer<char> stringBuffer;
         db::ListBuffer<> listBuffer;
         db::MapBuffer<> mapBuffer;
         db::Dataframe decoded;
         std::vector<net::proto::DecodedColumnSchema> schemas;
-        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
         ASSERT_EQ(decoded.cols().size(), 1u);
         EXPECT_EQ(decoded.getLogicalRowCount(), 4u);
@@ -707,12 +717,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsHugeStringsAcrossMultipleBuffers) {
         EXPECT_GE(countPacketsOfType(packets, net::proto::MessageTypes::CHUNK), 5u);
 
         net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<uint64_t> pathBuffer;
         net::proto::ChunkedBuffer<char> stringBuffer;
         db::ListBuffer<> listBuffer;
         db::MapBuffer<> mapBuffer;
         db::Dataframe decoded;
         std::vector<net::proto::DecodedColumnSchema> schemas;
-        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
         ASSERT_EQ(decoded.cols().size(), 2u);
         const auto* decodedIds = decoded.cols().at(0)->as<db::ColumnVector<UInt64>>();
@@ -753,12 +764,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsHugeEmbeddingsAcrossMultipleBuffers) {
         EXPECT_GE(countPacketsOfType(packets, net::proto::MessageTypes::CHUNK), 5u);
 
         net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<uint64_t> pathBuffer;
         net::proto::ChunkedBuffer<char> stringBuffer;
         db::ListBuffer<> listBuffer;
         db::MapBuffer<> mapBuffer;
         db::Dataframe decoded;
         std::vector<net::proto::DecodedColumnSchema> schemas;
-        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
         ASSERT_EQ(decoded.cols().size(), 2u);
         const auto* decodedIds = decoded.cols().at(0)->as<db::ColumnVector<UInt64>>();
@@ -802,12 +814,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalConstantColumns) {
     EXPECT_GE(countPacketsOfType(packets, net::proto::MessageTypes::CHUNK), 2u);
 
     net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::MapBuffer<> mapBuffer;
     db::Dataframe decoded;
     std::vector<net::proto::DecodedColumnSchema> schemas;
-    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 3u);
     const auto* decodedIds = decoded.cols().at(0)->as<db::ColumnConst<std::optional<UInt64>>>();
@@ -850,12 +863,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsConstantListColumns) {
     EXPECT_GE(countPacketsOfType(packets, net::proto::MessageTypes::CHUNK), 2u);
 
     net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::MapBuffer<> mapBuffer;
     db::Dataframe decoded;
     std::vector<net::proto::DecodedColumnSchema> schemas;
-    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 1u);
     const auto* decodedList = decoded.cols().at(0)->as<db::ColumnConst<db::ListView>>();
@@ -909,12 +923,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsCellViewColumns) {
     EXPECT_GE(countPacketsOfType(packets, net::proto::MessageTypes::CHUNK), 2u);
 
     net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::MapBuffer<> mapBuffer;
     db::Dataframe decoded;
     std::vector<net::proto::DecodedColumnSchema> schemas;
-    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 1u);
     const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnVector<db::CellView>>();
@@ -930,6 +945,65 @@ TEST(TuringProtoRoundTripTest, RoundTripsCellViewColumns) {
     EXPECT_EQ(decodedCol->at(3).getTag(), db::CellTag::UInt);
     EXPECT_EQ(decodedCol->at(3).getAs<UInt64>(), 123u);
     EXPECT_EQ(decodedCol->at(4).getTag(), db::CellTag::Null);
+}
+
+// A path a list or a map holds goes on the wire as its IDs, framed as an embedding's floats
+// are; the small chunk size splits the longer path's IDs across packets
+TEST(TuringProtoRoundTripTest, RoundTripsThePathsListsAndMapsHold) {
+    db::LocalMemory localMem;
+    db::DataframeManager dfMan;
+    db::Dataframe source;
+
+    std::vector<uint64_t> longPath(41);
+    std::iota(longPath.begin(), longPath.end(), uint64_t {0});
+    const std::vector<uint64_t> oneHop {0, 0, 1};
+
+    std::vector<db::MapBuffer<>::MapKeyValuePair> pairs;
+    pairs.emplace_back("route", db::PathView {oneHop});
+    const db::MapView route = localMem.mapBuffer().insert(pairs);
+
+    std::vector<db::ListBuffer<>::ListItemVariant> items;
+    items.emplace_back(Int64 {-7});
+    items.emplace_back(db::PathView {longPath});
+    items.emplace_back(route);
+
+    auto* listCol = localMem.alloc<db::ColumnConst<db::ListView>>();
+    listCol->set(localMem.listBuffer().insert(items));
+    addColumn(&dfMan, &source, "paths", listCol);
+
+    const auto packets = encodeDataframeWithChunkSize(source, 48);
+    expectPacketSequence(packets, true);
+    EXPECT_GE(countPacketsOfType(packets, net::proto::MessageTypes::CHUNK), 2u);
+
+    net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
+    net::proto::ChunkedBuffer<char> stringBuffer;
+    db::ListBuffer<> listBuffer;
+    db::MapBuffer<> mapBuffer;
+    db::Dataframe decoded;
+    std::vector<net::proto::DecodedColumnSchema> schemas;
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+
+    ASSERT_EQ(decoded.cols().size(), 1u);
+    const auto* decodedList = decoded.cols().at(0)->as<db::ColumnConst<db::ListView>>();
+    ASSERT_NE(decodedList, nullptr);
+
+    const db::ListView view = decodedList->at(0);
+    ASSERT_EQ(view.size(), 3u);
+
+    const std::span<const db::CellView> elements = view.elements();
+    EXPECT_EQ(elements[0].getAs<Int64>(), -7);
+
+    ASSERT_EQ(elements[1].getTag(), db::CellTag::Path);
+    EXPECT_TRUE(std::ranges::equal(elements[1].getAs<db::PathView>().getIDs(), longPath));
+
+    ASSERT_EQ(elements[2].getTag(), db::CellTag::MapView);
+    const db::MapView decodedRoute = elements[2].getAs<db::MapView>();
+    ASSERT_EQ(decodedRoute.size(), 1u);
+
+    const db::CellView routeValue = decodedRoute.front().getValue();
+    ASSERT_EQ(routeValue.getTag(), db::CellTag::Path);
+    EXPECT_TRUE(std::ranges::equal(routeValue.getAs<db::PathView>().getIDs(), oneHop));
 }
 
 // A column of cells viewing the values a map holds - one per row, what m.key reads
@@ -963,12 +1037,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsCellsViewingMapValues) {
     expectPacketSequence(packets, true);
 
     net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::MapBuffer<> mapBuffer;
     db::Dataframe decoded;
     std::vector<net::proto::DecodedColumnSchema> schemas;
-    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 1u);
     const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnVector<db::CellView>>();
@@ -1008,12 +1083,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsConstantCellColumn) {
     expectPacketSequence(packets, true);
 
     net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::MapBuffer<> mapBuffer;
     db::Dataframe decoded;
     std::vector<net::proto::DecodedColumnSchema> schemas;
-    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 1u);
     const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnConst<db::CellView>>();
@@ -1064,12 +1140,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsNestedListColumns) {
     EXPECT_GE(countPacketsOfType(packets, net::proto::MessageTypes::CHUNK), 2u);
 
     net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::MapBuffer<> mapBuffer;
     db::Dataframe decoded;
     std::vector<net::proto::DecodedColumnSchema> schemas;
-    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 1u);
     const auto* decodedList = decoded.cols().at(0)->as<db::ColumnConst<db::ListView>>();
@@ -1153,12 +1230,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsCellViewColumnOfNestedLists) {
     expectPacketSequence(packets, true);
 
     net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::MapBuffer<> mapBuffer;
     db::Dataframe decoded;
     std::vector<net::proto::DecodedColumnSchema> schemas;
-    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 1u);
     const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnVector<db::CellView>>();
@@ -1242,12 +1320,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalCellViewColumns) {
         expectPacketSequence(packets, true);
 
         net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<uint64_t> pathBuffer;
         net::proto::ChunkedBuffer<char> stringBuffer;
         db::ListBuffer<> listBuffer;
         db::MapBuffer<> mapBuffer;
         db::Dataframe decoded;
         std::vector<net::proto::DecodedColumnSchema> schemas;
-        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
         ASSERT_EQ(decoded.cols().size(), 1u);
         const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnOptVector<db::CellView>>();
@@ -1304,12 +1383,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalConstantCellViewColumns) {
     EXPECT_GE(countPacketsOfType(packets, net::proto::MessageTypes::CHUNK), 2u);
 
     net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::MapBuffer<> mapBuffer;
     db::Dataframe decoded;
     std::vector<net::proto::DecodedColumnSchema> schemas;
-    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 2u);
     const auto* decodedElement = decoded.cols().at(0)->as<db::ColumnConst<OptionalElement>>();
@@ -1367,12 +1447,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsConstantOnlyChunkRowCount) {
                               std::string_view(dataBuf.data(), dataBuf.size()))});
 
     net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::MapBuffer<> mapBuffer;
     db::Dataframe decoded;
     std::vector<net::proto::DecodedColumnSchema> schemas;
-    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 1u);
     EXPECT_EQ(decoded.getLogicalRowCount(), ROW_COUNT);
@@ -1409,12 +1490,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsAListColumnFollowedByAnotherColumn) {
     expectPacketSequence(packets, true);
 
     net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::MapBuffer<> mapBuffer;
     db::Dataframe decoded;
     std::vector<net::proto::DecodedColumnSchema> schemas;
-    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 2u);
 
@@ -1452,12 +1534,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsConstantMapColumn) {
     expectPacketSequence(packets, true);
 
     net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::MapBuffer<> mapBuffer;
     db::Dataframe decoded;
     std::vector<net::proto::DecodedColumnSchema> schemas;
-    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 1u);
     const auto* decodedMap = decoded.cols().at(0)->as<db::ColumnConst<db::MapView>>();
@@ -1509,12 +1592,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsMapVectorColumn) {
     expectPacketSequence(packets, true);
 
     net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::MapBuffer<> mapBuffer;
     db::Dataframe decoded;
     std::vector<net::proto::DecodedColumnSchema> schemas;
-    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 1u);
     const auto* decodedMaps = decoded.cols().at(0)->as<db::ColumnVector<db::MapView>>();
@@ -1560,12 +1644,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsMapKeysAndValuesAcrossMultipleBuffers) 
     EXPECT_GE(countPacketsOfType(packets, net::proto::MessageTypes::CHUNK), 4u);
 
     net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::MapBuffer<> mapBuffer;
     db::Dataframe decoded;
     std::vector<net::proto::DecodedColumnSchema> schemas;
-    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 1u);
     const auto* decodedMap = decoded.cols().at(0)->as<db::ColumnConst<db::MapView>>();
@@ -1615,12 +1700,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsMapVectorColumnAcrossMultipleBuffers) {
     EXPECT_GE(countPacketsOfType(packets, net::proto::MessageTypes::CHUNK), 10u);
 
     net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::MapBuffer<> mapBuffer;
     db::Dataframe decoded;
     std::vector<net::proto::DecodedColumnSchema> schemas;
-    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 1u);
     const auto* decodedMaps = decoded.cols().at(0)->as<db::ColumnVector<db::MapView>>();
@@ -1676,12 +1762,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsAMapHoldingNestedLists) {
     const auto packets = encodeDataframeWithChunkSize(source, 4096);
 
     net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::MapBuffer<> mapBuffer;
     db::Dataframe decoded;
     std::vector<net::proto::DecodedColumnSchema> schemas;
-    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     const auto* decodedMap = decoded.cols().at(0)->as<db::ColumnConst<db::MapView>>();
     ASSERT_NE(decodedMap, nullptr);
@@ -1721,12 +1808,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsAnEmptyMapColumn) {
     const auto packets = encodeDataframeWithChunkSize(source, 4096);
 
     net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::MapBuffer<> mapBuffer;
     db::Dataframe decoded;
     std::vector<net::proto::DecodedColumnSchema> schemas;
-    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     const auto* decodedMap = decoded.cols().at(0)->as<db::ColumnConst<db::MapView>>();
     ASSERT_NE(decodedMap, nullptr);
@@ -1770,12 +1858,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsAMapHoldingEveryValueTag) {
     const auto packets = encodeDataframeWithChunkSize(source, 4096);
 
     net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::MapBuffer<> mapBuffer;
     db::Dataframe decoded;
     std::vector<net::proto::DecodedColumnSchema> schemas;
-    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     const auto* decodedMap = decoded.cols().at(0)->as<db::ColumnConst<db::MapView>>();
     ASSERT_NE(decodedMap, nullptr);
@@ -1849,12 +1938,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsAListHoldingAMap) {
     const auto packets = encodeDataframeWithChunkSize(source, 4096);
 
     net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::MapBuffer<> mapBuffer;
     db::Dataframe decoded;
     std::vector<net::proto::DecodedColumnSchema> schemas;
-    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     const auto* decodedList = decoded.cols().at(0)->as<db::ColumnConst<db::ListView>>();
     ASSERT_NE(decodedList, nullptr);
@@ -1918,12 +2008,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsCellViewColumnOfMaps) {
     const auto packets = encodeDataframeWithChunkSize(source, 4096);
 
     net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::MapBuffer<> mapBuffer;
     db::Dataframe decoded;
     std::vector<net::proto::DecodedColumnSchema> schemas;
-    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnVector<db::CellView>>();
     ASSERT_NE(decodedCol, nullptr);
@@ -1982,12 +2073,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsGraphPathColumnsAcrossChunkSizes) {
         expectPacketSequence(packets, true);
 
         net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<uint64_t> pathBuffer;
         net::proto::ChunkedBuffer<char> stringBuffer;
         db::ListBuffer<> listBuffer;
         db::MapBuffer<> mapBuffer;
         db::Dataframe decoded;
         std::vector<net::proto::DecodedColumnSchema> schemas;
-        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
         ASSERT_EQ(decoded.cols().size(), 1u);
         const auto* decodedPaths = decoded.cols().at(0)->as<db::ColumnVector<db::GraphPath>>();
@@ -2031,13 +2123,14 @@ TEST(TuringProtoRoundTripTest, RejectsAGraphPathNodeCountOverTheWireSize) {
     std::memcpy(chunk->_bytes.data() + rowOffset, &corruptNodeCount, sizeof(corruptNodeCount));
 
     net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
     net::proto::ChunkedBuffer<char> stringBuffer;
     db::ListBuffer<> listBuffer;
     db::MapBuffer<> mapBuffer;
     db::Dataframe decoded;
     std::vector<net::proto::DecodedColumnSchema> schemas;
     const auto decode = [&]() {
-        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
     };
     EXPECT_THROW(decode(), TuringException);
 }

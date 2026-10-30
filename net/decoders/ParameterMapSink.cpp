@@ -79,6 +79,10 @@ float* ParameterMapSink::allocEmbedding(size_t numFloats) {
     throwUnsupportedType("Embedding");
 }
 
+uint64_t* ParameterMapSink::allocPathIDs(size_t idCount) {
+    throwUnsupportedType("Path");
+}
+
 char* ParameterMapSink::allocString(size_t size) {
     ParameterFrame& frame = _frames.back();
 
@@ -113,6 +117,11 @@ db::CellView ParameterMapSink::writeListValue(std::string_view value) {
 }
 
 db::CellView ParameterMapSink::writeListValue(std::span<const float> value) {
+    completeValue();
+    return {};
+}
+
+db::CellView ParameterMapSink::writeListValue(db::PathView value) {
     completeValue();
     return {};
 }

@@ -15,6 +15,7 @@
 #include "list/ListView.h"
 #include "map/EncodedMap.h"
 #include "map/MapView.h"
+#include "PathView.h"
 #include "metadata/LabelSet.h"
 #include "metadata/PropertyType.h"
 #include "views/NodeView.h"
@@ -28,6 +29,7 @@ concept NLViewElement = std::same_as<T, types::String::Primitive>
                      || std::same_as<T, types::Embedding::Primitive>
                      || std::same_as<T, ListView>
                      || std::same_as<T, MapView>
+                     || std::same_as<T, PathView>
                      || std::same_as<T, CellView>;
 
 template <typename T>
@@ -35,8 +37,8 @@ concept NLOptionalViewElement = requires { typename T::value_type; }
                              && std::same_as<T, std::optional<typename T::value_type>>
                              && NLViewElement<typename T::value_type>;
 
-// Invoke handler with a column whose rows are views - strings, lists, maps, embeddings, list
-// or map cells, present or nullable - typed on its container, when handler takes that
+// Invoke handler with a column whose rows are views - strings, lists, maps, embeddings, paths,
+// list or map cells, present or nullable - typed on its container, when handler takes that
 // container. A column of values is left alone.
 template <typename Handler>
 class NLViewColumnVisitor {
@@ -73,7 +75,7 @@ void dispatchViewColumn(const Column* column, Handler&& handler) {
 }
 
 // Owns the copies of the values an op keeps past the step that built them. A string, list,
-// map or embedding built per row lives in a buffer its op empties when it runs again, so
+// map, embedding or path built per row lives in a buffer its op empties when it runs again, so
 // an op holding rows across steps - a sort, a join, an aggregate - keeps them in here.
 // Most stores hold values of one kind or none, so each buffer is created on first use.
 class NLValueStore {
@@ -85,6 +87,7 @@ public:
     types::Embedding::Primitive own(types::Embedding::Primitive embedding);
     ListView own(ListView list);
     MapView own(MapView map);
+    PathView own(PathView path);
     CellView own(CellView element);
 
     // A list or map a change holds encoded, decoded into this store
@@ -125,10 +128,12 @@ private:
     size_t _valueCount {0};
     std::unique_ptr<StringBuffer> _strings;
     std::unique_ptr<ListContainer::EmbeddingBuffer> _embeddings;
+    std::unique_ptr<ListContainer::PathBuffer> _paths;
     std::unique_ptr<ListContainer> _lists;
 
     StringBuffer& getStrings();
     ListContainer::EmbeddingBuffer& getEmbeddings();
+    ListContainer::PathBuffer& getPaths();
     ListContainer& getLists();
 };
 

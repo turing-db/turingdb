@@ -7,6 +7,7 @@
 #include "CellTag.h"
 
 #include "ID.h"
+#include "PathView.h"
 #include "map/MapHash.h"
 #include "metadata/PropertyType.h"
 
@@ -80,6 +81,14 @@ size_t db::hashCell(CellView element) {
         break;
         case CellTag::MapView:
             return combine(seed, hashMap(element.getAs<MapView>()));
+        break;
+        case CellTag::Path: {
+            size_t hash = seed;
+            for (const uint64_t id : element.getAs<PathView>().getIDs()) {
+                hash = combine(hash, hashValue(id));
+            }
+            return hash;
+        }
         break;
         case CellTag::Null:
         case CellTag::INVALID:

@@ -762,6 +762,18 @@ bool holdsItsNull(mlir::Type chunkType) {
     return mlir::isa<storage::NullableType>(element) || holdsItsOwnNull(element);
 }
 
+// Whether a column of @param element goes into a list, a map or a collect as it stands: an
+// entity, a path, a list, a map and a tagged cell hold a cell in every row, their null among
+// them. A scalar value column is read as nullable instead, the way a property fetch is.
+bool holdsCellsPresentInEveryRow(mlir::Type element) {
+    return mlir::isa<storage::NodeIDType,
+                     storage::EdgeIDType,
+                     storage::PathType,
+                     storage::ListType,
+                     storage::MapType,
+                     storage::AnyType>(element);
+}
+
 // Whether a value of @param element can be held as a tagged cell
 bool holdsAsTaggedCell(mlir::Type element) {
     const bool isContainer = mlir::isa<storage::ListType, storage::MapType>(element);
@@ -2089,17 +2101,8 @@ void DBLowering::lowerListComprehension(mlir::db::ListComprehension comprehensio
     mlir::Operation* const placeholderYield =
         lowerElementBody(comprehension.getBody().front(), bodyBlock, rowTagChunk, valueChunk);
 
-    // An entity ID, a list and a tagged cell are present in every row and go into the list
-    // as they stand; only a scalar value column is read as nullable, the way lowerMakeList
-    // reads the columns it builds from
     const mlir::Type valueElement = mlir::cast<nl::ChunkType>(valueChunk.getType()).getElementType();
-    const bool holdsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
-                                                       storage::EdgeIDType,
-                                                       storage::ListType,
-                                                       storage::MapType,
-                                                       storage::AnyType>(valueElement);
-
-    if (!holdsCellsPresentInEveryRow) {
+    if (!holdsCellsPresentInEveryRow(valueElement)) {
         valueChunk = nullableValueChunk(valueChunk);
     }
 
@@ -2402,16 +2405,8 @@ mlir::Value DBLowering::rowListsValueChunk(mlir::Value valueChunk, mlir::Value r
     // laid out over the rows it is read against
     const mlir::Value aligned = rowAlignedChunk(valueChunk, rows);
 
-    // An entity ID, a list and a tagged cell are present in every row and go into the list
-    // as they stand; only a scalar value column is read as nullable, the way lowerMakeList
-    // reads the columns it builds from
     const mlir::Type valueElement = mlir::cast<nl::ChunkType>(aligned.getType()).getElementType();
-    const bool holdsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
-                                                       storage::EdgeIDType,
-                                                       storage::ListType,
-                                                       storage::AnyType>(valueElement);
-
-    if (holdsCellsPresentInEveryRow) {
+    if (holdsCellsPresentInEveryRow(valueElement)) {
         return aligned;
     }
 
@@ -2508,17 +2503,8 @@ void DBLowering::containerCellChunks(mlir::ValueRange columns, llvm::SmallVector
 }
 
 mlir::Value DBLowering::listItemChunk(mlir::Value chunk) {
-    // An entity ID, a list, a map and a tagged cell are present in every row and are read
-    // as they stand; only a scalar value column is read as nullable, the way lowerCollect
-    // reads the column it gathers.
     const mlir::Type element = mlir::cast<nl::ChunkType>(chunk.getType()).getElementType();
-    const bool holdsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
-                                                       storage::EdgeIDType,
-                                                       storage::ListType,
-                                                       storage::MapType,
-                                                       storage::AnyType>(element);
-
-    if (holdsCellsPresentInEveryRow) {
+    if (holdsCellsPresentInEveryRow(element)) {
         return chunk;
     }
 
@@ -5006,19 +4992,11 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
         chunks[inputIndex] = rowAlignedChunk(chunks[inputIndex], cardinality);
     }
 
-    // An entity column collects as the IDs it carries, a list column as the cells it
-    // holds, and a type-erased one as the tagged cells - all present in every row, the
-    // tagged null among them, which the fold drops rather than the column. Only a scalar
-    // value column is read as nullable, the way a property fetch is.
     for (size_t valueIndex = 0; valueIndex < valueCount; valueIndex++) {
         const size_t chunkIndex = keyCount + valueIndex;
         const mlir::Type collectedElement = mlir::cast<nl::ChunkType>(chunks[chunkIndex].getType()).getElementType();
-        const bool collectsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
-                                                              storage::EdgeIDType,
-                                                              storage::ListType,
-                                                              storage::AnyType>(collectedElement);
 
-        if (!collectsCellsPresentInEveryRow) {
+        if (!holdsCellsPresentInEveryRow(collectedElement)) {
             chunks[chunkIndex] = nullableValueChunk(chunks[chunkIndex]);
         }
     }
@@ -6381,12 +6359,13 @@ mlir::Type DBLowering::caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks
 
     // A node or an edge is selected as the entity it is rather than as its ID's integer,
     // so the selection answers a column the rest of the query still reads as an entity.
-    const bool isEntity = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(unified);
+    // A path is selected as the path it is, for the same reason.
+    const bool isEntityOrPath = mlir::isa<storage::NodeIDType, storage::EdgeIDType, storage::PathType>(unified);
     const bool isValue = elementTypeToValueType(unified) != ValueType::Invalid;
     const bool isAny = mlir::isa<storage::AnyType>(unified);
 
-    if (!isEntity && !isValue && !isAny) {
-        throw IRException("db.case requires value or entity branches");
+    if (!isEntityOrPath && !isValue && !isAny) {
+        throw IRException("db.case requires value, entity or path branches");
     }
 
     return unified;

@@ -18,6 +18,8 @@
 #include "dataframe/NamedColumn.h"
 #include "CellTag.h"
 #include "CellView.h"
+#include "GraphPath.h"
+#include "PathView.h"
 #include "list/ListView.h"
 #include "map/MapEntryView.h"
 #include "map/MapView.h"
@@ -64,6 +66,24 @@ bool renderOptEntityCell(const Column* column, size_t row, std::string& out) {
 
 void renderList(const ListView& list, std::string& out);
 void renderMap(const MapView& map, std::string& out);
+
+// A path, as its nodes and edges in order: a node as (id), an edge as [id]
+void renderPath(const PathView path, std::string& out) {
+    const std::span<const uint64_t> ids = path.getIDs();
+
+    for (size_t position = 0; position < ids.size(); position++) {
+        if (position > 0) {
+            out += ", ";
+        }
+
+        const std::string id = std::to_string(ids[position]);
+        if (GraphPath::isNodeAt(position)) {
+            out += "(" + id + ")";
+        } else {
+            out += "[" + id + "]";
+        }
+    }
+}
 
 void renderCellView(const CellView& element, std::string& out) {
     switch (element.getTag()) {
@@ -124,6 +144,11 @@ void renderCellView(const CellView& element, std::string& out) {
 
         case CellTag::MapView:
             renderMap(element.getAs<MapView>(), out);
+            return;
+        break;
+
+        case CellTag::Path:
+            renderPath(element.getAs<PathView>(), out);
             return;
         break;
 
