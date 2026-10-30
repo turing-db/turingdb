@@ -60,3 +60,5 @@ add_turing_test(test_query_ir_uncommitted_write_count UncommittedWriteCountTest.
 add_turing_test(test_query_ir_match_after_delete MatchAfterDeleteTest.cpp)
 
 add_turing_test(test_query_ir_created_property_lookup CreatedPropertyLookupTest.cpp)
+
+add_turing_test(test_query_ir_path_property_value PathPropertyValueTest.cpp)
