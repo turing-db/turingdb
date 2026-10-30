@@ -153,3 +153,55 @@ TEST_F(HashJoinLimitPastAggregateTest, keepsTheProductUnderALimitOverItsKeys) {
     EXPECT_FALSE(fuses("MATCH (n), (m) WHERE n.k = m.k RETURN m.k LIMIT 3"));
     EXPECT_FALSE(fuses("MATCH (n), (m) WHERE n.k = m.k WITH m LIMIT 3 RETURN m.k, count(*) ORDER BY m.k"));
 }
+
+TEST_F(HashJoinLimitPastAggregateTest, fusesUnderALimitOverSortedKeys) {
+    buildGraph(1000);
+
+    EXPECT_TRUE(fuses("MATCH (n), (m) WHERE n.k = m.k RETURN m.k ORDER BY m.k LIMIT 3"));
+}
+
+TEST_F(HashJoinLimitPastAggregateTest, fusesUnderALimitOverACollect) {
+    buildGraph(1000);
+
+    EXPECT_TRUE(fuses("MATCH (n), (m) WHERE n.k = m.k RETURN collect(m.k) LIMIT 1"));
+}
+
+TEST_F(HashJoinLimitPastAggregateTest, fusesUnderALimitOverFilteredRows) {
+    buildGraph(1000);
+
+    EXPECT_TRUE(fuses("MATCH (n), (m) WHERE n.k = m.k WITH n, m WHERE n.name < m.name RETURN m.k LIMIT 3"));
+    EXPECT_TRUE(fuses("MATCH (n), (m) WHERE n.k = m.k AND n.name < m.name RETURN m.k LIMIT 3"));
+}
+
+TEST_F(HashJoinLimitPastAggregateTest, fusesUnderALimitOverDistinctKeys) {
+    buildGraph(1000);
+
+    EXPECT_TRUE(fuses("MATCH (n), (m) WHERE n.k = m.k RETURN DISTINCT m.k LIMIT 3"));
+}
+
+TEST_F(HashJoinLimitPastAggregateTest, fusesUnderALimitPastALargeSkip) {
+    buildGraph(1000);
+
+    EXPECT_TRUE(fuses("MATCH (n), (m) WHERE n.k = m.k RETURN m.k SKIP 10 LIMIT 3"));
+    EXPECT_TRUE(fuses("MATCH (n), (m) WHERE n.k = m.k WITH m SKIP 10 RETURN m.k LIMIT 3"));
+}
+
+TEST_F(HashJoinLimitPastAggregateTest, keepsTheProductUnderALimitPastASmallSkip) {
+    buildGraph(1000);
+
+    EXPECT_FALSE(fuses("MATCH (n), (m) WHERE n.k = m.k RETURN m.k SKIP 1 LIMIT 3"));
+    EXPECT_FALSE(fuses("MATCH (n), (m) WHERE n.k = m.k WITH m LIMIT 3 RETURN m.k SKIP 10"));
+}
+
+TEST_F(HashJoinLimitPastAggregateTest, keepsTheProductUnderALimitOverValuesOfItsRows) {
+    buildGraph(1000);
+
+    EXPECT_FALSE(fuses("MATCH (n), (m) WHERE n.k = m.k RETURN m.k + 1 LIMIT 3"));
+    EXPECT_FALSE(fuses("MATCH (n), (m) WHERE n.k = m.k RETURN toString(m.k) AS s LIMIT 3"));
+}
+
+TEST_F(HashJoinLimitPastAggregateTest, keepsTheProductUnderALimitOverAnOptionalMatch) {
+    buildGraph(1000);
+
+    EXPECT_FALSE(fuses("MATCH (n), (m) WHERE n.k = m.k OPTIONAL MATCH (m)-->(x) RETURN m.k, x LIMIT 3"));
+}
