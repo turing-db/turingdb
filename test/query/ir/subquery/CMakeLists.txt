@@ -229,3 +229,6 @@ add_turing_test(test_query_ir_per_row_subquery_expression PerRowSubqueryExpressi
 
 # A COLLECT subquery or a pattern comprehension whose body returns a map.
 add_call_v3_test(test_query_ir_subquery_collecting_a_map SubqueryCollectingAMapTest.cpp)
+
+# Two expressions of one projection that each run a subquery per row inside the elements of a list.
+add_call_v3_test(test_query_ir_sibling_per_row_subquery SiblingPerRowSubqueryTest.cpp)
