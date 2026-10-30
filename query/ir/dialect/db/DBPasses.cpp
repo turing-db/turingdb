@@ -4961,19 +4961,11 @@ struct FuseExploreHopLabels : public impl::FuseExploreHopLabelsBase<FuseExploreH
     }
 };
 
-// A filter carrying a named path its mask does not read cuts the rows before the path is
-// built: the build moves behind it, over the columns the filter keeps. Null where it stays.
-MakePath sinkPastFilter(MakePath build, mlir::OpBuilder& builder) {
+// A filter carrying a named path cuts the rows before the path is built: the path is built
+// again behind it, over the columns the filter keeps. A mask reading the path still reads
+// the build ahead of the filter. Null where the filter does not keep every entity.
+MakePath sinkPastFilter(MakePath build, FilterOp filter, mlir::OpBuilder& builder) {
     const Value path = build.getResult();
-    if (!path.hasOneUse()) {
-        return nullptr;
-    }
-
-    FilterOp filter = dyn_cast<FilterOp>(*path.getUsers().begin());
-    if (!filter || filter->getBlock() != build->getBlock()) {
-        return nullptr;
-    }
-
     const OperandRange carried = filter.getColumnsToFilter();
 
     llvm::SmallVector<Value> keptColumns;
@@ -5021,9 +5013,23 @@ MakePath sinkPastFilter(MakePath build, mlir::OpBuilder& builder) {
     }
 
     filter.erase();
-    build.erase();
 
     return sunk;
+}
+
+MakePath sinkPastAFilter(MakePath build, mlir::OpBuilder& builder) {
+    for (Operation* user : build.getResult().getUsers()) {
+        FilterOp filter = dyn_cast<FilterOp>(user);
+        if (!filter || filter->getBlock() != build->getBlock()) {
+            continue;
+        }
+
+        if (const MakePath sunk = sinkPastFilter(build, filter, builder)) {
+            return sunk;
+        }
+    }
+
+    return nullptr;
 }
 
 struct SinkMakePath : public impl::SinkMakePathBase<SinkMakePath> {
@@ -5036,9 +5042,18 @@ struct SinkMakePath : public impl::SinkMakePathBase<SinkMakePath> {
         });
 
         while (!builds.empty()) {
-            const MakePath sunk = sinkPastFilter(builds.pop_back_val(), builder);
-            if (sunk) {
-                builds.push_back(sunk);
+            MakePath build = builds.pop_back_val();
+            const MakePath sunk = sinkPastAFilter(build, builder);
+            if (!sunk) {
+                continue;
+            }
+
+            builds.push_back(sunk);
+
+            if (build->use_empty()) {
+                build.erase();
+            } else {
+                builds.push_back(build);
             }
         }
     }

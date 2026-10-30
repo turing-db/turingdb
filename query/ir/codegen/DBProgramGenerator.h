@@ -281,21 +281,8 @@ private:
 
         std::unordered_map<const VarDecl*, PathBinding> _pathBindings;
 
-        // The walk a `MATCH p = ...` names when its element is one quantified relationship:
-        // the variable holding the seeds and the one holding the handles, which is the
-        // relationship's own column. The path is built from the two where it is read, so
-        // the rows carry a handle rather than a sequence of their own.
-        struct NamedPathWalk {
-            const VariableDependency* _seed {nullptr};
-            const VariableDependency* _path {nullptr};
-            bool _reversed {false};
-        };
-
-        std::unordered_map<const VarDecl*, NamedPathWalk> _namedPathWalks;
-
-        // The path each `MATCH p = ...` built for an element that names no
-        // single walk. A path variable appears in no pattern, so it is no VDG variable and
-        // cannot live in _varMap.
+        // The path each `MATCH p = ...` built. A path variable appears in no pattern, so it
+        // is no VDG variable and cannot live in _varMap.
         std::unordered_map<const VarDecl*, mlir::Value> _namedPaths;
 
         // The quantified edge pattern each variable-length variable was declared by, whose
@@ -877,9 +864,8 @@ private:
 
     void generateMatchFilter(const MatchStmt* matchStmt);
 
-    // Binds every element a `MATCH p = ...` named: to the walk when the element is one
-    // quantified relationship, and otherwise to the path built here out of the
-    // columns its entities are bound to
+    // Binds every element a `MATCH p = ...` named to the path built here out of the columns
+    // its entities are bound to
     void generateNamedPaths(const MatchStmt* matchStmt);
     void generateNamedPath(const PatternElement* element, const VarDecl* pathDecl);
 
@@ -891,18 +877,11 @@ private:
     // contributes to the path its element is named by
     mlir::Value pathHandleColumn(const VarDecl* edgeDecl);
 
-    // Builds the path of a walk out of its seeds and its handles, at the point it is read
-    mlir::Value namedPathColumn(const PartScope::NamedPathWalk& walk);
     mlir::Value makePathColumn(llvm::ArrayRef<mlir::Value> entities, llvm::ArrayRef<int64_t> reversedPaths = {});
 
     // The entities a walk stands for, which an expression or an aggregate reading a variable
     // bound to the walk's handles takes rather than the handles
     mlir::Value readWalkEntities(const Expr* argExpr, mlir::Value column);
-
-    // Builds the path of every named-path item a projection publishes or outputs. A handle
-    // column says nothing about which of a path's lists it stands for, so the sink would
-    // read it as the walk's edges.
-    void buildNamedPathItems(const Projection* projection, llvm::SmallVectorImpl<mlir::Value>& projected);
 
     // Emits the Sort a MATCH's ORDER BY asks for, over everything in flight: the rows the
     // rest of the query reads are then the ordered ones.

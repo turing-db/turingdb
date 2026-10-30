@@ -1059,13 +1059,10 @@ void DBProgramGenerator::rebindYieldedColumn(const VarDecl* decl, mlir::TypedVal
 }
 
 void DBProgramGenerator::rebindNamedPath(const VarDecl* decl, mlir::Value column) {
-    const bool namesAPath = _part._namedPaths.contains(decl) || _part._namedPathWalks.contains(decl);
-    if (!namesAPath) {
+    if (!_part._namedPaths.contains(decl)) {
         return;
     }
 
-    // The column is a built path now, no longer the walk's handle
-    _part._namedPathWalks.erase(decl);
     _part._namedPaths[decl] = column;
 }
 
@@ -1808,11 +1805,6 @@ mlir::Value DBProgramGenerator::listColumnOf(const VarDecl* decl, mlir::Value co
         return column;
     }
 
-    const auto walkIt = _part._namedPathWalks.find(decl);
-    if (walkIt != end(_part._namedPathWalks)) {
-        return namedPathColumn(walkIt->second);
-    }
-
     // A path a WITH published carries no binding of its own: it reads as its edges
     PartScope::PathBinding binding;
     const auto bindingIt = _part._pathBindings.find(decl);
@@ -1852,9 +1844,8 @@ mlir::Value DBProgramGenerator::listColumnOf(const VarDecl* decl, mlir::Value co
 mlir::Value DBProgramGenerator::columnLeavingScope(const VarDecl* decl, mlir::Value column) {
     const auto bindingIt = _part._pathBindings.find(decl);
     const bool readsOtherThanItsEdges = bindingIt != end(_part._pathBindings) && !bindingIt->second.readsAsItsEdges();
-    const bool namesAWalk = _part._namedPathWalks.contains(decl);
 
-    return readsOtherThanItsEdges || namesAWalk ? listColumnOf(decl, column) : column;
+    return readsOtherThanItsEdges ? listColumnOf(decl, column) : column;
 }
 
 void DBProgramGenerator::expandPathItems(const Projection* projection, llvm::SmallVectorImpl<mlir::Value>& projected) {
@@ -1866,28 +1857,6 @@ void DBProgramGenerator::expandPathItems(const Projection* projection, llvm::Sma
         const mlir::Value column = projected[itemIndex];
         if (isPathColumn(column)) {
             projected[itemIndex] = listColumnOf(declOfReturnItem(item), column);
-        }
-
-        itemIndex++;
-    }
-}
-
-void DBProgramGenerator::buildNamedPathItems(const Projection* projection, llvm::SmallVectorImpl<mlir::Value>& projected) {
-    if (_part._namedPathWalks.empty()) {
-        return;
-    }
-
-    const auto& items = projection->items();
-    bioassert(projected.size() == items.size(), "One projected column per return item expected");
-
-    size_t itemIndex = 0;
-    for (const Projection::ReturnItem& item : items) {
-        const VarDecl* decl = declOfReturnItem(item);
-        const mlir::Value column = projected[itemIndex];
-
-        const bool namesAWalk = decl && _part._namedPathWalks.contains(decl);
-        if (namesAWalk && isPathColumn(column)) {
-            projected[itemIndex] = listColumnOf(decl, column);
         }
 
         itemIndex++;
@@ -3688,14 +3657,23 @@ void DBProgramGenerator::generateNamedPaths(const MatchStmt* matchStmt) {
 }
 
 void DBProgramGenerator::generateNamedPath(const PatternElement* element, const VarDecl* pathDecl) {
-    // A walk already holds its path: the rows carry its handles, and p is another name for
-    // that column until something reads it
+    // Over one walk the path is built from its seed and its handles alone, the form
+    // fuse_path_elements matches
     if (const EdgePattern* walked = singleQuantifiedRelationship(element)) {
         const auto bindingIt = _part._pathBindings.find(walked->getDecl());
         bioassert(bindingIt != end(_part._pathBindings), "Quantified relationship without a path column");
 
         const PartScope::PathBinding& binding = bindingIt->second;
-        _part._namedPathWalks[pathDecl] = PartScope::NamedPathWalk {binding._seed, binding._path, binding._reversed};
+        const mlir::Value seedColumn = _part._varMap.at(binding._seed).back();
+        const mlir::Value pathColumn = _part._varMap.at(binding._path).back();
+
+        // A walk taken against the pattern ends on the node the pattern opens with, so its
+        // hops come first and the node it seeded from is the element's last entity
+        if (binding._reversed) {
+            _part._namedPaths[pathDecl] = makePathColumn({pathColumn, seedColumn}, {0});
+        } else {
+            _part._namedPaths[pathDecl] = makePathColumn({seedColumn, pathColumn});
+        }
 
         return;
     }
@@ -3755,26 +3733,6 @@ mlir::Value DBProgramGenerator::pathHandleColumn(const VarDecl* edgeDecl) {
     bioassert(bindingIt != end(_part._pathBindings), "Quantified relationship without a path column");
 
     return _part._varMap.at(bindingIt->second._path).back();
-}
-
-mlir::Value DBProgramGenerator::namedPathColumn(const PartScope::NamedPathWalk& walk) {
-    const mlir::Value seedColumn = _part._varMap.at(walk._seed).back();
-    const mlir::Value pathColumn = _part._varMap.at(walk._path).back();
-
-    // A walk taken against the pattern ends on the node the pattern opens with, so its hops
-    // come first and the node it seeded from is the element's last entity
-    llvm::SmallVector<mlir::Value, 2> entities;
-    mlir::ArrayAttr reversedPaths;
-    if (walk._reversed) {
-        entities = {pathColumn, seedColumn};
-        reversedPaths = _opBuilder.getI64ArrayAttr({0});
-    } else {
-        entities = {seedColumn, pathColumn};
-    }
-
-    const mlir::db::ColumnType pathType = allocColumnType(mlir::storage::PathType::get(_mlirCtxt));
-
-    return _opBuilder.create<mlir::db::MakePath>(_opBuilder.getUnknownLoc(), pathType, entities, reversedPaths).getResult();
 }
 
 void DBProgramGenerator::generateMatchOrderBy(const MatchStmt* matchStmt) {
@@ -5086,11 +5044,6 @@ mlir::Value DBProgramGenerator::resolveEntityColumn(const VarDecl* decl) {
         return createdIt->second._column;
     }
 
-    const auto walkIt = _part._namedPathWalks.find(decl);
-    if (walkIt != end(_part._namedPathWalks)) {
-        return namedPathColumn(walkIt->second);
-    }
-
     const auto namedPathIt = _part._namedPaths.find(decl);
     if (namedPathIt != end(_part._namedPaths)) {
         return namedPathIt->second;
@@ -5586,7 +5539,6 @@ void DBProgramGenerator::generateOutput(const Projection* projection, const Unio
 
     broadcastConstantProjection(outputted);
 
-    buildNamedPathItems(projection, outputted);
     expandPathItems(projection, outputted);
 
     translateProjectionTail(projection, variableColumns, outputted, {});
@@ -5718,8 +5670,6 @@ void DBProgramGenerator::publishProjection(const Projection* projection,
     translateProjection(projection, itemColumns, projected, names);
 
     broadcastConstantProjection(projected);
-
-    buildNamedPathItems(projection, projected);
 
     if (with && !projection->isAggregate()) {
         collectFilterColumns(with->filterImports(), variableColumns, carriedColumns);
@@ -7282,17 +7232,13 @@ void DBProgramGenerator::forEachVariableColumn(const VariableColumnBinding& bind
         return !binding._path || binding._path->getDecl() == groupDecl;
     };
 
-    // An occurrence of a named edge, and the walk a group variable or a named path stands
-    // for, holds a column the query names below, and is bound under that name alone
+    // An occurrence of a named edge, and the walk a group variable stands for, holds a column
+    // the query names below, and is bound under that name alone
     llvm::SmallPtrSet<const VariableDependency*, 8> namedBelow;
     for (const auto& [decl, vars] : _vdg.edgeIdentities()) {
         if (!vars.empty() && holdsColumn(vars.front())) {
             namedBelow.insert(vars.begin(), vars.end());
         }
-    }
-
-    for (const auto& [pathDecl, walk] : _part._namedPathWalks) {
-        namedBelow.insert(walk._path);
     }
 
     for (const auto& [groupDecl, binding] : _part._pathBindings) {
@@ -7323,13 +7269,7 @@ void DBProgramGenerator::forEachVariableColumn(const VariableColumnBinding& bind
         bind(createdDecl, createdDecl->getName(), created._column);
     }
 
-    // So is the path a `MATCH p = ...` named, declared by its pattern element. One over a
-    // walk is another name for the handle column that walk bound, and is built where it is
-    // read; any other shape was built when its element was matched.
-    for (const auto& [pathDecl, walk] : _part._namedPathWalks) {
-        bind(pathDecl, pathDecl->getName(), _part._varMap.at(walk._path).back());
-    }
-
+    // So is the path a `MATCH p = ...` named, declared by its pattern element
     for (const auto& [pathDecl, pathColumn] : _part._namedPaths) {
         bind(pathDecl, pathDecl->getName(), pathColumn);
     }
@@ -10137,9 +10077,7 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
     const Expr* const pathExpr = args && args->size() == 1 ? args->front() : nullptr;
     const bool readsANamedPath = pathExpr && pathExpr->getType() == EvaluatedType::GraphPath;
     if (readsANamedPath) {
-        // Beside `RETURN p` the path rides the handle column of its walk, which reads as
-        // the entities it runs through
-        const mlir::Value path = readWalkEntities(pathExpr, translateArg(pathExpr));
+        const mlir::Value path = translateArg(pathExpr);
 
         if (funcName == "length") {
             _part._exprMap[expr] = pathElementsColumn(path, mlir::storage::PathElementsKind::Length);
