@@ -14,6 +14,8 @@ set(storage_sources
         datapart/DataPart.cpp
         datapart/NodeContainer.cpp
         datapart/EdgeContainer.cpp
+        datapart/EdgeCounts.cpp
+        datapart/DegreeProducts.cpp
 
         embedding/EmbeddingBucket.cpp
         embedding/EmbeddingContainer.cpp
@@ -129,6 +131,7 @@ set(storage_sources
         versioning/ChangeAccessor.cpp
         versioning/CommitHash.cpp
         versioning/CommitData.cpp
+        versioning/CommitStatistics.cpp
         versioning/Commit.cpp
         versioning/CommitView.cpp
         versioning/CommitBuilder.cpp
@@ -180,6 +183,10 @@ set(storage_sources
         dump/CommitMetaDataDumper.cpp
         dump/TombstonesDumper.cpp
         dump/TombstonesLoader.cpp
+        dump/EdgeCountsDumper.cpp
+        dump/EdgeCountsLoader.cpp
+        dump/DegreeProductsDumper.cpp
+        dump/DegreeProductsLoader.cpp
       )
 
 add_library(turing_db_storage_s STATIC ${storage_sources})

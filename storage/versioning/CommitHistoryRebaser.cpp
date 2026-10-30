@@ -43,10 +43,10 @@ void CommitHistoryRebaser::rebase(const MetadataRebaser& metadataRebaser,
         return;
     }
 
-    const auto* prevPart = prevDataParts.back().get();
-    for (auto& part : _history._commitDataparts) {
-        dataPartRebaser.rebase(metadataRebaser, *prevPart, *part);
-        prevPart = part.get();
+    const DataPartSpan allParts = _history._allDataparts;
+    for (size_t i = 0; i < commitDatapartCount; i++) {
+        const size_t partIndex = prevDataParts.size() + i;
+        dataPartRebaser.rebase(metadataRebaser, allParts.first(partIndex), *_history._allDataparts[partIndex]);
     }
 
     CommitJournal& journal = _history.journal();

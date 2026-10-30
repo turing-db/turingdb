@@ -5,6 +5,7 @@
 #include "ID.h"
 #include "views/EdgeView.h"
 #include "views/GraphView.h"
+#include "datapart/DegreeProducts.h"
 #include "iterators/GetPropertiesWithNullIterator.h"
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetEdgesIterator.h"
@@ -83,6 +84,24 @@ public:
      */
     [[nodiscard]] size_t getOutEdgeCountMatchingLabelset(const LabelSetHandle& labelset) const;
     [[nodiscard]] size_t getInEdgeCountMatchingLabelset(const LabelSetHandle& labelset) const;
+
+    /**
+     * @brief Returns the number of edges, of every type or of @p edgeType, from a node
+     * matching @p source to a node matching @p target, none that a tombstone deleted.
+     */
+    [[nodiscard]] size_t getEdgeCount(const LabelSetHandle& source, const LabelSetHandle& target) const;
+    [[nodiscard]] size_t getEdgeCount(const LabelSetHandle& source,
+                                      EdgeTypeID edgeType,
+                                      const LabelSetHandle& target) const;
+
+    /**
+     * @brief Returns the sum over the nodes matching @p labels of their degree in the edges
+     * @p first selects times their degree in the edges @p second selects, pairs of one edge
+     * left out, deleted edges included.
+     */
+    [[nodiscard]] size_t sumDegreeProducts(const LabelSetHandle& labels,
+                                           const DegreeSelection& first,
+                                           const DegreeSelection& second) const;
 
     /**
      * @brief Returns the number of nodes matching @p labelset which hold property @p
