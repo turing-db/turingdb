@@ -147,3 +147,6 @@ target_include_directories(test_query_ir_list_predicate_early_exit PRIVATE ${IR_
 add_call_v3_test(test_query_ir_constant_list_element_truth ConstantListElementTruthTest.cpp)
 
 add_call_v3_test(test_query_ir_logical_operator_over_unreached_cell LogicalOperatorOverUnreachedCellTest.cpp)
+
+# reduce and allReduce over a list of collected paths.
+add_call_v3_test(test_query_ir_reduce_over_paths ReduceOverPathsTest.cpp)
