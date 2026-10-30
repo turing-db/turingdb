@@ -12935,8 +12935,8 @@ void NLExecutor::runPropertyFetch(NLExecutionContext* context, NLFunctionData* d
     writer.fill(inputIDs->size());
 
     // The fetch above read the graph, which holds this change's writes nowhere: a row
-    // whose entity the change wrote holds a write-buffer offset rather than an ID the
-    // graph knows, and a row it merely updated still reads the value from before.
+    // whose entity the change wrote names it by the ID it will commit as, which the graph
+    // holds nothing under, and a row it merely updated still reads the value from before.
     const ColumnMask* pending = fetchData->getPending();
     const bool allPending = fetchData->isAllPending();
     CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
