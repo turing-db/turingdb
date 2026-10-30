@@ -157,3 +157,6 @@ add_turing_test(test_query_ir_list_element_concatenation ListElementConcatenatio
 target_include_directories(test_query_ir_list_element_concatenation PRIVATE ${IR_TEST_DIR})
 
 add_call_v3_test(test_query_ir_equality_across_types EqualityAcrossTypesTest.cpp)
+
+# An expression over constants alone sits below every constant and handle hoisted above it.
+add_call_v3_test(test_query_ir_computation_below_hoisted_values ComputationBelowHoistedValuesTest.cpp)

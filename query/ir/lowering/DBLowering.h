@@ -158,9 +158,10 @@ private:
     // Entry block of the nl function being built
     mlir::Block* _entryBlock {nullptr};
 
-    // The last constant hoisted to the entry block, which the next one goes after. Null
-    // while the block opens on something else, where the next constant goes to the top
-    mlir::Operation* _lastHoistedConstant {nullptr};
+    // The last op of the run the entry block opens on: the constants and handles hoisted
+    // above every loop. The next one goes after it and an op computed from them alone goes
+    // below it, so each dominates every op and body that reads it
+    mlir::Operation* _lastHoisted {nullptr};
 
     // The block the WHEN being lowered runs in, or the loop of its branch being lowered. A
     // computation over constants alone goes there in place of the entry block, so neither
@@ -818,13 +819,13 @@ private:
     // lowered op belongs
     void setInsertionInto(mlir::Block* block);
 
-    // Point the builder at the end of the entry block's run of hoisted constants, where
-    // the next one belongs
-    void setInsertionAfterHoistedConstants();
+    // Point the builder at the end of the entry block's run of hoisted constants and
+    // handles, where the next one belongs
+    void setInsertionAfterHoisted();
 
-    // Point the builder at the very top of the entry block, above the constants hoisted
-    // there
-    void setInsertionToEntryBlockStart();
+    // Point the builder below the entry block's hoisted run and after @param lastOperandDef,
+    // where an op computed from hoisted values alone sits under every one its body reads
+    void setInsertionBelowHoisted(mlir::Operation* lastOperandDef);
 
     // The chunks one group of a db op's column operands lowered to, in order
     void mapColumns(mlir::OperandRange columns, llvm::SmallVectorImpl<mlir::Value>& chunks);

@@ -216,9 +216,7 @@ TEST_F(AllReduceTest, foldsAPerRowSubqueryInTheStep) {
                {{"true"}});
 }
 
-// Disabled: the second fold over a constant list is lowered above the property and edge type
-// handles the first one created, which its subquery reads (SiblingPerRowSubqueryTest).
-TEST_F(AllReduceTest, DISABLED_foldsPerRowSubqueriesInSiblingSteps) {
+TEST_F(AllReduceTest, foldsPerRowSubqueriesInSiblingSteps) {
     expectRows("RETURN allReduce(total = 0, name IN ['Remy', 'Adam', 'Doruk'] | "
                "total + COUNT { MATCH (q:Person)-[:INTERESTED_IN]->(i) WHERE q.name = name RETURN i LIMIT 2 }, total < 5), "
                "allReduce(total = 0, name IN ['Remy', 'Adam', 'Doruk'] | "
@@ -226,7 +224,7 @@ TEST_F(AllReduceTest, DISABLED_foldsPerRowSubqueriesInSiblingSteps) {
                {{"false", "true"}});
 }
 
-TEST_F(AllReduceTest, DISABLED_foldsAPerRowSubqueryBesideAReduce) {
+TEST_F(AllReduceTest, foldsAPerRowSubqueryBesideAReduce) {
     expectRows("RETURN reduce(total = 0, name IN ['Remy', 'Adam', 'Doruk'] | "
                "total + COUNT { MATCH (q:Person)-[:INTERESTED_IN]->(i) WHERE q.name = name RETURN i LIMIT 2 }) AS r, "
                "allReduce(total = 0, name IN ['Remy', 'Adam', 'Doruk'] | "
