@@ -685,7 +685,7 @@ public:
     static NLBroadcastConstantFunction selectConstantMapBroadcast();
     static NLBroadcastConstantFunction selectConstantCellBroadcast();
 
-    // The node, edge and path siblings, which ride the plain chunk their kind names
+    // The node, edge, path and walk siblings, which ride the plain chunk their kind names
     static NLBroadcastConstantFunction selectConstantPlainBroadcast(NLChunkKind kind, const Column* value);
 
     // The mask sibling, which lays the boolean of a constant out as flags

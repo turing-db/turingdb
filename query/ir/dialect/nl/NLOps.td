@@ -1315,7 +1315,7 @@ def ExpandPath : NLOp<"expand_path", [Pure, RowAlignedThroughOperands]> {
              : (!nl.chunk<!storage.path_ref>, !nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.list<!storage.edge_id>>
   }];
 
-  let arguments = (ins NLChunk:$paths,
+  let arguments = (ins NLPathRefChunk:$paths,
                        Optional<NLNodeIDChunk>:$srcids,
                        PathExpansionKind:$kind,
                        UnitAttr:$reversed,
@@ -1344,7 +1344,7 @@ def PathLength : NLOp<"path_length", [Pure, RowAlignedThroughOperands]> {
       %n = nl.path_length(%p) nodes : (!nl.chunk<!storage.path_ref>) -> !nl.chunk<ui64>
   }];
 
-  let arguments = (ins NLChunk:$paths, OptionalAttr<UI64Attr>:$steps, UnitAttr:$nodes);
+  let arguments = (ins NLPathRefChunk:$paths, OptionalAttr<UI64Attr>:$steps, UnitAttr:$nodes);
   let results   = (outs NLChunk:$result);
 
   let assemblyFormat = [{

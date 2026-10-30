@@ -1245,10 +1245,7 @@ bool DBLowering::isConstantReadAsRows(mlir::Value chunk) {
         return false;
     }
 
-    const mlir::Type element = chunkType.getElementType();
-    const bool readAsRows = llvm::isa<storage::NodeIDType, storage::EdgeIDType, storage::PathType, storage::BoolType>(element);
-
-    return readAsRows && yieldsConstantColumn(chunk, _constantColumns);
+    return isReadAsRows(chunkType.getElementType()) && yieldsConstantColumn(chunk, _constantColumns);
 }
 
 bool DBLowering::readsConstantsAsRows(mlir::Operation& operation) {
@@ -7567,11 +7564,10 @@ mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinali
     // what every fold, key serialization and reduction reads a value column as. A list or
     // a map literal is laid out as the plain container chunk an nl.collect drain emits
     // instead, since no row of a literal is absent; one a function answered may be null.
-    // A node, an edge, a path or a mask rides the plain chunk every op takes it in.
+    // A node, an edge, a path, a walk or a mask rides the plain chunk every op takes it in.
     mlir::MLIRContext* const context = _builder.getContext();
     const bool isContainer = llvm::isa<storage::ListType, storage::MapType>(valueElement);
-    const bool isReadAsRows = llvm::isa<storage::NodeIDType, storage::EdgeIDType, storage::PathType, storage::BoolType>(valueElement);
-    const bool staysPlain = (isContainer && !nullable) || isReadAsRows;
+    const bool staysPlain = (isContainer && !nullable) || isReadAsRows(valueElement);
     const mlir::Type resultElement = staysPlain ? valueElement
                                                 : storage::NullableType::get(context, valueElement);
     const nl::ChunkType resultType = nl::ChunkType::get(context, resultElement);

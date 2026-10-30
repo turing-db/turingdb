@@ -11595,7 +11595,7 @@ NLBroadcastConstantFunction NLExecutor::selectConstantCellBroadcast() {
 
 NLBroadcastConstantFunction NLExecutor::selectConstantPlainBroadcast(NLChunkKind kind, const Column* value) {
     bioassert(value->getContainerKind() == ContainerKind::code<ColumnConst>(),
-              "A node, an edge or a path laid out over rows is read as the constant nl.row_constant made of it");
+              "A node, an edge, a path or a walk laid out over rows is read as the constant nl.row_constant made of it");
 
     NLBroadcastConstantFunction fill = nullptr;
     dispatchChunkKind(kind, [&]<typename Element>() { fill = &broadcastConstantPlainColumn<Element>; });
@@ -11679,6 +11679,7 @@ NLUnaryFn NLExecutor::selectRowConstant(const Column* row, LocalMemory* memory, 
     selectForElement.template operator()<NodeID>();
     selectForElement.template operator()<EdgeID>();
     selectForElement.template operator()<GraphPath>();
+    selectForElement.template operator()<PathRef>();
     selectForElement.template operator()<ListView>();
     selectForElement.template operator()<std::optional<ListView>>();
     selectForElement.template operator()<CellView>();

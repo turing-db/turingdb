@@ -317,6 +317,13 @@ def NLEdgeIDChunk : Type<
     BuildableType<"::mlir::nl::ChunkType::get($_builder.getContext(), "
                   "::mlir::storage::EdgeIDType::get($_builder.getContext()))">;
 
+def NLPathRefChunk : Type<
+        CPred<"::llvm::isa<::mlir::nl::ChunkType>($_self) && "
+              "::llvm::isa<::mlir::storage::PathRefType>(::llvm::cast<::mlir::nl::ChunkType>($_self).getElementType())">,
+        "chunk of path handles", "::mlir::nl::ChunkType">,
+    BuildableType<"::mlir::nl::ChunkType::get($_builder.getContext(), "
+                  "::mlir::storage::PathRefType::get($_builder.getContext()))">;
+
 // The mask sibling of NLNodeIDChunk: constrains an operand to
 // !nl.chunk<!storage.bool> - a row-by-row flag beside another chunk, as nl.merge's
 // pending masks are - and carries the recipe that lets a format omit its type.
