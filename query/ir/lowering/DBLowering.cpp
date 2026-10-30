@@ -394,9 +394,9 @@ nl::ChunkType procedureChunkType(mlir::OpBuilder& builder, const NamedProcedureT
 // min and max keep the input's own type. Throws for a value type the reduction
 // cannot handle: sum/avg/stdev need a numeric column, min/max an orderable one (so a
 // string sum, a bool sum or an embedding min is rejected, matching Cypher). A tagged
-// cell is numeric only once read, so sum, avg and stdev accept one - all landing on the
-// f64 mixed numeric tags reduce to - where min/max would have to hand the winning cell
-// back under its own type, which no single result type names.
+// cell is numeric only once read, so sum, avg and stdev accept one. Its sum is an
+// integer or a float depending on the cells it reads, so it stays a tagged cell, as a
+// min/max of tagged cells does.
 mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
                                       storage::AggregateKind kind,
                                       mlir::Type inputElement) {
@@ -428,7 +428,7 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
             if (!isNumeric && !isTaggedCell) {
                 throw IRException("db.sum requires a numeric column");
             }
-            return isTaggedCell ? builder.getF64Type() : inputElement;
+            return inputElement;
         }
         break;
 

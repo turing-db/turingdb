@@ -3299,7 +3299,7 @@ void aggregateResetNull(NLAggregateState* state) {
     auto* accumulator = static_cast<ColumnOptVector<Primitive>*>(state->getAccumulator());
     accumulator->getRaw().assign(1, std::nullopt);
     state->setCount(0);
-    state->extremeValues().clear();
+    state->accumulatorValues().clear();
 }
 
 // Add two aggregate values with defined overflow. A signed integer sum wraps in
@@ -3388,7 +3388,7 @@ void aggregateUpdateMinMax(NLAggregateState* state, const Column* input) {
     }
 
     if (replaced) {
-        NLCompactingValueStore& extremes = state->extremeValues();
+        NLCompactingValueStore& extremes = state->accumulatorValues();
         current = extremes.getSpare().ownElement(*current);
         extremes.flip();
     }
@@ -3611,12 +3611,10 @@ NLAggregateUpdateFunction selectDeviationUpdate(ValueType inputType) {
     return nullptr;
 }
 
-// Fold a chunk of tagged cells into a running f64 sum, counting the ones folded so avg
-// reads the same accumulator. A cell tagged null is skipped, as a null value column row
-// is. Mixed numeric tags are what makes a column type-erased, and Cypher sums those to a
-// float, so the accumulator is an f64 whichever tags turn up.
-template <typename Cell, bool CountsRows>
-void aggregateUpdateNumericTagged(NLAggregateState* state, const Column* input) {
+// Fold a chunk of tagged cells into avg's running f64 sum, counting the ones folded. A
+// cell tagged null is skipped, as a null value column row is.
+template <typename Cell>
+void aggregateUpdateTaggedAvg(NLAggregateState* state, const Column* input) {
     auto* accumulator = static_cast<ColumnOptVector<double>*>(state->getAccumulator());
     std::optional<double>& current = accumulator->getRaw().front();
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
@@ -3635,9 +3633,97 @@ void aggregateUpdateNumericTagged(NLAggregateState* state, const Column* input) 
     }
 
     current = running;
+    state->addCount(seen);
+}
 
-    if constexpr (CountsRows) {
-        state->addCount(seen);
+constexpr std::byte INTEGER_ZERO_CELL[sizeof(CellTag) + sizeof(types::Int64::Primitive)] {
+    static_cast<std::byte>(CellTag::Int),
+};
+
+// The running sum of tagged cells: an integer while every number summed is one, and a
+// float from the first float on, as Cypher sums mixed numbers. Integers wrap as an integer
+// column's sum does.
+class NLTaggedSum {
+public:
+    explicit NLTaggedSum(CellView sum) {
+        add(sum);
+    }
+
+    void add(CellView number) {
+        const CellTag tag = number.getTag();
+
+        if (tag == CellTag::Int) {
+            addInteger(number.getAs<types::Int64::Primitive>());
+        } else if (tag == CellTag::UInt) {
+            addInteger(static_cast<types::Int64::Primitive>(number.getAs<types::UInt64::Primitive>()));
+        } else {
+            addReal(taggedNumericValue(number));
+        }
+    }
+
+    CellView own(NLValueStore& values) const {
+        ListBuffer<>::ListItemVariant item = _isReal ? ListBuffer<>::ListItemVariant {_real}
+                                                     : ListBuffer<>::ListItemVariant {_integer};
+
+        return values.ownCell(item);
+    }
+
+private:
+    bool _isReal {false};
+    types::Int64::Primitive _integer {0};
+    types::Double::Primitive _real {0.0};
+
+    void addInteger(types::Int64::Primitive value) {
+        if (_isReal) {
+            _real += static_cast<types::Double::Primitive>(value);
+        } else {
+            _integer = numericAdd(_integer, value);
+        }
+    }
+
+    void addReal(types::Double::Primitive value) {
+        if (!_isReal) {
+            _isReal = true;
+            _real = static_cast<types::Double::Primitive>(_integer);
+        }
+
+        _real += value;
+    }
+};
+
+void aggregateResetTaggedSum(NLAggregateState* state) {
+    auto* accumulator = static_cast<ColumnOptVector<CellView>*>(state->getAccumulator());
+    accumulator->getRaw().assign(1, std::optional<CellView>(CellView {INTEGER_ZERO_CELL}));
+    state->setCount(0);
+    state->accumulatorValues().clear();
+}
+
+// Fold a chunk of tagged cells into the running sum, which is copied into the spare store
+// once per chunk, as a min/max extreme is. A cell tagged null is skipped, as a null value
+// column row is.
+template <typename Cell>
+void aggregateUpdateTaggedSum(NLAggregateState* state, const Column* input) {
+    auto* accumulator = static_cast<ColumnOptVector<CellView>*>(state->getAccumulator());
+    std::optional<CellView>& current = accumulator->getRaw().front();
+    const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
+
+    NLTaggedSum sum(current.value());
+    bool added = false;
+
+    for (const Cell& cell : inputRaw) {
+        const std::optional<CellView> number = presentCell(cell);
+        if (!number) {
+            continue;
+        }
+
+        sum.add(*number);
+        added = true;
+    }
+
+    if (added) {
+        NLCompactingValueStore& values = state->accumulatorValues();
+        current = sum.own(values.getSpare());
+        values.flip();
     }
 }
 
@@ -3645,11 +3731,11 @@ template <typename Cell>
 NLAggregateUpdateFunction taggedAggregateUpdateFor(AggregateKind kind) {
     switch (kind) {
         case AggregateKind::Sum:
-            return &aggregateUpdateNumericTagged<Cell, /*CountsRows=*/false>;
+            return &aggregateUpdateTaggedSum<Cell>;
         break;
 
         case AggregateKind::Avg:
-            return &aggregateUpdateNumericTagged<Cell, /*CountsRows=*/true>;
+            return &aggregateUpdateTaggedAvg<Cell>;
         break;
 
         case AggregateKind::StDev:
@@ -3949,15 +4035,15 @@ void groupFoldSumDistinct(Column* accumulator,
 }
 
 // Fold a group's tagged cells into its running f64 sum, tallying the ones folded so avg
-// divides by the same count. The type-erased sibling of groupFoldSum / groupFoldAvg: the
-// cells carry a type each, so the number each holds is read by its tag.
-template <typename Cell, bool CountsRows, bool Distinct>
-void groupFoldNumericTagged(Column* accumulator,
-                            std::vector<uint64_t>& counts,
-                            const Column* input,
-                            const std::vector<size_t>& groups,
-                            NLGroupDistinctTally& distinct,
-                            NLValueStore& values) {
+// divides by the same count. The type-erased sibling of groupFoldAvg: the cells carry a
+// type each, so the number each holds is read by its tag.
+template <typename Cell, bool Distinct>
+void groupFoldTaggedAvg(Column* accumulator,
+                        std::vector<uint64_t>& counts,
+                        const Column* input,
+                        const std::vector<size_t>& groups,
+                        NLGroupDistinctTally& distinct,
+                        NLValueStore& values) {
     auto& raw = static_cast<ColumnOptVector<double>*>(accumulator)->getRaw();
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
@@ -3980,10 +4066,52 @@ void groupFoldNumericTagged(Column* accumulator,
 
         std::optional<double>& running = raw[group];
         running = running.value() + taggedNumericValue(*element);
+        counts[group]++;
+    }
+}
 
-        if constexpr (CountsRows) {
-            counts[group]++;
+void groupGrowTaggedSum(Column* accumulator,
+                        std::vector<uint64_t>& counts,
+                        size_t groupCount) {
+    auto& raw = static_cast<ColumnOptVector<CellView>*>(accumulator)->getRaw();
+    raw.resize(groupCount, std::optional<CellView>(CellView {INTEGER_ZERO_CELL}));
+}
+
+// Fold a group's tagged cells into its running sum. The type-erased sibling of groupFoldSum
+// and groupFoldSumDistinct: a group's sum is a cell copied into @param values at each cell
+// it folds, compacted as the min/max extremes are.
+template <typename Cell, bool Distinct>
+void groupFoldTaggedSum(Column* accumulator,
+                        std::vector<uint64_t>& counts,
+                        const Column* input,
+                        const std::vector<size_t>& groups,
+                        NLGroupDistinctTally& distinct,
+                        NLValueStore& values) {
+    auto& raw = static_cast<ColumnOptVector<CellView>*>(accumulator)->getRaw();
+    const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const std::optional<CellView> number = presentCell(inputRaw[row]);
+        if (!number) {
+            continue;
         }
+
+        const size_t group = groups[row];
+
+        if constexpr (Distinct) {
+            distinct.beginKey(group);
+            distinctAppendElementBytes(distinct.getKey(), *number);
+
+            if (!distinct.insertIfNew()) {
+                continue;
+            }
+        }
+
+        std::optional<CellView>& running = raw[group];
+
+        NLTaggedSum sum(running.value());
+        sum.add(*number);
+        running = sum.own(values);
     }
 }
 
@@ -4042,19 +4170,19 @@ template <typename Cell>
 NLGroupAggregateFoldFunction taggedGroupAggregateFoldFor(GroupAggregateKind kind) {
     switch (kind) {
         case GroupAggregateKind::Sum:
-            return &groupFoldNumericTagged<Cell, /*CountsRows=*/false, /*Distinct=*/false>;
+            return &groupFoldTaggedSum<Cell, /*Distinct=*/false>;
         break;
 
         case GroupAggregateKind::SumDistinct:
-            return &groupFoldNumericTagged<Cell, /*CountsRows=*/false, /*Distinct=*/true>;
+            return &groupFoldTaggedSum<Cell, /*Distinct=*/true>;
         break;
 
         case GroupAggregateKind::Avg:
-            return &groupFoldNumericTagged<Cell, /*CountsRows=*/true, /*Distinct=*/false>;
+            return &groupFoldTaggedAvg<Cell, /*Distinct=*/false>;
         break;
 
         case GroupAggregateKind::AvgDistinct:
-            return &groupFoldNumericTagged<Cell, /*CountsRows=*/true, /*Distinct=*/true>;
+            return &groupFoldTaggedAvg<Cell, /*Distinct=*/true>;
         break;
 
         case GroupAggregateKind::StDev:
@@ -10568,7 +10696,7 @@ void NLExecutor::runGroupAggregateUpdate(NLExecutionContext* context, NLFunction
         aggregate._grow(aggregate._accumulator, aggregate._counts, groupCount);
     }
 
-    NLValueStore& extremeValues = state->extremeValues();
+    NLValueStore& accumulatorValues = state->accumulatorValues();
 
     for (NLGroupAggregateState::Aggregate& aggregate : aggregates) {
         aggregate._fold(aggregate._accumulator,
@@ -10576,10 +10704,10 @@ void NLExecutor::runGroupAggregateUpdate(NLExecutionContext* context, NLFunction
                         aggregate._input,
                         groupIndices,
                         aggregate._distinct,
-                        extremeValues);
+                        accumulatorValues);
     }
 
-    state->compactExtremeValues();
+    state->compactAccumulatorValues();
 }
 
 void NLExecutor::runGroupAggregateLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -10720,7 +10848,7 @@ void NLExecutor::runCollectUpdate(NLExecutionContext* context, NLFunctionData* d
         aggregate._grow(aggregate._accumulator, aggregate._counts, groupCount);
     }
 
-    NLValueStore& extremeValues = state->extremeValues();
+    NLValueStore& accumulatorValues = state->accumulatorValues();
 
     for (NLGroupAggregateState::Aggregate& aggregate : aggregates) {
         aggregate._fold(aggregate._accumulator,
@@ -10728,10 +10856,10 @@ void NLExecutor::runCollectUpdate(NLExecutionContext* context, NLFunctionData* d
                         aggregate._input,
                         groupIndices,
                         aggregate._distinct,
-                        extremeValues);
+                        accumulatorValues);
     }
 
-    state->compactExtremeValues();
+    state->compactAccumulatorValues();
 }
 
 // Only the scalar value types are collectable for now; an embedding column (a span of
@@ -12186,7 +12314,11 @@ NLAggregateUpdateFunction NLExecutor::selectOptTaggedAggregateUpdate(AggregateKi
     return taggedAggregateUpdateFor<std::optional<CellView>>(kind);
 }
 
-NLAggregateResetFunction NLExecutor::selectTaggedAggregateReset() {
+NLAggregateResetFunction NLExecutor::selectTaggedAggregateReset(AggregateKind kind) {
+    if (kind == AggregateKind::Sum) {
+        return &aggregateResetTaggedSum;
+    }
+
     return &aggregateResetNull<CellView>;
 }
 
@@ -12278,7 +12410,12 @@ NLGroupAggregateFoldFunction NLExecutor::selectOptTaggedGroupAggregateFold(Group
     return taggedGroupAggregateFoldFor<std::optional<CellView>>(kind);
 }
 
-NLGroupAggregateGrowFunction NLExecutor::selectTaggedGroupAggregateGrow() {
+NLGroupAggregateGrowFunction NLExecutor::selectTaggedGroupAggregateGrow(GroupAggregateKind kind) {
+    const bool sums = (kind == GroupAggregateKind::Sum) || (kind == GroupAggregateKind::SumDistinct);
+    if (sums) {
+        return &groupGrowTaggedSum;
+    }
+
     return &groupGrowNull<CellView>;
 }
 

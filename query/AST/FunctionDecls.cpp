@@ -454,12 +454,12 @@ void FunctionDecls::initDefault() {
     sumNulls->setReturnTypes({{EvaluatedType::Integer}});
     sumNulls->setIsAggregate(true);
 
-    // A type-erased cell carries its number's type per row. Mixed numeric tags are what
-    // leaves a list type-erased, and Cypher sums those to a float, so this reduces to one
-    // whichever tags turn up - and errors on a cell that is no number at all.
+    // A type-erased cell carries its number's type per row, so the sum is an integer or a
+    // float depending on the rows: a float once any float is summed. It errors on a cell
+    // that is no number at all.
     FunctionSignature* sumAnyValues = createFunction("sum");
     sumAnyValues->setArguments({EvaluatedType::Any});
-    sumAnyValues->setReturnTypes({{EvaluatedType::Double}});
+    sumAnyValues->setReturnTypes({{EvaluatedType::Any}});
     sumAnyValues->setIsAggregate(true);
 
     // stDev spreads the values as a sample of a population, stDevP as the whole of it. Too

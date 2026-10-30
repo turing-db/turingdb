@@ -15,9 +15,9 @@ using namespace db;
 
 namespace {
 
-void compactExtremes(NLCompactingValueStore& extremes,
-                     std::vector<NLGroupAggregateState::Aggregate>& aggregates,
-                     size_t groupCount) {
+void compactAccumulators(NLCompactingValueStore& values,
+                         std::vector<NLGroupAggregateState::Aggregate>& aggregates,
+                         size_t groupCount) {
     size_t liveCount = 0;
     for (const NLGroupAggregateState::Aggregate& aggregate : aggregates) {
         if (aggregate._reown) {
@@ -25,18 +25,18 @@ void compactExtremes(NLCompactingValueStore& extremes,
         }
     }
 
-    if (!extremes.needsCompaction(liveCount)) {
+    if (!values.needsCompaction(liveCount)) {
         return;
     }
 
-    NLValueStore& spare = extremes.getSpare();
+    NLValueStore& spare = values.getSpare();
     for (NLGroupAggregateState::Aggregate& aggregate : aggregates) {
         if (aggregate._reown) {
             aggregate._reown(aggregate._accumulator, spare);
         }
     }
 
-    extremes.flip();
+    values.flip();
 }
 
 }
@@ -458,7 +458,7 @@ void NLGroupTable::clear() {
 void NLGroupAggregateState::reset() {
     _groupTable.clear();
     _keyValues.clear();
-    _extremeValues.clear();
+    _accumulatorValues.clear();
 
     for (KeyColumn& key : _keyColumns) {
         key._buffer->clear();
@@ -476,12 +476,12 @@ void NLGroupAggregateState::reset() {
     }
 }
 
-void NLGroupAggregateState::compactExtremeValues() {
-    compactExtremes(_extremeValues, _aggregates, _groupTable.getGroupCount());
+void NLGroupAggregateState::compactAccumulatorValues() {
+    compactAccumulators(_accumulatorValues, _aggregates, _groupTable.getGroupCount());
 }
 
-void NLCollectState::compactExtremeValues() {
-    compactExtremes(_extremeValues, _aggregates, _groupTable.getGroupCount());
+void NLCollectState::compactAccumulatorValues() {
+    compactAccumulators(_accumulatorValues, _aggregates, _groupTable.getGroupCount());
 }
 
 NLCollectState::ValueColumn& NLCollectState::unwoundColumn() {
@@ -511,7 +511,7 @@ void NLCollectState::reset() {
     _listBuffer.clear();
     _keyValues.clear();
     _collectedValues.clear();
-    _extremeValues.clear();
+    _accumulatorValues.clear();
 
     for (NLGroupAggregateState::Aggregate& aggregate : _aggregates) {
         if (aggregate._accumulator) {

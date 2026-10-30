@@ -5486,12 +5486,12 @@ void NLTranslator::translateAggregateState(nl::Aggregate aggregate, NLStmtContai
     const mlir::Type accumulatorElement = stateType.getElementType();
     const AggregateKind kind = toRuntimeAggregateKind(aggregate.getKind());
 
-    // A min/max over type-erased cells keeps the winning cell, which names no value type
+    // A sum or a min/max over type-erased cells keeps a cell, which names no value type
     Column* accumulator = nullptr;
     NLAggregateResetFunction reset = nullptr;
     if (mlir::isa<storage::AnyType>(accumulatorElement)) {
         accumulator = allocOptCellColumn();
-        reset = NLExecutor::selectTaggedAggregateReset();
+        reset = NLExecutor::selectTaggedAggregateReset(kind);
     } else {
         const ValueType accumulatorType = valueTypeFromElementType(accumulatorElement);
         accumulator = allocSingleRowOptColumnForValueType(accumulatorType);
@@ -5682,8 +5682,9 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
             // kinds keep the shape of the kind they mirror and differ only in the
             // fold, which charges each of a group's values once.
             //
-            // A type-erased input carries a type per cell, so sum and avg reduce it by tag
-            // into the f64 its mixed numeric tags land on, and min/max/first keep the cell.
+            // A type-erased input carries a type per cell, so avg and stdev reduce it by tag
+            // into an f64, and sum and min/max/first keep a cell: sum's is an integer until a
+            // float joins it.
             const mlir::Type reducedElement = mlir::cast<nl::ChunkType>(chunkType).getElementType();
             const bool reducesNullableTaggedCells = isNullableAny(reducedElement);
             const bool reducesTaggedCells = mlir::isa<storage::AnyType>(reducedElement)
@@ -5692,13 +5693,14 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
             const bool keepsAValue = (kind == GroupAggregateKind::Min)
                                   || (kind == GroupAggregateKind::Max)
                                   || (kind == GroupAggregateKind::First);
-            const bool keepsTaggedCells = reducesTaggedCells && keepsAValue;
+            const bool sums = (kind == GroupAggregateKind::Sum) || (kind == GroupAggregateKind::SumDistinct);
+            const bool keepsTaggedCells = reducesTaggedCells && (keepsAValue || sums);
             const bool averages = (kind == GroupAggregateKind::Avg) || (kind == GroupAggregateKind::AvgDistinct);
             const bool deviates = (kind == GroupAggregateKind::StDev)
                                || (kind == GroupAggregateKind::StDevP)
                                || (kind == GroupAggregateKind::StDevDistinct)
                                || (kind == GroupAggregateKind::StDevPDistinct);
-            const bool accumulatesAsDouble = (reducesTaggedCells && !keepsAValue) || averages || deviates;
+            const bool accumulatesAsDouble = averages || deviates;
 
             const ValueType inputType = reducesTaggedCells ? ValueType::Double
                                                            : nullableChunkValueType(chunkType);
@@ -5706,7 +5708,7 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
 
             if (keepsTaggedCells) {
                 aggregate._accumulator = allocOptCellColumn();
-                aggregate._grow = NLExecutor::selectTaggedGroupAggregateGrow();
+                aggregate._grow = NLExecutor::selectTaggedGroupAggregateGrow(kind);
                 aggregate._emit = NLExecutor::selectTaggedGroupAggregateEmit();
             } else {
                 aggregate._accumulator = allocOptColumnForValueType(accumulatorType);
@@ -5722,7 +5724,7 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
                 aggregate._fold = NLExecutor::selectGroupAggregateFold(kind, inputType);
             }
 
-            if (keepsAValue) {
+            if (keepsAValue || keepsTaggedCells) {
                 aggregate._reown = NLExecutor::selectReownFunction(aggregate._accumulator);
             }
         }

@@ -139,6 +139,9 @@ target_include_directories(test_query_ir_min_max_over_nullable PRIVATE ${IR_TEST
 add_turing_test(test_query_ir_integer_sum_past_null IntegerSumPastNullTest.cpp)
 target_include_directories(test_query_ir_integer_sum_past_null PRIVATE ${IR_TEST_DIR})
 
+add_turing_test(test_query_ir_tagged_cell_sum TaggedCellSumTest.cpp)
+target_include_directories(test_query_ir_tagged_cell_sum PRIVATE ${IR_TEST_DIR})
+
 add_turing_test(test_query_ir_keyless_aggregates_over_element_ops KeylessAggregatesOverElementOpsTest.cpp)
 target_sources(test_query_ir_keyless_aggregates_over_element_ops PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp ${IR_TEST_DIR}/CallV3Test.cpp)
 target_include_directories(test_query_ir_keyless_aggregates_over_element_ops PRIVATE ${IR_TEST_DIR})
