@@ -280,3 +280,6 @@ add_ir_tests(test_query_ir_run_constant_walk RunConstantWalkTest.cpp)
 
 # A body run once per row writes from its import, and a merge reads back the rows it wrote.
 add_ir_tests(test_query_ir_per_run_import_write PerRunImportWriteTest.cpp)
+
+# A variable-length named path read inside and past a subquery.
+add_ir_tests(test_query_ir_named_walk_across_subquery NamedWalkAcrossSubqueryTest.cpp)

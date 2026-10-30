@@ -59,3 +59,5 @@ add_call_v3_test(test_query_ir_coalesce_argument_value_type CoalesceArgumentValu
 add_call_v3_test(test_query_ir_null_test_across_kinds NullTestAcrossKindsTest.cpp)
 
 add_ir_tests(test_query_ir_null_test_dialect NullTestDialectTest.cpp)
+
+add_ir_tests(test_query_ir_null_operand_over_rows NullOperandOverRowsTest.cpp)
