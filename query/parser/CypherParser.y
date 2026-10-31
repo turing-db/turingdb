@@ -95,6 +95,7 @@
     #include "expr/ListPredicateExpr.h"
     #include "expr/ReduceExpr.h"
     #include "expr/AllReduceExpr.h"
+    #include "expr/MapProjectionExpr.h"
     #include "VecLibMetadata.h"
     #include "CreateNodePropertyIndexQuery.h"
     #include "CreateEdgePropertyIndexQuery.h"
@@ -358,8 +359,9 @@
 %type<db::Expr*> stringExpr
 %type<db::Expr*> entityTypeExpr
 %type<db::Expr*> labelTestOperand
-%type<db::Expr*> propertyLookupExpr
+%type<db::Expr*> lookupOperand
 %type<db::Expr*> propertyExpr
+%type<db::Expr*> variablePropertyExpr
 %type<db::Expr*> atomExpr
 %type<db::Expr*> collectExpr
 %type<db::Expr*> bracketExpr
@@ -368,6 +370,10 @@
 %type<db::Expr*> filterWith
 %type<db::Expr*> reduceExpr
 %type<db::Expr*> allReduceExpr
+%type<db::Expr*> mapProjection
+%type<db::MapProjectionExpr::Items> mapProjectionBody
+%type<db::MapProjectionExpr::Items> mapProjectionItems
+%type<db::MapProjectionExpr::Item> mapProjectionItem
 %type<db::CaseExpr*> caseExpr
 %type<db::CaseExpr*> whenThenChain
 %type<std::pair<db::CaseExpr::Tests, db::Expr*>> whenThen
@@ -824,7 +830,7 @@ indexType
     ;
 
 createNodePropertyIndexQuery
-    : CREATE INDEX name FOR nodePattern ON propertyExpr {
+    : CREATE INDEX name FOR nodePattern ON variablePropertyExpr {
         if ($5->getWhere()) {
             scanner.syntaxError(@5, "WHERE is not allowed in an index pattern");
         }
@@ -835,7 +841,7 @@ createNodePropertyIndexQuery
     ;
 
 createEdgePropertyIndexQuery
-    : CREATE INDEX name FOR OBRACK edgeDetail CBRACK ON propertyExpr {
+    : CREATE INDEX name FOR OBRACK edgeDetail CBRACK ON variablePropertyExpr {
         if ($6->getWhere()) {
             scanner.syntaxError(@6, "WHERE is not allowed in an index pattern");
         }
@@ -1185,7 +1191,7 @@ removeSt
     ;
 
 removeItem
-    : propertyExpr { $$ = static_cast<PropertyExpr*>($1); }
+    : variablePropertyExpr { $$ = static_cast<PropertyExpr*>($1); }
     | entityTypeExpr { scanner.notImplemented(@$, "REMOVE of a label"); }
     ;
 
@@ -1388,7 +1394,7 @@ setSt
     ;
 
 setItem
-    : propertyExpr ASSIGN expr { $$ = SetItem::create(ast, static_cast<PropertyExpr*>($1), $3); LOC($$, @$); }
+    : variablePropertyExpr ASSIGN expr { $$ = SetItem::create(ast, static_cast<PropertyExpr*>($1), $3); LOC($$, @$); }
     | symbol ADD_ASSIGN expr { $$ = SetItem::create(ast, $1, $3); LOC($$, @$); }
     | entityTypeExpr { $$ = SetItem::create(ast, static_cast<EntityTypeExpr*>($1)); LOC($$, @$); }
     ;
@@ -1575,8 +1581,13 @@ atomicExpr
 
 labelTestOperand
     : propertyExpr { $$ = $1; }
-    | propertyLookupExpr { $$ = $1; }
-    | atomExpr { $$ = $1; }
+    | lookupOperand { $$ = $1; }
+    ;
+
+// Every operand of a property lookup but a variable, whose lookups qualifiedName reads
+lookupOperand
+    : atomExpr { $$ = $1; }
+    | lookupOperand DOT name { $$ = ParserUtils::createPropertyLookup(ast, $1, $3); LOC($$, @$); }
     | atomicExpr OBRACK expr CBRACK {
         $$ = IndexExpr::create(ast, $1, $3); LOC($$, @$);
       }
@@ -1600,30 +1611,17 @@ entityTypeExpr
 
 propertyExpr
     : qualifiedName DOT name { $1->addName($3); $$ = PropertyExpr::create(ast, $1); LOC($$, @$); }
+    ;
+
+variablePropertyExpr
+    : propertyExpr { $$ = $1; }
     | parenthesizedExpr DOT name {
-        // check whether the parenthesised expr is a valid thing for a property access
         $$ = ParserUtils::createParenthesizedPropertyAccess(ast, $1, $3);
 
         if (!$$) {
             scanner.syntaxError(@1, "Invalid property access. Only a variable can be parenthesized on the left of '.'");
         }
 
-        LOC($$, @$);
-      }
-    ;
-
-propertyLookupExpr
-    : functionInvocation DOT name {
-        Expr* call = FunctionInvocationExpr::create(ast, $1);
-        LOC(call, @1);
-        $$ = PropertyLookupExpr::create(ast, call, $3->getName());
-        LOC($$, @$);
-      }
-    | propertyLookupExpr DOT name { $$ = PropertyLookupExpr::create(ast, $1, $3->getName()); LOC($$, @$); }
-    | atomicExpr OBRACK expr CBRACK DOT name {
-        Expr* indexed = IndexExpr::create(ast, $1, $3);
-        LOC(indexed, SourceLocation::join(@1, @4));
-        $$ = PropertyLookupExpr::create(ast, indexed, $6->getName());
         LOC($$, @$);
       }
     ;
@@ -1644,6 +1642,7 @@ atomExpr
     | filterWith { $$ = $1; }
     | reduceExpr { $$ = $1; }
     | allReduceExpr { $$ = $1; }
+    | mapProjection { $$ = $1; }
     | functionInvocation { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
     | subqueryExist { $$ = $1; }
     | subqueryCount { $$ = $1; }
@@ -1937,7 +1936,15 @@ predicateRoot
     : %empty { $$ = ParserUtils::createNodePattern(ast, nullptr, nullptr, nullptr, nullptr); LOC($$, @$); }
     | whereClause { $$ = ParserUtils::createNodePattern(ast, nullptr, nullptr, nullptr, $1); LOC($$, @$); }
     | symbol whereClause { $$ = ParserUtils::createNodePattern(ast, $1, nullptr, nullptr, $2); LOC($$, @$); }
-    | symbol properties opt_whereClause { $$ = ParserUtils::createNodePattern(ast, $1, nullptr, $2, $3); LOC($$, @$); }
+    | symbol mapProjectionBody whereClause {
+        MapLiteral* properties = NodePattern::createProperties(ast, $2);
+        if (!properties) {
+            scanner.syntaxError(@2, "Invalid node pattern. Its properties are 'key: value' entries");
+        }
+
+        $$ = ParserUtils::createNodePattern(ast, $1, nullptr, properties, $3);
+        LOC($$, @$);
+      }
     | symbol labelExpression whereClause { $$ = ParserUtils::createNodePattern(ast, $1, $2, nullptr, $3); LOC($$, @$); }
     | symbol labelExpression properties opt_whereClause { $$ = ParserUtils::createNodePattern(ast, $1, $2, $3, $4); LOC($$, @$); }
     | labelExpression opt_properties opt_whereClause { $$ = ParserUtils::createNodePattern(ast, nullptr, $1, $2, $3); LOC($$, @$); }
@@ -1980,6 +1987,44 @@ allReduceExpr
     : ALLREDUCE OPAREN name ASSIGN expr COMMA name IN expr PIPE expr COMMA expr CPAREN {
         $$ = AllReduceExpr::create(ast, $3, $5, $7, $9, $11, $13);
         LOC($$, @$);
+      }
+    ;
+
+mapProjection
+    : symbol mapProjectionBody {
+        SymbolExpr* base = SymbolExpr::create(ast, $1);
+        LOC(base, @1);
+
+        $$ = MapProjectionExpr::create(ast, base, $2);
+        LOC($$, @$);
+      }
+    ;
+
+mapProjectionBody
+    : OBRACE CBRACE { $$ = MapProjectionExpr::Items {}; }
+    | OBRACE mapProjectionItems CBRACE { $$ = $2; }
+    ;
+
+mapProjectionItems
+    : mapProjectionItem { $$ = MapProjectionExpr::Items {$1}; }
+    | mapProjectionItems COMMA mapProjectionItem { $$ = $1; $$.push_back($3); }
+    ;
+
+mapProjectionItem
+    : DOT name {
+        $$ = MapProjectionExpr::Item {._kind = MapProjectionExpr::ItemKind::Property, ._key = $2};
+      }
+    | DOT MULT {
+        $$ = MapProjectionExpr::Item {._kind = MapProjectionExpr::ItemKind::AllProperties};
+      }
+    | name COLON expr {
+        $$ = MapProjectionExpr::Item {._kind = MapProjectionExpr::ItemKind::Literal, ._key = $1, ._value = $3};
+      }
+    | symbol {
+        SymbolExpr* variable = SymbolExpr::create(ast, $1);
+        LOC(variable, @1);
+
+        $$ = MapProjectionExpr::Item {._kind = MapProjectionExpr::ItemKind::Variable, ._key = $1, ._value = variable};
       }
     ;
 

@@ -152,3 +152,11 @@ add_call_v3_test(test_query_ir_logical_operator_over_unreached_cell LogicalOpera
 add_call_v3_test(test_query_ir_reduce_over_paths ReduceOverPathsTest.cpp)
 
 add_call_v3_test(test_query_ir_empty_list_unification EmptyListUnificationTest.cpp)
+
+# reduce and allReduce over the list a variable-length or quantified pattern binds.
+add_turing_test(test_query_ir_fold_over_pattern_list FoldOverPatternListTest.cpp)
+target_sources(test_query_ir_fold_over_pattern_list PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_fold_over_pattern_list PRIVATE ${IR_TEST_DIR})
+
+# allReduce over paths, with list, string and null accumulators, in every clause position.
+add_ir_tests(test_query_ir_all_reduce_composition AllReduceCompositionTest.cpp)

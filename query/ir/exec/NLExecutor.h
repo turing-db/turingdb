@@ -417,6 +417,13 @@ public:
     // Build one map per row (nl.make_map): row r of the result maps each key to what its
     // value column holds at r, as one contiguous run of the query's map buffer.
     static void runMakeMap(NLExecutionContext* context, NLFunctionData* data);
+
+    // Merge the maps of each row (nl.merge_maps), a later operand's entry replacing an
+    // earlier one's under the same key. @tparam Result is a MapView, or an optional one
+    // where an operand may hold no map.
+    template <typename Result>
+    static void runMergeMaps(NLExecutionContext* context, NLFunctionData* data);
+
     static void runStaticMapKey(NLExecutionContext* context, NLFunctionData* data);
     static void runDynamicMapKey(NLExecutionContext* context, NLFunctionData* data);
 
@@ -485,12 +492,12 @@ public:
                                          bool nullable,
                                          bool untypedNull);
 
-    // The entity siblings of the two above, for a selection whose branches are nodes or
-    // edges: an entity column carries its null in the ID rather than in an optional, so
-    // the reset writes the invalid ID and the write copies the branch's ID across
-    static NLCaseResetFn selectEntityCaseReset(NLChunkKind kind);
+    // The siblings of the two above for a selection whose branches are nodes, edges or
+    // paths: such a column carries its null in a value of its own rather than in an
+    // optional, so the reset writes that null and the write copies the branch's cell across
+    static NLCaseResetFn selectOwnNullCaseReset(NLChunkKind kind);
 
-    static NLCaseWriteFn selectEntityCaseWrite(NLChunkKind kind, bool untypedNull);
+    static NLCaseWriteFn selectOwnNullCaseWrite(NLChunkKind kind, bool untypedNull);
 
     // Lay a constant chunk's single value out over the driving relation's rows
     // (nl.broadcast_constant), so a fold that walks rows is handed the step's rows
@@ -678,7 +685,7 @@ public:
     static NLBroadcastConstantFunction selectConstantMapBroadcast();
     static NLBroadcastConstantFunction selectConstantCellBroadcast();
 
-    // The node, edge and path siblings, which ride the plain chunk their kind names
+    // The node, edge, path and walk siblings, which ride the plain chunk their kind names
     static NLBroadcastConstantFunction selectConstantPlainBroadcast(NLChunkKind kind, const Column* value);
 
     // The mask sibling, which lays the boolean of a constant out as flags
@@ -936,10 +943,12 @@ public:
                                                NLCollectFoldFunction& fold,
                                                NLCollectListEmitFunction& listEmit);
 
-    // The handlers a collect of a list column reads: the cells nest into a list of lists.
-    static void selectCollectListHandlers(bool distinctValues,
-                                          NLCollectFoldFunction& fold,
-                                          NLCollectListEmitFunction& listEmit);
+    // The handlers a collect of a list or a map column reads, @tparam Container being a
+    // ListView or a MapView: the cells nest into a list of lists or a list of maps.
+    template <typename Container>
+    static void selectCollectContainerHandlers(bool distinctValues,
+                                               NLCollectFoldFunction& fold,
+                                               NLCollectListEmitFunction& listEmit);
 
     // The handlers a collect of a type-erased column reads: each cell keeps the type its
     // tag names, and a cell tagged null is dropped as Cypher's collect drops a null.
@@ -947,9 +956,10 @@ public:
                                             NLCollectFoldFunction& fold,
                                             NLCollectListEmitFunction& listEmit);
 
-    static void selectCollectOptListHandlers(bool distinctValues,
-                                             NLCollectFoldFunction& fold,
-                                             NLCollectListEmitFunction& listEmit);
+    template <typename Container>
+    static void selectCollectOptContainerHandlers(bool distinctValues,
+                                                  NLCollectFoldFunction& fold,
+                                                  NLCollectListEmitFunction& listEmit);
     static void selectCollectOptTaggedHandlers(bool distinctValues,
                                                NLCollectFoldFunction& fold,
                                                NLCollectListEmitFunction& listEmit);

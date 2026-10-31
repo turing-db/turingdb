@@ -37,6 +37,9 @@ private:
 
     FunctionSignature* createFunction(std::string_view fullName);
 
+    // @param alias resolves to every signature of @param fullName, which codegen reads by that name
+    void addAlias(std::string_view alias, std::string_view fullName);
+
     // One overload per way of typing the arguments, position i taking any of positionTypes[i]
     void createOverloads(std::string_view fullName,
                          const std::vector<PossibleArgTypes>& positionTypes,

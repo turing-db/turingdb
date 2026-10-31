@@ -184,6 +184,11 @@ private:
     // not left in the loop body - just a record of which block is innermost.
     mlir::Block* _innermostLoopBody {nullptr};
 
+    // The region of an op over a list's elements, a fold, a hop or a computed unwind being
+    // lowered. Its op already sits in the block above, so an op lowered for the region into
+    // a block enclosing it must go ahead of that op, not at the end of the block.
+    mlir::Block* _innermostRegionBody {nullptr};
+
     // Defines the cardinality of the innermost loop, used for projection
     mlir::Value _innermostCardinality;
 
@@ -243,8 +248,8 @@ private:
     // over @param cardinality, or over a single row where it is null
     void lowerWithConstantsLaidOut(mlir::Operation& operation, mlir::Value cardinality, ChunkPredicate laysOut);
 
-    // Whether @param chunk is a constant node, edge, path or mask, which no kernel reads as
-    // a constant: every op reading one has it laid out over its rows first
+    // Whether @param chunk is a constant node, edge, path, walk or mask, which no kernel reads
+    // as a constant: every op reading one has it laid out over its rows first
     bool isConstantReadAsRows(mlir::Value chunk);
     bool readsConstantsAsRows(mlir::Operation& operation);
 
@@ -282,6 +287,7 @@ private:
     void lowerUnwindComputed(mlir::db::UnwindComputed unwind);
     void lowerMakeList(mlir::db::MakeList makeList);
     void lowerMakeMap(mlir::db::MakeMap makeMap);
+    void lowerMergeMaps(mlir::db::MergeMaps merge);
     void lowerRange(mlir::db::Range range);
     void lowerSubstring(mlir::db::Substring substring);
     void lowerSplit(mlir::db::Split split);
@@ -491,6 +497,11 @@ private:
     // Reads the null literal's chunk as a column of @param chunkType, holding one absent
     // value per row of it
     mlir::Value typedNullChunk(mlir::Value chunk, mlir::Type chunkType);
+
+    // The null literal laid out over rows is a column no kernel reads a value of, so an op
+    // reads it as the nullable column of @param valueElement it needs there. Any other
+    // @param chunk, the null constant among them, is handed back as it is.
+    mlir::Value laidOutNullAs(mlir::Value chunk, mlir::Type valueElement);
 
     // Lower a db.optional_match into an nl.optional_buffer, the pattern's own loop nest,
     // an nl.optional_collect at its deepest point and an nl.optional_drain loop yielding

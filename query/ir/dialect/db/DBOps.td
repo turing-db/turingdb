@@ -555,6 +555,34 @@ def MakeMap : TuringOp<"make_map", [Pure, ConstantThroughOperands]> {
 }
 
 /**
+* MergeMaps
+*/
+def MergeMaps : TuringOp<"merge_maps", [Pure, ConstantThroughOperands]> {
+  let summary = "Merge the maps of each row, a later operand's entry replacing an earlier one's";
+
+  let description = [{
+    The map projection `p {.*, name: 'x'}`: the properties of p, with the entry of a later
+    item replacing the one under the same key. Row r of the result holds every key the
+    operands' maps hold at row r, each under the value of the last operand holding it:
+
+      %m = db.merge_maps(%properties, %entries)
+             : (!db.column<none>, !db.column<!storage.map>) -> !db.column<none>
+
+    A row where an operand holds no map gets no map, as a function of a null is null. An
+    operand holding one map for every row is laid out over the rows during lowering. The
+    result is a map column, nullable where an operand is, resolved during lowering.
+  }];
+
+  let arguments = (ins Variadic<Column>:$maps);
+  let results   = (outs Column:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $maps `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+/**
 * StaticMapKey
 */
 def StaticMapKey : TuringOp<"static_map_key", [Pure, ConstantThroughOperands]> {
@@ -3173,7 +3201,7 @@ def ConstantOp : TuringOp<"constant", [Pure, ConstantLike, DeclareOpInterfaceMet
   let assemblyFormat = "`(` $value `)` attr-dict";
 }
 
-def BroadcastConstant : TuringOp<"broadcast_constant", [Pure]> {
+def BroadcastConstant : TuringOp<"broadcast_constant", [Pure, AllTypesMatch<["value", "result"]>]> {
   let summary = "Lay a constant column's single value out over the rows of a relation";
   let description = [{
     A constant column holds one value standing for every row rather than one per row,
@@ -3184,7 +3212,7 @@ def BroadcastConstant : TuringOp<"broadcast_constant", [Pure]> {
 
       %p = db.scan_nodes() : !db.column<!storage.node_id>
       %c = db.constant(1 : i64) : !db.column<i64>
-      %x = db.broadcast_constant(%c, %p) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<none>
+      %x = db.broadcast_constant(%c, %p) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<i64>
 
     It is what a WITH publishing constants alone emits: `MATCH (p:Person) WITH 1 AS x`
     publishes one row per Person, not the single row the literal is, so the statements
@@ -3195,11 +3223,9 @@ def BroadcastConstant : TuringOp<"broadcast_constant", [Pure]> {
     the constants are - `WITH 1 AS x WHERE x > 100`, whose one row the filter drops - so
     the value is laid out over that row:
 
-      %x = db.broadcast_constant(%c) : (!db.column<i64>) -> !db.column<none>
+      %x = db.broadcast_constant(%c) : (!db.column<i64>) -> !db.column<i64>
 
-    The result names the value's element type, or none for lowering to resolve it, as
-    for the arithmetic ops. Either way the rows are laid out as a nullable value column,
-    present in every row.
+    The result holds the value it lays out, so it has the value's type.
   }];
 
   // The driver is the only optional operand, so MLIR tells it from the value without
@@ -3481,18 +3507,25 @@ def Case : TuringOp<"case", [Pure, ConstantThroughOperands, AttrSizedOperandSegm
     A Cypher CASE is a db.lazy_case instead, which computes a branch only over the rows
     that reach it.
 
-    The result element type is resolved during lowering, as for the arithmetic ops: the
-    branches promote against each other into one nullable value column, or - when they are
-    all nodes, or all edges - into the entity column they already are, which carries the
-    null of an unmatched row in its ID. A selection walks rows, so - unlike the arithmetic
-    ops - it is not constant through its operands: the constants among them are laid out
-    over the driving relation during lowering.
+    The result is the one element every value holds, nullable unless it holds its own
+    null, the null literal holding whatever the others do. Nodes, edges and paths are
+    selected into the column they already are, which carries the null of an unmatched row
+    in a value of its own. A result of none is resolved during lowering, as for the
+    arithmetic ops: the branches promote against each other into one nullable value
+    column. A selection walks rows, so - unlike the arithmetic ops - it is not constant
+    through its operands: the constants among them are laid out over the driving relation
+    during lowering.
   }];
 
   let arguments = (ins Variadic<Column>:$conditions,
                        Variadic<Column>:$values,
                        Optional<Column>:$defaultValue);
   let results = (outs Column:$result);
+
+  let extraClassDeclaration = [{
+    // The value of every branch, then the default
+    void collectSelectedValues(::llvm::SmallVectorImpl<::mlir::Value>& values);
+  }];
 
   let hasVerifier = 1;
 
@@ -3535,13 +3568,18 @@ def LazyCase : TuringOp<"lazy_case", [Pure, ConstantThroughOperands]> {
     subject against each WHEN value as the condition. The subject is computed once over
     every row and, unless it is a constant, carried as the last column.
 
-    The result element type is resolved during lowering, as db.case's is.
+    The result is typed as db.case's is, over the values the value regions yield.
   }];
 
   let arguments = (ins Variadic<Column>:$columns_to_filter);
   let results   = (outs Column:$result);
 
   let regions = (region VariadicRegion<SizedRegion<1>>:$branches);
+
+  let extraClassDeclaration = [{
+    // The value each WHEN's value region yields, then the ELSE's
+    void collectSelectedValues(::llvm::SmallVectorImpl<::mlir::Value>& values);
+  }];
 
   let hasVerifier = 1;
 

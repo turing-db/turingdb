@@ -39,6 +39,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/SaveAndRestore.h"
 
+#include "DBColumnElement.h"
 #include "DBDialect.h"
 #include "DBOps.h"
 #include "DBPassPipeline.h"
@@ -102,6 +103,7 @@
 #include "expr/ListPredicateExpr.h"
 #include "expr/ReduceExpr.h"
 #include "expr/AllReduceExpr.h"
+#include "expr/MapProjectionExpr.h"
 #include "expr/ListExpr.h"
 #include "expr/ListSliceExpr.h"
 #include "expr/LiteralExpr.h"
@@ -1058,13 +1060,10 @@ void DBProgramGenerator::rebindYieldedColumn(const VarDecl* decl, mlir::TypedVal
 }
 
 void DBProgramGenerator::rebindNamedPath(const VarDecl* decl, mlir::Value column) {
-    const bool namesAPath = _part._namedPaths.contains(decl) || _part._namedPathWalks.contains(decl);
-    if (!namesAPath) {
+    if (!_part._namedPaths.contains(decl)) {
         return;
     }
 
-    // The column is a built path now, no longer the walk's handle
-    _part._namedPathWalks.erase(decl);
     _part._namedPaths[decl] = column;
 }
 
@@ -1286,6 +1285,16 @@ mlir::Value DBProgramGenerator::translateMapOfColumns(const MapLiteral* map) {
 
     for (const auto& [key, valueExpr] : *map) {
         entries.emplace_back(key->getName(), valueExpr);
+    }
+
+    return emitMakeMap(entries);
+}
+
+mlir::Value DBProgramGenerator::emitMakeMap(llvm::SmallVectorImpl<std::pair<std::string_view, const Expr*>>& entries) {
+    if (entries.empty()) {
+        mlir::db::ConstantOp empty = _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(),
+                                                                             _opBuilder.getDictionaryAttr({}));
+        return empty.getResult();
     }
 
     // Sorted on key name, as the DictionaryAttr of a constant map is
@@ -1797,11 +1806,6 @@ mlir::Value DBProgramGenerator::listColumnOf(const VarDecl* decl, mlir::Value co
         return column;
     }
 
-    const auto walkIt = _part._namedPathWalks.find(decl);
-    if (walkIt != end(_part._namedPathWalks)) {
-        return namedPathColumn(walkIt->second);
-    }
-
     // A path a WITH published carries no binding of its own: it reads as its edges
     PartScope::PathBinding binding;
     const auto bindingIt = _part._pathBindings.find(decl);
@@ -1841,9 +1845,8 @@ mlir::Value DBProgramGenerator::listColumnOf(const VarDecl* decl, mlir::Value co
 mlir::Value DBProgramGenerator::columnLeavingScope(const VarDecl* decl, mlir::Value column) {
     const auto bindingIt = _part._pathBindings.find(decl);
     const bool readsOtherThanItsEdges = bindingIt != end(_part._pathBindings) && !bindingIt->second.readsAsItsEdges();
-    const bool namesAWalk = _part._namedPathWalks.contains(decl);
 
-    return readsOtherThanItsEdges || namesAWalk ? listColumnOf(decl, column) : column;
+    return readsOtherThanItsEdges ? listColumnOf(decl, column) : column;
 }
 
 void DBProgramGenerator::expandPathItems(const Projection* projection, llvm::SmallVectorImpl<mlir::Value>& projected) {
@@ -1855,28 +1858,6 @@ void DBProgramGenerator::expandPathItems(const Projection* projection, llvm::Sma
         const mlir::Value column = projected[itemIndex];
         if (isPathColumn(column)) {
             projected[itemIndex] = listColumnOf(declOfReturnItem(item), column);
-        }
-
-        itemIndex++;
-    }
-}
-
-void DBProgramGenerator::buildNamedPathItems(const Projection* projection, llvm::SmallVectorImpl<mlir::Value>& projected) {
-    if (_part._namedPathWalks.empty()) {
-        return;
-    }
-
-    const auto& items = projection->items();
-    bioassert(projected.size() == items.size(), "One projected column per return item expected");
-
-    size_t itemIndex = 0;
-    for (const Projection::ReturnItem& item : items) {
-        const VarDecl* decl = declOfReturnItem(item);
-        const mlir::Value column = projected[itemIndex];
-
-        const bool namesAWalk = decl && _part._namedPathWalks.contains(decl);
-        if (namesAWalk && isPathColumn(column)) {
-            projected[itemIndex] = listColumnOf(decl, column);
         }
 
         itemIndex++;
@@ -2750,18 +2731,15 @@ void DBProgramGenerator::filterConstantScope(mlir::Value predicate) {
     }
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
-    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
     const mlir::Value noDriver;
 
-    const mlir::Value mask =
-        _opBuilder.create<mlir::db::BroadcastConstant>(loc, noneType, predicate, noDriver).getResult();
+    const mlir::Value mask = _opBuilder.create<mlir::db::BroadcastConstant>(loc, predicate, noDriver).getResult();
 
     llvm::SmallVector<mlir::Value> columnsToFilter;
     llvm::SmallVector<mlir::Type> resultTypes;
     for (const VariableDependency* var : constantVars) {
         const mlir::Value column = _part._varMap.at(var).back();
-        const mlir::Value laidOut =
-            _opBuilder.create<mlir::db::BroadcastConstant>(loc, noneType, column, noDriver).getResult();
+        const mlir::Value laidOut = _opBuilder.create<mlir::db::BroadcastConstant>(loc, column, noDriver).getResult();
 
         columnsToFilter.push_back(laidOut);
         resultTypes.push_back(laidOut.getType());
@@ -3680,14 +3658,23 @@ void DBProgramGenerator::generateNamedPaths(const MatchStmt* matchStmt) {
 }
 
 void DBProgramGenerator::generateNamedPath(const PatternElement* element, const VarDecl* pathDecl) {
-    // A walk already holds its path: the rows carry its handles, and p is another name for
-    // that column until something reads it
+    // Over one walk the path is built from its seed and its handles alone, the form
+    // fuse_path_elements matches
     if (const EdgePattern* walked = singleQuantifiedRelationship(element)) {
         const auto bindingIt = _part._pathBindings.find(walked->getDecl());
         bioassert(bindingIt != end(_part._pathBindings), "Quantified relationship without a path column");
 
         const PartScope::PathBinding& binding = bindingIt->second;
-        _part._namedPathWalks[pathDecl] = PartScope::NamedPathWalk {binding._seed, binding._path, binding._reversed};
+        const mlir::Value seedColumn = _part._varMap.at(binding._seed).back();
+        const mlir::Value pathColumn = _part._varMap.at(binding._path).back();
+
+        // A walk taken against the pattern ends on the node the pattern opens with, so its
+        // hops come first and the node it seeded from is the element's last entity
+        if (binding._reversed) {
+            _part._namedPaths[pathDecl] = makePathColumn({pathColumn, seedColumn}, {0});
+        } else {
+            _part._namedPaths[pathDecl] = makePathColumn({seedColumn, pathColumn});
+        }
 
         return;
     }
@@ -3747,26 +3734,6 @@ mlir::Value DBProgramGenerator::pathHandleColumn(const VarDecl* edgeDecl) {
     bioassert(bindingIt != end(_part._pathBindings), "Quantified relationship without a path column");
 
     return _part._varMap.at(bindingIt->second._path).back();
-}
-
-mlir::Value DBProgramGenerator::namedPathColumn(const PartScope::NamedPathWalk& walk) {
-    const mlir::Value seedColumn = _part._varMap.at(walk._seed).back();
-    const mlir::Value pathColumn = _part._varMap.at(walk._path).back();
-
-    // A walk taken against the pattern ends on the node the pattern opens with, so its hops
-    // come first and the node it seeded from is the element's last entity
-    llvm::SmallVector<mlir::Value, 2> entities;
-    mlir::ArrayAttr reversedPaths;
-    if (walk._reversed) {
-        entities = {pathColumn, seedColumn};
-        reversedPaths = _opBuilder.getI64ArrayAttr({0});
-    } else {
-        entities = {seedColumn, pathColumn};
-    }
-
-    const mlir::db::ColumnType pathType = allocColumnType(mlir::storage::PathType::get(_mlirCtxt));
-
-    return _opBuilder.create<mlir::db::MakePath>(_opBuilder.getUnknownLoc(), pathType, entities, reversedPaths).getResult();
 }
 
 void DBProgramGenerator::generateMatchOrderBy(const MatchStmt* matchStmt) {
@@ -5078,11 +5045,6 @@ mlir::Value DBProgramGenerator::resolveEntityColumn(const VarDecl* decl) {
         return createdIt->second._column;
     }
 
-    const auto walkIt = _part._namedPathWalks.find(decl);
-    if (walkIt != end(_part._namedPathWalks)) {
-        return namedPathColumn(walkIt->second);
-    }
-
     const auto namedPathIt = _part._namedPaths.find(decl);
     if (namedPathIt != end(_part._namedPaths)) {
         return namedPathIt->second;
@@ -5337,9 +5299,7 @@ mlir::Value DBProgramGenerator::alignConstantToDriver(mlir::Value column) {
         return column;
     }
 
-    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
-
-    return _opBuilder.create<mlir::db::BroadcastConstant>(_opBuilder.getUnknownLoc(), noneType, column, driver).getResult();
+    return _opBuilder.create<mlir::db::BroadcastConstant>(_opBuilder.getUnknownLoc(), column, driver).getResult();
 }
 
 void DBProgramGenerator::alignConstantOperandsToDriver(mlir::Block::iterator first, mlir::Block::iterator last) {
@@ -5351,7 +5311,6 @@ void DBProgramGenerator::alignConstantOperandsToDriver(mlir::Block::iterator fir
     const auto isConstant = [this](mlir::Value value) { return yieldsConstantColumn(value, _constantColumns); };
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
-    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
     const mlir::OpBuilder::InsertionGuard insertionGuard(_opBuilder);
 
     for (mlir::Operation& op : llvm::make_range(first, last)) {
@@ -5363,7 +5322,7 @@ void DBProgramGenerator::alignConstantOperandsToDriver(mlir::Block::iterator fir
 
         _opBuilder.setInsertionPoint(&op);
         for (mlir::OpOperand& operand : op.getOpOperands()) {
-            operand.set(_opBuilder.create<mlir::db::BroadcastConstant>(loc, noneType, operand.get(), driver).getResult());
+            operand.set(_opBuilder.create<mlir::db::BroadcastConstant>(loc, operand.get(), driver).getResult());
         }
     }
 }
@@ -5581,7 +5540,6 @@ void DBProgramGenerator::generateOutput(const Projection* projection, const Unio
 
     broadcastConstantProjection(outputted);
 
-    buildNamedPathItems(projection, outputted);
     expandPathItems(projection, outputted);
 
     translateProjectionTail(projection, variableColumns, outputted, {});
@@ -5601,13 +5559,12 @@ void DBProgramGenerator::generateOutput(const Projection* projection, const Unio
 
 void DBProgramGenerator::broadcastUnionProjection(llvm::SmallVectorImpl<mlir::Value>& projected) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
-    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
     const mlir::Value driver = resolveProjectionDriver(projected);
 
     for (mlir::Value& column : projected) {
         if (yieldsConstantColumn(column, _constantColumns)) {
-            column = _opBuilder.create<mlir::db::BroadcastConstant>(loc, noneType, column, driver).getResult();
+            column = _opBuilder.create<mlir::db::BroadcastConstant>(loc, column, driver).getResult();
         }
     }
 }
@@ -5714,8 +5671,6 @@ void DBProgramGenerator::publishProjection(const Projection* projection,
     translateProjection(projection, itemColumns, projected, names);
 
     broadcastConstantProjection(projected);
-
-    buildNamedPathItems(projection, projected);
 
     if (with && !projection->isAggregate()) {
         collectFilterColumns(with->filterImports(), variableColumns, carriedColumns);
@@ -7082,10 +7037,9 @@ void DBProgramGenerator::broadcastConstantProjection(llvm::SmallVectorImpl<mlir:
     }
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
-    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
     for (mlir::Value& column : projected) {
-        column = _opBuilder.create<mlir::db::BroadcastConstant>(loc, noneType, column, driver).getResult();
+        column = _opBuilder.create<mlir::db::BroadcastConstant>(loc, column, driver).getResult();
     }
 }
 
@@ -7279,17 +7233,13 @@ void DBProgramGenerator::forEachVariableColumn(const VariableColumnBinding& bind
         return !binding._path || binding._path->getDecl() == groupDecl;
     };
 
-    // An occurrence of a named edge, and the walk a group variable or a named path stands
-    // for, holds a column the query names below, and is bound under that name alone
+    // An occurrence of a named edge, and the walk a group variable stands for, holds a column
+    // the query names below, and is bound under that name alone
     llvm::SmallPtrSet<const VariableDependency*, 8> namedBelow;
     for (const auto& [decl, vars] : _vdg.edgeIdentities()) {
         if (!vars.empty() && holdsColumn(vars.front())) {
             namedBelow.insert(vars.begin(), vars.end());
         }
-    }
-
-    for (const auto& [pathDecl, walk] : _part._namedPathWalks) {
-        namedBelow.insert(walk._path);
     }
 
     for (const auto& [groupDecl, binding] : _part._pathBindings) {
@@ -7320,13 +7270,7 @@ void DBProgramGenerator::forEachVariableColumn(const VariableColumnBinding& bind
         bind(createdDecl, createdDecl->getName(), created._column);
     }
 
-    // So is the path a `MATCH p = ...` named, declared by its pattern element. One over a
-    // walk is another name for the handle column that walk bound, and is built where it is
-    // read; any other shape was built when its element was matched.
-    for (const auto& [pathDecl, walk] : _part._namedPathWalks) {
-        bind(pathDecl, pathDecl->getName(), _part._varMap.at(walk._path).back());
-    }
-
+    // So is the path a `MATCH p = ...` named, declared by its pattern element
     for (const auto& [pathDecl, pathColumn] : _part._namedPaths) {
         bind(pathDecl, pathDecl->getName(), pathColumn);
     }
@@ -7971,6 +7915,8 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
             }
 
             bioassert(bound, "Symbol refers to unknown variable: {}", varName);
+
+            _part._exprMap[expr] = readWalkEntities(expr, _part._exprMap.at(expr));
         }
         break;
 
@@ -8060,6 +8006,12 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
         case Expr::Kind::ALL_REDUCE: {
             const AllReduceExpr* allReduce = static_cast<const AllReduceExpr*>(expr);
             translateAllReduceExpr(expr, allReduce);
+        }
+        break;
+
+        case Expr::Kind::MAP_PROJECTION: {
+            const MapProjectionExpr* projection = static_cast<const MapProjectionExpr*>(expr);
+            translateMapProjectionExpr(expr, projection);
         }
         break;
 
@@ -8248,6 +8200,58 @@ void DBProgramGenerator::translateAllReduceExpr(const Expr* expr, const AllReduc
     dropUnreadCarriedColumns(allReduceOp, allReduceOp.getColumnsToFilter());
 
     _part._exprMap[expr] = allReduceOp.getResult();
+}
+
+void DBProgramGenerator::translateMapProjectionExpr(const Expr* expr, const MapProjectionExpr* projection) {
+    if (projection->getType() == EvaluatedType::Null) {
+        _part._exprMap[expr] = nullConstantColumn();
+        return;
+    }
+
+    const mlir::Value base = getOrTranslateExprColumn(projection->getBase());
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    llvm::SmallVector<mlir::Value, 4> maps;
+    llvm::SmallVector<std::pair<std::string_view, const Expr*>> entries;
+
+    for (const MapProjectionExpr::Item& item : projection->getItems()) {
+        if (item._kind == MapProjectionExpr::ItemKind::AllProperties) {
+            if (!entries.empty()) {
+                maps.push_back(emitMakeMap(entries));
+                entries.clear();
+            }
+
+            maps.push_back(_opBuilder.create<mlir::db::PropertyMap>(loc, noneType, base).getResult());
+            continue;
+        }
+
+        const std::string_view key = item._key->getName();
+        const auto entryIt = std::ranges::find_if(entries, [key](const auto& entry) {
+            return entry.first == key;
+        });
+
+        if (entryIt != entries.end()) {
+            entryIt->second = item._value;
+        } else {
+            entries.emplace_back(key, item._value);
+        }
+    }
+
+    if (!entries.empty() || maps.empty()) {
+        maps.push_back(emitMakeMap(entries));
+    }
+
+    mlir::Value map = maps.front();
+    if (maps.size() > 1) {
+        map = _opBuilder.create<mlir::db::MergeMaps>(loc, noneType, maps).getResult();
+    }
+
+    const mlir::Value holdsABase = _opBuilder.create<mlir::db::IsNotNullOp>(loc, boolType, base).getResult();
+
+    _part._exprMap[expr] = createCase(mlir::ValueRange {holdsABase}, mlir::ValueRange {map}, mlir::Value {});
 }
 
 void DBProgramGenerator::generateFoldRegion(mlir::Region& region,
@@ -8942,7 +8946,13 @@ void DBProgramGenerator::translateCaseExpr(const Expr* expr, const CaseExpr* cas
 
     dropUnreadCarriedColumns(caseOp, caseOp.getColumnsToFilter());
 
-    _part._exprMap[expr] = caseOp.getResult();
+    llvm::SmallVector<mlir::Value> selected;
+    caseOp.collectSelectedValues(selected);
+
+    mlir::Value result = caseOp.getResult();
+    result.setType(allocColumnType(selectedColumnElement(_mlirCtxt, selected)));
+
+    _part._exprMap[expr] = result;
 }
 
 void DBProgramGenerator::generateCaseRegion(mlir::Region& region,
@@ -9465,6 +9475,21 @@ mlir::Value DBProgramGenerator::nullConstantColumn() {
     return _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(), resultType, valueAttr).getResult();
 }
 
+mlir::Value DBProgramGenerator::createCase(mlir::ValueRange conditions, mlir::ValueRange values, mlir::Value defaultValue) {
+    llvm::SmallVector<mlir::Value> selected(values.begin(), values.end());
+    if (defaultValue) {
+        selected.push_back(defaultValue);
+    }
+
+    const mlir::db::ColumnType resultType = allocColumnType(selectedColumnElement(_mlirCtxt, selected));
+
+    return _opBuilder.create<mlir::db::Case>(_opBuilder.getUnknownLoc(),
+                                             resultType,
+                                             conditions,
+                                             values,
+                                             defaultValue).getResult();
+}
+
 mlir::Value DBProgramGenerator::constantBool(bool value) {
     const mlir::TypedAttr valueAttr = _opBuilder.getBoolAttr(value);
     const mlir::db::ColumnType resultType = allocColumnType(valueAttr.getType());
@@ -9867,11 +9892,9 @@ mlir::Value DBProgramGenerator::translateEntityTypeExpr(const EntityTypeExpr* ty
     const bool writtenTypesUnknown = written && !(isNode ? written->_labelsKnown : written->_edgeTypeKnown);
     const bool boundAtRuntime = labelExpr->holdsParameter() || writtenTypesUnknown;
     if (writtenTypesKnown && !boundAtRuntime) {
-        const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
         const mlir::Value answer = constantBool(writtenEntityPasses(*written, labelExpr, isNode));
 
         return _opBuilder.create<mlir::db::BroadcastConstant>(_opBuilder.getUnknownLoc(),
-                                                              noneType,
                                                               answer,
                                                               resolveEntityColumn(entityDecl)).getResult();
     }
@@ -10073,9 +10096,7 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
     const Expr* const pathExpr = args && args->size() == 1 ? args->front() : nullptr;
     const bool readsANamedPath = pathExpr && pathExpr->getType() == EvaluatedType::GraphPath;
     if (readsANamedPath) {
-        // Beside `RETURN p` the path rides the handle column of its walk, which reads as
-        // the entities it runs through
-        const mlir::Value path = readWalkEntities(pathExpr, translateArg(pathExpr));
+        const mlir::Value path = translateArg(pathExpr);
 
         if (funcName == "length") {
             _part._exprMap[expr] = pathElementsColumn(path, mlir::storage::PathElementsKind::Length);
@@ -10285,7 +10306,6 @@ void DBProgramGenerator::translateCoalesce(const Expr* expr, const ExprChain* ar
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
-    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
     const size_t branchCount = arguments.size() - 1;
 
@@ -10303,12 +10323,7 @@ void DBProgramGenerator::translateCoalesce(const Expr* expr, const ExprChain* ar
 
     const llvm::ArrayRef<mlir::Value> branches = llvm::ArrayRef<mlir::Value>(arguments).drop_back();
 
-    _part._exprMap[expr] = _opBuilder.create<mlir::db::Case>(loc,
-                                                             noneType,
-                                                             conditions,
-                                                             branches,
-                                                             arguments.back())
-                               .getResult();
+    _part._exprMap[expr] = createCase(conditions, branches, arguments.back());
 }
 
 mlir::db::Collect DBProgramGenerator::createCollect(llvm::ArrayRef<mlir::Value> keyColumns,
@@ -10360,18 +10375,34 @@ mlir::db::Collect DBProgramGenerator::createCollect(llvm::ArrayRef<mlir::Value> 
     return collectOp;
 }
 
-void DBProgramGenerator::emitKeylessCollect(llvm::ArrayRef<const FunctionInvocationExpr*> collectExprs,
-                                            llvm::ArrayRef<AggregateArguments> collectArguments) {
+void DBProgramGenerator::emitKeylessCollect(llvm::ArrayRef<const FunctionInvocationExpr*> aggregateExprs,
+                                            llvm::ArrayRef<AggregateArguments> arguments) {
+    llvm::SmallVector<const FunctionInvocationExpr*> collectExprs;
     llvm::SmallVector<mlir::Value> valueColumns;
     llvm::SmallVector<mlir::Value> percentileColumns;
     llvm::SmallVector<std::optional<size_t>> percentileIndices;
 
-    for (const AggregateArguments& arguments : collectArguments) {
-        valueColumns.push_back(arguments._values);
+    llvm::SmallVector<const FunctionInvocationExpr*> reductionExprs;
+    llvm::SmallVector<mlir::Value> aggregateColumns;
+    llvm::SmallVector<mlir::storage::GroupAggregateKind> aggregateKinds;
 
-        if (arguments._rowPercentile) {
+    for (size_t aggregateIndex = 0; aggregateIndex < aggregateExprs.size(); aggregateIndex++) {
+        const FunctionInvocationExpr* aggregateExpr = aggregateExprs[aggregateIndex];
+        const AggregateArguments& aggregateArguments = arguments[aggregateIndex];
+
+        if (!gathersItsValues(aggregateExpr)) {
+            reductionExprs.push_back(aggregateExpr);
+            aggregateColumns.push_back(aggregateArguments._values);
+            aggregateKinds.push_back(groupAggregateKind(aggregateExpr->getFunctionInvocation()));
+            continue;
+        }
+
+        collectExprs.push_back(aggregateExpr);
+        valueColumns.push_back(aggregateArguments._values);
+
+        if (aggregateArguments._rowPercentile) {
             percentileIndices.push_back(percentileColumns.size());
-            percentileColumns.push_back(arguments._rowPercentile);
+            percentileColumns.push_back(aggregateArguments._rowPercentile);
         } else {
             percentileIndices.push_back(std::nullopt);
         }
@@ -10380,16 +10411,19 @@ void DBProgramGenerator::emitKeylessCollect(llvm::ArrayRef<const FunctionInvocat
     llvm::SmallVector<int64_t> distinctValues;
     collectDistinctValueIndices(collectExprs, distinctValues);
 
-    const llvm::SmallVector<mlir::storage::GroupAggregateKind> percentileKinds(percentileColumns.size(),
-                                                                               mlir::storage::GroupAggregateKind::First);
+    aggregateColumns.append(percentileColumns.begin(), percentileColumns.end());
+    aggregateKinds.append(percentileColumns.size(), mlir::storage::GroupAggregateKind::First);
 
-    mlir::db::Collect collectOp = createCollect({}, valueColumns, distinctValues, percentileColumns, percentileKinds);
+    mlir::db::Collect collectOp = createCollect({}, valueColumns, distinctValues, aggregateColumns, aggregateKinds);
     const mlir::ResultRange results = collectOp.getResults();
 
-    for (size_t collectIndex = 0; collectIndex < collectExprs.size(); collectIndex++) {
+    const size_t collectCount = collectExprs.size();
+    const size_t reductionCount = reductionExprs.size();
+
+    for (size_t collectIndex = 0; collectIndex < collectCount; collectIndex++) {
         const FunctionInvocationExpr* collectExpr = collectExprs[collectIndex];
         const std::optional<size_t> percentileIndex = percentileIndices[collectIndex];
-        const mlir::Value groupPercentile = percentileIndex ? results[collectExprs.size() + *percentileIndex] : mlir::Value {};
+        const mlir::Value groupPercentile = percentileIndex ? results[collectCount + reductionCount + *percentileIndex] : mlir::Value {};
         const mlir::Value reducedColumn = reduceGatheredValues(collectExpr->getFunctionInvocation(),
                                                                results[collectIndex],
                                                                groupPercentile);
@@ -10403,6 +10437,43 @@ void DBProgramGenerator::emitKeylessCollect(llvm::ArrayRef<const FunctionInvocat
             _part._projectedColumns[collectDecl] = reducedColumn;
         }
     }
+
+    for (size_t reductionIndex = 0; reductionIndex < reductionCount; reductionIndex++) {
+        _part._exprMap[reductionExprs[reductionIndex]] = results[collectCount + reductionIndex];
+    }
+}
+
+mlir::storage::GroupAggregateKind DBProgramGenerator::groupAggregateKind(const FunctionInvocation* invocation) const {
+    const std::string_view funcName = invocation->getSignature()->getFullName();
+    const Expr* argExpr = invocation->getArguments()->front();
+
+    // Dropping repeated values cannot move an extremum, so min(DISTINCT x) is min(x)
+    // and takes the plain kind. The others reduce each of a group's distinct values
+    // once, which is a kind of its own, spelled as the function's name with the
+    // modifier appended
+    const bool isExtremum = funcName == "min" || funcName == "max";
+    const bool reducesDistinctValues = invocation->isDistinct() && !isExtremum;
+
+    const bool countsRows = argExpr->getType() == EvaluatedType::Wildcard;
+
+    // count(*) reads no value, so a null of the column it is anchored on is a row
+    // all the same: that is a kind of its own
+    std::string kindName {funcName};
+    std::ranges::transform(kindName, kindName.begin(), [](unsigned char letter) {
+        return static_cast<char>(tolower(letter));
+    });
+    if (countsRows) {
+        kindName += "_rows";
+    } else if (reducesDistinctValues) {
+        kindName += "_distinct";
+    }
+
+    const std::optional<mlir::storage::GroupAggregateKind> kind = mlir::storage::symbolizeGroupAggregateKind(kindName);
+    if (!kind) {
+        throwError(fmt::format("Unsupported aggregate function: {}", funcName), argExpr);
+    }
+
+    return *kind;
 }
 
 mlir::Value DBProgramGenerator::reduceGatheredValues(const FunctionInvocation* invocation,
@@ -10448,16 +10519,10 @@ mlir::Value DBProgramGenerator::translateRowPercentile(const FunctionInvocation*
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
-    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
     const mlir::Value holdsAValue = _opBuilder.create<mlir::db::IsNotNullOp>(loc, boolType, valueColumn).getResult();
 
-    return _opBuilder.create<mlir::db::Case>(loc,
-                                             noneType,
-                                             mlir::ValueRange {holdsAValue},
-                                             mlir::ValueRange {percentile},
-                                             mlir::Value {})
-        .getResult();
+    return createCase(mlir::ValueRange {holdsAValue}, mlir::ValueRange {percentile}, mlir::Value {});
 }
 
 void DBProgramGenerator::generateKeylessAggregates(const Projection* projection) {
@@ -10481,26 +10546,17 @@ void DBProgramGenerator::generateKeylessAggregates(const Projection* projection)
                                     arguments[aggregateIndex]);
     }
 
-    llvm::SmallVector<const FunctionInvocationExpr*> collectExprs;
-    llvm::SmallVector<AggregateArguments> collectArguments;
-    for (size_t aggregateIndex = 0; aggregateIndex < aggregateExprs.size(); aggregateIndex++) {
-        if (gathersItsValues(aggregateExprs[aggregateIndex])) {
-            collectExprs.push_back(aggregateExprs[aggregateIndex]);
-            collectArguments.push_back(arguments[aggregateIndex]);
-        }
-    }
+    const bool gathersValues = llvm::any_of(aggregateExprs, [](const FunctionInvocationExpr* aggregateExpr) {
+        return gathersItsValues(aggregateExpr);
+    });
 
-    const bool collectsSeveralLists = collectExprs.size() > 1;
-    if (collectsSeveralLists) {
-        emitKeylessCollect(collectExprs, collectArguments);
+    if (gathersValues) {
+        emitKeylessCollect(aggregateExprs, arguments);
+        return;
     }
 
     for (size_t aggregateIndex = 0; aggregateIndex < aggregateExprs.size(); aggregateIndex++) {
         const FunctionInvocationExpr* aggregateExpr = aggregateExprs[aggregateIndex];
-        if (collectsSeveralLists && gathersItsValues(aggregateExpr)) {
-            continue;
-        }
-
         emitAggregate(aggregateExpr, aggregateExpr->getFunctionInvocation(), arguments[aggregateIndex]);
     }
 }
@@ -10696,36 +10752,12 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
             continue;
         }
 
-        // Dropping repeated values cannot move an extremum, so min(DISTINCT x) is min(x)
-        // and takes the plain kind. The others reduce each of a group's distinct values
-        // once, which is a kind of its own, spelled as the function's name with the
-        // modifier appended
-        const bool isExtremum = funcName == "min" || funcName == "max";
-        const bool reducesDistinctValues = invocation->isDistinct() && !isExtremum;
-
-        const bool countsRows = argExpr->getType() == EvaluatedType::Wildcard;
-
-        // count(*) reads no value, so a null of the column it is anchored on is a row
-        // all the same: that is a kind of its own
-        std::string kindName {funcName};
-        std::ranges::transform(kindName, kindName.begin(), [](unsigned char letter) {
-            return static_cast<char>(tolower(letter));
-        });
-        if (countsRows) {
-            kindName += "_rows";
-        } else if (reducesDistinctValues) {
-            kindName += "_distinct";
-        }
-
-        const std::optional<mlir::storage::GroupAggregateKind> kind = mlir::storage::symbolizeGroupAggregateKind(kindName);
-        if (!kind) {
-            throwError(fmt::format("Unsupported aggregate function: {}", funcName), argExpr);
-        }
+        const mlir::storage::GroupAggregateKind kind = groupAggregateKind(invocation);
 
         const mlir::Value inputColumn = translateAggregateInput(argExpr, &variableColumns);
 
         aggInputColumns.push_back(readWalkEntities(argExpr, inputColumn));
-        aggKinds.push_back(*kind);
+        aggKinds.push_back(kind);
         aggFuncExprs.push_back(funcExpr);
     }
 

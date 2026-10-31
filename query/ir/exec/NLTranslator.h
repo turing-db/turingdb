@@ -1089,6 +1089,7 @@ private:
     template <typename Function, typename StringEndOp>
     void translateStringEnd(StringEndOp stringEnd, NLStmtContainer* body);
     void translateMakeMap(mlir::nl::MakeMap makeMap, NLStmtContainer* body);
+    void translateMergeMaps(mlir::nl::MergeMaps merge, NLStmtContainer* body);
     void translateStaticMapKey(mlir::nl::StaticMapKey mapKey, NLStmtContainer* body);
     void translateDynamicMapKey(mlir::nl::DynamicMapKey mapKey, NLStmtContainer* body);
 

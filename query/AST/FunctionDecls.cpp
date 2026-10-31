@@ -83,6 +83,8 @@ void FunctionDecls::initDefault() {
     idOfCell->setArguments({EvaluatedType::Any});
     idOfCell->setReturnTypes({{EvaluatedType::Integer}});
 
+    addAlias("elementId", "id");
+
     FunctionSignature* keysNodes = createFunction("keys");
     keysNodes->setArguments({EvaluatedType::NodePattern});
     keysNodes->setReturnTypes({{EvaluatedType::List}});
@@ -227,6 +229,12 @@ void FunctionDecls::initDefault() {
     collectLists->setReturnTypes({{EvaluatedType::List}});
     collectLists->setIsAggregate(true);
     collectLists->setCollectsItsArgument(true);
+
+    FunctionSignature* collectMaps = createFunction("collect");
+    collectMaps->setArguments({EvaluatedType::Map});
+    collectMaps->setReturnTypes({{EvaluatedType::List}});
+    collectMaps->setIsAggregate(true);
+    collectMaps->setCollectsItsArgument(true);
 
     // A type-erased cell collects too: the list gathers the values the cells hold, each
     // keeping its own type, so the list is homogeneous in nothing and hands tagged
@@ -861,6 +869,17 @@ FunctionSignature* FunctionDecls::createFunction(std::string_view fullName) {
     _nameMap[foldedName].push_back(ptr);
 
     return ptr;
+}
+
+void FunctionDecls::addAlias(std::string_view alias, std::string_view fullName) {
+    std::string foldedAlias;
+    foldCase(alias, foldedAlias);
+
+    std::string foldedName;
+    foldCase(fullName, foldedName);
+
+    const FunctionSignatures& signatures = _nameMap.at(foldedName);
+    _nameMap[foldedAlias] = signatures;
 }
 
 void FunctionDecls::createOverloads(std::string_view fullName,

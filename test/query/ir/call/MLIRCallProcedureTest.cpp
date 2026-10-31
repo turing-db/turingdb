@@ -1092,8 +1092,8 @@ constexpr const char* labelsConstantProgram = R"mlir(
 func.func @main() {
   %label = db.call_procedure("db.labels", {}, {}) yields ["label"] : () -> !db.column<none>
   %c = db.constant(5 : i64)
-  %rows = db.broadcast_constant(%c, %label) : (!db.column<i64>, !db.column<none>) -> !db.column<none>
-  db.output(%rows) : !db.column<none>
+  %rows = db.broadcast_constant(%c, %label) : (!db.column<i64>, !db.column<none>) -> !db.column<i64>
+  db.output(%rows) : !db.column<i64>
   return
 }
 )mlir";

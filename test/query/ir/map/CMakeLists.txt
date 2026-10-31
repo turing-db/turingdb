@@ -72,3 +72,9 @@ target_include_directories(test_query_ir_null_inside_value_equality PRIVATE ${IR
 add_call_v3_test(test_query_ir_map_holding_a_node MapHoldingANodeTest.cpp)
 
 add_call_v3_test(test_query_ir_map_holding_a_path MapHoldingAPathTest.cpp)
+
+# A map projection: the properties of a node or an edge, picked by name, as a map.
+add_ir_tests(test_query_ir_map_projection MapProjectionTest.cpp)
+
+# A property lookup on a map literal.
+add_ir_tests(test_query_ir_map_literal_lookup MapLiteralLookupTest.cpp)

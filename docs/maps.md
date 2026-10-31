@@ -90,6 +90,30 @@ first use (`ListContainer::getMaps`). A `MapContainer` holds its list values in 
 by value, so the two types nest, but the objects form a tree. `EncodedList` encodes a map element
 as `[u64 length][EncodedMap bytes]`.
 
+# Map projection
+
+`v {.name, .*, rank: v.age + 1, x}` builds a map out of `v`, a node, a relationship or a map.
+`.key` holds `v.key`, null where `v` has no such property, and `.*` every property of `v`.
+`key: expr` holds the expression, and `x` the variable `x` under the key `x`. A later item
+replaces the entry an earlier one wrote under the same key, so `p {.*, name: 'x'}` replaces the
+name. A null `v` projects to null.
+
+The AST keeps the projection as a `MapProjectionExpr`; the analyzer reads each `.key` as the
+`v.key` property read. Codegen emits one `db.make_map` per run of items between two `.*`, a
+`db.properties` of `v` for each `.*`, and a `db.merge_maps` of them in item order. A
+`db.case` on `v IS NOT NULL` then keeps the map only where `v` is not null.
+
+`db.merge_maps` lowers one-for-one to `nl.merge_maps`. Row r holds every key the operands hold
+at row r, under the value of the last operand holding it, sorted on key. A row where an operand
+holds no map gets no map.
+
+`(n {key: value})` is also a node pattern. Where a pattern may start, as in
+`WHERE (n {name: 'x'})-->()`, the projection is read as one: its entries become the node's
+properties. Any other item makes it no node pattern.
+
+`collect()` gathers maps as it gathers lists. A null map is dropped, and `collect(DISTINCT m)`
+compares maps entry by entry.
+
 # keys() and properties()
 
 `keys(x)` returns the property names of a node or a relationship, or the keys of a map, sorted.

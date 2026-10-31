@@ -748,12 +748,6 @@ mlir::Type selectedValueElement(mlir::OpBuilder& builder, mlir::Type lhs, mlir::
     return mlir::Type {};
 }
 
-// Whether a column of @param element spells a null as a value of its own: the invalid ID of
-// an entity, the tag of a cell, or the path with no node
-bool holdsItsOwnNull(mlir::Type element) {
-    return mlir::isa<storage::AnyType, storage::NodeIDType, storage::EdgeIDType, storage::PathType>(element);
-}
-
 // Whether a column can hold the null literal beside its values: in the optional a nullable
 // chunk wraps them in, or in a value of its own
 bool holdsItsNull(mlir::Type chunkType) {
@@ -1126,6 +1120,7 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     _constantColumns.clear();
     _rootBlock = _entryBlock;
     _innermostLoopBody = nullptr;
+    _innermostRegionBody = nullptr;
     _innermostCardinality = mlir::Value();
     _limitHandles.clear();
     _loopLimitHandle.clear();
@@ -1250,10 +1245,7 @@ bool DBLowering::isConstantReadAsRows(mlir::Value chunk) {
         return false;
     }
 
-    const mlir::Type element = chunkType.getElementType();
-    const bool readAsRows = llvm::isa<storage::NodeIDType, storage::EdgeIDType, storage::PathType, storage::BoolType>(element);
-
-    return readAsRows && yieldsConstantColumn(chunk, _constantColumns);
+    return isReadAsRows(chunkType.getElementType()) && yieldsConstantColumn(chunk, _constantColumns);
 }
 
 bool DBLowering::readsConstantsAsRows(mlir::Operation& operation) {
@@ -1423,6 +1415,8 @@ void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
         lowerMakeList(makeList);
     } else if (mlir::db::MakeMap makeMap = mlir::dyn_cast<mlir::db::MakeMap>(operation)) {
         lowerMakeMap(makeMap);
+    } else if (mlir::db::MergeMaps merge = mlir::dyn_cast<mlir::db::MergeMaps>(operation)) {
+        lowerMergeMaps(merge);
     } else if (mlir::db::StaticMapKey mapKey = mlir::dyn_cast<mlir::db::StaticMapKey>(operation)) {
         lowerStaticMapKey(mapKey);
     } else if (mlir::db::DynamicMapKey dynamicMapKey = mlir::dyn_cast<mlir::db::DynamicMapKey>(operation)) {
@@ -1946,8 +1940,10 @@ void DBLowering::lowerUnwindComputed(mlir::db::UnwindComputed unwind) {
     mlir::Operation* const placeholderYield = _builder.create<nl::UnwindYield>(loc, runCardinality);
 
     mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    mlir::Block* const previousInnermostRegionBody = _innermostRegionBody;
     const mlir::Value previousInnermostCardinality = _innermostCardinality;
     _innermostLoopBody = nlSource;
+    _innermostRegionBody = nlSource;
     _innermostCardinality = runCardinality;
 
     mlir::Value sourceChunk;
@@ -1961,6 +1957,7 @@ void DBLowering::lowerUnwindComputed(mlir::db::UnwindComputed unwind) {
     }
 
     _innermostLoopBody = previousInnermostLoopBody;
+    _innermostRegionBody = previousInnermostRegionBody;
     _innermostCardinality = previousInnermostCardinality;
 
     _builder.setInsertionPointToEnd(nlSource);
@@ -2033,8 +2030,10 @@ mlir::Operation* DBLowering::lowerElementBody(mlir::Block& dbBody,
     // The rows the body computes over are the elements of one row's list, so a constant it
     // reads is laid out over those rather than over the rows the op is read on
     mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    mlir::Block* const previousInnermostRegionBody = _innermostRegionBody;
     const mlir::Value previousInnermostCardinality = _innermostCardinality;
     _innermostLoopBody = nlBody;
+    _innermostRegionBody = nlBody;
     _innermostCardinality = elementChunk;
 
     for (mlir::Operation& operation : dbBody) {
@@ -2049,6 +2048,7 @@ mlir::Operation* DBLowering::lowerElementBody(mlir::Block& dbBody,
     }
 
     _innermostLoopBody = previousInnermostLoopBody;
+    _innermostRegionBody = previousInnermostRegionBody;
     _innermostCardinality = previousInnermostCardinality;
 
     // ComprehensionYield::verify guarantees both, so an empty one here means unverified
@@ -2163,8 +2163,10 @@ mlir::Operation* DBLowering::lowerFoldRegion(mlir::Block& dbBlock, mlir::Block* 
     }
 
     mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    mlir::Block* const previousInnermostRegionBody = _innermostRegionBody;
     const mlir::Value previousInnermostCardinality = _innermostCardinality;
     _innermostLoopBody = nlBlock;
+    _innermostRegionBody = nlBlock;
     _innermostCardinality = elementChunk;
 
     for (mlir::Operation& operation : dbBlock.without_terminator()) {
@@ -2174,6 +2176,7 @@ mlir::Operation* DBLowering::lowerFoldRegion(mlir::Block& dbBlock, mlir::Block* 
     valueChunk = mapValue(dbBlock.getTerminator()->getOperand(0));
 
     _innermostLoopBody = previousInnermostLoopBody;
+    _innermostRegionBody = previousInnermostRegionBody;
     _innermostCardinality = previousInnermostCardinality;
 
     valueChunk = rowAlignedChunk(valueChunk, elementChunk);
@@ -2670,6 +2673,39 @@ void DBLowering::lowerMakeMap(mlir::db::MakeMap makeMap) {
 
     nl::MakeMap maps = _builder.create<nl::MakeMap>(_builder.getUnknownLoc(), chunks, makeMap.getKeys());
     _valueMap[makeMap.getResult()] = maps.getResult();
+}
+
+void DBLowering::lowerMergeMaps(mlir::db::MergeMaps merge) {
+    llvm::SmallVector<mlir::Value, 4> maps;
+    for (const mlir::Value column : merge.getMaps()) {
+        maps.push_back(mapValue(column));
+    }
+
+    const mlir::Value cardinality = cardinalityDriver(maps);
+
+    bool everyRowHoldsAMap = true;
+
+    for (mlir::Value& map : maps) {
+        map = rowAlignedChunk(map, cardinality);
+
+        const mlir::Type mapChunkType = map.getType();
+        if (!holdsAMapPerRow(mapChunkType)) {
+            throw IRException("db.merge_maps merges map columns, or columns of tagged cells");
+        }
+
+        const mlir::Type element = mlir::cast<nl::ChunkType>(mapChunkType).getElementType();
+        everyRowHoldsAMap = everyRowHoldsAMap && mlir::isa<storage::MapType>(element);
+    }
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const mlir::Type mapType = storage::MapType::get(context);
+    const mlir::Type resultElement = everyRowHoldsAMap ? mapType : storage::NullableType::get(context, mapType);
+    const nl::ChunkType resultType = nl::ChunkType::get(context, resultElement);
+
+    setInsertionForNaryOp(maps);
+
+    nl::MergeMaps merged = _builder.create<nl::MergeMaps>(_builder.getUnknownLoc(), resultType, maps);
+    _valueMap[merge.getResult()] = merged.getResult();
 }
 
 void DBLowering::lowerRange(mlir::db::Range range) {
@@ -4627,6 +4663,21 @@ mlir::Value DBLowering::typedNullChunk(mlir::Value chunk, mlir::Type chunkType) 
     return _builder.create<nl::ToNullable>(_builder.getUnknownLoc(), chunkType, chunk).getResult();
 }
 
+mlir::Value DBLowering::laidOutNullAs(mlir::Value chunk, mlir::Type valueElement) {
+    const bool laidOutNull = isUntypedNullChunk(chunk.getType())
+                          && !yieldsConstantColumn(chunk, _constantColumns);
+    const bool namesAType = !mlir::isa<mlir::NoneType>(valueElement);
+
+    if (!laidOutNull || !namesAType) {
+        return chunk;
+    }
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const nl::ChunkType chunkType = nl::ChunkType::get(context, storage::NullableType::get(context, valueElement));
+
+    return typedNullChunk(chunk, chunkType);
+}
+
 // The shared seen-set is hoisted to the top of the root block, above every branch's
 // loops, so it is emptied once per step of that block and dominates each branch's filter -
 // the same placement lowerRemoveDuplicates gives a dedup's private set.
@@ -5006,8 +5057,8 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
         chunks[inputIndex] = rowAlignedChunk(chunks[inputIndex], cardinality);
     }
 
-    // An entity column collects as the IDs it carries, a list column as the cells it
-    // holds, and a type-erased one as the tagged cells - all present in every row, the
+    // An entity column collects as the IDs it carries, a list or a map column as the cells
+    // it holds, and a type-erased one as the tagged cells - all present in every row, the
     // tagged null among them, which the fold drops rather than the column. Only a scalar
     // value column is read as nullable, the way a property fetch is.
     for (size_t valueIndex = 0; valueIndex < valueCount; valueIndex++) {
@@ -5016,6 +5067,7 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
         const bool collectsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
                                                               storage::EdgeIDType,
                                                               storage::ListType,
+                                                              storage::MapType,
                                                               storage::AnyType>(collectedElement);
 
         if (!collectsCellsPresentInEveryRow) {
@@ -6342,6 +6394,17 @@ void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
         }
     }
 
+    if constexpr (CONNECTS_TRUTH_VALUES) {
+        lhsChunk = laidOutNullAs(lhsChunk, _builder.getI1Type());
+        rhsChunk = laidOutNullAs(rhsChunk, _builder.getI1Type());
+    } else if (readsScalarOperands) {
+        const mlir::Type lhsElement = chunkValueElement(_builder, lhsChunk.getType());
+        const mlir::Type rhsElement = chunkValueElement(_builder, rhsChunk.getType());
+
+        lhsChunk = laidOutNullAs(lhsChunk, rhsElement);
+        rhsChunk = laidOutNullAs(rhsChunk, lhsElement);
+    }
+
     const mlir::Type resultElement = binaryResultElement(kind, lhsChunk.getType(), rhsChunk.getType());
     const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultElement);
 
@@ -6372,21 +6435,18 @@ mlir::Type DBLowering::caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks
         unified = shared ? shared : storage::AnyType::get(_builder.getContext());
     }
 
-    // Every branch is the null literal, so no branch says what the column holds. The rows
-    // are all absent whichever type carries them, so they ride the integer column an
-    // untyped null is laid out over anywhere else.
+    // Every branch is the null literal, so no branch says what the column holds: the
+    // selection is that literal, laid out over its rows
     if (!unified) {
-        return _builder.getIntegerType(64);
+        return _builder.getNoneType();
     }
 
-    // A node or an edge is selected as the entity it is rather than as its ID's integer,
-    // so the selection answers a column the rest of the query still reads as an entity.
-    const bool isEntity = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(unified);
+    // A node, an edge or a path is selected as what it is rather than as an ID's integer,
+    // so the selection answers a column the rest of the query still reads as one.
     const bool isValue = elementTypeToValueType(unified) != ValueType::Invalid;
-    const bool isAny = mlir::isa<storage::AnyType>(unified);
 
-    if (!isEntity && !isValue && !isAny) {
-        throw IRException("db.case requires value or entity branches");
+    if (!isValue && !holdsItsOwnNull(unified)) {
+        throw IRException("db.case requires value, entity or path branches");
     }
 
     return unified;
@@ -6637,7 +6697,7 @@ void DBLowering::filterCaseRows(mlir::Value mask,
 }
 
 void DBLowering::lowerNot(mlir::db::NotOp notOp) {
-    const mlir::Value operandChunk = mapValue(notOp.getOperand());
+    const mlir::Value operandChunk = laidOutNullAs(mapValue(notOp.getOperand()), _builder.getI1Type());
 
     const mlir::Type operandType = operandChunk.getType();
 
@@ -7066,8 +7126,10 @@ void DBLowering::lowerHopRegion(mlir::Block& dbHop, mlir::Region& nlHop, size_t 
     // laid out over those rather than over the rows the walk is read on
     const mlir::Value edges = nlBlock->getArgument(mlir::hopEdgeArgument(step));
     mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    mlir::Block* const previousInnermostRegionBody = _innermostRegionBody;
     const mlir::Value previousInnermostCardinality = _innermostCardinality;
     _innermostLoopBody = nlBlock;
+    _innermostRegionBody = nlBlock;
     _innermostCardinality = edges;
 
     mlir::Value mask;
@@ -7080,6 +7142,7 @@ void DBLowering::lowerHopRegion(mlir::Block& dbHop, mlir::Region& nlHop, size_t 
     }
 
     _innermostLoopBody = previousInnermostLoopBody;
+    _innermostRegionBody = previousInnermostRegionBody;
     _innermostCardinality = previousInnermostCardinality;
 
     _builder.setInsertionPoint(placeholder);
@@ -7189,9 +7252,17 @@ void DBLowering::buildLoopForSource(mlir::Value iterator, mlir::Operation* dbOp)
 
 void DBLowering::setInsertionInto(mlir::Block* block) {
     // The next op goes before the block's terminator, after the siblings already lowered
-    // here - or, in a block enclosing the root, before the nest the root's factor reads it
-    // from.
-    mlir::Operation* const nest = block->findAncestorOpInBlock(*_rootBlock->getParentOp());
+    // here - or, in a block enclosing the region being lowered or the root, before the op
+    // holding it.
+    mlir::Operation* nest = nullptr;
+    if (_innermostRegionBody) {
+        nest = block->findAncestorOpInBlock(*_innermostRegionBody->getParentOp());
+    }
+
+    if (!nest) {
+        nest = block->findAncestorOpInBlock(*_rootBlock->getParentOp());
+    }
+
     _builder.setInsertionPoint(nest ? nest : block->getTerminator());
 }
 
@@ -7493,11 +7564,10 @@ mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinali
     // what every fold, key serialization and reduction reads a value column as. A list or
     // a map literal is laid out as the plain container chunk an nl.collect drain emits
     // instead, since no row of a literal is absent; one a function answered may be null.
-    // A node, an edge, a path or a mask rides the plain chunk every op takes it in.
+    // A node, an edge, a path, a walk or a mask rides the plain chunk every op takes it in.
     mlir::MLIRContext* const context = _builder.getContext();
     const bool isContainer = llvm::isa<storage::ListType, storage::MapType>(valueElement);
-    const bool isReadAsRows = llvm::isa<storage::NodeIDType, storage::EdgeIDType, storage::PathType, storage::BoolType>(valueElement);
-    const bool staysPlain = (isContainer && !nullable) || isReadAsRows;
+    const bool staysPlain = (isContainer && !nullable) || isReadAsRows(valueElement);
     const mlir::Type resultElement = staysPlain ? valueElement
                                                 : storage::NullableType::get(context, valueElement);
     const nl::ChunkType resultType = nl::ChunkType::get(context, resultElement);

@@ -60,6 +60,7 @@ class ListComprehensionExpr;
 class ListPredicateExpr;
 class ReduceExpr;
 class AllReduceExpr;
+class MapProjectionExpr;
 class ExistsExpr;
 class CountSubqueryExpr;
 class CollectSubqueryExpr;
@@ -280,21 +281,8 @@ private:
 
         std::unordered_map<const VarDecl*, PathBinding> _pathBindings;
 
-        // The walk a `MATCH p = ...` names when its element is one quantified relationship:
-        // the variable holding the seeds and the one holding the handles, which is the
-        // relationship's own column. The path is built from the two where it is read, so
-        // the rows carry a handle rather than a sequence of their own.
-        struct NamedPathWalk {
-            const VariableDependency* _seed {nullptr};
-            const VariableDependency* _path {nullptr};
-            bool _reversed {false};
-        };
-
-        std::unordered_map<const VarDecl*, NamedPathWalk> _namedPathWalks;
-
-        // The path each `MATCH p = ...` built for an element that names no
-        // single walk. A path variable appears in no pattern, so it is no VDG variable and
-        // cannot live in _varMap.
+        // The path each `MATCH p = ...` built. A path variable appears in no pattern, so it
+        // is no VDG variable and cannot live in _varMap.
         std::unordered_map<const VarDecl*, mlir::Value> _namedPaths;
 
         // The quantified edge pattern each variable-length variable was declared by, whose
@@ -876,9 +864,8 @@ private:
 
     void generateMatchFilter(const MatchStmt* matchStmt);
 
-    // Binds every element a `MATCH p = ...` named: to the walk when the element is one
-    // quantified relationship, and otherwise to the path built here out of the
-    // columns its entities are bound to
+    // Binds every element a `MATCH p = ...` named to the path built here out of the columns
+    // its entities are bound to
     void generateNamedPaths(const MatchStmt* matchStmt);
     void generateNamedPath(const PatternElement* element, const VarDecl* pathDecl);
 
@@ -890,18 +877,11 @@ private:
     // contributes to the path its element is named by
     mlir::Value pathHandleColumn(const VarDecl* edgeDecl);
 
-    // Builds the path of a walk out of its seeds and its handles, at the point it is read
-    mlir::Value namedPathColumn(const PartScope::NamedPathWalk& walk);
     mlir::Value makePathColumn(llvm::ArrayRef<mlir::Value> entities, llvm::ArrayRef<int64_t> reversedPaths = {});
 
     // The entities a walk stands for, which an expression or an aggregate reading a variable
     // bound to the walk's handles takes rather than the handles
     mlir::Value readWalkEntities(const Expr* argExpr, mlir::Value column);
-
-    // Builds the path of every named-path item a projection publishes or outputs. A handle
-    // column says nothing about which of a path's lists it stands for, so the sink would
-    // read it as the walk's edges.
-    void buildNamedPathItems(const Projection* projection, llvm::SmallVectorImpl<mlir::Value>& projected);
 
     // Emits the Sort a MATCH's ORDER BY asks for, over everything in flight: the rows the
     // rest of the query reads are then the ordered ones.
@@ -1147,6 +1127,8 @@ private:
 
     mlir::Value nullConstantColumn();
 
+    mlir::Value createCase(mlir::ValueRange conditions, mlir::ValueRange values, mlir::Value defaultValue);
+
     // The one-element list a column makes, the shape a scalar takes to join a list
     mlir::Value singletonList(mlir::Value column);
 
@@ -1213,10 +1195,13 @@ private:
                                     llvm::ArrayRef<mlir::Value> aggregateColumns = {},
                                     llvm::ArrayRef<mlir::storage::GroupAggregateKind> aggregateKinds = {});
 
-    // The collects a keyless projection returns, built as one op so a single drain emits
-    // them all. One collect needs no help: its own translation is that op.
-    void emitKeylessCollect(llvm::ArrayRef<const FunctionInvocationExpr*> collectExprs,
-                            llvm::ArrayRef<AggregateArguments> collectArguments);
+    // Every aggregate of a keyless projection that gathers values, built as one db.collect
+    // as a grouped projection's are: the lists and the reductions beside them read the rows
+    // of one accumulator, and a single drain emits them all.
+    void emitKeylessCollect(llvm::ArrayRef<const FunctionInvocationExpr*> aggregateExprs,
+                            llvm::ArrayRef<AggregateArguments> arguments);
+
+    mlir::storage::GroupAggregateKind groupAggregateKind(const FunctionInvocation* invocation) const;
 
     // What an aggregate gathering its values answers from @param listColumn, the list of a
     // group's values: collect the list itself, percentileCont and percentileDisc its percentile.
@@ -1291,6 +1276,11 @@ private:
     // Emits the db.all_reduce of `allReduce(acc = init, x IN xs | f(acc, x), p(acc, x))`:
     // db.reduce's operands and body, and a predicate region over the same arguments
     void translateAllReduceExpr(const Expr* expr, const AllReduceExpr* allReduce);
+
+    // Emits a map projection: one db.make_map per run of items other than `.*`, the base's
+    // db.properties for each `.*`, a db.merge_maps of them in item order where there are
+    // several, and a db.case keeping the map only where the base is not null
+    void translateMapProjectionExpr(const Expr* expr, const MapProjectionExpr* projection);
 
     // Generates a region of a db.reduce or a db.all_reduce: the entry block binds the
     // element and the accumulator to their variables and takes the carry set, and
@@ -1423,6 +1413,10 @@ private:
     mlir::Value translateListOfColumns(const ListLiteral* list);
 
     mlir::Value translateMapOfColumns(const MapLiteral* map);
+
+    // The db.make_map of @param entries, each a key and the expression its value is read
+    // from, which this sorts on key. The constant empty map when there is none.
+    mlir::Value emitMakeMap(llvm::SmallVectorImpl<std::pair<std::string_view, const Expr*>>& entries);
 
     void addScanNodes(const VariableDependency* var);
 

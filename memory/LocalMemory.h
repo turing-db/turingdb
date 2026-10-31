@@ -65,6 +65,7 @@ public:
         MakeMemoryPool<ColumnConst<NodeID>>::type,
         MakeMemoryPool<ColumnConst<EdgeID>>::type,
         MakeMemoryPool<ColumnConst<GraphPath>>::type,
+        MakeMemoryPool<ColumnConst<PathRef>>::type,
         MakeMemoryPool<ColumnConst<LabelSetID>>::type,
         MakeMemoryPool<ColumnConst<EdgeTypeID>>::type,
         MakeMemoryPool<ColumnConst<size_t>>::type,

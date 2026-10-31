@@ -26,6 +26,7 @@
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/MathExtras.h"
 
 #include "CardinalityEstimation.h"
 #include "metadata/GraphMetadata.h"
@@ -1450,7 +1451,7 @@ void fuseUnwindEquality(UnwindEqualityCross& match, mlir::OpBuilder& builder) {
             elements = builder.create<ToInteger>(loc, elementsType, standIn).getResult();
         } else {
             ConstantOp element = builder.create<ConstantOp>(loc, match._unwind.getElements()[0]);
-            elements = builder.create<BroadcastConstant>(loc, elementsType, element.getResult(), standIn).getResult();
+            elements = builder.create<BroadcastConstant>(loc, element.getResult(), standIn).getResult();
         }
 
         for (const size_t index : elementsReadConverted) {
@@ -4960,19 +4961,11 @@ struct FuseExploreHopLabels : public impl::FuseExploreHopLabelsBase<FuseExploreH
     }
 };
 
-// A filter carrying a named path its mask does not read cuts the rows before the path is
-// built: the build moves behind it, over the columns the filter keeps. Null where it stays.
-MakePath sinkPastFilter(MakePath build, mlir::OpBuilder& builder) {
+// A filter carrying a named path cuts the rows before the path is built: the path is built
+// again behind it, over the columns the filter keeps. A mask reading the path still reads
+// the build ahead of the filter. Null where the filter does not keep every entity.
+MakePath sinkPastFilter(MakePath build, FilterOp filter, mlir::OpBuilder& builder) {
     const Value path = build.getResult();
-    if (!path.hasOneUse()) {
-        return nullptr;
-    }
-
-    FilterOp filter = dyn_cast<FilterOp>(*path.getUsers().begin());
-    if (!filter || filter->getBlock() != build->getBlock()) {
-        return nullptr;
-    }
-
     const OperandRange carried = filter.getColumnsToFilter();
 
     llvm::SmallVector<Value> keptColumns;
@@ -5020,9 +5013,23 @@ MakePath sinkPastFilter(MakePath build, mlir::OpBuilder& builder) {
     }
 
     filter.erase();
-    build.erase();
 
     return sunk;
+}
+
+MakePath sinkPastAFilter(MakePath build, mlir::OpBuilder& builder) {
+    for (Operation* user : build.getResult().getUsers()) {
+        FilterOp filter = dyn_cast<FilterOp>(user);
+        if (!filter || filter->getBlock() != build->getBlock()) {
+            continue;
+        }
+
+        if (const MakePath sunk = sinkPastFilter(build, filter, builder)) {
+            return sunk;
+        }
+    }
+
+    return nullptr;
 }
 
 struct SinkMakePath : public impl::SinkMakePathBase<SinkMakePath> {
@@ -5035,9 +5042,18 @@ struct SinkMakePath : public impl::SinkMakePathBase<SinkMakePath> {
         });
 
         while (!builds.empty()) {
-            const MakePath sunk = sinkPastFilter(builds.pop_back_val(), builder);
-            if (sunk) {
-                builds.push_back(sunk);
+            MakePath build = builds.pop_back_val();
+            const MakePath sunk = sinkPastAFilter(build, builder);
+            if (!sunk) {
+                continue;
+            }
+
+            builds.push_back(sunk);
+
+            if (build->use_empty()) {
+                build.erase();
+            } else {
+                builds.push_back(build);
             }
         }
     }
@@ -7970,37 +7986,49 @@ void keySideLabels(const JoinKeySide& side,
     collectScanLabels(scan.getLabels(), metadata, labels);
 }
 
-// The row budget a limit downstream of the cut puts on the rows the join would emit, and
-// zero when none governs them. A product stops as soon as the budget is met, where the
-// join reads its whole build side before it can emit a row, which is what tips a small
-// budget back towards the product.
+// An op reading the rows of a cut, and how many of those rows the skips between them drop
+struct CutRowsReader {
+    Operation* _op {nullptr};
+    uint64_t _skipped {0};
+};
+
+// The rows the cut must produce for a limit downstream of it to be met, and zero when no
+// limit bounds them. The budget reaches the cut only through ops handing each row on as at
+// least one row as they read it, and a skip adds the rows it drops. A product stops once the
+// budget is met, where the join reads its whole build side before it can emit a row.
 uint64_t limitOverTheCut(FilterOp filter) {
-    llvm::SmallVector<Operation*, 8> pending;
+    Block* const cutBlock = filter->getBlock();
+
+    llvm::SmallVector<CutRowsReader, 8> pending;
     llvm::SmallPtrSet<Operation*, 8> visited;
-    for (const Value column : filter.getFilteredColumns()) {
-        for (Operation* const user : column.getUsers()) {
-            if (visited.insert(user).second) {
-                pending.push_back(user);
+    const auto pushReaders = [&](Operation* op, uint64_t skipped) {
+        for (Operation* const user : op->getUsers()) {
+            Operation* const reader = cutBlock->findAncestorOpInBlock(*user);
+            if (visited.insert(reader).second) {
+                pending.push_back(CutRowsReader {reader, skipped});
             }
         }
-    }
+    };
 
+    pushReaders(filter, 0);
+
+    uint64_t budget = 0;
     while (!pending.empty()) {
-        Operation* const op = pending.pop_back_val();
-        if (Limit limit = dyn_cast<Limit>(op)) {
-            return limit.getCount();
-        }
+        const CutRowsReader reader = pending.pop_back_val();
+        Operation* const op = reader._op;
 
-        for (const Value result : op->getResults()) {
-            for (Operation* const user : result.getUsers()) {
-                if (visited.insert(user).second) {
-                    pending.push_back(user);
-                }
-            }
+        if (Limit limit = dyn_cast<Limit>(op)) {
+            budget = std::max(budget, llvm::SaturatingAdd(reader._skipped, limit.getCount()));
+        } else if (Skip skip = dyn_cast<Skip>(op)) {
+            pushReaders(op, llvm::SaturatingAdd(reader._skipped, skip.getCount()));
+        } else if (computesAValuePerRow(op) || isa<OptionalMatch>(op)) {
+            pushReaders(op, reader._skipped);
+        } else {
+            return 0;
         }
     }
 
-    return 0;
+    return budget;
 }
 
 // Whether the cut is better left as the product it stands as. The join reads its build

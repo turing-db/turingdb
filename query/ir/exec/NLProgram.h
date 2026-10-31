@@ -4335,6 +4335,31 @@ private:
     NLStepBuffers* _stepBuffers {nullptr};
 };
 
+// Row-wise map merge (nl.merge_maps): row r of the result holds every key the operands' maps
+// hold at row r, under the value of the last operand holding it.
+class NLMergeMapsData : public NLFunctionData {
+public:
+    struct Operand {
+        const Column* _column {nullptr};
+        NLKeyedReadFunction _read {nullptr};
+    };
+
+    NLMergeMapsData(Column* result, NLStepBuffers* stepBuffers);
+    ~NLMergeMapsData() override;
+
+    Column* getResult() const { return _result; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
+
+    const std::vector<Operand>& operands() const { return _operands; }
+
+    void addOperand(const Operand& operand);
+
+private:
+    Column* _result {nullptr};
+    NLStepBuffers* _stepBuffers {nullptr};
+    std::vector<Operand> _operands;
+};
+
 
 // Read the bound one column of an nl.range holds at @param row, or nothing where the row
 // has no bound. One per integer column kind, selected during translation the way the list
