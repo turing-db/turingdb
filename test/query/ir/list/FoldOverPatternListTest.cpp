@@ -24,8 +24,9 @@ using namespace db;
 using namespace turing::test;
 
 // The variable of a variable-length relationship and a group variable of a quantified path
-// are lists, which reduce and allReduce fold as they fold any list. KNOWS_WELL leaves Remy for
-// Adam and Adam for Remy, both of duration 20, and Ghosts for Remy, of duration 200.
+// are lists, which reduce, allReduce and every other list operation read as they read any
+// list. KNOWS_WELL leaves Remy for Adam and Adam for Remy, both of duration 20, and Ghosts
+// for Remy, of duration 200.
 class FoldOverPatternListTest : public TuringTest {
 protected:
     void initialize() override {
@@ -101,4 +102,50 @@ TEST_F(FoldOverPatternListTest, foldsAGroupNodeVariable) {
     expectRows("MATCH (:Person {name: 'Remy'}) ((x)-[e:KNOWS_WELL]->(y)){1,2} (b) "
                "RETURN b.name, reduce(s = '', n IN x | s + n.name)",
                {{"Adam", "Remy"}, {"Remy", "RemyAdam"}});
+}
+
+TEST_F(FoldOverPatternListTest, takesTheHeadLastTailAndReverseOfTheRelationships) {
+    expectRows("MATCH (:Person {name: 'Remy'})-[r:KNOWS_WELL*1..2]->(b) "
+               "RETURN b.name, startNode(head(r)).name, startNode(last(r)).name, size(tail(r)), "
+               "[e IN reverse(r) | startNode(e).name]",
+               {{"Adam", "Remy", "Remy", "0", "Remy"}, {"Remy", "Remy", "Adam", "1", "Adam, Remy"}});
+}
+
+TEST_F(FoldOverPatternListTest, takesTheHeadAndLastOfAGroupNodeVariable) {
+    expectRows("MATCH (:Person {name: 'Remy'}) ((x)-[e:KNOWS_WELL]->(y)){1,2} (b) "
+               "RETURN b.name, head(x).name, last(y).name, [n IN reverse(x) | n.name]",
+               {{"Adam", "Remy", "Adam", "Remy"}, {"Remy", "Remy", "Remy", "Adam, Remy"}});
+}
+
+TEST_F(FoldOverPatternListTest, slicesTheRelationships) {
+    expectRows("MATCH (:Person {name: 'Remy'})-[r:KNOWS_WELL*1..2]->(b) RETURN b.name, size(r[1..]), [e IN r[1..] | e.duration]",
+               {{"Adam", "0", ""}, {"Remy", "1", "20"}});
+}
+
+TEST_F(FoldOverPatternListTest, concatenatesTheRelationships) {
+    expectRows("MATCH (:Person {name: 'Remy'})-[r:KNOWS_WELL*1..2]->(b) RETURN b.name, size(r + r), size(r + head(r))",
+               {{"Adam", "2", "2"}, {"Remy", "4", "3"}});
+}
+
+TEST_F(FoldOverPatternListTest, findsARelationshipInTheRelationships) {
+    expectRows("MATCH (:Person {name: 'Remy'})-[r:KNOWS_WELL*1..2]->(b) "
+               "MATCH (:Person {name: 'Adam'})-[q:KNOWS_WELL]->() WHERE q IN r RETURN b.name",
+               {{"Remy"}});
+}
+
+TEST_F(FoldOverPatternListTest, findsANodeInAGroupNodeVariable) {
+    expectRows("MATCH (:Person {name: 'Remy'}) ((x)-[e:KNOWS_WELL]->(y)){1,2} (b) "
+               "MATCH (q:Person {name: 'Adam'}) WHERE q IN x RETURN b.name",
+               {{"Remy"}});
+}
+
+TEST_F(FoldOverPatternListTest, nestsTheRelationshipsInAListLiteral) {
+    expectRows("MATCH (:Person {name: 'Remy'})-[r:KNOWS_WELL*1..2]->(b) RETURN b.name, size([r][0])",
+               {{"Adam", "1"}, {"Remy", "2"}});
+}
+
+TEST_F(FoldOverPatternListTest, collectsTheRelationshipsIntoAListOfLists) {
+    expectRows("MATCH (:Person {name: 'Remy'})-[r:KNOWS_WELL*1..2]->(b) "
+               "WITH b, collect(r) AS paths UNWIND paths AS path RETURN b.name, size(path)",
+               {{"Adam", "1"}, {"Remy", "2"}});
 }
