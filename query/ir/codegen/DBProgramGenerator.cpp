@@ -7893,7 +7893,7 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
             } else {
                 const mlir::Value entityColumn = resolveEntityColumn(decl);
                 if (entityColumn) {
-                    _part._exprMap[expr] = readWalkEntities(expr, entityColumn);
+                    _part._exprMap[expr] = entityColumn;
                 }
             }
 

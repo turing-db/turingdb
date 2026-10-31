@@ -963,11 +963,12 @@ LogicalResult MakeMap::verify() {
 // Only a plain chunk of maps holds one in every row, so a result over any other operand is
 // nullable.
 LogicalResult MergeMaps::verify() {
-    if (getMaps().size() < 2) {
+    const OperandRange maps = getMaps();
+    if (maps.size() < 2) {
         return emitOpError("requires at least two map chunks");
     }
 
-    const auto operandTypes = getMaps().getTypes();
+    const auto operandTypes = maps.getTypes();
 
     if (!llvm::all_of(operandTypes, holdsAMapPerRow)) {
         return emitOpError("operands must be chunks of maps or of tagged cells");

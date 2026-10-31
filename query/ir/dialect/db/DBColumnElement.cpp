@@ -243,7 +243,7 @@ mlir::Type db::selectedColumnElement(mlir::MLIRContext* context, mlir::ValueRang
             continue;
         }
 
-        // A mask and a boolean value hold the same truth value, the i1 lowering reads both as
+        // A mask and a boolean value hold the same truth value, which lowering reads as an i1
         mlir::Type element = declaredColumnElement(value);
         if (mlir::isa<storage::BoolType>(element)) {
             element = mlir::IntegerType::get(context, 1);

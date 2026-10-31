@@ -2135,7 +2135,8 @@ LogicalResult MakeMap::verify() {
 
 // A tagged cell may hold a map, and a column whose type lowering resolves may be one
 LogicalResult MergeMaps::verify() {
-    if (getMaps().size() < 2) {
+    const OperandRange maps = getMaps();
+    if (maps.size() < 2) {
         return emitOpError("requires at least two map columns");
     }
 
@@ -2143,7 +2144,7 @@ LogicalResult MergeMaps::verify() {
         return isa<storage::MapType, storage::AnyType, NoneType>(columnElement(column));
     };
 
-    if (!llvm::all_of(getMaps(), readsMaps)) {
+    if (!llvm::all_of(maps, readsMaps)) {
         return emitOpError("operands must be columns of maps");
     }
 

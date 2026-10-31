@@ -141,3 +141,5 @@ target_sources(test_query_ir_reroot_control_graph PRIVATE ${IR_TEST_DIR}/StringR
 target_include_directories(test_query_ir_reroot_control_graph PRIVATE ${IR_TEST_DIR})
 
 add_turing_test(test_query_ir_fuse_unwind_equality FuseUnwindEqualityTest.cpp)
+
+add_turing_test(test_query_ir_unread_value_raises UnreadValueRaisesTest.cpp)
