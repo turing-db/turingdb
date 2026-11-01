@@ -4350,7 +4350,7 @@ public:
     Column* getResult() const { return _result; }
     NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
-    const std::vector<Operand>& operands() const { return _operands; }
+    const std::vector<Operand>& getOperands() const { return _operands; }
 
     void addOperand(const Operand& operand);
 

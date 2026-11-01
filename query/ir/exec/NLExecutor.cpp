@@ -5244,18 +5244,10 @@ std::optional<types::Int64::Primitive> rangeBound(const Column* input, size_t ro
 }
 
 std::optional<types::Int64::Primitive> cellBound(const std::optional<CellView>& cell) {
-    if (!cell.has_value()) {
+    if (!cell.has_value() || cell->getTag() == CellTag::Null) {
         return std::nullopt;
-    }
-
-    const CellTag tag = cell->getTag();
-
-    if (tag == CellTag::Int) {
-        return cell->getAs<types::Int64::Primitive>();
-    } else if (tag == CellTag::UInt) {
-        return static_cast<types::Int64::Primitive>(cell->getAs<types::UInt64::Primitive>());
-    } else if (tag == CellTag::Null) {
-        return std::nullopt;
+    } else if (cellHoldsAnInteger(*cell)) {
+        return cellInteger(*cell);
     }
 
     throw IRException("A list slice reads an integer bound, and this row holds a value that is not one");
@@ -8617,7 +8609,7 @@ template <typename Result>
 void NLExecutor::runMergeMaps(NLExecutionContext*, NLFunctionData* data) {
     const NLMergeMapsData* merge = static_cast<NLMergeMapsData*>(data);
 
-    const std::vector<NLMergeMapsData::Operand>& operands = merge->operands();
+    const std::vector<NLMergeMapsData::Operand>& operands = merge->getOperands();
     NLStepBuffers* memory = merge->getStepBuffers();
     memory->clear();
     MapBuffer<>& mapBuffer = memory->mapBuffer();
