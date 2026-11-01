@@ -1277,10 +1277,14 @@ private:
     // db.reduce's operands and body, and a predicate region over the same arguments
     void translateAllReduceExpr(const Expr* expr, const AllReduceExpr* allReduce);
 
-    // Emits a map projection: one db.make_map per run of items other than `.*`, the base's
-    // db.properties for each `.*`, a db.merge_maps of them in item order where there are
-    // several, and a db.case keeping the map only where the base is not null
+    // Emits a map projection as a db.lazy_case computing the map only on the rows whose base
+    // is not null
     void translateMapProjectionExpr(const Expr* expr, const MapProjectionExpr* projection);
+
+    // The map a projection builds: one db.make_map per run of items other than `.*`, the
+    // base's db.properties for each `.*`, and a db.merge_maps of them in item order where
+    // there are several
+    mlir::Value projectedMap(const MapProjectionExpr* projection);
 
     // Generates a region of a db.reduce or a db.all_reduce: the entry block binds the
     // element and the accumulator to their variables and takes the carry set, and
@@ -1326,6 +1330,10 @@ private:
                             const CarrySet& carrySet,
                             mlir::Value subject,
                             CaseRegionGenerator generateValue);
+
+    // The result of a db.lazy_case whose regions are generated, typed as the values it
+    // selects, once the carried columns no region reads are dropped
+    mlir::Value lazyCaseResult(mlir::db::LazyCase caseOp);
 
     // The condition one WHEN value puts on a row: the value itself in the generic form,
     // and the comparison of @param subject against it in the simple one

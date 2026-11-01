@@ -2593,7 +2593,7 @@ void DBProgramGenerator::collectInFlightColumns(InFlightColumns& inFlight) {
     }
 
     for (auto& [decl, column] : _part._namedPaths) {
-        if (!isRowAlignedHere(column)) {
+        if (!holdsTheRowsInFlight(column)) {
             continue;
         }
 
@@ -4780,9 +4780,9 @@ void DBProgramGenerator::collectGroupedColumns(CarrySet& carrySet) {
     InFlightColumns& inFlight = carrySet._inFlight;
     const ExprValueMap& exprMap = _part._exprMap;
 
-    // No grouping reduced the elements of a list, so a comprehension this one sits inside
-    // still holds its element here
-    collectElementColumns(inFlight);
+    // The grouping rebinds a key held by a variable, a named path or a yielded column outside
+    // the expression map, and leaves a comprehension this one sits inside its element
+    collectInFlightColumns(inFlight);
 
     for (const auto& [expr, column] : exprMap) {
         const bool holdsTheGroupedRows = isRowAlignedHere(column)
@@ -8208,10 +8208,34 @@ void DBProgramGenerator::translateMapProjectionExpr(const Expr* expr, const MapP
         return;
     }
 
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    CarrySet carrySet;
+    collectElementCarrySet(carrySet);
+
+    const llvm::SmallVector<mlir::Value> carried(carrySet._columns.begin(), carrySet._columns.end());
+
+    auto caseOp = _opBuilder.create<mlir::db::LazyCase>(loc, noneType, carried, 2u);
+    const mlir::MutableArrayRef<mlir::Region> regions = caseOp.getBranches();
+
+    generateCaseRegion(regions[0], carried, carrySet, mlir::Value {}, [&](mlir::Value) {
+        const mlir::Value base = getOrTranslateExprColumn(projection->getBase());
+        return _opBuilder.create<mlir::db::IsNotNullOp>(loc, boolType, base).getResult();
+    });
+
+    generateCaseRegion(regions[1], carried, carrySet, mlir::Value {}, [&](mlir::Value) {
+        return projectedMap(projection);
+    });
+
+    _part._exprMap[expr] = lazyCaseResult(caseOp);
+}
+
+mlir::Value DBProgramGenerator::projectedMap(const MapProjectionExpr* projection) {
     const mlir::Value base = getOrTranslateExprColumn(projection->getBase());
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
-    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
     llvm::SmallVector<mlir::Value, 4> maps;
@@ -8244,14 +8268,11 @@ void DBProgramGenerator::translateMapProjectionExpr(const Expr* expr, const MapP
         maps.push_back(emitMakeMap(entries));
     }
 
-    mlir::Value map = maps.front();
     if (maps.size() > 1) {
-        map = _opBuilder.create<mlir::db::MergeMaps>(loc, noneType, maps).getResult();
+        return _opBuilder.create<mlir::db::MergeMaps>(loc, noneType, maps).getResult();
     }
 
-    const mlir::Value holdsABase = _opBuilder.create<mlir::db::IsNotNullOp>(loc, boolType, base).getResult();
-
-    _part._exprMap[expr] = createCase(mlir::ValueRange {holdsABase}, mlir::ValueRange {map}, mlir::Value {});
+    return maps.front();
 }
 
 void DBProgramGenerator::generateFoldRegion(mlir::Region& region,
@@ -8944,15 +8965,7 @@ void DBProgramGenerator::translateCaseExpr(const Expr* expr, const CaseExpr* cas
         });
     }
 
-    dropUnreadCarriedColumns(caseOp, caseOp.getColumnsToFilter());
-
-    llvm::SmallVector<mlir::Value> selected;
-    caseOp.collectSelectedValues(selected);
-
-    mlir::Value result = caseOp.getResult();
-    result.setType(allocColumnType(selectedColumnElement(_mlirCtxt, selected)));
-
-    _part._exprMap[expr] = result;
+    _part._exprMap[expr] = lazyCaseResult(caseOp);
 }
 
 void DBProgramGenerator::generateCaseRegion(mlir::Region& region,
@@ -8985,6 +8998,18 @@ void DBProgramGenerator::generateCaseRegion(mlir::Region& region,
     _opBuilder.create<mlir::db::CaseYield>(_opBuilder.getUnknownLoc(), value);
 
     _part = outerPart;
+}
+
+mlir::Value DBProgramGenerator::lazyCaseResult(mlir::db::LazyCase caseOp) {
+    dropUnreadCarriedColumns(caseOp, caseOp.getColumnsToFilter());
+
+    llvm::SmallVector<mlir::Value> selected;
+    caseOp.collectSelectedValues(selected);
+
+    mlir::Value result = caseOp.getResult();
+    result.setType(allocColumnType(selectedColumnElement(_mlirCtxt, selected)));
+
+    return result;
 }
 
 mlir::Value DBProgramGenerator::disjointComparison(mlir::Value lhs, mlir::Value rhs, bool equality) {

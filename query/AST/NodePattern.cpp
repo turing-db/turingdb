@@ -43,8 +43,10 @@ NodePattern* NodePattern::fromExpr(CypherAST* ast, Expr* expr) {
             return nullptr;
         }
 
+        const SymbolExpr* base = projection->getBase();
+
         NodePattern* pattern = NodePattern::create(ast);
-        pattern->setSymbol(projection->getBase()->getSymbol());
+        pattern->setSymbol(base->getSymbol());
         pattern->setProperties(properties);
         return pattern;
     } else if (const EntityTypeExpr* nodeLabelExpr = dynamic_cast<EntityTypeExpr*>(expr)) {

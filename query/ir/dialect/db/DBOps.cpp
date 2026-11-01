@@ -1558,13 +1558,20 @@ LogicalResult Case::verify() {
 void LazyCase::collectSelectedValues(llvm::SmallVectorImpl<Value>& values) {
     const MutableArrayRef<Region> branches = getBranches();
 
+    const auto yieldedValue = [](Region& branch) {
+        Block& body = branch.front();
+        Operation* const yield = body.getTerminator();
+
+        return yield->getOperand(0);
+    };
+
     for (size_t branchIndex = 1; branchIndex < branches.size(); branchIndex += 2) {
-        values.push_back(branches[branchIndex].front().getTerminator()->getOperand(0));
+        values.push_back(yieldedValue(branches[branchIndex]));
     }
 
     const bool hasElse = branches.size() % 2 == 1;
     if (hasElse) {
-        values.push_back(branches.back().front().getTerminator()->getOperand(0));
+        values.push_back(yieldedValue(branches.back()));
     }
 }
 
