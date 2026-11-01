@@ -10466,8 +10466,11 @@ void DBProgramGenerator::emitKeylessCollect(llvm::ArrayRef<const FunctionInvocat
 }
 
 mlir::storage::GroupAggregateKind DBProgramGenerator::groupAggregateKind(const FunctionInvocation* invocation) const {
-    const std::string_view funcName = invocation->getSignature()->getFullName();
-    const Expr* argExpr = invocation->getArguments()->front();
+    const FunctionSignature* signature = invocation->getSignature();
+    const std::string_view funcName = signature->getFullName();
+
+    const ExprChain* arguments = invocation->getArguments();
+    const Expr* argExpr = arguments->front();
 
     // Dropping repeated values cannot move an extremum, so min(DISTINCT x) is min(x)
     // and takes the plain kind. The others reduce each of a group's distinct values
