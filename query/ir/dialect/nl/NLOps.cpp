@@ -970,9 +970,7 @@ LogicalResult MergeMaps::verify() {
 
     if (!llvm::all_of(operandTypes, holdsAMapPerRow)) {
         return emitOpError("operands must be chunks of maps or of tagged cells");
-    }
-
-    if (getResult().getType() != resultChunkType(getContext(), operandTypes)) {
+    } else if (getResult().getType() != resultChunkType(getContext(), operandTypes)) {
         return emitOpError("result must be a chunk of maps, nullable unless every operand holds a map in every row");
     }
 
