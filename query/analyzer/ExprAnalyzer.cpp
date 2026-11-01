@@ -2090,6 +2090,8 @@ void ExprAnalyzer::analyzeMapProjectionExpr(MapProjectionExpr* expr) {
     SymbolExpr* const base = expr->getBase();
     analyzeExpr(base);
 
+    Symbol* const baseSymbol = base->getSymbol();
+    VarDecl* const baseDecl = base->getDecl();
     const EvaluatedType baseType = base->getType();
 
     // A tagged cell names no type until a row is in hand, and a null projects to null
@@ -2101,7 +2103,7 @@ void ExprAnalyzer::analyzeMapProjectionExpr(MapProjectionExpr* expr) {
 
     if (!projectsAnEntity && !projectsAMap && !projectsNull) {
         throwError(fmt::format("A map projection reads a node, a relationship or a map, and '{}' is '{}'",
-                               base->getSymbol()->getName(),
+                               baseSymbol->getName(),
                                EvaluatedTypeName::value(baseType)),
                    base);
     }
@@ -2114,11 +2116,11 @@ void ExprAnalyzer::analyzeMapProjectionExpr(MapProjectionExpr* expr) {
         // `.key` reads what `v.key` reads, so it is analyzed as that read
         if (readsAProperty && !item._value) {
             QualifiedName* name = QualifiedName::create(_ast);
-            name->addName(base->getSymbol());
+            name->addName(baseSymbol);
             name->addName(item._key);
 
             PropertyExpr* read = PropertyExpr::create(_ast, name);
-            read->setEntityVarDecl(base->getDecl());
+            read->setEntityVarDecl(baseDecl);
             item._value = read;
         }
 
