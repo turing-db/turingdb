@@ -1,5 +1,7 @@
 #include "NodePattern.h"
 
+#include <algorithm>
+
 #include "CypherAST.h"
 #include "Literal.h"
 #include "expr/SymbolExpr.h"
@@ -64,13 +66,16 @@ NodePattern* NodePattern::fromExpr(CypherAST* ast, Expr* expr) {
 }
 
 MapLiteral* NodePattern::createProperties(CypherAST* ast, const MapProjectionExpr::Items& items) {
+    const bool literalItems = std::ranges::all_of(items, [](const MapProjectionExpr::Item& item) {
+        return item._kind == MapProjectionExpr::ItemKind::Literal;
+    });
+
+    if (!literalItems) {
+        return nullptr;
+    }
+
     MapLiteral* properties = MapLiteral::create(ast);
-
     for (const MapProjectionExpr::Item& item : items) {
-        if (item._kind != MapProjectionExpr::ItemKind::Literal) {
-            return nullptr;
-        }
-
         properties->set(item._key, item._value);
     }
 

@@ -17,8 +17,8 @@ public:
     static NodePattern* create(CypherAST* ast);
     static NodePattern* fromExpr(CypherAST* ast, Expr* expr);
 
-    // `(n {key: value})` reads as a map projection wherever an expression may stand. As a
-    // node pattern its entries are the node's properties, and any other item is no property.
+    // `(n {key: value})` reads as a map projection wherever an expression may stand. As a node
+    // pattern its entries are the node's properties; null when any item is not `key: value`.
     static MapLiteral* createProperties(CypherAST* ast, const MapProjectionExpr::Items& items);
 
     LabelExpr* getLabelExpr() const { return _labelExpr; }

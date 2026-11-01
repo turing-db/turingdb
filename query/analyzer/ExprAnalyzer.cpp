@@ -2134,10 +2134,7 @@ void ExprAnalyzer::analyzeMapProjectionExpr(MapProjectionExpr* expr) {
 
     const EvaluatedType type = projectsNull ? EvaluatedType::Null : EvaluatedType::Map;
     expr->setType(type);
-
-    if (base->isDynamic()) {
-        expr->setDynamic();
-    }
+    expr->setDynamic();
 
     if (aggregate) {
         expr->setAggregate();
