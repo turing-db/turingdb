@@ -253,9 +253,11 @@ def UnwindRange : NLOp<"unwind_range", [Pure, AttrSizedOperandSegments]> {
                 -> !nl.iter<!nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.node_id>>
 
     Every bound carries rows - lowering lays a constant one out over them first - and is
-    read as a nullable value chunk. The integers are computed as the chunk is filled, so
-    the iterator holds one chunk of them however many a row spans. `from`, `to` and
-    `reversed` are db.unwind_range's, and the slice bounds are read as its range bounds are.
+    read as a nullable value chunk, or as a chunk of type-erased cells whose integer each
+    row reads out of its cell, raising on any other value. The integers are computed as the
+    chunk is filled, so the iterator holds one chunk of them however many a row spans.
+    `from`, `to` and `reversed` are db.unwind_range's, and the slice bounds are read as its
+    range bounds are.
   }];
 
   let arguments = (ins NLChunk:$start,
@@ -493,8 +495,9 @@ def ListSlice : NLOp<"list_slice", [Pure, RowAlignedThroughOperands, AttrSizedOp
                -> !nl.chunk<!storage.nullable<!storage.list<i64>>>
 
     Each bound carries rows - lowering lays a constant one out over them first - and is
-    read as a nullable value chunk. A bound the query left out is no operand at all, which
-    runs from the start or to the end.
+    read as a nullable value chunk, or as a chunk of type-erased cells whose integer each
+    row reads out of its cell, raising on any other value. A bound the query left out is no
+    operand at all, which runs from the start or to the end.
   }];
 
   let arguments = (ins NLChunk:$list, Optional<NLChunk>:$from, Optional<NLChunk>:$to);

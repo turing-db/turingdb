@@ -7231,8 +7231,9 @@ void trimCarriedColumns(Operation* op, mlir::OpBuilder& builder) {
     op->erase();
 }
 
-// Its own set, not @param erased, tells a freed op from a live one: the caller's set can hold
-// an address a later op was allocated at, and nothing is allocated while this runs.
+// An op that may raise stays, and so does the error a row raises on it. Its own set, not
+// @param erased, tells a freed op from a live one: the caller's set can hold an address a
+// later op was allocated at, and nothing is allocated while this runs.
 template <typename Erasable>
 bool eraseUnreadOps(llvm::SmallVectorImpl<Operation*>& pending, Erasable erasable, llvm::SmallPtrSetImpl<Operation*>& erased) {
     llvm::SmallPtrSet<Operation*, 16> freed;
@@ -7241,7 +7242,7 @@ bool eraseUnreadOps(llvm::SmallVectorImpl<Operation*>& pending, Erasable erasabl
         Operation* const op = pending.pop_back_val();
 
         const bool unread = op && !freed.contains(op) && erasable(op) && mlir::isOpTriviallyDead(op);
-        if (!unread) {
+        if (!unread || raisesOnSomeRows(op)) {
             continue;
         }
 
@@ -7262,8 +7263,8 @@ bool eraseUnreadOps(llvm::SmallVectorImpl<Operation*>& pending, Erasable erasabl
 }
 
 // Lowering runs every op it is handed, so the ops a dropped column leaves unread in the
-// pattern go too. Every op there that shapes the rows hands the yield the row tag or a
-// column it keeps, so the ones left unread only computed dropped values.
+// pattern go too, but for one that may raise. Every op there that shapes the rows hands the
+// yield the row tag or a column it keeps, so the ones left unread only computed dropped values.
 void eraseUnreadInPattern(llvm::ArrayRef<Value> dropped, Region& pattern, llvm::SmallPtrSetImpl<Operation*>& erased) {
     llvm::SmallVector<Operation*> producers;
     for (const Value column : dropped) {
@@ -7348,12 +7349,8 @@ bool eraseUnreadRowValues(Operation* root) {
         ops.push_back(op);
     });
 
-    const auto computesARowValue = [](Operation* op) {
-        return computesAValuePerRow(op) && !raisesOnSomeRows(op);
-    };
-
     llvm::SmallPtrSet<Operation*, 16> erased;
-    return eraseUnreadOps(ops, computesARowValue, erased);
+    return eraseUnreadOps(ops, computesAValuePerRow, erased);
 }
 
 struct TrimUnreadColumns : public impl::TrimUnreadColumnsBase<TrimUnreadColumns> {

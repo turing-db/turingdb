@@ -646,7 +646,7 @@ def Range : TuringOp<"range", [NoMemoryEffect, ConstantThroughOperands, DeclareO
 /**
 * ListSlice
 */
-def ListSlice : TuringOp<"list_slice", [Pure, ConstantThroughOperands, AttrSizedOperandSegments]> {
+def ListSlice : TuringOp<"list_slice", [NoMemoryEffect, ConstantThroughOperands, AttrSizedOperandSegments, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Read the run of each row's list that its bounds span";
 
   let description = [{
@@ -660,8 +660,9 @@ def ListSlice : TuringOp<"list_slice", [Pure, ConstantThroughOperands, AttrSized
 
     A bound is absent where the query left it out, which runs from the start or to the
     end. A negative bound counts from the end, and one running past the list is clamped to
-    it, so no row errors on a bound; a row whose list or whose bound is null gets a null
-    cell, which is what Cypher reads `null[1..2]` as.
+    it, so no row errors on an integer bound; a row whose list or whose bound is null gets a
+    null cell, which is what Cypher reads `null[1..2]` as. A bound read out of a type-erased
+    cell may hold another value, which raises.
 
     The elements are the ones the list already holds, so the result element type is the
     input's and is resolved during lowering, as db.list_comprehension's is.
@@ -2933,7 +2934,7 @@ def Avg : AggregateOp<"avg">;
 def StDev : AggregateOp<"stdev">;
 def StDevP : AggregateOp<"stdevp">;
 
-class UnaryFunctionOp<string mnemonic, list<Trait> traits = [Pure]>
+class UnaryFunctionOp<string mnemonic, list<Trait> traits>
     : TuringOp<mnemonic, !listconcat(traits, [ConstantThroughOperands])> {
   let summary = "Apply a unary function row-wise to a value column";
 
@@ -2957,6 +2958,17 @@ class TypedUnaryFunctionOp<string mnemonic, string readTypes>
   }];
 }
 
+// A conversion raises on a type-erased cell holding a value it has no rule for. The analyzer
+// turns away a column of one type it has no rule for, so only such a cell can raise
+class ConversionFunctionOp<string mnemonic>
+    : UnaryFunctionOp<mnemonic, [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+  let extraClassDefinition = [{
+    ::mlir::Speculation::Speculatability $cppClass::getSpeculatability() {
+      return speculatableOverKnownTypes(getInput());
+    }
+  }];
+}
+
 class NumberFunctionOp<string mnemonic> : TypedUnaryFunctionOp<mnemonic, "::mlir::IntegerType, ::mlir::FloatType">;
 class TextFunctionOp<string mnemonic> : TypedUnaryFunctionOp<mnemonic, "::mlir::storage::StringType">;
 class ListFunctionOp<string mnemonic> : TypedUnaryFunctionOp<mnemonic, "::mlir::storage::ListType">;
@@ -2972,17 +2984,17 @@ def PropertyMap : TypedUnaryFunctionOp<"properties", "::mlir::storage::NodeIDTyp
 def StartNode : TypedUnaryFunctionOp<"start_node", "::mlir::storage::EdgeIDType">;
 def EndNode : TypedUnaryFunctionOp<"end_node", "::mlir::storage::EdgeIDType">;
 
-def ToInteger : UnaryFunctionOp<"to_integer">;
-def ToFloat : UnaryFunctionOp<"to_float">;
-def ToBoolean : UnaryFunctionOp<"to_boolean">;
-def ToDateTime : UnaryFunctionOp<"to_datetime">;
+def ToInteger : ConversionFunctionOp<"to_integer">;
+def ToFloat : ConversionFunctionOp<"to_float">;
+def ToBoolean : ConversionFunctionOp<"to_boolean">;
+def ToDateTime : UnaryFunctionOp<"to_datetime", [Pure]>;
 def ToDuration : TypedUnaryFunctionOp<"to_duration", "::mlir::IntegerType">;
-def ToString : UnaryFunctionOp<"to_string">;
+def ToString : ConversionFunctionOp<"to_string">;
 
-def ToIntegerOrNull : UnaryFunctionOp<"to_integer_or_null">;
-def ToFloatOrNull : UnaryFunctionOp<"to_float_or_null">;
-def ToBooleanOrNull : UnaryFunctionOp<"to_boolean_or_null">;
-def ToStringOrNull : UnaryFunctionOp<"to_string_or_null">;
+def ToIntegerOrNull : UnaryFunctionOp<"to_integer_or_null", [Pure]>;
+def ToFloatOrNull : UnaryFunctionOp<"to_float_or_null", [Pure]>;
+def ToBooleanOrNull : UnaryFunctionOp<"to_boolean_or_null", [Pure]>;
+def ToStringOrNull : UnaryFunctionOp<"to_string_or_null", [Pure]>;
 
 // The calendar fields of an instant, as integer columns. The sub-second pair reads the
 // fraction of the second truncated to its own precision, so .123456 of a second in is a

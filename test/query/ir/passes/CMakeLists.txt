@@ -143,3 +143,9 @@ target_include_directories(test_query_ir_reroot_control_graph PRIVATE ${IR_TEST_
 add_turing_test(test_query_ir_fuse_unwind_equality FuseUnwindEqualityTest.cpp)
 
 add_turing_test(test_query_ir_unread_value_raises UnreadValueRaisesTest.cpp)
+
+add_turing_test(test_query_ir_unread_conversion_raises UnreadConversionRaisesTest.cpp)
+
+add_turing_test(test_query_ir_unread_slice_raises UnreadSliceRaisesTest.cpp)
+
+add_ir_tests(test_query_ir_unwind_range_window_speculatability UnwindRangeWindowSpeculatabilityTest.cpp)

@@ -3688,9 +3688,12 @@ NLRangeBound NLTranslator::rangeBound(mlir::Value chunk) {
         return NLRangeBound {};
     }
 
+    const Column* const column = getColumn(chunk);
+    const mlir::Type chunkType = chunk.getType();
+
     return NLRangeBound {
-        ._column = getColumn(chunk),
-        ._read = selectRangeBoundRead(chunk.getType()),
+        ._column = column,
+        ._read = isAnyChunk(chunkType) ? NLExecutor::selectCellBoundRead(column) : selectRangeBoundRead(chunkType),
     };
 }
 
