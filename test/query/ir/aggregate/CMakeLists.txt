@@ -193,3 +193,5 @@ add_ir_tests(test_query_ir_constant_key_write ConstantKeyWriteTest.cpp)
 
 # A collect or a percentile beside other aggregates of one projection, in either order.
 add_ir_tests(test_query_ir_collect_beside_aggregates CollectBesideAggregatesTest.cpp)
+
+add_turing_test(test_query_ir_limit_past_a_collect LimitPastACollectTest.cpp)
