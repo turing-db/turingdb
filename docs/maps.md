@@ -94,14 +94,16 @@ as `[u64 length][EncodedMap bytes]`.
 
 `v {.name, .*, rank: v.age + 1, x}` builds a map out of `v`, a node, a relationship or a map.
 `.key` holds `v.key`, null where `v` has no such property, and `.*` every property of `v`.
-`key: expr` holds the expression, and `x` the variable `x` under the key `x`. A later item
-replaces the entry an earlier one wrote under the same key, so `p {.*, name: 'x'}` replaces the
-name. A null `v` projects to null.
+`key: expr` holds the expression, and `x` the variable `x` under the key `x`. A later entry
+replaces an earlier one under the same key, and an entry wins over the property `.*` reads
+under its key wherever the `.*` stands, as in Neo4j: `p {name: 'x', .*}` and
+`p {.*, name: 'x'}` both hold the name 'x'. A null `v` projects to null and computes none of
+its items.
 
 The AST keeps the projection as a `MapProjectionExpr`; the analyzer reads each `.key` as the
-`v.key` property read. Codegen emits one `db.make_map` per run of items between two `.*`, a
-`db.properties` of `v` for each `.*`, and a `db.merge_maps` of them in item order. A
-`db.case` on `v IS NOT NULL` then keeps the map only where `v` is not null.
+`v.key` property read. Codegen emits a `db.make_map` of the entries and, where the projection
+reads every property, a `db.merge_maps` of it over `db.properties` of `v`. The map is built in
+a `db.lazy_case` on `v IS NOT NULL`, so only the rows where `v` is not null compute it.
 
 `db.merge_maps` lowers one-for-one to `nl.merge_maps`. Row r holds every key the operands hold
 at row r, under the value of the last operand holding it, sorted on key. A row where an operand

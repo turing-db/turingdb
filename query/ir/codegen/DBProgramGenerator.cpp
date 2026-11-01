@@ -8233,22 +8233,12 @@ void DBProgramGenerator::translateMapProjectionExpr(const Expr* expr, const MapP
 }
 
 mlir::Value DBProgramGenerator::projectedMap(const MapProjectionExpr* projection) {
-    const mlir::Value base = getOrTranslateExprColumn(projection->getBase());
-
-    const mlir::Location loc = _opBuilder.getUnknownLoc();
-    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
-
-    llvm::SmallVector<mlir::Value, 4> maps;
+    bool readsEveryProperty = false;
     llvm::SmallVector<std::pair<std::string_view, const Expr*>> entries;
 
     for (const MapProjectionExpr::Item& item : projection->getItems()) {
         if (item._kind == MapProjectionExpr::ItemKind::AllProperties) {
-            if (!entries.empty()) {
-                maps.push_back(emitMakeMap(entries));
-                entries.clear();
-            }
-
-            maps.push_back(_opBuilder.create<mlir::db::PropertyMap>(loc, noneType, base).getResult());
+            readsEveryProperty = true;
             continue;
         }
 
@@ -8264,15 +8254,22 @@ mlir::Value DBProgramGenerator::projectedMap(const MapProjectionExpr* projection
         }
     }
 
-    if (!entries.empty() || maps.empty()) {
-        maps.push_back(emitMakeMap(entries));
+    if (!readsEveryProperty) {
+        return emitMakeMap(entries);
     }
 
-    if (maps.size() > 1) {
-        return _opBuilder.create<mlir::db::MergeMaps>(loc, noneType, maps).getResult();
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+    const mlir::Value base = getOrTranslateExprColumn(projection->getBase());
+
+    const mlir::Value properties = _opBuilder.create<mlir::db::PropertyMap>(loc, noneType, base).getResult();
+    if (entries.empty()) {
+        return properties;
     }
 
-    return maps.front();
+    const mlir::Value written = emitMakeMap(entries);
+
+    return _opBuilder.create<mlir::db::MergeMaps>(loc, noneType, mlir::ValueRange {properties, written}).getResult();
 }
 
 void DBProgramGenerator::generateFoldRegion(mlir::Region& region,

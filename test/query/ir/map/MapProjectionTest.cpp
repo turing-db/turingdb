@@ -100,9 +100,9 @@ TEST_F(MapProjectionTest, replacesAPropertyWithALaterEntry) {
                {{"Remi", "32"}});
 }
 
-TEST_F(MapProjectionTest, replacesAnEntryWithALaterProperty) {
+TEST_F(MapProjectionTest, keepsAnEntryOverALaterProperty) {
     expectRows("MATCH (p:Person {name: 'Remy'}) WITH p {name: 'Remi', .*} AS m RETURN m.name, m.age",
-               {{"Remy", "32"}});
+               {{"Remi", "32"}});
 }
 
 TEST_F(MapProjectionTest, keepsASelectedPropertyTheNodeLacksBesideEveryProperty) {

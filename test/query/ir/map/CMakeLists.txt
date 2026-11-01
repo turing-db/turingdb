@@ -80,3 +80,5 @@ add_ir_tests(test_query_ir_map_projection MapProjectionTest.cpp)
 add_ir_tests(test_query_ir_map_literal_lookup MapLiteralLookupTest.cpp)
 
 add_turing_test(test_query_ir_map_projection_over_null MapProjectionOverNullTest.cpp)
+
+add_turing_test(test_query_ir_map_projection_precedence MapProjectionPrecedenceTest.cpp)

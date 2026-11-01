@@ -1281,9 +1281,8 @@ private:
     // is not null
     void translateMapProjectionExpr(const Expr* expr, const MapProjectionExpr* projection);
 
-    // The map a projection builds: one db.make_map per run of items other than `.*`, the
-    // base's db.properties for each `.*`, and a db.merge_maps of them in item order where
-    // there are several
+    // The map a projection builds: a db.make_map of its entries, merged over the base's
+    // db.properties where it reads every property, so an entry wins wherever `.*` stands
     mlir::Value projectedMap(const MapProjectionExpr* projection);
 
     // Generates a region of a db.reduce or a db.all_reduce: the entry block binds the
