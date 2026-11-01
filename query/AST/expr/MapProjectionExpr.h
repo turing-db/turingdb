@@ -12,8 +12,8 @@ class Symbol;
 class SymbolExpr;
 
 // A Cypher map projection: `v {.name, .*, rank: v.age + 1, x}` over a variable bound to a
-// node, an edge or a map. The items apply in order, a later one replacing the entry an
-// earlier one wrote under the same key, and a null base projects to null.
+// node, an edge or a map. A later entry replaces an earlier one under the same key, every
+// entry wins over the properties `.*` reads wherever it stands, and a null base projects to null.
 class MapProjectionExpr : public Expr {
 public:
     enum class ItemKind : uint8_t {
