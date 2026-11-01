@@ -3609,8 +3609,9 @@ void NLTranslator::translateMakeMap(nl::MakeMap makeMap, NLStmtContainer* body) 
 
 void NLTranslator::translateMergeMaps(nl::MergeMaps merge, NLStmtContainer* body) {
     const mlir::Value resultValue = merge.getResult();
+    const mlir::Type resultType = resultValue.getType();
 
-    Column* const result = allocColumnForChunkType(resultValue.getType());
+    Column* const result = allocColumnForChunkType(resultType);
     _valueSlots[resultValue] = result;
 
     NLMergeMapsData* data = _program->allocFunctionData<NLMergeMapsData>(result, _program->allocStepBuffers());
@@ -3624,7 +3625,7 @@ void NLTranslator::translateMergeMaps(nl::MergeMaps merge, NLStmtContainer* body
         });
     }
 
-    const mlir::Type resultElement = mlir::cast<nl::ChunkType>(resultValue.getType()).getElementType();
+    const mlir::Type resultElement = mlir::cast<nl::ChunkType>(resultType).getElementType();
 
     if (mlir::isa<storage::NullableType>(resultElement)) {
         body->emplaceStmt(&NLExecutor::runMergeMaps<std::optional<MapView>>, data);

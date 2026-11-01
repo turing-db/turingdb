@@ -8626,6 +8626,7 @@ void NLExecutor::runMergeMaps(NLExecutionContext*, NLFunctionData* data) {
     outputRaw.resize(rowCount);
 
     std::vector<MapEntryView> entries;
+    std::vector<size_t> order;
     std::vector<MapBuffer<>::MapKeyValuePair> merged;
 
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
@@ -8654,14 +8655,21 @@ void NLExecutor::runMergeMaps(NLExecutionContext*, NLFunctionData* data) {
         }
 
         // Equal keys keep their operand order, so the last of each run is the one that stays
-        std::ranges::stable_sort(entries, std::less {}, &MapEntryView::getKey);
+        order.resize(entries.size());
+        std::iota(order.begin(), order.end(), 0);
+        std::ranges::sort(order, [&entries](size_t lhs, size_t rhs) {
+            const std::string_view lhsKey = entries[lhs].getKey();
+            const std::string_view rhsKey = entries[rhs].getKey();
+
+            return lhsKey < rhsKey || (lhsKey == rhsKey && lhs < rhs);
+        });
 
         merged.clear();
-        for (size_t index = 0; index < entries.size(); index++) {
-            const MapEntryView entry = entries[index];
+        for (size_t position = 0; position < order.size(); position++) {
+            const MapEntryView entry = entries[order[position]];
 
-            const bool replacedLater = index + 1 < entries.size()
-                                    && entries[index + 1].getKey() == entry.getKey();
+            const bool replacedLater = position + 1 < order.size()
+                                    && entries[order[position + 1]].getKey() == entry.getKey();
             if (replacedLater) {
                 continue;
             }

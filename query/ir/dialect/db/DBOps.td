@@ -3594,6 +3594,7 @@ def LazyCase : TuringOp<"lazy_case", [Pure, ConstantThroughOperands]> {
   }];
 
   let hasVerifier = 1;
+  let hasRegionVerifier = 1;
 
   let assemblyFormat = [{
     `(` `{` $columns_to_filter `}` `)` $branches attr-dict `:` functional-type(operands, results)

@@ -1606,6 +1606,10 @@ LogicalResult LazyCase::verify() {
         }
     }
 
+    return success();
+}
+
+LogicalResult LazyCase::verifyRegions() {
     llvm::SmallVector<Value> selected;
     collectSelectedValues(selected);
 
@@ -2529,7 +2533,9 @@ Speculation::Speculatability Range::getSpeculatability() {
 // A type-erased list reads as null where it holds no list, so only a bound may raise. Its
 // first operand is the list, every other one a bound
 Speculation::Speculatability ListSlice::getSpeculatability() {
-    return speculatableOverKnownTypes(getOperation()->getOperands().drop_front());
+    const OperandRange operands = getOperands();
+
+    return speculatableOverKnownTypes(operands.drop_front());
 }
 
 // The window raises as the slice it was folded from does, on a type-erased bound holding no
@@ -2573,19 +2579,21 @@ Speculation::Speculatability Split::getSpeculatability() {
 }
 
 Speculation::Speculatability AndOp::getSpeculatability() {
-    return speculatableOverKnownTypes(getOperation()->getOperands());
+    return speculatableOverKnownTypes(getOperands());
 }
 
 Speculation::Speculatability OrOp::getSpeculatability() {
-    return speculatableOverKnownTypes(getOperation()->getOperands());
+    return speculatableOverKnownTypes(getOperands());
 }
 
 Speculation::Speculatability XorOp::getSpeculatability() {
-    return speculatableOverKnownTypes(getOperation()->getOperands());
+    return speculatableOverKnownTypes(getOperands());
 }
 
 Speculation::Speculatability NotOp::getSpeculatability() {
-    return speculatableOverKnownTypes(getOperation()->getOperands());
+    Operation* const operation = getOperation();
+
+    return speculatableOverKnownTypes(operation->getOperands());
 }
 
 Speculation::Speculatability AddOp::getSpeculatability() {
@@ -2594,7 +2602,7 @@ Speculation::Speculatability AddOp::getSpeculatability() {
 
 // '||' raises on a value that is neither a string nor a list
 Speculation::Speculatability ConcatOp::getSpeculatability() {
-    return speculatableOverKnownTypes(getOperation()->getOperands());
+    return speculatableOverKnownTypes(getOperands());
 }
 
 Speculation::Speculatability SubOp::getSpeculatability() {

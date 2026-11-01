@@ -5013,7 +5013,7 @@ MakePath sinkPastFilter(MakePath build, FilterOp filter, mlir::OpBuilder& builde
     return sunk;
 }
 
-MakePath sinkPastAFilter(MakePath build, mlir::OpBuilder& builder) {
+MakePath sinkPastFirstSinkableFilter(MakePath build, mlir::OpBuilder& builder) {
     for (Operation* user : build.getResult().getUsers()) {
         FilterOp filter = dyn_cast<FilterOp>(user);
         if (!filter || filter->getBlock() != build->getBlock()) {
@@ -5039,7 +5039,7 @@ struct SinkMakePath : public impl::SinkMakePathBase<SinkMakePath> {
 
         while (!builds.empty()) {
             MakePath build = builds.pop_back_val();
-            const MakePath sunk = sinkPastAFilter(build, builder);
+            const MakePath sunk = sinkPastFirstSinkableFilter(build, builder);
             if (!sunk) {
                 continue;
             }

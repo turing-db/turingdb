@@ -5480,12 +5480,10 @@ void DBLowering::visitProducer(mlir::Value column,
                                   || accumulatesThenEmits(definingOp)
                                   || mlir::isa<mlir::db::OptionalMatch>(definingOp);
 
-    // An op reading the whole relation before emitting any of it needs the loops feeding it
-    // to see every row: the walk stops and the limit budgets the emit loop alone. So does a
-    // materialize, whose scans are the emit loops. An optional match accumulates one step of
-    // the rows it joins onto rather than the relation, and emits them in input order, so once
-    // the budget is spent no later step can contribute a row - the walk carries on and bounds
-    // the loops feeding it too.
+    // An op reading the whole relation before emitting any of it, and a materialize, whose
+    // scans are the emit loops, need every row fed to them: the walk stops, and the limit
+    // budgets the emit loop alone. An optional match emits each step's rows in input order, so
+    // once the budget is spent no later step adds a row: the walk goes on to bound its inputs.
     const bool accumulatesTheRelation = accumulatesThenEmits(definingOp)
                                      || mlir::isa<mlir::db::Materialize>(definingOp);
     const bool breaksPipeline = accumulatesTheRelation || reducesToOneRow(definingOp);
