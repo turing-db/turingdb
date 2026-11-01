@@ -416,6 +416,10 @@ def MergeMaps : NLOp<"merge_maps", [Pure, RowAlignedThroughOperands]> {
   let results   = (outs NLChunk:$result);
   let hasVerifier = 1;
 
+  let extraClassDeclaration = [{
+    static ::mlir::Type resultChunkType(::mlir::MLIRContext* context, ::mlir::TypeRange mapTypes);
+  }];
+
   let assemblyFormat = "`(` $maps `)` attr-dict `:` functional-type(operands, results)";
 }
 

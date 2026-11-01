@@ -36,11 +36,16 @@ Type columnElement(Value column) {
     return ::db::inferredColumnElement(column);
 }
 
-// A selection whose result names an element holds the one its values select into; a result
-// of none leaves it to lowering
+// A selection whose result names an element holds the one its values select into. A result
+// of none leaves it to lowering, and so does a value of none, which a pass can put in place
+// of a typed one after codegen typed the result
 LogicalResult verifySelectedResult(Operation* op, Value result, ValueRange values) {
     const Type resultElement = cast<ColumnType>(result.getType()).getType();
-    if (isa<NoneType>(resultElement)) {
+    const bool selectsAValueLoweringTypes = llvm::any_of(values, [](Value value) {
+        return isa<NoneType>(cast<ColumnType>(value.getType()).getType());
+    });
+
+    if (isa<NoneType>(resultElement) || selectsAValueLoweringTypes) {
         return success();
     }
 

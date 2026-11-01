@@ -960,8 +960,6 @@ LogicalResult MakeMap::verify() {
     return success();
 }
 
-// Only a plain chunk of maps holds one in every row, so a result over any other operand is
-// nullable.
 LogicalResult MergeMaps::verify() {
     const OperandRange maps = getMaps();
     if (maps.size() < 2) {
@@ -974,19 +972,24 @@ LogicalResult MergeMaps::verify() {
         return emitOpError("operands must be chunks of maps or of tagged cells");
     }
 
-    const bool everyRowHoldsAMap = llvm::all_of(operandTypes, [](Type operandType) {
-        return isa<storage::MapType>(cast<ChunkType>(operandType).getElementType());
-    });
-
-    MLIRContext* const context = getContext();
-    const Type mapType = storage::MapType::get(context);
-    const Type expected = everyRowHoldsAMap ? mapType : storage::NullableType::get(context, mapType);
-
-    if (cast<ChunkType>(getResult().getType()).getElementType() != expected) {
+    if (getResult().getType() != resultChunkType(getContext(), operandTypes)) {
         return emitOpError("result must be a chunk of maps, nullable unless every operand holds a map in every row");
     }
 
     return success();
+}
+
+// Only a plain chunk of maps holds one in every row, so a result over any other operand is
+// nullable.
+Type MergeMaps::resultChunkType(MLIRContext* context, TypeRange mapTypes) {
+    const bool everyRowHoldsAMap = llvm::all_of(mapTypes, [](Type mapType) {
+        return isa<storage::MapType>(cast<ChunkType>(mapType).getElementType());
+    });
+
+    const Type map = storage::MapType::get(context);
+    const Type element = everyRowHoldsAMap ? map : storage::NullableType::get(context, map);
+
+    return ChunkType::get(context, element);
 }
 
 // A bound is read as a nullable value chunk, so a row missing one gets no list, and what

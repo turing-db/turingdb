@@ -2683,24 +2683,15 @@ void DBLowering::lowerMergeMaps(mlir::db::MergeMaps merge) {
 
     const mlir::Value cardinality = cardinalityDriver(maps);
 
-    bool everyRowHoldsAMap = true;
-
     for (mlir::Value& map : maps) {
         map = rowAlignedChunk(map, cardinality);
 
-        const mlir::Type mapChunkType = map.getType();
-        if (!holdsAMapPerRow(mapChunkType)) {
+        if (!holdsAMapPerRow(map.getType())) {
             throw IRException("db.merge_maps merges map columns, or columns of tagged cells");
         }
-
-        const mlir::Type element = mlir::cast<nl::ChunkType>(mapChunkType).getElementType();
-        everyRowHoldsAMap = everyRowHoldsAMap && mlir::isa<storage::MapType>(element);
     }
 
-    mlir::MLIRContext* const context = _builder.getContext();
-    const mlir::Type mapType = storage::MapType::get(context);
-    const mlir::Type resultElement = everyRowHoldsAMap ? mapType : storage::NullableType::get(context, mapType);
-    const nl::ChunkType resultType = nl::ChunkType::get(context, resultElement);
+    const mlir::Type resultType = nl::MergeMaps::resultChunkType(_builder.getContext(), mlir::ValueRange(maps).getTypes());
 
     setInsertionForNaryOp(maps);
 
