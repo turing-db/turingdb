@@ -324,7 +324,14 @@ bool StructuralExpressionComparator::readsThePropertyOfComponent(const Expr* can
     const bool sameEntity = property->getEntityVarDecl() == component->getEntityVarDecl();
     const bool sameProperty = property->getPropName() == component->getPropName();
 
-    return !candidateReadsAComponent && sameEntity && sameProperty;
+    // m.a reads the value m.a.key reads its key off, as n.attrs does for n.attrs.key
+    const bool readsTheKeyOfTheVariable = property->readsAMapKey()
+                                       && property->getPropName().empty()
+                                       && property->getMapKey() == component->getPropName();
+
+    const bool readsTheProperty = !candidateReadsAComponent && sameProperty;
+
+    return sameEntity && (readsTheProperty || readsTheKeyOfTheVariable);
 }
 
 bool StructuralExpressionComparator::equalLiterals(const Literal* lhs, const Literal* rhs) {

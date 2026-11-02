@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stddef.h>
+
 #include "Expr.h"
 
 #include "metadata/PropertyType.h"
@@ -12,6 +14,8 @@ class VarDecl;
 
 class PropertyExpr : public Expr {
 public:
+    static constexpr size_t MAX_NAME_COUNT = 3;
+
     const QualifiedName* getFullName() const { return _fullName; }
 
     static PropertyExpr* create(CypherAST* ast, QualifiedName* name);
@@ -46,8 +50,8 @@ public:
     DurationPart getDurationPart() const { return _durationPart; }
     void setDurationPart(DurationPart part);
 
-    // The key a map value is read under - m.key, or n.attrs.key, whose property name is
-    // still attrs. The key is meaningless unless this says so.
+    // The key a map value is read under - m.key, or n.attrs.key and m.a.key, whose property
+    // names are still attrs and a. The key is meaningless unless this says so.
     bool readsAMapKey() const { return _readsAMapKey; }
     std::string_view getMapKey() const { return _mapKey; }
     void setMapKey(std::string_view key);

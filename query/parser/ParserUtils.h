@@ -28,6 +28,7 @@ class Parameter;
 class PatternElement;
 class PropertyExpr;
 class Projection;
+class QualifiedName;
 class QuantifiedPath;
 class RegularQuery;
 class ReturnStmt;
@@ -129,6 +130,10 @@ public:
 
     // `(n).name` is `n.name`: a variable keeps its PropertyExpr, any other value is looked up
     static Expr* createPropertyLookup(CypherAST* ast, Expr* base, Symbol* propertyName);
+
+    // `m.a.b.c` is `(m.a.b).c`: a PropertyExpr reads a name off a variable and one component
+    // off that value, and each further name looks up the value the names before it read
+    static Expr* createPropertyChain(CypherAST* ast, QualifiedName* chain, const SourceLocation& location);
 
     static EntityTypeExpr* createLabelTest(CypherAST* ast, Expr* operand, LabelExpr* labelExpr);
 

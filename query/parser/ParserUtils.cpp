@@ -504,6 +504,39 @@ Expr* ParserUtils::createPropertyLookup(CypherAST* ast, Expr* base, Symbol* prop
     return PropertyLookupExpr::create(ast, base, propertyName->getName());
 }
 
+Expr* ParserUtils::createPropertyChain(CypherAST* ast, QualifiedName* chain, const SourceLocation& location) {
+    SourceManager* sourceManager = ast->getSourceManager();
+    const QualifiedName::Symbols& names = chain->names();
+
+    if (names.size() <= PropertyExpr::MAX_NAME_COUNT) {
+        PropertyExpr* property = PropertyExpr::create(ast, chain);
+        sourceManager->setLocation(property, location);
+
+        return property;
+    }
+
+    QualifiedName* fullName = QualifiedName::create(ast);
+    for (size_t index = 0; index < PropertyExpr::MAX_NAME_COUNT; index++) {
+        fullName->addName(names[index]);
+    }
+
+    const Symbol* lastName = fullName->back();
+    const SourceLocation* lastNameLocation = sourceManager->getLocation(reinterpret_cast<uintptr_t>(lastName));
+
+    Expr* value = PropertyExpr::create(ast, fullName);
+    sourceManager->setLocation(value, SourceLocation::join(location, *lastNameLocation));
+
+    for (size_t index = PropertyExpr::MAX_NAME_COUNT; index < names.size(); index++) {
+        const Symbol* name = names[index];
+        const SourceLocation* nameLocation = sourceManager->getLocation(reinterpret_cast<uintptr_t>(name));
+
+        value = PropertyLookupExpr::create(ast, value, name->getName());
+        sourceManager->setLocation(value, SourceLocation::join(location, *nameLocation));
+    }
+
+    return value;
+}
+
 EntityTypeExpr* ParserUtils::createLabelTest(CypherAST* ast, Expr* operand, LabelExpr* labelExpr) {
     if (operand->getKind() == Expr::Kind::SYMBOL) {
         const SymbolExpr* variable = static_cast<const SymbolExpr*>(operand);

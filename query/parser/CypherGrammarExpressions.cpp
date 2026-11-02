@@ -408,7 +408,7 @@ Expr* CypherGrammar::parseAtomicExpr() {
                 value = FunctionInvocationExpr::create(_ast, invocation);
                 locate(value, start);
             } else {
-                value = parsePropertyExpr(name, start);
+                value = ParserUtils::createPropertyChain(_ast, name, locationFrom(start));
                 kind = AtomicValue::PROPERTY;
             }
         } else if (check(CypherTokenKind::OBRACE)) {
@@ -539,7 +539,10 @@ QualifiedName* CypherGrammar::parseQualifiedName(Symbol* first) {
     name->addName(first);
 
     while (accept(CypherTokenKind::DOT)) {
-        name->addName(parseName());
+        Symbol* nextName = parseName();
+        _sourceManager->setLocation(nextName, _previous._location);
+
+        name->addName(nextName);
     }
 
     return name;

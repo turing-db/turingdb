@@ -10004,7 +10004,8 @@ mlir::Value DBProgramGenerator::translatePropertyRead(const PropertyExpr* propEx
     const std::string_view propName = propExpr->getPropName();
 
     // d.year, d.hours and m.key name no property: the value the component or the key is
-    // read off is the column the variable itself was bound to
+    // read off is the column the variable itself was bound to, or for m.a.key the value its
+    // map holds under a
     const EvaluatedType entityType = entityDecl->getType();
 
     const bool readsOffTheVariableItself = entityType == EvaluatedType::DateTime
@@ -10020,7 +10021,11 @@ mlir::Value DBProgramGenerator::translatePropertyRead(const PropertyExpr* propEx
 
         bioassert(boundColumn, "Dotted read on unknown variable: {}", varName);
 
-        return boundColumn;
+        if (propName.empty()) {
+            return boundColumn;
+        }
+
+        return emitStaticMapKey(boundColumn, propName);
     }
 
     // A header access reads a field of a loaded record rather than a property of an

@@ -58,14 +58,16 @@ drops them too.
 Beyond that and `keys()` / `properties()` below, a map value is passed through and rendered.
 Ordering by one, deduplicating on one, doing arithmetic on one and writing one back with `SET` are
 all rejected, `ORDER BY` and `DISTINCT` by the chunk-kind selectors rather than by the analyzer,
-so they read as `Unsupported chunk element type`. So is `m.a.b`, a key of a map another map holds.
-The bracket form reads a key computed per row, so a key written in the query is sent to the dotted
-form - `m.key`, `xs[0].a` - and `m.a['b']` is sent there too, which leaves a nested key with no
-spelling the query can write. A key computed per row still reaches one (`m.a[k]`). So is unwinding
-one: `UNWIND m.l AS x` is turned away with `UNWIND requires a list, not 'MapValue'`, whatever the
-entry's tag holds.
+so they read as `Unsupported chunk element type`. So is unwinding one: `UNWIND m.l AS x` is turned
+away with `UNWIND requires a list, not 'MapValue'`, whatever the entry's tag holds. The bracket
+form reads a key computed per row (`m.a[k]`), so a key written in the query is sent to the dotted
+form: `m.key`, `xs[0].a`, and `m.a.b` for `m.a['b']`.
 
 # Reading through a nested value
+
+`m.a.b` reads `b` out of the value `m.a` holds, as `n.attrs.b` reads it out of a stored map. A
+`PropertyExpr` holds at most three names, and the parser looks each further name up in the value
+before it, so `m.a.b.c` is `(m.a.b).c`. `WITH {d: {e: 1}} AS m RETURN m.d.e` is 1.
 
 A map value is a tagged cell, so a read through one asks the row's tag rather than the column's
 type. `m[k].b` reads `b` out of the map `m[k]` holds, and `m.l[0]` reads the first element of

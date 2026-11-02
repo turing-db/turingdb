@@ -539,9 +539,9 @@ void ExprAnalyzer::analyzeLiteralExpr(LiteralExpr* expr) {
 ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate, ValueType defaultType) {
     const QualifiedName* qualifiedName = expr->getFullName();
 
-    // Two names read a property of an entity or a field of a row; three read a component
-    // off a property holding an instant or a duration, the one chain a value extends
-    const bool readsAComponentOfAProperty = qualifiedName->size() == 3;
+    // Two names read a property of an entity, a field of a row or a key of a map; three read
+    // a component or a key off that value
+    const bool readsAComponentOfAProperty = qualifiedName->size() == PropertyExpr::MAX_NAME_COUNT;
 
     if (qualifiedName->size() != 2 && !readsAComponentOfAProperty) {
         throwError("Invalid property expression.", expr);
@@ -692,14 +692,13 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         }
 
         if (readsAComponentOfAProperty) {
-            throwError(fmt::format("'{}.{}' reads a key of a map held by another map, "
-                                   "which is not supported",
-                                   varName->getName(), propName->getName()),
-                       expr);
+            expr->setPropertyName(propName->getName());
+            expr->setMapKey(componentName);
+        } else {
+            expr->setMapKey(propName->getName());
         }
 
         expr->setEntityVarDecl(varDecl);
-        expr->setMapKey(propName->getName());
         expr->setType(EvaluatedType::Any);
         expr->setDynamic();
 
