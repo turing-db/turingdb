@@ -110,7 +110,7 @@ LiteralExpr* ExpectedASTTest::map(std::initializer_list<std::pair<std::string_vi
 MapLiteral* ExpectedASTTest::properties(std::initializer_list<std::pair<std::string_view, Expr*>> entries) {
     MapLiteral* values = MapLiteral::create(_expected.get());
     for (const auto& [key, value] : entries) {
-        values->set(name(key), value);
+        values->addEntry(name(key), value);
     }
 
     return values;

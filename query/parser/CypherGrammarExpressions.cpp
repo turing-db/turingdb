@@ -1253,12 +1253,12 @@ MapLiteral* CypherGrammar::parseMapPairChain() {
     const std::pair<Symbol*, Expr*> first = parseMapPair();
 
     MapLiteral* map = MapLiteral::create(_ast);
-    map->set(first.first, first.second);
+    map->addEntry(first.first, first.second);
     locate(map, start);
 
     while (accept(CypherTokenKind::COMMA)) {
         const std::pair<Symbol*, Expr*> pair = parseMapPair();
-        map->set(pair.first, pair.second);
+        map->addEntry(pair.first, pair.second);
     }
 
     return map;

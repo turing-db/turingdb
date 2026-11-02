@@ -76,7 +76,7 @@ MapLiteral* NodePattern::createProperties(CypherAST* ast, const MapProjectionExp
 
     MapLiteral* properties = MapLiteral::create(ast);
     for (const MapProjectionExpr::Item& item : items) {
-        properties->set(item._key, item._value);
+        properties->addEntry(item._key, item._value);
     }
 
     return properties;

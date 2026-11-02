@@ -1437,8 +1437,7 @@ private:
     mlir::Value translateListLiteral(const ListLiteral* list);
 
     mlir::Value translateMapLiteral(const MapLiteral* map);
-    void translateMapEntries(const MapLiteral* map,
-                             llvm::SmallVectorImpl<mlir::NamedAttribute>& entries);
+    void translateMapEntries(const MapLiteral* map, mlir::NamedAttrList& entries);
 
     // The column of the lists a db.make_list builds out of the column each item rides:
     // what a list whose items are not all literals evaluates to
@@ -1447,8 +1446,9 @@ private:
     mlir::Value translateMapOfColumns(const MapLiteral* map);
 
     // The db.make_map of @param entries, each a key and the expression its value is read
-    // from, which this sorts on key. The constant empty map when there is none.
-    mlir::Value emitMakeMap(llvm::SmallVectorImpl<std::pair<std::string_view, const Expr*>>& entries);
+    // from, in the order they were written. Every value is translated, and the map holds the
+    // last one under a key. The constant empty map when there is none.
+    mlir::Value emitMakeMap(std::span<const std::pair<std::string_view, const Expr*>> entries);
 
     void addScanNodes(const VariableDependency* var);
 

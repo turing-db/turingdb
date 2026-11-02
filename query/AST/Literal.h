@@ -199,11 +199,10 @@ public:
 
     static MapLiteral* create(CypherAST* ast);
 
-    /**
-     * @brief Sets @param key to @param value, replacing in place the entry carrying the same
-     * key name if there is one.
-     */
-    void set(Symbol* key, Expr* value);
+    // A key may repeat. Every value is evaluated, and the map holds the last one under a key.
+    void addEntry(Symbol* key, Expr* value);
+
+    void dropShadowedEntries();
 
     /// Whether every value is a literal, at any depth - what makes the whole map a value
     /// known without reading a row, rather than one built per row out of what its values

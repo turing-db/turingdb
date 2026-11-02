@@ -19,7 +19,7 @@ public:
     VarDecl* getDecl() const { return _decl; }
 
     void setSymbol(Symbol* symbol) { _symbol = symbol; }
-    void setProperties(MapLiteral* properties) { _properties = properties; }
+    void setProperties(MapLiteral* properties);
     void setWhere(WhereClause* where) { _where = where; }
 
     void setDecl(VarDecl* decl) { _decl = decl; }

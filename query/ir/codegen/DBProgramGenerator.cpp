@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <algorithm>
 #include <array>
+#include <map>
 #include <memory>
 #include <numbers>
 #include <optional>
@@ -1199,10 +1200,10 @@ mlir::Attribute DBProgramGenerator::literalAttr(const Literal* literal) {
     } else if (kind == Literal::Kind::MAP) {
         const MapLiteral* nested = static_cast<const MapLiteral*>(literal);
 
-        llvm::SmallVector<mlir::NamedAttribute> nestedEntries;
+        mlir::NamedAttrList nestedEntries;
         translateMapEntries(nested, nestedEntries);
 
-        return _opBuilder.getDictionaryAttr(nestedEntries);
+        return nestedEntries.getDictionary(_mlirCtxt);
     }
 
     return scalarLiteralAttr(literal);
@@ -1269,13 +1270,13 @@ mlir::Value DBProgramGenerator::translateMapLiteral(const MapLiteral* map) {
         return translateMapOfColumns(map);
     }
 
-    llvm::SmallVector<mlir::NamedAttribute> entries;
+    mlir::NamedAttrList entries;
     translateMapEntries(map, entries);
 
     // DictionaryAttr canonicalises by sorting on key name, so the entries reach the
     // interpreter sorted rather than in the order MapLiteral holds them.
     mlir::db::ConstantOp constant = _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(),
-                                                                            _opBuilder.getDictionaryAttr(entries));
+                                                                            entries.getDictionary(_mlirCtxt));
 
     return constant.getResult();
 }
@@ -1291,7 +1292,7 @@ mlir::Value DBProgramGenerator::translateMapOfColumns(const MapLiteral* map) {
     return emitMakeMap(entries);
 }
 
-mlir::Value DBProgramGenerator::emitMakeMap(llvm::SmallVectorImpl<std::pair<std::string_view, const Expr*>>& entries) {
+mlir::Value DBProgramGenerator::emitMakeMap(std::span<const std::pair<std::string_view, const Expr*>> entries) {
     if (entries.empty()) {
         mlir::db::ConstantOp empty = _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(),
                                                                              _opBuilder.getDictionaryAttr({}));
@@ -1299,18 +1300,19 @@ mlir::Value DBProgramGenerator::emitMakeMap(llvm::SmallVectorImpl<std::pair<std:
     }
 
     // Sorted on key name, as the DictionaryAttr of a constant map is
-    std::sort(entries.begin(), entries.end(), [](const auto& lhs, const auto& rhs) {
-        return lhs.first < rhs.first;
-    });
+    std::map<std::string_view, mlir::Value> columnsByKey;
+    for (const auto& [keyName, valueExpr] : entries) {
+        columnsByKey.insert_or_assign(keyName, getOrTranslateExprColumn(valueExpr));
+    }
 
     llvm::SmallVector<mlir::Attribute> keys;
     llvm::SmallVector<mlir::Value> valueColumns;
-    keys.reserve(entries.size());
-    valueColumns.reserve(entries.size());
+    keys.reserve(columnsByKey.size());
+    valueColumns.reserve(columnsByKey.size());
 
-    for (const auto& [keyName, valueExpr] : entries) {
+    for (const auto& [keyName, column] : columnsByKey) {
         keys.push_back(_opBuilder.getStringAttr(llvm::StringRef(keyName.data(), keyName.size())));
-        valueColumns.push_back(getOrTranslateExprColumn(valueExpr));
+        valueColumns.push_back(column);
     }
 
     mlir::db::MakeMap makeMap = _opBuilder.create<mlir::db::MakeMap>(_opBuilder.getUnknownLoc(),
@@ -1320,8 +1322,7 @@ mlir::Value DBProgramGenerator::emitMakeMap(llvm::SmallVectorImpl<std::pair<std:
     return makeMap.getResult();
 }
 
-void DBProgramGenerator::translateMapEntries(const MapLiteral* map,
-                                             llvm::SmallVectorImpl<mlir::NamedAttribute>& entries) {
+void DBProgramGenerator::translateMapEntries(const MapLiteral* map, mlir::NamedAttrList& entries) {
     entries.reserve(map->size());
 
     for (const auto& [key, valueExpr] : *map) {
@@ -1341,8 +1342,7 @@ void DBProgramGenerator::translateMapEntries(const MapLiteral* map,
         }
 
         const std::string_view keyName = key->getName();
-        entries.emplace_back(_opBuilder.getStringAttr(llvm::StringRef(keyName.data(), keyName.size())),
-                             value);
+        entries.set(_opBuilder.getStringAttr(llvm::StringRef(keyName.data(), keyName.size())), value);
     }
 }
 
@@ -8492,16 +8492,7 @@ mlir::Value DBProgramGenerator::projectedMap(const MapProjectionExpr* projection
             continue;
         }
 
-        const std::string_view key = item._key->getName();
-        const auto entryIt = std::ranges::find_if(entries, [key](const auto& entry) {
-            return entry.first == key;
-        });
-
-        if (entryIt != entries.end()) {
-            entryIt->second = item._value;
-        } else {
-            entries.emplace_back(key, item._value);
-        }
+        entries.emplace_back(item._key->getName(), item._value);
     }
 
     if (!readsEveryProperty) {

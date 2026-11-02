@@ -94,11 +94,11 @@ as `[u64 length][EncodedMap bytes]`.
 
 `v {.name, .*, rank: v.age + 1, x}` builds a map out of `v`, a node, a relationship or a map.
 `.key` holds `v.key`, null where `v` has no such property, and `.*` every property of `v`.
-`key: expr` holds the expression, and `x` the variable `x` under the key `x`. A later entry
-replaces an earlier one under the same key, and an entry wins over the property `.*` reads
-under its key wherever the `.*` stands, as in Neo4j: `p {name: 'x', .*}` and
-`p {.*, name: 'x'}` both hold the name 'x'. A null `v` projects to null and computes none of
-its items.
+`key: expr` holds the expression, and `x` the variable `x` under the key `x`. Every entry is
+computed, and a later one replaces an earlier one under the same key, as in a map literal:
+`v {x: 1 / 0, x: 2}` raises. An entry wins over the property `.*` reads under its key wherever
+the `.*` stands, as in Neo4j: `p {name: 'x', .*}` and `p {.*, name: 'x'}` both hold the name
+'x'. A null `v` projects to null and computes none of its items.
 
 The AST keeps the projection as a `MapProjectionExpr`; the analyzer reads each `.key` as the
 `v.key` property read. Codegen emits a `db.make_map` of the entries and, where the projection
