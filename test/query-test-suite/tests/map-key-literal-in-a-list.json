@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "WITH [{a: 1}, 2] AS xs RETURN xs[0]['a']",
+  "expect": {
+    "result": "xs[0]['a']\n1"
+  },
+  "tags": [
+    "map",
+    "key",
+    "static"
+  ],
+  "write-required": false
+}

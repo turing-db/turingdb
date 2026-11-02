@@ -59,9 +59,14 @@ Beyond that and `keys()` / `properties()` below, a map value is passed through a
 Ordering by one, deduplicating on one, doing arithmetic on one and writing one back with `SET` are
 all rejected, `ORDER BY` and `DISTINCT` by the chunk-kind selectors rather than by the analyzer,
 so they read as `Unsupported chunk element type`. So is unwinding one: `UNWIND m.l AS x` is turned
-away with `UNWIND requires a list, not 'MapValue'`, whatever the entry's tag holds. The bracket
-form reads a key computed per row (`m.a[k]`), so a key written in the query is sent to the dotted
-form: `m.key`, `xs[0].a`, and `m.a.b` for `m.a['b']`.
+away with `UNWIND requires a list, not 'MapValue'`, whatever the entry's tag holds.
+
+The bracket form reads a key too. Where `m` is a map, a node, a relationship or a loaded row,
+`m['key']` is analyzed as its dotted form `m.key` (`IndexExpr::getDottedForm`), and grouping and
+ordering match the two as one expression: `WITH {a: 1} AS m RETURN m['a']` is 1, and `p['age']` is
+the integer `p.age` is. On a tagged cell, `m['key']` is emitted as a `db.dynamic_map_key` over the
+key as a constant, the op `m[k]` emits for a key computed per row. That read raises on a datetime
+or a duration, where `m.key` reads the component.
 
 # Reading through a nested value
 

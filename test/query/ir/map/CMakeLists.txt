@@ -86,3 +86,5 @@ add_turing_test(test_query_ir_map_projection_precedence MapProjectionPrecedenceT
 add_turing_test(test_query_ir_map_repeated_key MapRepeatedKeyTest.cpp)
 
 add_turing_test(test_query_ir_nested_map_key NestedMapKeyTest.cpp)
+
+add_turing_test(test_query_ir_literal_map_key LiteralMapKeyTest.cpp)

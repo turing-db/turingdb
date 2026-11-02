@@ -201,6 +201,8 @@ private:
     // index names the field the load publishes it under; a computed one names none
     void analyzeCSVRowIndex(IndexExpr* expr);
 
+    Expr* createDottedForm(const IndexExpr* expr);
+
     LoadCSVStmt* findCSVSource(const VarDecl* alias) const;
 
     // The declaration the load publishes field @param slot under, created by the first

@@ -9562,6 +9562,13 @@ void DBProgramGenerator::translateIndexExpr(const Expr* expr, const IndexExpr* i
     const Expr* base = indexExpr->getBase();
     const Expr* index = indexExpr->getIndexExpr();
 
+    if (const Expr* dottedForm = indexExpr->getDottedForm()) {
+        translateExpr(dottedForm);
+
+        _part._exprMap[expr] = _part._exprMap.at(dottedForm);
+        return;
+    }
+
     // A null index reads nothing, whatever it names, so the analyzer types such a read Null.
     // Both operands are still emitted: an aggregate under one of them is not this layer's
     // to drop, and a pass prunes the columns nothing reads.

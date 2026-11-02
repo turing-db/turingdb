@@ -32,7 +32,24 @@
 
 using namespace db;
 
+namespace {
+
+const Expr* comparedForm(const Expr* expr) {
+    if (!expr || expr->getKind() != Expr::Kind::INDEX) {
+        return expr;
+    }
+
+    const Expr* dottedForm = static_cast<const IndexExpr*>(expr)->getDottedForm();
+
+    return dottedForm ? dottedForm : expr;
+}
+
+}
+
 bool StructuralExpressionComparator::equal(const Expr* lhs, const Expr* rhs) {
+    lhs = comparedForm(lhs);
+    rhs = comparedForm(rhs);
+
     // The same node, or two null operands of the same shape, need no further comparison
     if (lhs == rhs) {
         return true;
@@ -310,6 +327,8 @@ bool StructuralExpressionComparator::equalLabelExprs(const LabelExpr* lhs, const
 }
 
 bool StructuralExpressionComparator::readsThePropertyOfComponent(const Expr* candidate, const PropertyExpr* component) {
+    candidate = comparedForm(candidate);
+
     if (candidate->getKind() != Expr::Kind::PROPERTY) {
         return false;
     } 

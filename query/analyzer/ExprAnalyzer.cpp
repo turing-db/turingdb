@@ -21,7 +21,9 @@
 #include "Pattern.h"
 #include "PatternElement.h"
 #include "Parameter.h"
+#include "ParserUtils.h"
 #include "QualifiedName.h"
+#include "SourceManager.h"
 #include "Symbol.h"
 #include "Literal.h"
 #include "Projection.h"
@@ -925,11 +927,36 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     const EvaluatedType baseType = base->getType();
     const bool indexesAList = baseType == EvaluatedType::List;
     const bool indexesAMap = baseType == EvaluatedType::Map;
+    const bool indexesAnEntity = baseType == EvaluatedType::NodePattern
+                              || baseType == EvaluatedType::EdgePattern;
     const bool indexesACSVRow = baseType == EvaluatedType::StringTable;
 
     const bool indexesATaggedCell = baseType == EvaluatedType::Any;
 
     const bool indexesANullValue = baseType == EvaluatedType::Null;
+
+    // A tagged cell keeps the bracket's own read: the dotted form reads the components of
+    // a datetime the cell holds, which the bracket raises on
+    const bool indexesByAKeyInTheQuery = indexExpr->getKind() == Expr::Kind::LITERAL
+                                      && indexExpr->getType() == EvaluatedType::String;
+    const bool readsAsTheDottedForm = indexesByAKeyInTheQuery
+                                   && (indexesAMap || indexesAnEntity || indexesACSVRow);
+
+    Expr* const dottedForm = readsAsTheDottedForm ? createDottedForm(expr) : nullptr;
+    expr->setDottedForm(dottedForm);
+
+    if (dottedForm) {
+        analyzeExpr(dottedForm);
+
+        if (dottedForm->isDynamic()) {
+            expr->setDynamic();
+        }
+
+        expr->setExprType(dottedForm->getExprType());
+        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, dottedForm->getType()));
+
+        return;
+    }
 
     if (!indexesAList && !indexesAMap && !indexesATaggedCell && !indexesACSVRow
         && !indexesANullValue) {
@@ -973,16 +1000,8 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     }
 
     if (indexesByKey) {
-        // A map literal names its own keys, so reading one back is a separate feature. It is
-        // turned away first, since the dotted form it would be sent to does not parse either.
         if (base->getKind() == Expr::Kind::LITERAL) {
             throwError("Reading a key of a map literal is not supported yet.", expr);
-        }
-
-        // The bracket form reads a key computed per row. A key written in the query is not
-        // one, whatever it is read off, so it is sent to the dotted form.
-        if (indexExpr->getKind() == Expr::Kind::LITERAL) {
-            throwError("A map key known in the query is written m.key, not m['key']", expr);
         }
 
         expr->setReadsAMapKey();
@@ -1046,6 +1065,22 @@ void ExprAnalyzer::analyzeCSVRowIndex(IndexExpr* expr) {
     }
 
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::String));
+}
+
+Expr* ExprAnalyzer::createDottedForm(const IndexExpr* expr) {
+    const LiteralExpr* key = static_cast<const LiteralExpr*>(expr->getIndexExpr());
+    const StringLiteral* keyLiteral = static_cast<const StringLiteral*>(key->getLiteral());
+
+    Symbol* keySymbol = Symbol::create(_ast, keyLiteral->getValue());
+    Expr* dottedForm = ParserUtils::createPropertyLookup(_ast, expr->getBase(), keySymbol);
+
+    SourceManager* sourceManager = _ast->getSourceManager();
+    const SourceLocation* location = sourceManager->getLocation(reinterpret_cast<uintptr_t>(expr));
+    if (location) {
+        sourceManager->setLocation(dottedForm, *location);
+    }
+
+    return dottedForm;
 }
 
 void ExprAnalyzer::registerCSVSource(const VarDecl* alias, LoadCSVStmt* loadCSV) {
