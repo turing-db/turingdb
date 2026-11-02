@@ -322,14 +322,12 @@ TEST_F(ListOfMapsTest, holdsAMapReadingARowBesideAConstant) {
                {"[1, {name: 'Remy'}]", "[1, {name: 'Adam'}]"});
 }
 
-// A collect gathers its rows into a list, so a map value should collect like any other.
-// Disabled: collect's signature rejects a Map argument in the analyzer, before the lowering
-// gap in lowerCollect's cell-presence set is even reached.
-TEST_F(ListOfMapsTest, DISABLED_collectsMapsReadingARow) {
+// A collect gathers its rows into a list, so a map value collects like any other.
+TEST_F(ListOfMapsTest, collectsMapsReadingARow) {
     expectRows("UNWIND [1, 2] AS x RETURN collect({a: x})", {"[{a: 1}, {a: 2}]"});
 }
 
-TEST_F(ListOfMapsTest, DISABLED_collectsAConstantMap) {
+TEST_F(ListOfMapsTest, collectsAConstantMap) {
     expectRows("UNWIND [1, 2] AS x RETURN collect({a: 1})", {"[{a: 1}, {a: 1}]"});
 }
 
