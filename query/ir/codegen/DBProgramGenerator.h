@@ -223,10 +223,14 @@ private:
 
         CreatedEntityMap _createdEntities;
 
-        // The aggregate that reduced the rows the part matched, once one has. The columns
-        // bound above it hold those rows and are no longer the rows in flight, which are
-        // the groups: an op emitted below can carry only what this op bound or later.
+        // The aggregate that grouped the rows the part matched, once one has: the grouped
+        // columns are the ones it bound, under the expressions they compute.
         mlir::Operation* _aggregateOp {nullptr};
+
+        // The op that reduced the rows the part matched, once one has: the aggregate, or the
+        // dedup of a DISTINCT. The columns bound above it hold the rows it read and are no
+        // longer the rows in flight: an op emitted below can carry only what it bound or later.
+        mlir::Operation* _rowReductionOp {nullptr};
 
         // What a part cut leaves of an entity the query wrote: every row of it that is not
         // null names one this change has not committed, so a read goes to the write buffer,
@@ -1182,6 +1186,7 @@ private:
     void applyPredicateFilters(std::span<const Expr* const> predicates);
 
     void generateGroupAggregate(const Projection* projection);
+    void recordAggregate(mlir::Operation* aggregateOp);
 
     // Publishes the grouped column of every grouping key and aggregate result an ORDER BY
     // key reads, so the key computes over one value per group rather than over the
