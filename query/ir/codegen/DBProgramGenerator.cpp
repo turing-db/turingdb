@@ -5413,18 +5413,78 @@ void DBProgramGenerator::generatePropertyWrite(const PropertyExpr* propertyExpr,
     }
 }
 
+void DBProgramGenerator::generatePropertiesWrite(const SetItem::EntityPropertiesAssign& assign,
+                                                 mlir::Value mapColumn,
+                                                 mlir::Value rows) {
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+
+    const VarDecl* entityDecl = assign._entity->getDecl();
+    const std::string_view varName = entityDecl->getName();
+
+    const mlir::Value entityColumn = resolveEntityColumn(entityDecl);
+    bioassert(entityColumn, "Properties write on unknown variable: {}", varName);
+
+    const auto createdIt = _part._createdEntities.find(entityDecl);
+    if (createdIt != end(_part._createdEntities)) {
+        createdIt->second._properties.clear();
+    }
+
+    const mlir::Value pending = findPendingMask(entityDecl);
+    const bool allPending = isPendingThroughout(entityDecl);
+
+    llvm::SmallVector<mlir::NamedAttribute> createdTypes;
+    for (const EntityPropertyConstraint& created : assign._createdProperties) {
+        const mlir::Type elementType = valueTypeToElementType(_opBuilder, created._valueType);
+        createdTypes.push_back(_opBuilder.getNamedAttr(created._propTypeName, mlir::TypeAttr::get(elementType)));
+    }
+
+    const mlir::DictionaryAttr createdTypesAttr = createdTypes.empty() ? mlir::DictionaryAttr {}
+                                                                       : _opBuilder.getDictionaryAttr(createdTypes);
+
+    const EvaluatedType entityType = entityDecl->getType();
+    const bool isNode = entityType == EvaluatedType::NodePattern;
+    const bool isEdge = entityType == EvaluatedType::EdgePattern;
+    bioassert(isNode || isEdge, "Properties write on non-entity variable: {}", varName);
+
+    const auto createWrite = [&]<typename SetProperties>() {
+        _opBuilder.create<SetProperties>(loc,
+                                         entityColumn,
+                                         mapColumn,
+                                         pending,
+                                         rows,
+                                         allPending,
+                                         createdTypesAttr);
+    };
+
+    if (isNode) {
+        createWrite.template operator()<mlir::db::SetNodeProperties>();
+    } else /* (isEdge) */ {
+        createWrite.template operator()<mlir::db::SetEdgeProperties>();
+    }
+}
+
 void DBProgramGenerator::generateSetItems(const SetStmt* setStmt, mlir::Value rows) {
     for (const SetItem* item : setStmt->getItems()) {
-        const SetItem::PropertyExprAssign* assign =
-            std::get_if<SetItem::PropertyExprAssign>(&item->item());
-        bioassert(assign, "Only property-assignment SET items are supported");
+        const SetItem::Variant& variant = item->item();
+        const SetItem::PropertyExprAssign* assign = std::get_if<SetItem::PropertyExprAssign>(&variant);
+        const SetItem::EntityPropertiesAssign* propertiesAssign = std::get_if<SetItem::EntityPropertiesAssign>(&variant);
 
-        translateExprOverRows(assign->_propValueExpr);
+        if (assign) {
+            translateExprOverRows(assign->_propValueExpr);
 
-        const PropertyExpr* propertyExpr = assign->_propTypeExpr;
-        generatePropertyWrite(propertyExpr,
-                              assignedColumn(assign->_propValueExpr, propertyExpr->getValueType()),
-                              rows);
+            const PropertyExpr* propertyExpr = assign->_propTypeExpr;
+            generatePropertyWrite(propertyExpr,
+                                  assignedColumn(assign->_propValueExpr, propertyExpr->getValueType()),
+                                  rows);
+        } else if (propertiesAssign) {
+            translateExprOverRows(propertiesAssign->_value);
+
+            generatePropertiesWrite(*propertiesAssign,
+                                    _part._exprMap.at(propertiesAssign->_value),
+                                    rows);
+        } else {
+            bioassert(false, "Only property and properties assignment SET items are supported");
+        }
     }
 }
 

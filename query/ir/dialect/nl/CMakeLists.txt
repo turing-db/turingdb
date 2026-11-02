@@ -41,6 +41,7 @@ add_mlir_library(turing_db_ir_nldialect_s
   MLIRInferTypeOpInterface
   MLIRBuiltinToLLVMIRTranslation
   turing_db_ir_storagedialect_s
+  turing_db_ir_common_s
 )
 
 # Ensure we have MLIR and LLVM includes, as well as the headers in current dir

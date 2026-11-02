@@ -3762,6 +3762,54 @@ def SetEdgeProperty : NLOp<"set_edge_property", [AttrSizedOperandSegments]> {
   let hasVerifier = 1;
 }
 
+def SetNodeProperties : NLOp<"set_node_properties", [AttrSizedOperandSegments]> {
+  let summary = "Write each input node's map as its properties in the open transaction's write buffer";
+  let description = [{
+      nl.for %nodes in %scan {
+        nl.set_node_properties %nodes, %maps : !nl.chunk<!storage.map>
+      }
+  }];
+
+  let arguments = (ins NLNodeIDChunk:$input_nodes,
+                       NLChunk:$value,
+                       Optional<NLBoolChunk>:$pending,
+                       Optional<NLBoolChunk>:$rows,
+                       UnitAttr:$all_pending,
+                       OptionalAttr<DictionaryAttr>:$created_types);
+
+  let assemblyFormat = [{
+    $input_nodes `,` $value (`pending` $pending^)? (`rows` $rows^)?
+    (`all_pending` $all_pending^)? (`creates` $created_types^)?
+    attr-dict `:` qualified(type($value))
+  }];
+
+  let hasVerifier = 1;
+}
+
+def SetEdgeProperties : NLOp<"set_edge_properties", [AttrSizedOperandSegments]> {
+  let summary = "Write each input edge's map as its properties in the open transaction's write buffer";
+  let description = [{
+      nl.for %s, %e, %t in %edges {
+        nl.set_edge_properties %e, %maps : !nl.chunk<!storage.map>
+      }
+  }];
+
+  let arguments = (ins NLEdgeIDChunk:$input_edges,
+                       NLChunk:$value,
+                       Optional<NLBoolChunk>:$pending,
+                       Optional<NLBoolChunk>:$rows,
+                       UnitAttr:$all_pending,
+                       OptionalAttr<DictionaryAttr>:$created_types);
+
+  let assemblyFormat = [{
+    $input_edges `,` $value (`pending` $pending^)? (`rows` $rows^)?
+    (`all_pending` $all_pending^)? (`creates` $created_types^)?
+    attr-dict `:` qualified(type($value))
+  }];
+
+  let hasVerifier = 1;
+}
+
 def DeleteNode : NLOp<"delete_node"> {
   let summary = "Tombstone each input node in the open transaction's write buffer";
   let description = [{

@@ -12,6 +12,7 @@
 #include "DBColumnElement.h"
 #include "IRLiteralList.h"
 #include "IRRange.h"
+#include "IRValueTypes.h"
 #include "StorageEnums.h"
 #include "ColumnIndicesFormat.h"
 #include "EdgeDirectionsFormat.h"
@@ -79,6 +80,15 @@ bool mayHoldAnyType(Value operand) {
     const bool unresolved = isa<NoneType>(column.getType()) && isa<NoneType>(element);
 
     return unresolved || isa<storage::AnyType>(element);
+}
+
+bool holdsAMapPerRow(Value column) {
+    return mayHoldAnyType(column) || isa<storage::MapType>(columnElement(column));
+}
+
+template <typename IDType>
+bool holdsIDsOf(Value column) {
+    return mayHoldAnyType(column) || isa<IDType>(columnElement(column));
 }
 
 // An op reading values of some types raises on a value of another, which such an operand may hold
@@ -1361,6 +1371,30 @@ LogicalResult SetNodeProperty::verify() {
 LogicalResult SetEdgeProperty::verify() {
     if (getProperty().empty()) {
         return emitOpError("requires a non-empty property name");
+    }
+
+    return success();
+}
+
+LogicalResult SetNodeProperties::verify() {
+    if (!holdsIDsOf<storage::NodeIDType>(getInputNodes())) {
+        return emitOpError("writes the properties of a column of node IDs");
+    } else if (!holdsAMapPerRow(getValue())) {
+        return emitOpError("writes a column of maps or of tagged cells, optionally nullable");
+    } else if (!::db::namesPropertyElementTypes(getCreatedTypesAttr())) {
+        return emitOpError("creates each property with the element type of a stored value");
+    }
+
+    return success();
+}
+
+LogicalResult SetEdgeProperties::verify() {
+    if (!holdsIDsOf<storage::EdgeIDType>(getInputEdges())) {
+        return emitOpError("writes the properties of a column of edge IDs");
+    } else if (!holdsAMapPerRow(getValue())) {
+        return emitOpError("writes a column of maps or of tagged cells, optionally nullable");
+    } else if (!::db::namesPropertyElementTypes(getCreatedTypesAttr())) {
+        return emitOpError("creates each property with the element type of a stored value");
     }
 
     return success();

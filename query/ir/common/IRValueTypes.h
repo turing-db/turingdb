@@ -3,6 +3,7 @@
 #include "metadata/PropertyType.h"
 
 namespace mlir {
+class DictionaryAttr;
 class MLIRContext;
 class OpBuilder;
 class Type;
@@ -18,6 +19,10 @@ mlir::Type valueTypeToElementType(mlir::OpBuilder& builder, ValueType valueType)
 // The inverse of valueTypeToElementType, over a list of any element: ValueType::Invalid
 // for an element no value column is laid out for
 ValueType elementTypeToValueType(mlir::Type elementType);
+
+// Whether each entry of @param types, absent or not, is a TypeAttr of an element type a
+// property value column is laid out for
+bool namesPropertyElementTypes(mlir::DictionaryAttr types);
 
 // The element type an unwind of @param sourceElement produces: a drained list gives up the
 // type its own elements carry, falling back to the type-erased !storage.any when they share

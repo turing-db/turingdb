@@ -1223,6 +1223,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateSetNodeProperty(setNodeProperty, body);
         } else if (nl::SetEdgeProperty setEdgeProperty = mlir::dyn_cast<nl::SetEdgeProperty>(operation)) {
             translateSetEdgeProperty(setEdgeProperty, body);
+        } else if (nl::SetNodeProperties setNodeProperties = mlir::dyn_cast<nl::SetNodeProperties>(operation)) {
+            translateSetProperties<NLSetNodePropertiesData>(setNodeProperties, setNodeProperties.getInputNodes(), body);
+        } else if (nl::SetEdgeProperties setEdgeProperties = mlir::dyn_cast<nl::SetEdgeProperties>(operation)) {
+            translateSetProperties<NLSetEdgePropertiesData>(setEdgeProperties, setEdgeProperties.getInputEdges(), body);
         } else if (nl::DeleteNode deleteNode = mlir::dyn_cast<nl::DeleteNode>(operation)) {
             translateDeleteNode(deleteNode, body);
         } else if (nl::DeleteEdge deleteEdge = mlir::dyn_cast<nl::DeleteEdge>(operation)) {
@@ -3219,6 +3223,49 @@ void NLTranslator::translateSetEdgeProperty(nl::SetEdgeProperty setEdgeProperty,
     data->setRows(getMaskColumn(setEdgeProperty.getRows()));
 
     body->emplaceStmt(&NLExecutor::runSetEdgeProperty, data);
+}
+
+void NLTranslator::createMapKeyProperties(mlir::DictionaryAttr createdTypes) const {
+    if (!createdTypes) {
+        return;
+    }
+
+    for (const mlir::NamedAttribute created : createdTypes) {
+        const mlir::StringAttr name = created.getName();
+        const llvm::StringRef key = name.getValue();
+        if (findPropertyType(key)) {
+            continue;
+        }
+
+        const mlir::TypeAttr typeAttr = mlir::cast<mlir::TypeAttr>(created.getValue());
+        const mlir::Type elementType = typeAttr.getValue();
+        _metadataBuilder->getOrCreatePropertyType(std::string_view {key.data(), key.size()},
+                                                  elementTypeToValueType(elementType));
+    }
+}
+
+template <typename SetPropertiesData, typename SetPropertiesOp>
+void NLTranslator::translateSetProperties(SetPropertiesOp setProperties, mlir::Value input, NLStmtContainer* body) {
+    if (!_metadataBuilder) {
+        throw IRException("Cannot perform SET outside of a write transaction.");
+    }
+
+    createMapKeyProperties(setProperties.getCreatedTypesAttr());
+
+    using IDColumn = typename SetPropertiesData::IDColumnType;
+    constexpr bool WRITES_NODES = std::is_same_v<IDColumn, ColumnNodeIDs>;
+    const NLHandlerFunction run = WRITES_NODES ? &NLExecutor::runSetNodeProperties : &NLExecutor::runSetEdgeProperties;
+
+    const IDColumn* inputColumn = static_cast<const IDColumn*>(getColumn(input));
+
+    SetPropertiesData* data = _program->allocFunctionData<SetPropertiesData>(inputColumn,
+                                                                             getColumn(setProperties.getValue()));
+
+    data->setPending(getMaskColumn(setProperties.getPending()));
+    data->setAllPending(setProperties.getAllPending() || isPendingValue(input, WRITES_NODES));
+    data->setRows(getMaskColumn(setProperties.getRows()));
+
+    body->emplaceStmt(run, data);
 }
 
 void NLTranslator::translateDeleteNode(nl::DeleteNode deleteNode, NLStmtContainer* body) {

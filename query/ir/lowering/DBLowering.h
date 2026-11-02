@@ -413,6 +413,8 @@ private:
     void lowerMerge(mlir::db::Merge merge);
     void lowerSetNodeProperty(mlir::db::SetNodeProperty setNodeProperty);
     void lowerSetEdgeProperty(mlir::db::SetEdgeProperty setEdgeProperty);
+    template <typename NLSetProperties, typename DBSetProperties>
+    void lowerSetProperties(DBSetProperties setProperties, mlir::Value input);
     void lowerDeleteNode(mlir::db::DeleteNode deleteNode);
     void lowerDeleteEdge(mlir::db::DeleteEdge deleteEdge);
     void lowerCrossProduct(mlir::db::CrossProduct product);
@@ -829,6 +831,7 @@ private:
     // Point the builder just before the terminator of block, where the next
     // lowered op belongs
     void setInsertionInto(mlir::Block* block);
+    void setWriteInsertion(mlir::Value inputChunk, mlir::Value valueChunk);
 
     // Point the builder at the end of the entry block's run of hoisted constants and
     // handles, where the next one belongs

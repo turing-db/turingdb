@@ -39,6 +39,9 @@
 #include "metadata/LabelSet.h"
 #include "metadata/LabelSetHandle.h"
 #include "metadata/PropertyType.h"
+#include "versioning/CommitWriteBuffer.h"
+
+#include "NLWriteProperties.h"
 
 namespace db {
 
@@ -3775,6 +3778,49 @@ private:
     ValueType _cellValueType {ValueType::Invalid};
     bool _allPending {false};
 };
+
+template <typename IDColumn>
+class NLSetPropertiesData : public NLFunctionData {
+public:
+    using IDColumnType = IDColumn;
+
+    NLSetPropertiesData(const IDColumn* input, const Column* value)
+        : _input(input),
+        _value(value)
+    {
+    }
+
+    const IDColumn* getInput() const { return _input; }
+    const Column* getValue() const { return _value; }
+
+    const ColumnMask* getPending() const { return _pending; }
+    void setPending(const ColumnMask* pending) { _pending = pending; }
+
+    bool isAllPending() const { return _allPending; }
+    void setAllPending(bool allPending) { _allPending = allPending; }
+
+    const ColumnMask* getRows() const { return _rows; }
+    void setRows(const ColumnMask* rows) { _rows = rows; }
+
+    std::vector<WrittenMap>& getMaps() { return _maps; }
+    CommitWriteBuffer::UntypedProperties& getMapProperties() { return _mapProperties; }
+    std::vector<StagedRange>& getMapRanges() { return _mapRanges; }
+    std::vector<MapKeyPropertyType>& getKeyTypes() { return _keyTypes; }
+
+private:
+    const IDColumn* _input {nullptr};
+    const Column* _value {nullptr};
+    const ColumnMask* _pending {nullptr};
+    const ColumnMask* _rows {nullptr};
+    bool _allPending {false};
+    std::vector<WrittenMap> _maps;
+    CommitWriteBuffer::UntypedProperties _mapProperties;
+    std::vector<StagedRange> _mapRanges;
+    std::vector<MapKeyPropertyType> _keyTypes;
+};
+
+using NLSetNodePropertiesData = NLSetPropertiesData<ColumnNodeIDs>;
+using NLSetEdgePropertiesData = NLSetPropertiesData<ColumnEdgeIDs>;
 
 class NLDeleteNodeData : public NLFunctionData {
 public:

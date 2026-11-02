@@ -1395,7 +1395,12 @@ setSt
 
 setItem
     : variablePropertyExpr ASSIGN expr { $$ = SetItem::create(ast, static_cast<PropertyExpr*>($1), $3); LOC($$, @$); }
-    | symbol ADD_ASSIGN expr { $$ = SetItem::create(ast, $1, $3); LOC($$, @$); }
+    | symbol ADD_ASSIGN expr {
+        SymbolExpr* entity = SymbolExpr::create(ast, $1);
+        LOC(entity, @1);
+        $$ = SetItem::create(ast, entity, $3);
+        LOC($$, @$);
+      }
     | entityTypeExpr { $$ = SetItem::create(ast, static_cast<EntityTypeExpr*>($1)); LOC($$, @$); }
     ;
 

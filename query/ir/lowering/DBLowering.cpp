@@ -1533,6 +1533,10 @@ void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
         lowerSetNodeProperty(setNodeProperty);
     } else if (mlir::db::SetEdgeProperty setEdgeProperty = mlir::dyn_cast<mlir::db::SetEdgeProperty>(operation)) {
         lowerSetEdgeProperty(setEdgeProperty);
+    } else if (mlir::db::SetNodeProperties setNodeProperties = mlir::dyn_cast<mlir::db::SetNodeProperties>(operation)) {
+        lowerSetProperties<nl::SetNodeProperties>(setNodeProperties, setNodeProperties.getInputNodes());
+    } else if (mlir::db::SetEdgeProperties setEdgeProperties = mlir::dyn_cast<mlir::db::SetEdgeProperties>(operation)) {
+        lowerSetProperties<nl::SetEdgeProperties>(setEdgeProperties, setEdgeProperties.getInputEdges());
     } else if (mlir::db::DeleteNode deleteNode = mlir::dyn_cast<mlir::db::DeleteNode>(operation)) {
         lowerDeleteNode(deleteNode);
     } else if (mlir::db::DeleteEdge deleteEdge = mlir::dyn_cast<mlir::db::DeleteEdge>(operation)) {
@@ -6020,18 +6024,23 @@ void DBLowering::lowerMerge(mlir::db::Merge merge) {
     _innermostCardinality = nlResults.front();
 }
 
+void DBLowering::setWriteInsertion(mlir::Value inputChunk, mlir::Value valueChunk) {
+    mlir::Value reference = inputChunk;
+    mlir::Block* const block = deeperBlock(reference, valueChunk);
+    if (ownerBlock(valueChunk) == block) {
+        reference = valueChunk;
+    }
+
+    setInsertionInto(ownerBlock(reference));
+}
+
 void DBLowering::lowerSetNodeProperty(mlir::db::SetNodeProperty setNodeProperty) {
     const mlir::Location loc = _builder.getUnknownLoc();
     const mlir::Value inputChunk = mapValue(setNodeProperty.getInputNodes());
     const mlir::Value valueChunk = propertyWriteChunk(setNodeProperty.getProperty(),
                                                       mapValue(setNodeProperty.getValue()));
 
-    mlir::Value reference = inputChunk;
-    mlir::Block* const block = deeperBlock(reference, valueChunk);
-    if (ownerBlock(valueChunk) == block) {
-        reference = valueChunk;
-    }
-    setInsertionInto(ownerBlock(reference));
+    setWriteInsertion(inputChunk, valueChunk);
 
     _builder.create<nl::SetNodeProperty>(
         loc,
@@ -6049,12 +6058,7 @@ void DBLowering::lowerSetEdgeProperty(mlir::db::SetEdgeProperty setEdgeProperty)
     const mlir::Value valueChunk = propertyWriteChunk(setEdgeProperty.getProperty(),
                                                       mapValue(setEdgeProperty.getValue()));
 
-    mlir::Value reference = inputChunk;
-    mlir::Block* const block = deeperBlock(reference, valueChunk);
-    if (ownerBlock(valueChunk) == block) {
-        reference = valueChunk;
-    }
-    setInsertionInto(ownerBlock(reference));
+    setWriteInsertion(inputChunk, valueChunk);
 
     _builder.create<nl::SetEdgeProperty>(
         loc,
@@ -6064,6 +6068,23 @@ void DBLowering::lowerSetEdgeProperty(mlir::db::SetEdgeProperty setEdgeProperty)
         mapOptionalMask(setEdgeProperty.getPending()),
         mapOptionalMask(setEdgeProperty.getRows()),
         setEdgeProperty.getAllPending());
+}
+
+template <typename NLSetProperties, typename DBSetProperties>
+void DBLowering::lowerSetProperties(DBSetProperties setProperties, mlir::Value input) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+    const mlir::Value inputChunk = mapValue(input);
+    const mlir::Value valueChunk = mapValue(setProperties.getValue());
+
+    setWriteInsertion(inputChunk, valueChunk);
+
+    _builder.create<NLSetProperties>(loc,
+                                     inputChunk,
+                                     valueChunk,
+                                     mapOptionalMask(setProperties.getPending()),
+                                     mapOptionalMask(setProperties.getRows()),
+                                     setProperties.getAllPending(),
+                                     setProperties.getCreatedTypesAttr());
 }
 
 void DBLowering::lowerDeleteNode(mlir::db::DeleteNode deleteNode) {

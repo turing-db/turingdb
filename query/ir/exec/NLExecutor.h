@@ -341,6 +341,10 @@ public:
 
     static void runSetEdgeProperty(NLExecutionContext* context, NLFunctionData* data);
 
+    static void runSetNodeProperties(NLExecutionContext* context, NLFunctionData* data);
+
+    static void runSetEdgeProperties(NLExecutionContext* context, NLFunctionData* data);
+
     static void runDeleteNode(NLExecutionContext* context, NLFunctionData* data);
 
     static void runDeleteEdge(NLExecutionContext* context, NLFunctionData* data);

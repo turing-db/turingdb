@@ -1,13 +1,16 @@
 #pragma once
 
 #include <variant>
+#include <vector>
+
+#include "decl/PatternData.h"
 
 namespace db {
 
 class CypherAST;
 class PropertyExpr;
 class Expr;
-class Symbol;
+class SymbolExpr;
 class EntityTypeExpr;
 
 class SetItem {
@@ -22,9 +25,10 @@ public:
         Expr* _propValueExpr {nullptr};
     };
 
-    struct SymbolAddAssign {
-        Symbol* _symbol {nullptr};
+    struct EntityPropertiesAssign {
+        SymbolExpr* _entity {nullptr};
         Expr* _value {nullptr};
+        std::vector<EntityPropertyConstraint> _createdProperties;
     };
 
     struct SymbolEntityTypes {
@@ -32,12 +36,12 @@ public:
     };
 
     using Variant = std::variant<PropertyExprAssign,
-                                 SymbolAddAssign,
+                                 EntityPropertiesAssign,
                                  SymbolEntityTypes>;
 
     static SetItem* create(CypherAST* ast, PropertyExpr* expr, Expr* value);
     static SetItem* create(CypherAST* ast, EntityTypeExpr* value);
-    static SetItem* create(CypherAST* ast, Symbol* symbol, Expr* value);
+    static SetItem* create(CypherAST* ast, SymbolExpr* entity, Expr* value);
 
     Variant& item() { return _item; }
     const Variant& item() const { return _item; }

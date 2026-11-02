@@ -133,6 +133,10 @@ public:
 
     static bool propTypeCompatible(ValueType vt, EvaluatedType exprType);
 
+    // The type property @param name has in this query: the graph's, or the one a write
+    // earlier in the query creates it with. Invalid for a name neither knows.
+    ValueType resolvePropertyType(std::string_view name) const;
+
     // The type of one column the branches of a CASE, a coalesce, a UNION or a WHEN fill
     // with @param carried and @param value, selected over the types each can be bound to
     static void selectExprType(const ExprType& carried, const ExprType& value, ExprType& out);
@@ -162,10 +166,6 @@ private:
 
     // The declaration a name reads as, noting it when it came from an enclosing scope
     VarDecl* resolveVariable(std::string_view name);
-
-    // The type property @param name has in this query: the graph's, or the one a write
-    // earlier in the query creates it with. Invalid for a name neither knows.
-    ValueType resolvePropertyType(std::string_view name) const;
 
     void narrowOperand(Expr* operand, EvaluatedTypeSet accepted);
 

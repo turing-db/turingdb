@@ -21,6 +21,7 @@
 #include "DBPasses.h"
 #include "DBTypes.h"
 #include "expr/CaseExpr.h"
+#include "stmt/SetItem.h"
 #include "metadata/DateTime.h"
 
 #include "ExplainRequest.h"
@@ -815,6 +816,10 @@ private:
     void generatePropertyWrite(const PropertyExpr* propertyExpr,
                                mlir::Value valueColumn,
                                mlir::Value rows);
+
+    void generatePropertiesWrite(const SetItem::EntityPropertiesAssign& assign,
+                                 mlir::Value mapColumn,
+                                 mlir::Value rows);
 
     mlir::Value assignedColumn(const Expr* value, ValueType propertyType);
 

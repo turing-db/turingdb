@@ -6039,6 +6039,116 @@ bool writeTouchesRow(const ColumnMask* rows, size_t row) {
     return !rows || (*rows)[row];
 }
 
+bool isSameMap(const WrittenMap& lhs, const WrittenMap& rhs) {
+    const bool holdsAnotherKind = lhs._tag != rhs._tag || lhs._map.has_value() != rhs._map.has_value();
+
+    if (holdsAnotherKind) {
+        return false;
+    } else if (!lhs._map) {
+        return true;
+    }
+
+    const std::span<const MapEntryView> lhsEntries = lhs._map->entries();
+    const std::span<const MapEntryView> rhsEntries = rhs._map->entries();
+
+    return lhsEntries.data() == rhsEntries.data() && lhsEntries.size() == rhsEntries.size();
+}
+
+template <typename IDColumn>
+void runSetProperties(NLExecutionContext* context, NLFunctionData* data) {
+    constexpr bool WRITES_NODES = std::is_same_v<IDColumn, ColumnNodeIDs>;
+
+    NLSetPropertiesData<IDColumn>* setData = static_cast<NLSetPropertiesData<IDColumn>*>(data);
+    CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
+    bioassert(writeBuffer, "A properties write requires an active write transaction");
+
+    const IDColumn* entities = setData->getInput();
+    const size_t rowCount = entities->size();
+
+    std::vector<WrittenMap>& maps = setData->getMaps();
+    extractWrittenMaps(setData->getValue(), rowCount, maps);
+
+    const GraphView* view = context->getView();
+    const MetadataBuilder* metadataBuilder = context->getMetadataBuilder();
+    const ColumnMask* rows = setData->getRows();
+    const auto& raw = entities->getRaw();
+
+    CommitWriteBuffer::UntypedProperties& mapProperties = setData->getMapProperties();
+    std::vector<StagedRange>& mapRanges = setData->getMapRanges();
+    std::vector<MapKeyPropertyType>& keyTypes = setData->getKeyTypes();
+
+    mapProperties.clear();
+    mapRanges.assign(rowCount, StagedRange {});
+
+    const WrittenMap* stagedMap = nullptr;
+    StagedRange stagedRange;
+
+    for (size_t row = 0; row < rowCount; row++) {
+        if (!writeTouchesRow(rows, row) || !raw[row].isValid()) {
+            continue;
+        }
+
+        const bool stagesAnotherMap = !stagedMap || !isSameMap(*stagedMap, maps[row]);
+        if (stagesAnotherMap) {
+            const size_t begin = mapProperties.size();
+            stageMapProperties(maps[row], view, metadataBuilder, keyTypes, mapProperties);
+
+            stagedMap = &maps[row];
+            stagedRange = StagedRange {begin, mapProperties.size()};
+        }
+
+        mapRanges[row] = stagedRange;
+    }
+
+    const size_t firstPendingID = WRITES_NODES ? committedNodeCount(view) : committedEdgeCount(view);
+    const size_t pendingCount = WRITES_NODES ? writeBuffer->numPendingNodes() : writeBuffer->numPendingEdges();
+    const PendingRows pendingRows(setData->getPending(), setData->isAllPending(), firstPendingID, pendingCount);
+    NLWrittenValues& written = context->getWrittenValues();
+
+    for (size_t row = 0; row < rowCount; row++) {
+        if (!writeTouchesRow(rows, row) || !raw[row].isValid()) {
+            continue;
+        }
+
+        const StagedRange& range = mapRanges[row];
+        const std::span<CommitWriteBuffer::UntypedProperty> writes {mapProperties.begin() + range._begin,
+                                                                    mapProperties.begin() + range._end};
+
+        const uint64_t id = raw[row].getValue();
+
+        if (pendingRows.has(row, id)) {
+            const size_t offset = id - firstPendingID;
+
+            if constexpr (WRITES_NODES) {
+                CommitWriteBuffer::PendingNode& node = writeBuffer->getPendingNode(offset);
+                const auto writeProperty = [&](const CommitWriteBuffer::UntypedProperty& property) {
+                    setPendingProperty(node.properties, property);
+                    written.addPendingNodeUpdate(offset, property.propertyID);
+                };
+
+                std::ranges::for_each(writes, writeProperty);
+            } else {
+                CommitWriteBuffer::PendingEdge& edge = writeBuffer->getPendingEdge(offset);
+                const auto writeProperty = [&](const CommitWriteBuffer::UntypedProperty& property) {
+                    setPendingProperty(edge.properties, property);
+                };
+
+                std::ranges::for_each(writes, writeProperty);
+            }
+        } else {
+            const auto writeProperty = [&](CommitWriteBuffer::UntypedProperty& property) {
+                if constexpr (WRITES_NODES) {
+                    writeBuffer->addNodeUpdate(raw[row], property);
+                } else {
+                    writeBuffer->addEdgeUpdate(raw[row], property);
+                }
+            };
+
+            std::ranges::for_each(writes, writeProperty);
+        }
+    }
+}
+
 // The searched value as the write buffer holds one, so a scan can compare it against what
 // a pending node was written with. A string the scan borrows is copied: the buffer's own
 // values are owning.
@@ -6702,6 +6812,14 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
             writeBuffer->addEdgeUpdate(raw[row], propsBuffer[row]);
         }
     }
+}
+
+void NLExecutor::runSetNodeProperties(NLExecutionContext* context, NLFunctionData* data) {
+    runSetProperties<ColumnNodeIDs>(context, data);
+}
+
+void NLExecutor::runSetEdgeProperties(NLExecutionContext* context, NLFunctionData* data) {
+    runSetProperties<ColumnEdgeIDs>(context, data);
 }
 
 void NLExecutor::runDeleteNode(NLExecutionContext* context, NLFunctionData* data) {
