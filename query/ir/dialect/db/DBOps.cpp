@@ -60,9 +60,9 @@ bool mayHoldAnyType(Value operand) {
     return unresolved || isa<storage::AnyType>(element);
 }
 
-// A logical operator raises on a value that is no boolean
-Speculation::Speculatability speculatableOverTruthValues(Operation* op) {
-    return speculatableWhen(llvm::none_of(op->getOperands(), mayHoldAnyType));
+// An op reading values of some types raises on a value of another, which such an operand may hold
+Speculation::Speculatability speculatableOverKnownTypes(ValueRange operands) {
+    return speculatableWhen(llvm::none_of(operands, mayHoldAnyType));
 }
 
 template <typename... ElementTypes>
@@ -2452,9 +2452,33 @@ Speculation::Speculatability Range::getSpeculatability() {
     return speculatableWhen(::db::countRangeSteps(from, to, by) < ::db::RANGE_LENGTH_LIMIT);
 }
 
+// A type-erased list reads as null where it holds no list, so only a bound may raise. Its
+// first operand is the list, every other one a bound
+Speculation::Speculatability ListSlice::getSpeculatability() {
+    const OperandRange operands = getOperands();
+
+    return speculatableOverKnownTypes(operands.drop_front());
+}
+
+// The window raises as the slice it was folded from does, on a type-erased bound holding no
+// integer
 Speculation::Speculatability UnwindRange::getSpeculatability() {
     int64_t by = 0;
-    return speculatableWhen(matchIntegerLiteral(getStep(), by) && by != 0);
+    const bool countsByALiteralStep = matchIntegerLiteral(getStep(), by) && by != 0;
+    if (!countsByALiteralStep) {
+        return Speculation::NotSpeculatable;
+    }
+
+    llvm::SmallVector<Value, 4> bounds {getStart(), getEnd()};
+    if (const Value from = getFrom()) {
+        bounds.push_back(from);
+    }
+
+    if (const Value to = getTo()) {
+        bounds.push_back(to);
+    }
+
+    return speculatableOverKnownTypes(bounds);
 }
 
 Speculation::Speculatability Substring::getSpeculatability() {
@@ -2477,19 +2501,21 @@ Speculation::Speculatability Split::getSpeculatability() {
 }
 
 Speculation::Speculatability AndOp::getSpeculatability() {
-    return speculatableOverTruthValues(getOperation());
+    return speculatableOverKnownTypes(getOperands());
 }
 
 Speculation::Speculatability OrOp::getSpeculatability() {
-    return speculatableOverTruthValues(getOperation());
+    return speculatableOverKnownTypes(getOperands());
 }
 
 Speculation::Speculatability XorOp::getSpeculatability() {
-    return speculatableOverTruthValues(getOperation());
+    return speculatableOverKnownTypes(getOperands());
 }
 
 Speculation::Speculatability NotOp::getSpeculatability() {
-    return speculatableOverTruthValues(getOperation());
+    Operation* const operation = getOperation();
+
+    return speculatableOverKnownTypes(operation->getOperands());
 }
 
 Speculation::Speculatability AddOp::getSpeculatability() {
@@ -2498,7 +2524,7 @@ Speculation::Speculatability AddOp::getSpeculatability() {
 
 // '||' raises on a value that is neither a string nor a list
 Speculation::Speculatability ConcatOp::getSpeculatability() {
-    return speculatableWhen(llvm::none_of(getOperation()->getOperands(), mayHoldAnyType));
+    return speculatableOverKnownTypes(getOperands());
 }
 
 Speculation::Speculatability SubOp::getSpeculatability() {

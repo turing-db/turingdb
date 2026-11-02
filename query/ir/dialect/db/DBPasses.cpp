@@ -576,10 +576,10 @@ struct ConeFrame {
 };
 
 // A cone is what a pass moves onto rows the query may not have run it on, so an op that may
-// raise on some row's value - any op not declared speculatable - stays out of it, as one of
-// the cone's inputs
+// raise on some row's value - any op not declared speculatable, or holding one - stays out
+// of it, as one of the cone's inputs
 bool raisesOnSomeRows(Operation* op) {
-    return !mlir::isSpeculatable(op);
+    return !::db::runsWithoutRaising(op);
 }
 
 // Gathers the mask's compute cone and the external columns feeding it. Valid
@@ -1761,7 +1761,8 @@ bool computesAValuePerRow(Operation* op) {
 
     return op->hasTrait<OpTrait::ConstantThroughOperands>()
         || computesPerRow(op)
-        || isa<Range, MakeList, MakeMap, ListSlice, CollectSubquery, CountSubquery, ExistsSubquery, PatternComprehension>(op);
+        || isa<Range, MakeList, MakeMap, ListSlice, DynamicMapKey, MakePath, ExpandPath, PathLength,
+               CollectSubquery, CountSubquery, ExistsSubquery, PatternComprehension>(op);
 }
 
 // The ops computing an unwind's source that nothing else reads, in block order, and the
@@ -7230,33 +7231,51 @@ void trimCarriedColumns(Operation* op, mlir::OpBuilder& builder) {
     op->erase();
 }
 
+// An op that may raise stays, and so does the error a row raises on it. Its own set, not
+// @param erased, tells a freed op from a live one: the caller's set can hold an address a
+// later op was allocated at, and nothing is allocated while this runs.
+template <typename Erasable>
+bool eraseUnreadOps(llvm::SmallVectorImpl<Operation*>& pending, Erasable erasable, llvm::SmallPtrSetImpl<Operation*>& erased) {
+    llvm::SmallPtrSet<Operation*, 16> freed;
+
+    while (!pending.empty()) {
+        Operation* const op = pending.pop_back_val();
+
+        const bool unread = op && !freed.contains(op) && erasable(op) && mlir::isOpTriviallyDead(op);
+        if (!unread || raisesOnSomeRows(op)) {
+            continue;
+        }
+
+        for (const Value operand : op->getOperands()) {
+            pending.push_back(operand.getDefiningOp());
+        }
+
+        op->walk([&freed](Operation* nested) {
+            freed.insert(nested);
+        });
+
+        op->erase();
+    }
+
+    erased.insert(freed.begin(), freed.end());
+
+    return !freed.empty();
+}
+
 // Lowering runs every op it is handed, so the ops a dropped column leaves unread in the
-// pattern go too. Every op there that shapes the rows hands the yield the row tag or a
-// column it keeps, so the ones left unread only computed dropped values.
+// pattern go too, but for one that may raise. Every op there that shapes the rows hands the
+// yield the row tag or a column it keeps, so the ones left unread only computed dropped values.
 void eraseUnreadInPattern(llvm::ArrayRef<Value> dropped, Region& pattern, llvm::SmallPtrSetImpl<Operation*>& erased) {
     llvm::SmallVector<Operation*> producers;
     for (const Value column : dropped) {
         producers.push_back(column.getDefiningOp());
     }
 
-    while (!producers.empty()) {
-        Operation* const producer = producers.pop_back_val();
+    const auto inPattern = [&pattern](Operation* op) {
+        return pattern.isAncestor(op->getParentRegion());
+    };
 
-        const bool inPattern = producer && pattern.isAncestor(producer->getParentRegion());
-        if (!inPattern || erased.contains(producer) || !mlir::isOpTriviallyDead(producer)) {
-            continue;
-        }
-
-        for (const Value operand : producer->getOperands()) {
-            producers.push_back(operand.getDefiningOp());
-        }
-
-        producer->walk([&erased](Operation* nested) {
-            erased.insert(nested);
-        });
-
-        producer->erase();
-    }
+    eraseUnreadOps(producers, inPattern, erased);
 }
 
 // An optional match pads and carries the variables its pattern binds for what reads them
@@ -7321,17 +7340,38 @@ void trimUnreadColumnsOf(Operation* op, mlir::OpBuilder& builder, llvm::SmallPtr
     }
 }
 
+// Lowering runs every op it is handed, so a value computed per row that nothing reads goes,
+// and so do the ones only it read. Unlike a filter or a hop nothing reads, it shapes no row
+// a constant could be laid out over.
+bool eraseUnreadRowValues(Operation* root) {
+    llvm::SmallVector<Operation*> ops;
+    root->walk([&ops](Operation* op) {
+        ops.push_back(op);
+    });
+
+    llvm::SmallPtrSet<Operation*, 16> erased;
+    return eraseUnreadOps(ops, computesAValuePerRow, erased);
+}
+
 struct TrimUnreadColumns : public impl::TrimUnreadColumnsBase<TrimUnreadColumns> {
     void runOnOperation() override {
-        llvm::SmallVector<Operation*> order;
-        collectTrimOrder(getOperation(), order);
-
         mlir::OpBuilder builder(&getContext());
-        llvm::SmallPtrSet<Operation*, 16> erased;
-        for (Operation* const op : order) {
-            if (!erased.contains(op)) {
-                trimUnreadColumnsOf(op, builder, erased);
+
+        // A value erased as unread can be all that read a column a hop or a filter still
+        // carries, so the trim runs again until a round erases no value
+        bool erasedRowValues = true;
+        while (erasedRowValues) {
+            llvm::SmallVector<Operation*> order;
+            collectTrimOrder(getOperation(), order);
+
+            llvm::SmallPtrSet<Operation*, 16> erased;
+            for (Operation* const op : order) {
+                if (!erased.contains(op)) {
+                    trimUnreadColumnsOf(op, builder, erased);
+                }
             }
+
+            erasedRowValues = eraseUnreadRowValues(getOperation());
         }
     }
 };

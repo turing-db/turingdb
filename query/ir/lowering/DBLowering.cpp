@@ -1884,7 +1884,7 @@ void DBLowering::lowerUnwindRange(mlir::db::UnwindRange unwindRange) {
     const mlir::Value cardinality = cardinalityDriver(operandChunks);
 
     for (mlir::Value& bound : bounds) {
-        bound = nullableValueChunk(rowAlignedChunk(bound, cardinality));
+        bound = integerBoundChunk(rowAlignedChunk(bound, cardinality));
     }
 
     operandChunks.assign(bounds.begin(), bounds.end());
@@ -2589,11 +2589,11 @@ void DBLowering::lowerListSlice(mlir::db::ListSlice slice) {
     listChunk = rowAlignedChunk(listChunk, cardinality);
 
     if (fromChunk) {
-        fromChunk = nullableValueChunk(rowAlignedChunk(fromChunk, cardinality));
+        fromChunk = integerBoundChunk(rowAlignedChunk(fromChunk, cardinality));
     }
 
     if (toChunk) {
-        toChunk = nullableValueChunk(rowAlignedChunk(toChunk, cardinality));
+        toChunk = integerBoundChunk(rowAlignedChunk(toChunk, cardinality));
     }
 
     // The slice holds the elements the sliced value holds, and is read as nullable: a row
@@ -7390,6 +7390,14 @@ mlir::Value DBLowering::nullableValueChunk(mlir::Value chunk) {
     }
 
     return toNullableChunk(chunk, valueElement);
+}
+
+mlir::Value DBLowering::integerBoundChunk(mlir::Value chunk) {
+    if (holdsTaggedCells(chunk.getType())) {
+        return chunk;
+    }
+
+    return nullableValueChunk(chunk);
 }
 
 // A type-erased column of tagged cells - what a list mixing types, holding a null or

@@ -5234,6 +5234,26 @@ std::optional<types::Int64::Primitive> rangeBound(const Column* input, size_t ro
     return static_cast<types::Int64::Primitive>(*cell);
 }
 
+std::optional<types::Int64::Primitive> cellBound(const std::optional<CellView>& cell) {
+    if (!cell.has_value() || cell->getTag() == CellTag::Null) {
+        return std::nullopt;
+    } else if (cellHoldsAnInteger(*cell)) {
+        return cellInteger(*cell);
+    }
+
+    throw IRException("A list slice reads an integer bound, and this row holds a value that is not one");
+}
+
+template <typename ColumnT>
+std::optional<types::Int64::Primitive> cellRowBound(const Column* input, size_t row) {
+    return cellBound((*static_cast<const ColumnT*>(input))[row]);
+}
+
+template <typename ColumnT>
+std::optional<types::Int64::Primitive> constCellBound(const Column* input, size_t) {
+    return cellBound(static_cast<const ColumnT*>(input)->getRaw());
+}
+
 template <typename Primitive>
 std::optional<types::Double::Primitive> percentileArgument(const Column* input, size_t row) {
     const std::optional<Primitive>& cell = (*static_cast<const ColumnOptVector<Primitive>*>(input))[row];
@@ -9272,6 +9292,22 @@ NLRangeBoundReadFunction NLExecutor::selectRangeBoundRead(ValueType valueType) {
             throw IRException("nl.range reads its bounds out of integer columns");
         break;
     }
+}
+
+NLRangeBoundReadFunction NLExecutor::selectCellBoundRead(const Column* input) {
+    const ColumnKind::Code kind = input->getKind();
+
+    if (kind == ColumnVector<CellView>::staticKind()) {
+        return &cellRowBound<ColumnVector<CellView>>;
+    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
+        return &cellRowBound<ColumnOptVector<CellView>>;
+    } else if (kind == ColumnConst<CellView>::staticKind()) {
+        return &constCellBound<ColumnConst<CellView>>;
+    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
+        return &constCellBound<ColumnConst<std::optional<CellView>>>;
+    }
+
+    throw IRException("a bound held in type-erased cells is read out of a column of them");
 }
 
 NLPercentileReadFunction NLExecutor::selectPercentileRead(ValueType valueType) {

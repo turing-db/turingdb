@@ -912,6 +912,10 @@ public:
     // integer one however the query wrote the bound.
     static NLRangeBoundReadFunction selectRangeBoundRead(ValueType valueType);
 
+    // The read taking a bound out of a column of type-erased cells, which raises on a row
+    // whose cell holds no integer
+    static NLRangeBoundReadFunction selectCellBoundRead(const Column* input);
+
     static NLPercentileReadFunction selectPercentileRead(ValueType valueType);
 
     // Whether a cell of a list comprehension's source holds no list: a null one where a

@@ -160,3 +160,5 @@ target_include_directories(test_query_ir_fold_over_pattern_list PRIVATE ${IR_TES
 
 # allReduce over paths, with list, string and null accumulators, in every clause position.
 add_ir_tests(test_query_ir_all_reduce_composition AllReduceCompositionTest.cpp)
+
+add_turing_test(test_query_ir_slice_by_type_erased_bound SliceByTypeErasedBoundTest.cpp)

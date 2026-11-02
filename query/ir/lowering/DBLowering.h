@@ -892,6 +892,10 @@ private:
 
     mlir::Value nullableValueChunk(mlir::Value chunk);
 
+    // A bound held in type-erased cells is read as it stands: the op takes the integer out of
+    // each row's cell, raising on a cell holding another value
+    mlir::Value integerBoundChunk(mlir::Value chunk);
+
     // The chunk a body's value is staged into its row's list from: laid out over @param rows
     // where it is a constant, and read as nullable where it is a scalar
     mlir::Value rowListsValueChunk(mlir::Value valueChunk, mlir::Value rows);
