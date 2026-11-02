@@ -42,7 +42,7 @@ public:
     void setDateTimePart(DateTimePart part);
 
     bool readsADurationComponent() const { return _readsADurationComponent; }
-    bool readsAComponent() const { return _readsADateTimeComponent || _readsADurationComponent; }
+    bool readsAComponent() const { return _readsADateTimeComponent || _readsADurationComponent || _readsAMapKey; }
     DurationPart getDurationPart() const { return _durationPart; }
     void setDurationPart(DurationPart part);
 

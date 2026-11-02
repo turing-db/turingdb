@@ -779,6 +779,7 @@ private:
     // grouping bound - the key columns a sort key reads, under the expressions naming them
     void collectGroupedColumns(CarrySet& carrySet);
     void rebindCarrySet(mlir::ValueRange columns, size_t firstColumn, const CarrySet& carrySet);
+    void carryProjectedColumns(CarrySet& carrySet);
 
     // Moves every projected column the carry set took along onto the column standing for
     // it here: @param from and @param to are the columns as they were bound and as they
@@ -1014,6 +1015,10 @@ private:
     // Every column in scope, deduplicated by name and in name order so the columns a cut
     // or an OPTIONAL MATCH carries are the query's choice and not the addresses'
     void collectPublishedColumns(llvm::SmallVectorImpl<PublishedColumn>& published);
+
+    // In an ORDER BY the alias of a projected item names its column, over any variable of
+    // the same name
+    void publishProjectedAliases(llvm::SmallVectorImpl<PublishedColumn>& published) const;
 
     // Drops the scope and opens a fresh one holding these columns alone: what a barrier or
     // a cut publishes, and what an OPTIONAL MATCH hands to its pattern and then to the rest

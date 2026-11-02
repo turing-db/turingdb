@@ -89,7 +89,6 @@ public:
     const Expr* findItemExpr(const Expr* key) const;
     bool hasItem(const Expr* key) const;
     bool hasItemReadingThePropertyOfComponent(const PropertyExpr* component) const;
-    bool hasVariableItem(const VarDecl* decl) const;
     bool hasItemDecl(const VarDecl* decl) const;
 
 private:
@@ -110,7 +109,6 @@ private:
     std::unordered_set<std::string_view> _namesSet;
 
     Items::const_iterator locateItem(const Expr* key) const;
-    bool hasItemDecl(const VarDecl* decl, bool bareVariablesOnly) const;
 
     Projection();
     ~Projection();
