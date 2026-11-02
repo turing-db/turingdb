@@ -2,6 +2,7 @@
 #define TURINGDB_DIALECT
 
 include "mlir/IR/OpBase.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def DB : Dialect {
     let name = "db";
@@ -20,6 +21,10 @@ def DB : Dialect {
 
 def ConstantThroughOperands : NativeOpTrait<"ConstantThroughOperands">;
 def ConstantResult : NativeOpTrait<"ConstantResult">;
+
+// In place of NoMemoryEffect on an op that may raise on some values: MLIR counts a
+// NoMemoryEffect op nothing reads as dead, and its error would go with it
+def MayRaise : TraitList<[MemoryEffectsOpInterface, NativeOpTrait<"MayRaise">]>;
 
 // Base, from which all TuringDB dialects are derived.
 //

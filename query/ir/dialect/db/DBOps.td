@@ -385,7 +385,7 @@ def Unwind : TuringOp<"unwind", [Pure]> {
 /**
 * UnwindRange
 */
-def UnwindRange : TuringOp<"unwind_range", [NoMemoryEffect, AttrSizedOperandSegments, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def UnwindRange : TuringOp<"unwind_range", [MayRaise, AttrSizedOperandSegments, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Produce one row per integer a row's range bounds span, without building the list";
 
   let description = [{
@@ -610,7 +610,7 @@ def StaticMapKey : TuringOp<"static_map_key", [Pure, ConstantThroughOperands]> {
 /**
 * Range
 */
-def Range : TuringOp<"range", [NoMemoryEffect, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def Range : TuringOp<"range", [MayRaise, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Build one list of the integers a row's bounds span";
 
   let description = [{
@@ -646,7 +646,7 @@ def Range : TuringOp<"range", [NoMemoryEffect, ConstantThroughOperands, DeclareO
 /**
 * ListSlice
 */
-def ListSlice : TuringOp<"list_slice", [NoMemoryEffect, ConstantThroughOperands, AttrSizedOperandSegments, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def ListSlice : TuringOp<"list_slice", [MayRaise, ConstantThroughOperands, AttrSizedOperandSegments, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Read the run of each row's list that its bounds span";
 
   let description = [{
@@ -689,7 +689,7 @@ def ListSlice : TuringOp<"list_slice", [NoMemoryEffect, ConstantThroughOperands,
 // element that is no number - which is why the op is not speculatable.
 //
 //   %m = db.percentile_cont(%values, %p) : (!db.column<none>, !db.column<f64>) -> !db.column<none>
-class PercentileOp<string mnemonic> : TuringOp<mnemonic, [NoMemoryEffect, ConstantThroughOperands]> {
+class PercentileOp<string mnemonic> : TuringOp<mnemonic, [MayRaise, ConstantThroughOperands]> {
   let summary = "Read a percentile of the numbers each row's list holds";
 
   let arguments = (ins Column:$list, Column:$percentile);
@@ -2961,7 +2961,7 @@ class UnaryFunctionOp<string mnemonic, list<Trait> traits>
 // column of type-erased cells or of an unresolved type can: it is speculatable over a
 // column of the types it reads alone
 class TypedUnaryFunctionOp<string mnemonic, string readTypes>
-    : UnaryFunctionOp<mnemonic, [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+    : UnaryFunctionOp<mnemonic, [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let extraClassDefinition = [{
     ::mlir::Speculation::Speculatability $cppClass::getSpeculatability() {
       return speculatableOverElement<}] # readTypes # [{>(getInput());
@@ -2972,7 +2972,7 @@ class TypedUnaryFunctionOp<string mnemonic, string readTypes>
 // A conversion raises on a type-erased cell holding a value it has no rule for. The analyzer
 // turns away a column of one type it has no rule for, so only such a cell can raise
 class ConversionFunctionOp<string mnemonic>
-    : UnaryFunctionOp<mnemonic, [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+    : UnaryFunctionOp<mnemonic, [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let extraClassDefinition = [{
     ::mlir::Speculation::Speculatability $cppClass::getSpeculatability() {
       return speculatableOverKnownTypes(getInput());
@@ -3117,7 +3117,7 @@ class NormalFormFunctionOp<string mnemonic> : TextFunctionOp<mnemonic> {
 def Normalize : NormalFormFunctionOp<"normalize">;
 def IsNormalized : NormalFormFunctionOp<"is_normalized">;
 
-def Substring : TuringOp<"substring", [NoMemoryEffect, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def Substring : TuringOp<"substring", [MayRaise, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Take the run of each row's string its start and length span";
 
   let description = [{
@@ -3133,7 +3133,7 @@ def Substring : TuringOp<"substring", [NoMemoryEffect, ConstantThroughOperands, 
   }];
 }
 
-def Split : TuringOp<"split", [NoMemoryEffect, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def Split : TuringOp<"split", [MayRaise, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Split on delimiter";
 
   let description = [{
@@ -3150,7 +3150,7 @@ def Split : TuringOp<"split", [NoMemoryEffect, ConstantThroughOperands, DeclareO
   }];
 }
 
-class StringEndOp<string mnemonic> : TuringOp<mnemonic, [NoMemoryEffect, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+class StringEndOp<string mnemonic> : TuringOp<mnemonic, [MayRaise, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Take the run of characters at one end of each row's string";
 
   let description = [{
@@ -3179,7 +3179,7 @@ class StringEndOp<string mnemonic> : TuringOp<mnemonic, [NoMemoryEffect, Constan
 def Left : StringEndOp<"left">;
 def Right : StringEndOp<"right">;
 
-def Replace : TuringOp<"replace", [NoMemoryEffect, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def Replace : TuringOp<"replace", [MayRaise, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Replace every occurrence of a search string in each row's string";
 
   let description = [{
@@ -3339,22 +3339,22 @@ class PredicateOp<string mnemonic, list<Trait> traits = []>
   let assemblyFormat = "$lhs`,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def AndOp : PredicateOp<"and", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def AndOp : PredicateOp<"and", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Performs row-wise logical AND on its two input columns";
   let arguments = (ins Column : $lhs, Column : $rhs);
 }
 
-def OrOp : PredicateOp<"or", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def OrOp : PredicateOp<"or", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Performs row-wise logical OR on its two input columns";
   let arguments = (ins Column : $lhs, Column : $rhs);
 }
 
-def XorOp : PredicateOp<"xor", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def XorOp : PredicateOp<"xor", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Performs row-wise logical XOR on its two input boolean columns";
   let arguments = (ins Column : $lhs, Column : $rhs);
 }
 
-def NotOp : TuringOp<"not", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>, ConstantThroughOperands]> {
+def NotOp : TuringOp<"not", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>, ConstantThroughOperands]> {
   let summary = "Row-wise logical NOT of a boolean column";
   let arguments = (ins Column:$operand);
   let results   = (outs ColumnBools:$result);
@@ -3409,7 +3409,7 @@ def IsNotNullOp : TuringOp<"is_not_null", [Pure, ConstantThroughOperands]> {
   let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
 }
 
-def AddOp : BinaryOp<"add", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def AddOp : BinaryOp<"add", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Row-wise addition of two value columns";
 
   let arguments = (ins Column:$lhs, Column:$rhs);
@@ -3418,7 +3418,7 @@ def AddOp : BinaryOp<"add", [NoMemoryEffect, DeclareOpInterfaceMethods<Condition
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def ConcatOp : BinaryOp<"concat", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def ConcatOp : BinaryOp<"concat", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Row-wise concatenation of two string or two list columns";
 
   let arguments = (ins Column:$lhs, Column:$rhs);
@@ -3483,7 +3483,7 @@ def DynamicMapKey : BinaryOp<"dynamic_map_key", [Pure]> {
   let assemblyFormat = "$map`,` $key attr-dict `:` functional-type(operands, results)";
 }
 
-def SubOp : BinaryOp<"sub", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def SubOp : BinaryOp<"sub", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Row-wise subtraction of two value columns";
 
   let arguments = (ins Column:$lhs, Column:$rhs);
@@ -3492,7 +3492,7 @@ def SubOp : BinaryOp<"sub", [NoMemoryEffect, DeclareOpInterfaceMethods<Condition
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def MulOp : BinaryOp<"mul", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def MulOp : BinaryOp<"mul", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Row-wise multiplication of two value columns";
 
   let arguments = (ins Column:$lhs, Column:$rhs);
@@ -3501,7 +3501,7 @@ def MulOp : BinaryOp<"mul", [NoMemoryEffect, DeclareOpInterfaceMethods<Condition
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def DivOp : BinaryOp<"div", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def DivOp : BinaryOp<"div", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Row-wise division of two value columns";
 
   let arguments = (ins Column:$lhs, Column:$rhs);
@@ -3510,7 +3510,7 @@ def DivOp : BinaryOp<"div", [NoMemoryEffect, DeclareOpInterfaceMethods<Condition
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def ModOp : BinaryOp<"mod", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def ModOp : BinaryOp<"mod", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Row-wise modulo of two value columns";
 
   let arguments = (ins Column:$lhs, Column:$rhs);

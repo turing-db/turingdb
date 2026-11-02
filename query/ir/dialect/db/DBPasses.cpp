@@ -34,6 +34,7 @@
 #include "views/GraphView.h"
 
 #include "IRConstantColumn.h"
+#include "IRRaiseEffect.h"
 #include "DBColumnElement.h"
 #include "StorageAttributes.h"
 #include "PropertyScanLiteral.h"
@@ -2256,7 +2257,7 @@ bool collectCarriedRowOps(Unwind unwind, ConeCache& cache, llvm::SmallVectorImpl
         }
 
         Operation* const def = value.getDefiningOp();
-        const bool madeInTheBlock = def && def->getBlock() == block && mlir::isMemoryEffectFree(def);
+        const bool madeInTheBlock = def && def->getBlock() == block && ::db::hasNoEffectButRaising(def);
 
         if (!madeInTheBlock) {
             return false;

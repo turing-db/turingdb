@@ -22,6 +22,7 @@
 
 #include "DBColumnElement.h"
 #include "IRConstantColumn.h"
+#include "IRRaiseEffect.h"
 #include "IRRowAlignment.h"
 #include "MergePatternShape.h"
 #include "NullLiteralType.h"
@@ -1086,7 +1087,7 @@ bool keepsEveryRow(mlir::Operation* operation) {
         return true;
     }
 
-    return mlir::isMemoryEffectFree(operation)
+    return hasNoEffectButRaising(operation)
         && !opensRowLoop(operation)
         && !dropsRows(operation)
         && !reducesToOneRow(operation);

@@ -13,6 +13,7 @@
 #include "DBTypes.h"
 
 #include "IRConstantColumn.h"
+#include "IRRaiseEffect.h"
 
 #define GET_OP_CLASSES
 #include "DBOps.h.inc"

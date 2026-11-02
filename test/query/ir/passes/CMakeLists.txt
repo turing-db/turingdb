@@ -148,6 +148,10 @@ add_turing_test(test_query_ir_unread_conversion_raises UnreadConversionRaisesTes
 
 add_turing_test(test_query_ir_unread_slice_raises UnreadSliceRaisesTest.cpp)
 
+add_turing_test(test_query_ir_unread_logical_raises UnreadLogicalRaisesTest.cpp)
+
+add_ir_tests(test_query_ir_raise_effect RaiseEffectTest.cpp)
+
 add_ir_tests(test_query_ir_unwind_range_window_speculatability UnwindRangeWindowSpeculatabilityTest.cpp)
 
 add_turing_test(test_query_ir_unwound_value_bound_by_an_equality UnwoundValueBoundByAnEqualityTest.cpp)
