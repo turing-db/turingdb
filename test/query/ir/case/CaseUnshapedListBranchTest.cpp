@@ -8,9 +8,9 @@
 
 using namespace turing::test;
 
-// labels(n) is a list whose element type the analyzer does not name. A CASE or a coalesce
-// mixing it with a list of integers answers a list of either, so an element read out of
-// it is a string on Remy's row.
+// A stored list is a list whose element type the analyzer does not name. A CASE or a
+// coalesce mixing it with a list of integers answers a list of either, so an element read
+// out of it is a string on Remy's row.
 class CaseUnshapedListBranchTest : public CallV3Test {
 protected:
     void expectRows(std::string_view query, const std::vector<StringRowSink::Row>& expected) {
@@ -22,13 +22,17 @@ protected:
 };
 
 TEST_F(CaseUnshapedListBranchTest, readsAStringOutOfACoalesce) {
-    expectRows("MATCH (n:Person) WHERE n.name = 'Remy' RETURN coalesce(labels(n), [1, 2])[0] STARTS WITH ''",
+    runWrite("MATCH (n:Person {name: 'Remy'}) SET n.tags = ['a', 'b']");
+
+    expectRows("MATCH (n:Person) WHERE n.name = 'Remy' RETURN coalesce(n.tags, [1, 2])[0] STARTS WITH ''",
                {{"true"}});
 }
 
 TEST_F(CaseUnshapedListBranchTest, readsAStringOutOfACase) {
+    runWrite("MATCH (n:Person {name: 'Remy'}) SET n.tags = ['a', 'b']");
+
     expectRows("MATCH (n:Person) WHERE n.name = 'Remy' "
-               "RETURN (CASE WHEN n.age > 100 THEN [1, 2] ELSE labels(n) END)[0] STARTS WITH ''",
+               "RETURN (CASE WHEN n.age > 100 THEN [1, 2] ELSE n.tags END)[0] STARTS WITH ''",
                {{"true"}});
 }
 
