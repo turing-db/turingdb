@@ -8027,11 +8027,11 @@ struct CutRowsReader {
     uint64_t _skipped {0};
 };
 
-// The rows the cut must produce for a limit downstream of it to be met, and zero when no
+// The rows the cut must produce for a limit downstream of it to be met, and none when no
 // limit bounds them. The budget reaches the cut only through ops handing each row on as at
-// least one row as they read it, and a skip adds the rows it drops. A product stops once the
-// budget is met, where the join reads its whole build side before it can emit a row.
-uint64_t limitOverTheCut(FilterOp filter) {
+// least one row as they read it. A skip adds the rows it drops to the limit after it, and a
+// LIMIT 0 needs no row: the loops stop before their first step.
+std::optional<uint64_t> limitOverTheCut(FilterOp filter) {
     Block* const cutBlock = filter->getBlock();
 
     llvm::SmallVector<CutRowsReader, 8> pending;
@@ -8047,19 +8047,21 @@ uint64_t limitOverTheCut(FilterOp filter) {
 
     pushReaders(filter, 0);
 
-    uint64_t budget = 0;
+    std::optional<uint64_t> budget;
     while (!pending.empty()) {
         const CutRowsReader reader = pending.pop_back_val();
         Operation* const op = reader._op;
 
         if (Limit limit = dyn_cast<Limit>(op)) {
-            budget = std::max(budget, llvm::SaturatingAdd(reader._skipped, limit.getCount()));
+            const uint64_t count = limit.getCount();
+            const uint64_t rows = count == 0 ? 0 : llvm::SaturatingAdd(reader._skipped, count);
+            budget = std::max(budget.value_or(0), rows);
         } else if (Skip skip = dyn_cast<Skip>(op)) {
             pushReaders(op, llvm::SaturatingAdd(reader._skipped, skip.getCount()));
         } else if (computesAValuePerRow(op) || isa<OptionalMatch>(op)) {
             pushReaders(op, reader._skipped);
         } else {
-            return 0;
+            return std::nullopt;
         }
     }
 

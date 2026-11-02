@@ -68,3 +68,6 @@ add_ir_tests(test_query_ir_hash_join_build_side HashJoinBuildSideTest.cpp)
 
 # A LIMIT past an aggregate does not cut the product it reads, so it keeps no product from fusing.
 add_ir_tests(test_query_ir_hash_join_limit_past_aggregate HashJoinLimitPastAggregateTest.cpp)
+
+# A LIMIT 0 behind a SKIP stops the product before its first pair, as a LIMIT 0 alone does.
+add_ir_tests(test_query_ir_hash_join_zero_limit_past_a_skip HashJoinZeroLimitPastASkipTest.cpp)

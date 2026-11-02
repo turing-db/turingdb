@@ -195,6 +195,22 @@ TEST_F(HashJoinCostModelTest, keepsTheProductUnderALimitTheJoinCannotRepay) {
     EXPECT_FALSE(fuses("MATCH (n), (m) WHERE n.name = m.name RETURN n, m LIMIT 1"));
 }
 
+// A limit of zero rows is met before the product reads a pair, where the join would read
+// all 400 build rows to emit nothing.
+TEST_F(HashJoinCostModelTest, keepsTheProductUnderALimitOfZero) {
+    buildGraph(400, 0);
+
+    EXPECT_FALSE(fuses("MATCH (n), (m) WHERE n.name = m.name RETURN n, m LIMIT 0"));
+    EXPECT_FALSE(fuses("MATCH (n), (m) WHERE n.name = m.name WITH n, m LIMIT 0 RETURN count(*)"));
+}
+
+// A limit of zero past a count bounds the groups, not the pairs the count reads first.
+TEST_F(HashJoinCostModelTest, fusesUnderALimitOfZeroOverACount) {
+    buildGraph(400, 0);
+
+    EXPECT_TRUE(fuses("MATCH (n), (m) WHERE n.name = m.name RETURN count(*) LIMIT 0"));
+}
+
 // A limit the product cannot meet within a chunk of the build side leaves the join in
 // place: 400 rows against a budget of 3 is not the early exit a smaller side would be.
 TEST_F(HashJoinCostModelTest, fusesUnderALimitTooLargeToCutTheProductShort) {

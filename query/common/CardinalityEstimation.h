@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "views/GraphView.h"
 #include "metadata/LabelSet.h"
 #include "datapart/DegreeProducts.h"
@@ -42,10 +44,7 @@ public:
     // Returns true when cartesian product + filter is likely cheaper
     // than value hash join, either because the product is small or
     // because a small LIMIT makes early-termination effective.
-    bool shouldPreferCartesian(const LabelSet& left, const LabelSet& right, size_t queryLimit) const;
-
-    // Covers the case rhs expression is not var node ( e.g. a yielded item)
-    bool shouldPreferCartesian(const LabelSet& left, size_t rightCardinality, size_t queryLimit) const;
+    bool shouldPreferCartesian(const LabelSet& left, const LabelSet& right, std::optional<size_t> queryLimit) const;
 
 private:
     GraphView _graphView;
