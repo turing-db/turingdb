@@ -125,6 +125,9 @@ public:
                                                            Expr* base,
                                                            Symbol* propertyName);
 
+    // `(n).name` is `n.name`: a variable keeps its PropertyExpr, any other value is looked up
+    static Expr* createPropertyLookup(CypherAST* ast, Expr* base, Symbol* propertyName);
+
     static EntityTypeExpr* createLabelTest(CypherAST* ast, Expr* operand, LabelExpr* labelExpr);
 
     // `-1` stays the literal it spells: an embedding list or a procedure's constant argument

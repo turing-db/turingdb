@@ -2,6 +2,7 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -9,7 +10,6 @@
 
 #include "CypherAST.h"
 #include "CypherParser.h"
-#include "ParserException.h"
 #include "QualifiedName.h"
 #include "Symbol.h"
 #include "expr/Expr.h"
@@ -200,12 +200,25 @@ TEST_F(ParenthesizedPropertyAccessTest, theAccessIsAnExpressionLikeAnyOther) {
     EXPECT_NO_THROW(parseQuery("MATCH (p) RETURN (p).age AS a ORDER BY (p).name"));
 }
 
-// Only a variable can be parenthesized. PropertyExpr roots at a name, so a value on the
-// left of the dot has no name to root at and the query is turned away at the parse
-TEST_F(ParenthesizedPropertyAccessTest, aValueOnTheLeftOfTheDotIsRejected) {
-    EXPECT_THROW(parseQuery("MATCH (p) RETURN (1 + 2).foo"), ParserException);
-    EXPECT_THROW(parseQuery("MATCH (p) RETURN ({a: 1}).a"), ParserException);
-    EXPECT_THROW(parseQuery("MATCH (p) RETURN (p.age).foo"), ParserException);
+// openCypher reads a property off any atom. Only a variable roots a PropertyExpr, so a
+// value on the left of the dot is looked up
+TEST_F(ParenthesizedPropertyAccessTest, aValueOnTheLeftOfTheDotIsLookedUp) {
+    const std::vector<std::string_view> queries = {
+        "MATCH (p) RETURN (1 + 2).foo",
+        "MATCH (p) RETURN ({a: 1}).a",
+        "MATCH (p) RETURN (p.age).foo",
+    };
+
+    for (const std::string_view query : queries) {
+        ASSERT_NO_THROW(parseQuery(query)) << query;
+
+        const std::vector<Expr*>& expressions = _ast->getExpressions();
+        const bool looksUp = std::ranges::any_of(expressions, [](const Expr* expr) {
+            return expr->getKind() == Expr::Kind::PROPERTY_LOOKUP;
+        });
+
+        EXPECT_TRUE(looksUp) << query;
+    }
 }
 
 // The rule reads `(` as the start of a parenthesized expression only where an expression

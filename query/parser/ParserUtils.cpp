@@ -18,6 +18,7 @@
 #include "expr/LogicalExpr.h"
 #include "expr/PatternComprehensionExpr.h"
 #include "expr/PropertyExpr.h"
+#include "expr/PropertyLookupExpr.h"
 #include "expr/SymbolExpr.h"
 #include "expr/UnaryExpr.h"
 #include "stmt/CallStmt.h"
@@ -486,6 +487,15 @@ PropertyExpr* ParserUtils::createParenthesizedPropertyAccess(CypherAST* ast, Exp
     fullName->addName(propertyName);
 
     return PropertyExpr::create(ast, fullName);
+}
+
+Expr* ParserUtils::createPropertyLookup(CypherAST* ast, Expr* base, Symbol* propertyName) {
+    PropertyExpr* variableProperty = createParenthesizedPropertyAccess(ast, base, propertyName);
+    if (variableProperty) {
+        return variableProperty;
+    }
+
+    return PropertyLookupExpr::create(ast, base, propertyName->getName());
 }
 
 EntityTypeExpr* ParserUtils::createLabelTest(CypherAST* ast, Expr* operand, LabelExpr* labelExpr) {
