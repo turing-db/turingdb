@@ -162,3 +162,6 @@ add_call_v3_test(test_query_ir_equality_across_types EqualityAcrossTypesTest.cpp
 add_call_v3_test(test_query_ir_computation_below_hoisted_values ComputationBelowHoistedValuesTest.cpp)
 
 add_call_v3_test(test_query_ir_is_empty_function IsEmptyFunctionTest.cpp)
+
+# elementId(): an identifier for each node and edge, unique and stable within a query.
+add_ir_tests(test_query_ir_element_id_function ElementIdFunctionTest.cpp)
