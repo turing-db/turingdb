@@ -1509,7 +1509,7 @@ bool CypherAnalyzer::isGroupWise(const Expr* expr,
             return true;
         }
 
-        return elements.contains(entityDecl) || projection->hasVariableItem(entityDecl);
+        return elements.contains(entityDecl) || projection->hasItemDecl(entityDecl);
     } else if (kind == Expr::Kind::ENTITY_TYPES) {
         const EntityTypeExpr* entityType = static_cast<const EntityTypeExpr*>(expr);
 
@@ -1519,7 +1519,7 @@ bool CypherAnalyzer::isGroupWise(const Expr* expr,
 
         const VarDecl* const entityDecl = entityType->getEntityVarDecl();
 
-        return elements.contains(entityDecl) || projection->hasVariableItem(entityDecl);
+        return elements.contains(entityDecl) || projection->hasItemDecl(entityDecl);
     } else if (kind == Expr::Kind::SYMBOL) {
         // A returned variable, and the alias of a returned item, are both matched above:
         // a symbol reaching here names a variable the grouping consumed, unless a
@@ -1617,7 +1617,7 @@ bool CypherAnalyzer::joinsGroupWiseVariables(const Pattern* pattern,
 
             const VarDecl* const decl = entity->getDecl();
 
-            if (!elements.contains(decl) && !projection->hasVariableItem(decl)) {
+            if (!elements.contains(decl) && !projection->hasItemDecl(decl)) {
                 return false;
             }
         }

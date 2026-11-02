@@ -4827,6 +4827,24 @@ void DBProgramGenerator::rebindCarrySet(mlir::ValueRange columns,
     }
 }
 
+void DBProgramGenerator::carryProjectedColumns(CarrySet& carrySet) {
+    llvm::SmallVector<mlir::Value> projectedColumns;
+    for (const auto& [decl, column] : _part._projectedColumns) {
+        const bool isCarriedAlready = llvm::is_contained(carrySet._columns, column)
+                                   || llvm::is_contained(projectedColumns, column);
+        const bool needsCarrying = holdsTheRowsInFlight(column)
+                                && !yieldsConstantColumn(column, _constantColumns)
+                                && !isCarriedAlready;
+
+        if (needsCarrying) {
+            projectedColumns.push_back(column);
+        }
+    }
+
+    std::ranges::sort(projectedColumns, computedBefore);
+    carrySet._columns.append(projectedColumns.begin(), projectedColumns.end());
+}
+
 // A projected item publishes its column under the declaration its alias shares with it, and
 // a symbol reads that column before any variable of the same name. The binding has to
 // follow the carried columns into a body, or a read there answers with the outer rows.
@@ -5055,6 +5073,11 @@ mlir::Value DBProgramGenerator::resolveEntityColumn(const VarDecl* decl) {
     const auto pathIt = _part._pathBindings.find(decl);
     if (pathIt != end(_part._pathBindings) && pathIt->second._path) {
         return listColumnOf(decl, _part._varMap.at(pathIt->second._path).back());
+    }
+
+    const auto projectedIt = _part._projectedColumns.find(decl);
+    if (projectedIt != end(_part._projectedColumns)) {
+        return projectedIt->second;
     }
 
     return findYieldedColumn(decl);
@@ -7221,6 +7244,28 @@ void DBProgramGenerator::collectPublishedColumns(llvm::SmallVectorImpl<Published
     }
 }
 
+void DBProgramGenerator::publishProjectedAliases(llvm::SmallVectorImpl<PublishedColumn>& published) const {
+    for (const auto& [decl, column] : _part._projectedColumns) {
+        const bool publishedAlready = std::ranges::contains(published, decl, &PublishedColumn::_decl);
+
+        if (decl->isUnnamed() || publishedAlready) {
+            continue;
+        }
+
+        const std::string_view name = decl->getName();
+        const PublishedColumn alias {decl, std::string(name), column};
+        const auto shadowedIt = std::ranges::find(published, name, &PublishedColumn::_name);
+
+        if (shadowedIt != published.end()) {
+            *shadowedIt = alias;
+        } else {
+            published.push_back(alias);
+        }
+    }
+
+    std::ranges::sort(published, {}, &PublishedColumn::_name);
+}
+
 void DBProgramGenerator::publishInFlightColumns() {
     llvm::SmallVector<PublishedColumn> published;
     collectPublishedColumns(published);
@@ -8331,21 +8376,7 @@ void DBProgramGenerator::collectElementCarrySet(CarrySet& carrySet) {
         collectCarrySet(carrySet);
     }
 
-    llvm::SmallVector<mlir::Value> projectedColumns;
-    for (const auto& [decl, column] : _part._projectedColumns) {
-        const bool isCarriedAlready = llvm::is_contained(carrySet._columns, column)
-                                   || llvm::is_contained(projectedColumns, column);
-        const bool needsCarrying = holdsTheRowsInFlight(column)
-                                && !yieldsConstantColumn(column, _constantColumns)
-                                && !isCarriedAlready;
-
-        if (needsCarrying) {
-            projectedColumns.push_back(column);
-        }
-    }
-
-    std::ranges::sort(projectedColumns, computedBefore);
-    carrySet._columns.append(projectedColumns.begin(), projectedColumns.end());
+    carryProjectedColumns(carrySet);
 }
 
 void DBProgramGenerator::generateElementRegion(mlir::Region& region,
@@ -8521,6 +8552,10 @@ void DBProgramGenerator::translatePatternComprehensionExpr(const Expr* expr,
     CarrySet carrySet;
     collectCarrySet(carrySet);
 
+    if (_part._orderingProjection) {
+        carryProjectedColumns(carrySet);
+    }
+
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
@@ -8559,6 +8594,11 @@ void DBProgramGenerator::translatePatternComprehensionExpr(const Expr* expr,
 
     llvm::SmallVector<PublishedColumn> patternScope;
     collectPublishedColumns(patternScope);
+
+    if (_part._orderingProjection) {
+        rebindProjectedColumns(carrySet._columns, patternBlock->getArguments());
+        publishProjectedAliases(patternScope);
+    }
 
     // The pattern is a MATCH of its own and is walked over a dependency graph of its own;
     // the one the query is being generated from is put back once it has been.
