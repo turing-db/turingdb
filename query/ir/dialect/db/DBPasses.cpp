@@ -4961,30 +4961,20 @@ struct FuseExploreHopLabels : public impl::FuseExploreHopLabelsBase<FuseExploreH
     }
 };
 
-// A filter carrying a named path its mask does not read cuts the rows before the path is
-// built: the build moves behind it, over the columns the filter keeps. Null where it stays.
-MakePath sinkPastFilter(MakePath build, mlir::OpBuilder& builder) {
+// A filter carrying a named path cuts the rows before the path is built: the path is built
+// again behind it, over the columns the filter keeps. A mask reading the path still reads
+// the build ahead of the filter. Null where the filter does not keep every entity.
+MakePath sinkPastFilter(MakePath build, FilterOp filter, mlir::OpBuilder& builder) {
     const Value path = build.getResult();
-    if (!path.hasOneUse()) {
-        return nullptr;
-    }
-
-    FilterOp filter = dyn_cast<FilterOp>(*path.getUsers().begin());
-    if (!filter || filter->getBlock() != build->getBlock()) {
-        return nullptr;
-    }
-
     const OperandRange carried = filter.getColumnsToFilter();
 
     llvm::SmallVector<Value> keptColumns;
     llvm::SmallVector<Type> keptTypes;
     llvm::SmallVector<size_t> keptIndices(carried.size(), 0);
-    size_t pathIndex = 0;
 
     for (size_t index = 0; index < carried.size(); index++) {
         const Value column = carried[index];
         if (column == path) {
-            pathIndex = index;
             continue;
         }
 
@@ -5016,14 +5006,28 @@ MakePath sinkPastFilter(MakePath build, mlir::OpBuilder& builder) {
 
     const ResultRange filtered = filter.getFilteredColumns();
     for (size_t index = 0; index < filtered.size(); index++) {
-        const Value replacement = index == pathIndex ? sunk.getResult() : narrowed.getResult(keptIndices[index]);
+        const Value replacement = carried[index] == path ? sunk.getResult() : narrowed.getResult(keptIndices[index]);
         filtered[index].replaceAllUsesWith(replacement);
     }
 
     filter.erase();
-    build.erase();
 
     return sunk;
+}
+
+MakePath sinkPastFirstSinkableFilter(MakePath build, mlir::OpBuilder& builder) {
+    for (Operation* user : build.getResult().getUsers()) {
+        FilterOp filter = dyn_cast<FilterOp>(user);
+        if (!filter || filter->getBlock() != build->getBlock()) {
+            continue;
+        }
+
+        if (const MakePath sunk = sinkPastFilter(build, filter, builder)) {
+            return sunk;
+        }
+    }
+
+    return nullptr;
 }
 
 struct SinkMakePath : public impl::SinkMakePathBase<SinkMakePath> {
@@ -5036,9 +5040,18 @@ struct SinkMakePath : public impl::SinkMakePathBase<SinkMakePath> {
         });
 
         while (!builds.empty()) {
-            const MakePath sunk = sinkPastFilter(builds.pop_back_val(), builder);
-            if (sunk) {
-                builds.push_back(sunk);
+            MakePath build = builds.pop_back_val();
+            const MakePath sunk = sinkPastFirstSinkableFilter(build, builder);
+            if (!sunk) {
+                continue;
+            }
+
+            builds.push_back(sunk);
+
+            if (build->use_empty()) {
+                build.erase();
+            } else {
+                builds.push_back(build);
             }
         }
     }

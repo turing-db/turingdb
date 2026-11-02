@@ -105,3 +105,55 @@ TEST_F(NamedWalkAcrossSubqueryTest, testsTheWalkInAnExistsSubquery) {
                "RETURN b.name, EXISTS { WITH p WHERE length(p) > 1 RETURN 1 }",
                {{"Adam", "false"}, {"Remy", "true"}});
 }
+
+TEST_F(NamedWalkAcrossSubqueryTest, returnsTheImportedWalkAsAPath) {
+    expectRows("MATCH p = (:Person {name: 'Remy'})-[:KNOWS_WELL*1..2]->(b) CALL (p) { RETURN p AS k } RETURN b.name, k",
+               {{"Adam", "(0), [0], (1)"}, {"Remy", "(0), [0], (1), [4], (0)"}});
+}
+
+TEST_F(NamedWalkAcrossSubqueryTest, readsAnImportedWalkTakenAgainstThePattern) {
+    expectRows("MATCH (r:Person {name: 'Adam'}) WITH r MATCH p = (b)-[:KNOWS_WELL*1..2]->(r) "
+               "CALL (p) { RETURN [n IN nodes(p) | n.name] AS ns } "
+               "RETURN b.name, ns",
+               {{"Remy", "Remy, Adam"}, {"Adam", "Adam, Remy, Adam"}, {"Ghosts", "Ghosts, Remy, Adam"}});
+}
+
+TEST_F(NamedWalkAcrossSubqueryTest, readsAnImportedQuantifiedPathPattern) {
+    expectRows("MATCH p = (:Person {name: 'Remy'}) ((x)-[:KNOWS_WELL]->(y)){1,2} (b) "
+               "CALL (p) { RETURN length(p) AS n } "
+               "RETURN b.name, n",
+               {{"Adam", "1"}, {"Remy", "2"}});
+
+    expectRows("MATCH p = (:Person {name: 'Remy'}) ((x)-[:KNOWS_WELL]->(y)){1,2} (b) "
+               "CALL (p) { WITH count(*) AS c RETURN [n IN nodes(p) | n.name] AS ns } "
+               "RETURN b.name, ns",
+               {{"Adam", "Remy, Adam"}, {"Remy", "Remy, Adam, Remy"}});
+}
+
+TEST_F(NamedWalkAcrossSubqueryTest, readsAnOptionalWalkInTheBody) {
+    expectRows("MATCH (a:Person {name: 'Remy'}) OPTIONAL MATCH p = (a)-[:KNOWS_WELL*1..1]->(b) "
+               "CALL (p) { RETURN length(p) AS n } "
+               "RETURN a.name, n",
+               {{"Remy", "1"}});
+
+    expectRows("MATCH (a:Person {name: 'Remy'}) OPTIONAL MATCH p = (a)-[:KNOWS_WELL*2..2]->(b:Interest) "
+               "CALL (p) { RETURN length(p) AS n } "
+               "RETURN a.name, n",
+               {{"Remy", "null"}});
+}
+
+TEST_F(NamedWalkAcrossSubqueryTest, collectsTheNodesOfTheWalkInACollectSubquery) {
+    expectRows("MATCH p = (:Person {name: 'Remy'})-[:KNOWS_WELL*1..2]->(b) "
+               "RETURN b.name, COLLECT { UNWIND nodes(p) AS n RETURN n.name }",
+               {{"Adam", "Remy, Adam"}, {"Remy", "Remy, Adam, Remy"}});
+}
+
+TEST_F(NamedWalkAcrossSubqueryTest, readsTheWalksUnionBranchesReturn) {
+    expectRows("CALL () { "
+               "MATCH p = (:Person {name: 'Remy'})-[:KNOWS_WELL*1..2]->(b) RETURN p "
+               "UNION "
+               "MATCH p = (:Person {name: 'Adam'})-[:KNOWS_WELL]->(b) RETURN p "
+               "} "
+               "RETURN length(p), [n IN nodes(p) | n.name]",
+               {{"1", "Remy, Adam"}, {"2", "Remy, Adam, Remy"}, {"1", "Adam, Remy"}});
+}

@@ -154,7 +154,7 @@ def FuseExploreHopLabels : Pass<"fuse_explore_hop_labels"> {
 }
 
 def SinkMakePath : Pass<"sink_make_path"> {
-    let summary = "Build a named path after the filters that only carry it, over the rows they keep";
+    let summary = "Build a named path again after each filter that carries it, over the rows the filter keeps";
     let dependentDialects = ["mlir::db::DB"];
 }
 

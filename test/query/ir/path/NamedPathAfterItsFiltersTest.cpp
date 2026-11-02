@@ -25,9 +25,9 @@ bool contains(std::string_view text, std::string_view part) {
 
 }
 
-// A named path is built over the rows the WHERE of its MATCH keeps, unless the WHERE reads
-// the path: a filter that does not read it cuts the rows first, and the traversal ahead of
-// it is optimised as it would be with no path named
+// A named path is built over the rows the WHERE of its MATCH keeps, and ahead of the WHERE
+// too when the WHERE reads it: the filter cuts the rows first, and the traversal ahead of it
+// is optimised as it would be with no path named
 class NamedPathAfterItsFiltersTest : public CallV3Test {
 protected:
     void optimisedDump(std::string_view query, std::string& dump) {
