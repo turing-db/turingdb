@@ -21,6 +21,7 @@
 #include "expr/ListPredicateExpr.h"
 #include "expr/ReduceExpr.h"
 #include "expr/AllReduceExpr.h"
+#include "expr/MapProjectionExpr.h"
 #include "expr/CaseExpr.h"
 #include "expr/ExistsExpr.h"
 #include "expr/CountSubqueryExpr.h"

@@ -707,3 +707,16 @@ NLMakeMapData::~NLMakeMapData() {
 void NLMakeMapData::addEntry(const Entry& entry) {
     _entries.push_back(entry);
 }
+
+NLMergeMapsData::NLMergeMapsData(Column* result, NLStepBuffers* stepBuffers)
+    : _result(result),
+    _stepBuffers(stepBuffers)
+{
+}
+
+NLMergeMapsData::~NLMergeMapsData() {
+}
+
+void NLMergeMapsData::addOperand(const Operand& operand) {
+    _operands.push_back(operand);
+}

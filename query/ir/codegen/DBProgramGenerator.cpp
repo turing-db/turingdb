@@ -103,6 +103,7 @@
 #include "expr/ListPredicateExpr.h"
 #include "expr/ReduceExpr.h"
 #include "expr/AllReduceExpr.h"
+#include "expr/MapProjectionExpr.h"
 #include "expr/ListExpr.h"
 #include "expr/ListSliceExpr.h"
 #include "expr/LiteralExpr.h"
@@ -1284,6 +1285,16 @@ mlir::Value DBProgramGenerator::translateMapOfColumns(const MapLiteral* map) {
 
     for (const auto& [key, valueExpr] : *map) {
         entries.emplace_back(key->getName(), valueExpr);
+    }
+
+    return emitMakeMap(entries);
+}
+
+mlir::Value DBProgramGenerator::emitMakeMap(llvm::SmallVectorImpl<std::pair<std::string_view, const Expr*>>& entries) {
+    if (entries.empty()) {
+        mlir::db::ConstantOp empty = _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(),
+                                                                             _opBuilder.getDictionaryAttr({}));
+        return empty.getResult();
     }
 
     // Sorted on key name, as the DictionaryAttr of a constant map is
@@ -7998,6 +8009,12 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
         }
         break;
 
+        case Expr::Kind::MAP_PROJECTION: {
+            const MapProjectionExpr* projection = static_cast<const MapProjectionExpr*>(expr);
+            translateMapProjectionExpr(expr, projection);
+        }
+        break;
+
         case Expr::Kind::LIST:
             throwError(fmt::format("Unsupported expression: {}",
                                    ExprKindDescription::value(kind)),
@@ -8183,6 +8200,76 @@ void DBProgramGenerator::translateAllReduceExpr(const Expr* expr, const AllReduc
     dropUnreadCarriedColumns(allReduceOp, allReduceOp.getColumnsToFilter());
 
     _part._exprMap[expr] = allReduceOp.getResult();
+}
+
+void DBProgramGenerator::translateMapProjectionExpr(const Expr* expr, const MapProjectionExpr* projection) {
+    if (projection->getType() == EvaluatedType::Null) {
+        _part._exprMap[expr] = nullConstantColumn();
+        return;
+    }
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    CarrySet carrySet;
+    collectElementCarrySet(carrySet);
+
+    const llvm::SmallVector<mlir::Value> carried(carrySet._columns.begin(), carrySet._columns.end());
+
+    auto caseOp = _opBuilder.create<mlir::db::LazyCase>(loc, noneType, carried, 2u);
+    const mlir::MutableArrayRef<mlir::Region> regions = caseOp.getBranches();
+
+    generateCaseRegion(regions[0], carried, carrySet, mlir::Value {}, [&](mlir::Value) {
+        const mlir::Value base = getOrTranslateExprColumn(projection->getBase());
+        return _opBuilder.create<mlir::db::IsNotNullOp>(loc, boolType, base).getResult();
+    });
+
+    generateCaseRegion(regions[1], carried, carrySet, mlir::Value {}, [&](mlir::Value) {
+        return projectedMap(projection);
+    });
+
+    _part._exprMap[expr] = lazyCaseResult(caseOp);
+}
+
+mlir::Value DBProgramGenerator::projectedMap(const MapProjectionExpr* projection) {
+    bool readsEveryProperty = false;
+    llvm::SmallVector<std::pair<std::string_view, const Expr*>> entries;
+
+    for (const MapProjectionExpr::Item& item : projection->getItems()) {
+        if (item._kind == MapProjectionExpr::ItemKind::AllProperties) {
+            readsEveryProperty = true;
+            continue;
+        }
+
+        const std::string_view key = item._key->getName();
+        const auto entryIt = std::ranges::find_if(entries, [key](const auto& entry) {
+            return entry.first == key;
+        });
+
+        if (entryIt != entries.end()) {
+            entryIt->second = item._value;
+        } else {
+            entries.emplace_back(key, item._value);
+        }
+    }
+
+    if (!readsEveryProperty) {
+        return emitMakeMap(entries);
+    }
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+    const mlir::Value base = getOrTranslateExprColumn(projection->getBase());
+
+    const mlir::Value properties = _opBuilder.create<mlir::db::PropertyMap>(loc, noneType, base).getResult();
+    if (entries.empty()) {
+        return properties;
+    }
+
+    const mlir::Value written = emitMakeMap(entries);
+
+    return _opBuilder.create<mlir::db::MergeMaps>(loc, noneType, mlir::ValueRange {properties, written}).getResult();
 }
 
 void DBProgramGenerator::generateFoldRegion(mlir::Region& region,
@@ -8875,15 +8962,7 @@ void DBProgramGenerator::translateCaseExpr(const Expr* expr, const CaseExpr* cas
         });
     }
 
-    dropUnreadCarriedColumns(caseOp, caseOp.getColumnsToFilter());
-
-    llvm::SmallVector<mlir::Value> selected;
-    caseOp.collectSelectedValues(selected);
-
-    mlir::Value result = caseOp.getResult();
-    result.setType(allocColumnType(selectedColumnElement(_mlirCtxt, selected)));
-
-    _part._exprMap[expr] = result;
+    _part._exprMap[expr] = lazyCaseResult(caseOp);
 }
 
 void DBProgramGenerator::generateCaseRegion(mlir::Region& region,
@@ -8916,6 +8995,18 @@ void DBProgramGenerator::generateCaseRegion(mlir::Region& region,
     _opBuilder.create<mlir::db::CaseYield>(_opBuilder.getUnknownLoc(), value);
 
     _part = outerPart;
+}
+
+mlir::Value DBProgramGenerator::lazyCaseResult(mlir::db::LazyCase caseOp) {
+    dropUnreadCarriedColumns(caseOp, caseOp.getColumnsToFilter());
+
+    llvm::SmallVector<mlir::Value> selected;
+    caseOp.collectSelectedValues(selected);
+
+    mlir::Value result = caseOp.getResult();
+    result.setType(allocColumnType(selectedColumnElement(_mlirCtxt, selected)));
+
+    return result;
 }
 
 mlir::Value DBProgramGenerator::disjointComparison(mlir::Value lhs, mlir::Value rhs, bool equality) {

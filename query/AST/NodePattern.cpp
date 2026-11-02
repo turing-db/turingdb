@@ -1,10 +1,13 @@
 #include "NodePattern.h"
 
+#include <algorithm>
+
 #include "CypherAST.h"
 #include "Literal.h"
 #include "expr/SymbolExpr.h"
 #include "expr/LiteralExpr.h"
 #include "expr/EntityTypeExpr.h"
+#include "expr/MapProjectionExpr.h"
 
 using namespace db;
 
@@ -36,6 +39,18 @@ NodePattern* NodePattern::fromExpr(CypherAST* ast, Expr* expr) {
             pattern->setProperties(maplit);
             return pattern;
         }
+    } else if (const MapProjectionExpr* projection = dynamic_cast<MapProjectionExpr*>(expr)) {
+        MapLiteral* properties = createProperties(ast, projection->getItems());
+        if (!properties) {
+            return nullptr;
+        }
+
+        const SymbolExpr* base = projection->getBase();
+
+        NodePattern* pattern = NodePattern::create(ast);
+        pattern->setSymbol(base->getSymbol());
+        pattern->setProperties(properties);
+        return pattern;
     } else if (const EntityTypeExpr* nodeLabelExpr = dynamic_cast<EntityTypeExpr*>(expr)) {
         if (nodeLabelExpr->getOperand()) {
             return nullptr;
@@ -48,4 +63,21 @@ NodePattern* NodePattern::fromExpr(CypherAST* ast, Expr* expr) {
     }
 
     return nullptr;
+}
+
+MapLiteral* NodePattern::createProperties(CypherAST* ast, const MapProjectionExpr::Items& items) {
+    const bool literalItems = std::ranges::all_of(items, [](const MapProjectionExpr::Item& item) {
+        return item._kind == MapProjectionExpr::ItemKind::Literal;
+    });
+
+    if (!literalItems) {
+        return nullptr;
+    }
+
+    MapLiteral* properties = MapLiteral::create(ast);
+    for (const MapProjectionExpr::Item& item : items) {
+        properties->set(item._key, item._value);
+    }
+
+    return properties;
 }

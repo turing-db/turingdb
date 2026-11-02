@@ -95,6 +95,7 @@
     #include "expr/ListPredicateExpr.h"
     #include "expr/ReduceExpr.h"
     #include "expr/AllReduceExpr.h"
+    #include "expr/MapProjectionExpr.h"
     #include "VecLibMetadata.h"
     #include "CreateNodePropertyIndexQuery.h"
     #include "CreateEdgePropertyIndexQuery.h"
@@ -369,6 +370,10 @@
 %type<db::Expr*> filterWith
 %type<db::Expr*> reduceExpr
 %type<db::Expr*> allReduceExpr
+%type<db::Expr*> mapProjection
+%type<db::MapProjectionExpr::Items> mapProjectionBody
+%type<db::MapProjectionExpr::Items> mapProjectionItems
+%type<db::MapProjectionExpr::Item> mapProjectionItem
 %type<db::CaseExpr*> caseExpr
 %type<db::CaseExpr*> whenThenChain
 %type<std::pair<db::CaseExpr::Tests, db::Expr*>> whenThen
@@ -1637,6 +1642,7 @@ atomExpr
     | filterWith { $$ = $1; }
     | reduceExpr { $$ = $1; }
     | allReduceExpr { $$ = $1; }
+    | mapProjection { $$ = $1; }
     | functionInvocation { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
     | subqueryExist { $$ = $1; }
     | subqueryCount { $$ = $1; }
@@ -1930,7 +1936,15 @@ predicateRoot
     : %empty { $$ = ParserUtils::createNodePattern(ast, nullptr, nullptr, nullptr, nullptr); LOC($$, @$); }
     | whereClause { $$ = ParserUtils::createNodePattern(ast, nullptr, nullptr, nullptr, $1); LOC($$, @$); }
     | symbol whereClause { $$ = ParserUtils::createNodePattern(ast, $1, nullptr, nullptr, $2); LOC($$, @$); }
-    | symbol properties opt_whereClause { $$ = ParserUtils::createNodePattern(ast, $1, nullptr, $2, $3); LOC($$, @$); }
+    | symbol mapProjectionBody whereClause {
+        MapLiteral* properties = NodePattern::createProperties(ast, $2);
+        if (!properties) {
+            scanner.syntaxError(@2, "Invalid node pattern. Its properties are 'key: value' entries");
+        }
+
+        $$ = ParserUtils::createNodePattern(ast, $1, nullptr, properties, $3);
+        LOC($$, @$);
+      }
     | symbol labelExpression whereClause { $$ = ParserUtils::createNodePattern(ast, $1, $2, nullptr, $3); LOC($$, @$); }
     | symbol labelExpression properties opt_whereClause { $$ = ParserUtils::createNodePattern(ast, $1, $2, $3, $4); LOC($$, @$); }
     | labelExpression opt_properties opt_whereClause { $$ = ParserUtils::createNodePattern(ast, nullptr, $1, $2, $3); LOC($$, @$); }
@@ -1973,6 +1987,44 @@ allReduceExpr
     : ALLREDUCE OPAREN name ASSIGN expr COMMA name IN expr PIPE expr COMMA expr CPAREN {
         $$ = AllReduceExpr::create(ast, $3, $5, $7, $9, $11, $13);
         LOC($$, @$);
+      }
+    ;
+
+mapProjection
+    : symbol mapProjectionBody {
+        SymbolExpr* base = SymbolExpr::create(ast, $1);
+        LOC(base, @1);
+
+        $$ = MapProjectionExpr::create(ast, base, $2);
+        LOC($$, @$);
+      }
+    ;
+
+mapProjectionBody
+    : OBRACE CBRACE { $$ = MapProjectionExpr::Items {}; }
+    | OBRACE mapProjectionItems CBRACE { $$ = $2; }
+    ;
+
+mapProjectionItems
+    : mapProjectionItem { $$ = MapProjectionExpr::Items {$1}; }
+    | mapProjectionItems COMMA mapProjectionItem { $$ = $1; $$.push_back($3); }
+    ;
+
+mapProjectionItem
+    : DOT name {
+        $$ = MapProjectionExpr::Item {._kind = MapProjectionExpr::ItemKind::Property, ._key = $2};
+      }
+    | DOT MULT {
+        $$ = MapProjectionExpr::Item {._kind = MapProjectionExpr::ItemKind::AllProperties};
+      }
+    | name COLON expr {
+        $$ = MapProjectionExpr::Item {._kind = MapProjectionExpr::ItemKind::Literal, ._key = $1, ._value = $3};
+      }
+    | symbol {
+        SymbolExpr* variable = SymbolExpr::create(ast, $1);
+        LOC(variable, @1);
+
+        $$ = MapProjectionExpr::Item {._kind = MapProjectionExpr::ItemKind::Variable, ._key = $1, ._value = variable};
       }
     ;
 

@@ -555,6 +555,34 @@ def MakeMap : TuringOp<"make_map", [Pure, ConstantThroughOperands]> {
 }
 
 /**
+* MergeMaps
+*/
+def MergeMaps : TuringOp<"merge_maps", [Pure, ConstantThroughOperands]> {
+  let summary = "Merge the maps of each row, a later operand's entry replacing an earlier one's";
+
+  let description = [{
+    The map projection `p {.*, name: 'x'}`: the properties of p, with the entry of a later
+    item replacing the one under the same key. Row r of the result holds every key the
+    operands' maps hold at row r, each under the value of the last operand holding it:
+
+      %m = db.merge_maps(%properties, %entries)
+             : (!db.column<none>, !db.column<!storage.map>) -> !db.column<none>
+
+    A row where an operand holds no map gets no map, as a function of a null is null. An
+    operand holding one map for every row is laid out over the rows during lowering. The
+    result is a map column, nullable where an operand is, resolved during lowering.
+  }];
+
+  let arguments = (ins Variadic<Column>:$maps);
+  let results   = (outs Column:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $maps `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+/**
 * StaticMapKey
 */
 def StaticMapKey : TuringOp<"static_map_key", [Pure, ConstantThroughOperands]> {

@@ -16,10 +16,12 @@
 #include "ListExpr.h"
 #include "LiteralExpr.h"
 #include "LogicalExpr.h"
+#include "MapProjectionExpr.h"
 #include "PropertyLookupExpr.h"
 #include "ReduceExpr.h"
 #include "AllReduceExpr.h"
 #include "StringExpr.h"
+#include "SymbolExpr.h"
 #include "UnaryExpr.h"
 
 using namespace db;
@@ -163,6 +165,21 @@ bool ExprChildren::collect(const Expr* expr, std::vector<const Expr*>& children)
             children.push_back(allReduce->getSource());
             children.push_back(allReduce->getExpression());
             children.push_back(allReduce->getPredicate());
+
+            return true;
+        }
+        break;
+
+        case Expr::Kind::MAP_PROJECTION: {
+            const MapProjectionExpr* projection = static_cast<const MapProjectionExpr*>(expr);
+
+            children.push_back(projection->getBase());
+
+            for (const MapProjectionExpr::Item& item : projection->getItems()) {
+                if (item._value) {
+                    children.push_back(item._value);
+                }
+            }
 
             return true;
         }

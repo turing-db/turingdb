@@ -23,6 +23,7 @@
 #include "LiteralExpr.h"
 #include "ParameterExpr.h"
 #include "LogicalExpr.h"
+#include "MapProjectionExpr.h"
 #include "PropertyExpr.h"
 #include "PropertyLookupExpr.h"
 #include "StringExpr.h"
@@ -215,6 +216,22 @@ bool StructuralExpressionComparator::equal(const Expr* lhs, const Expr* rhs) {
 
             return equal(lhsCase->getSubject(), rhsCase->getSubject())
                    && equal(lhsCase->getElseExpr(), rhsCase->getElseExpr());
+        }
+        break;
+
+        case Expr::Kind::MAP_PROJECTION: {
+            const MapProjectionExpr* lhsProjection = static_cast<const MapProjectionExpr*>(lhs);
+            const MapProjectionExpr* rhsProjection = static_cast<const MapProjectionExpr*>(rhs);
+
+            const auto sameItem = [](const MapProjectionExpr::Item& left, const MapProjectionExpr::Item& right) {
+                const bool sameKey = !left._key || !right._key ? left._key == right._key
+                                                               : left._key->getName() == right._key->getName();
+
+                return left._kind == right._kind && sameKey && equal(left._value, right._value);
+            };
+
+            return equal(lhsProjection->getBase(), rhsProjection->getBase())
+                   && std::ranges::equal(lhsProjection->getItems(), rhsProjection->getItems(), sameItem);
         }
         break;
 

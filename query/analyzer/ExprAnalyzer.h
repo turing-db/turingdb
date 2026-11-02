@@ -45,6 +45,7 @@ class ListComprehensionExpr;
 class ListPredicateExpr;
 class ReduceExpr;
 class AllReduceExpr;
+class MapProjectionExpr;
 class ExistsExpr;
 class CountSubqueryExpr;
 class CollectSubqueryExpr;
@@ -102,6 +103,7 @@ public:
     void analyzeListPredicateExpr(ListPredicateExpr* expr);
     void analyzeReduceExpr(ReduceExpr* expr);
     void analyzeAllReduceExpr(AllReduceExpr* expr);
+    void analyzeMapProjectionExpr(MapProjectionExpr* expr);
     void analyzeCaseExpr(CaseExpr* expr);
     void analyzeExistsExpr(ExistsExpr* expr);
     void analyzeCountSubqueryExpr(CountSubqueryExpr* expr);

@@ -2149,6 +2149,24 @@ LogicalResult MakeMap::verify() {
     return success();
 }
 
+// A tagged cell may hold a map, and a column whose type lowering resolves may be one
+LogicalResult MergeMaps::verify() {
+    const OperandRange maps = getMaps();
+    if (maps.size() < 2) {
+        return emitOpError("requires at least two map columns");
+    }
+
+    const auto readsMaps = [](Value column) {
+        return isa<storage::MapType, storage::AnyType, NoneType>(columnElement(column));
+    };
+
+    if (!llvm::all_of(maps, readsMaps)) {
+        return emitOpError("operands must be columns of maps");
+    }
+
+    return success();
+}
+
 // The integers a range spans ride the list it builds, so the result is a column of them.
 LogicalResult Range::verify() {
     const ColumnType resultColumn = llvm::dyn_cast<ColumnType>(getResult().getType());

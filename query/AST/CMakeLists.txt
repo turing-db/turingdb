@@ -94,6 +94,7 @@ set(ast_sources
     expr/ListPredicateExpr.cpp
     expr/ReduceExpr.cpp
     expr/AllReduceExpr.cpp
+    expr/MapProjectionExpr.cpp
     expr/CaseExpr.cpp
     NodePattern.cpp
     EdgePattern.cpp

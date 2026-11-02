@@ -398,6 +398,14 @@ public:
     }
 };
 
+class MapPropertiesFunction {
+public:
+    using ArgType = MapView;
+    using ResultType = std::optional<MapView>;
+
+    ResultType operator()(const MapView map) const { return map; }
+};
+
 class MapKeysFunction {
 public:
     using ArgType = MapView;

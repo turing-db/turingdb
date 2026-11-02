@@ -65,5 +65,5 @@ TEST_F(DoubleDashTest, hopsAcrossSpacedDashes) {
 }
 
 TEST_F(DoubleDashTest, rejectsANodeWithoutARelationship) {
-    runQueryExpectingError("MATCH (n) WHERE (n {name: 'Remy'}) RETURN n.name", "needs at least one relationship");
+    runQueryExpectingError("MATCH (n) WHERE (n:Person {name: 'Remy'}) RETURN n.name", "needs at least one relationship");
 }

@@ -287,6 +287,7 @@ private:
     void lowerUnwindComputed(mlir::db::UnwindComputed unwind);
     void lowerMakeList(mlir::db::MakeList makeList);
     void lowerMakeMap(mlir::db::MakeMap makeMap);
+    void lowerMergeMaps(mlir::db::MergeMaps merge);
     void lowerRange(mlir::db::Range range);
     void lowerSubstring(mlir::db::Substring substring);
     void lowerSplit(mlir::db::Split split);
