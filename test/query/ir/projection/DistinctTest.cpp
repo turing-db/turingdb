@@ -879,14 +879,6 @@ TEST_F(DistinctTest, rejectsOrderByOnAnUnprojectedVariable) {
                  TuringException);
 }
 
-// An aggregate key groups the projection as an aggregate item would, so the rows are one
-// per name before the dedup ever sees them and DISTINCT drops nothing. Gym is pointed at
-// three times and no other node more than twice, so it is the group the order opens on.
-TEST_F(DistinctTest, ordersDistinctGroupsByAnAggregateKey) {
-    const Names expected = {"Gym"};
-    expectNames("MATCH (a)-->(b) RETURN DISTINCT b.name ORDER BY count(b) DESC LIMIT 1", expected);
-}
-
 // A DISTINCT projection ordered by the very expression it returns. The key and the
 // returned item are two separate trees, so recognising them as one column is what keeps
 // this query from being turned away - after the dedup, only a column the projection

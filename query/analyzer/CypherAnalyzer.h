@@ -238,6 +238,7 @@ private:
     void declareItemAlias(Expr* item, std::string_view alias);
     void analyzeDistinct(const Projection* projection, bool isAggregate) const;
     void analyzeAggregateOrderBy(const Projection* projection) const;
+    void throwOnOrderByAggregate(const Projection* projection, const Stmt* clause) const;
     void analyzeAggregateItems(const Projection* projection) const;
     void throwOnImplicitGroupingKey(const Expr* expr,
                                     const Projection* projection,

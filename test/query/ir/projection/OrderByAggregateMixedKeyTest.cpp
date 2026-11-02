@@ -66,13 +66,6 @@ TEST_F(OrderByAggregateMixedKeyTest, rejectsAnAggregatePlusTheAggregatedVariable
                            DROPPED_KEY_REASON);
 }
 
-// The aggregate in the key is what makes the projection aggregating, with n.name its one
-// grouping key: n.age is dropped all the same.
-TEST_F(OrderByAggregateMixedKeyTest, rejectsAKeyThatIsTheOnlyAggregate) {
-    runQueryExpectingError("MATCH (n:Person)-->(m) RETURN n.name AS name ORDER BY count(m) + n.age",
-                           DROPPED_KEY_REASON);
-}
-
 TEST_F(OrderByAggregateMixedKeyTest, rejectsAnAggregatePlusADroppedVariableUnderAWith) {
     runQueryExpectingError("MATCH (n:Person)-->(m) WITH n.name AS name, count(m) AS k "
                            "ORDER BY count(m) + n.age RETURN name",

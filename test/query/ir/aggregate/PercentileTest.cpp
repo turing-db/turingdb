@@ -204,8 +204,8 @@ TEST_F(PercentileTest, groupsOrderedByAPercentile) {
 }
 
 TEST_F(PercentileTest, groupsOrderedByAPercentileTheyDoNotReturn) {
-    expectRows("UNWIND [1, 2, 3, 4, 5, 6] AS x RETURN x % 3 AS k ORDER BY percentileCont(x, 0.5) DESC",
-               {{"0"}, {"2"}, {"1"}});
+    expectRows("UNWIND [1, 2, 3, 4, 5, 6] AS x RETURN x % 3 AS k, count(*) AS c ORDER BY percentileCont(x, 0.5) DESC",
+               {{"0", "2"}, {"2", "2"}, {"1", "2"}});
 }
 
 TEST_F(PercentileTest, percentileFeedsAnExpression) {

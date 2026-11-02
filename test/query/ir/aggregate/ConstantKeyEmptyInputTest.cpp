@@ -63,24 +63,12 @@ TEST_F(ConstantKeyEmptyInputTest, takesNoPercentileUnderAConstantKey) {
     expectRows("MATCH (n:Person {name: 'Nobody'}) RETURN 1 AS x, percentileCont(n.age, 0.5)", {});
 }
 
-TEST_F(ConstantKeyEmptyInputTest, ordersNoGroupUnderAConstantKey) {
-    expectRows("MATCH (n:Person {name: 'Nobody'}) RETURN 1 AS x ORDER BY count(n)", {});
-}
-
 TEST_F(ConstantKeyEmptyInputTest, countsEveryPersonUnderConstantKeys) {
     expectRows("MATCH (n:Person) RETURN 1 AS x, null AS y, count(n)", {{"1", "null", "8"}});
 }
 
 TEST_F(ConstantKeyEmptyInputTest, countsTheDistinctRowsUnderAConstantKey) {
     expectRows("UNWIND [1, 1, 2] AS x WITH DISTINCT x RETURN 1 AS k, count(*)", {{"1", "2"}});
-}
-
-TEST_F(ConstantKeyEmptyInputTest, ordersTheOneGroupUnderAConstantKey) {
-    expectRows("MATCH (n:Person) RETURN 1 AS x ORDER BY count(n)", {{"1"}});
-}
-
-TEST_F(ConstantKeyEmptyInputTest, ordersTheOneRowOfAQueryWithNoMatch) {
-    expectRows("RETURN 1 AS x ORDER BY count(*)", {{"1"}});
 }
 
 TEST_F(ConstantKeyEmptyInputTest, callReturnsNoRowForAPersonWithNoMatch) {

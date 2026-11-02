@@ -10985,9 +10985,9 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
     }
 
     // A key may order the groups by an aggregate the projection does not return -
-    // RETURN a.name ORDER BY count(b) - which the aggregation has to compute all the same.
-    // Its result column is then read by the sort alone, and no db.output reads it, which is
-    // what keeps it out of the rows
+    // RETURN a.name, count(b) ORDER BY max(b.age) - which the aggregation has to compute
+    // all the same. Its result column is then read by the sort alone, and no db.output
+    // reads it, which is what keeps it out of the rows
     if (projection->hasOrderBy()) {
         llvm::SmallVector<const FunctionInvocationExpr*> keyInvocations;
         for (const OrderByItem* orderByItem : projection->getOrderBy()->getItems()) {

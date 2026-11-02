@@ -1286,12 +1286,8 @@ void CypherAnalyzer::analyzeProjection(Projection* projection, const Stmt* claus
         std::swap(_consumedVariables, consumedVariables);
         _orderedProjection = outerOrderedProjection;
 
-        // An aggregate in the ORDER BY aggregates the projection as an aggregate item
-        // would - RETURN a.name ORDER BY count(b) orders one row per name - so the items
-        // beside it are the grouping keys, and a projection of nothing but keys is
-        // aggregating after all
-        for (const OrderByItem* item : projection->getOrderBy()->getItems()) {
-            isAggregate |= item->getExpr()->isAggregate();
+        if (!isAggregate) {
+            throwOnOrderByAggregate(projection, clause);
         }
     }
 
@@ -1414,6 +1410,21 @@ void CypherAnalyzer::analyzeAggregateOrderBy(const Projection* projection) const
         if (!isGroupWise(keyExpr, projection)) {
             throwError("ORDER BY with an aggregate may only order by expressions over the "
                        "returned columns.",
+                       keyExpr);
+        }
+    }
+}
+
+void CypherAnalyzer::throwOnOrderByAggregate(const Projection* projection, const Stmt* clause) const {
+    const std::string_view clauseName = clause->getKind() == Stmt::Kind::WITH ? "WITH" : "RETURN";
+
+    for (const OrderByItem* item : projection->getOrderBy()->getItems()) {
+        const Expr* keyExpr = item->getExpr();
+
+        if (keyExpr->isAggregate()) {
+            throwError(fmt::format("Cannot use aggregation in ORDER BY if there are no aggregate "
+                                   "expressions in the preceding {}",
+                                   clauseName),
                        keyExpr);
         }
     }

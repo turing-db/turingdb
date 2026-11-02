@@ -48,7 +48,6 @@ using namespace turing::test;
 namespace {
 
 using Counts = std::vector<uint64_t>;
-using Names = std::vector<std::optional<std::string>>;
 using NameCountRow = std::pair<std::optional<std::string>, uint64_t>;
 using NameCountRows = std::vector<NameCountRow>;
 using AgeCountRow = std::pair<std::optional<int64_t>, uint64_t>;
@@ -181,33 +180,6 @@ private:
     Counts _values;
 };
 
-// Collects the single name column of a projection that returns the grouping key alone and
-// orders on a distinct count it does not carry.
-class OrderedNameSink : public NLOutputSink {
-public:
-    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
-        ASSERT_EQ(chunks.size(), 1u);
-
-        const auto* names = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
-        ASSERT_NE(names, nullptr);
-
-        const auto& nameRaw = names->getRaw();
-        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            std::optional<std::string> name;
-            if (nameRaw[rowIndex]) {
-                name = std::string(*nameRaw[rowIndex]);
-            }
-
-            _values.push_back(name);
-        }
-    }
-
-    const Names& values() const { return _values; }
-
-private:
-    Names _values;
-};
-
 }
 
 // How a count(DISTINCT x) projection meets the row-reordering and row-cutting clauses:
@@ -277,13 +249,6 @@ protected:
 
     void expectCounts(std::string_view query, const Counts& expected) {
         OrderedCountSink sink;
-        runQuery(query, &sink);
-
-        EXPECT_EQ(sink.values(), expected) << "query: " << query;
-    }
-
-    void expectNames(std::string_view query, const Names& expected) {
-        OrderedNameSink sink;
         runQuery(query, &sink);
 
         EXPECT_EQ(sink.values(), expected) << "query: " << query;
@@ -507,10 +472,9 @@ TEST_F(CountDistinctOrderingTest, ordersGroupsByANegationOfTheDistinctCount) {
 // The distinct count is the key and nothing else: it is computed for the sort and left out
 // of the output, the way an unprojected key over a grouping key already is.
 TEST_F(CountDistinctOrderingTest, ordersGroupsByADistinctCountItDoesNotProject) {
-    const Names expected {"Remy", "Adam", "Luc", "Martina"};
-    const std::string query = std::string(doctorGroupsMatch) + "RETURN a.name ORDER BY count(DISTINCT b) DESC";
+    const NameCountRows expected {doctorGroupsByCountAscending.rbegin(), doctorGroupsByCountAscending.rend()};
 
-    expectNames(query, expected);
+    expectDoctorRows("RETURN a.name, count(b) ORDER BY count(DISTINCT b) DESC", expected);
 }
 
 TEST_F(CountDistinctOrderingTest, ordersDistinctGroupsByTheDistinctCount) {

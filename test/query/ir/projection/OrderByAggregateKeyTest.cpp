@@ -25,17 +25,9 @@ using namespace turing::test;
 
 namespace {
 
-// The eight simpledb people with an out-edge, ordered by how many they have and then by
-// name: the order ORDER BY count(*) DESC, a.name asks for over the seventeen out-edge
-// rows of MATCH (a:Person)-->(b).
-const Rows peopleByOutDegreeDescending = {
-    {"Remy"}, {"Adam"}, {"Cyrus"}, {"Luc"}, {"Maxime"}, {"Suhas"}, {"Doruk"}, {"Martina"},
-};
-
-const Rows peopleByOutDegreeAscending = {
-    {"Doruk"}, {"Martina"}, {"Cyrus"}, {"Luc"}, {"Maxime"}, {"Suhas"}, {"Adam"}, {"Remy"},
-};
-
+// The eight simpledb people with an out-edge and how many they have, ordered by that and
+// then by name: the order ORDER BY count(*) DESC, a.name asks for over the seventeen
+// out-edge rows of MATCH (a:Person)-->(b).
 const Rows peopleAndOutDegreeDescending = {
     {"Remy", "4"},
     {"Adam", "3"},
@@ -46,6 +38,19 @@ const Rows peopleAndOutDegreeDescending = {
     {"Doruk", "1"},
     {"Martina", "1"},
 };
+
+const Rows peopleAndOutDegreeAscending = {
+    {"Doruk", "1"},
+    {"Martina", "1"},
+    {"Cyrus", "2"},
+    {"Luc", "2"},
+    {"Maxime", "2"},
+    {"Suhas", "2"},
+    {"Adam", "3"},
+    {"Remy", "4"},
+};
+
+const Rows topThreePeopleByOutDegree = {{"Remy", "4"}, {"Adam", "3"}, {"Cyrus", "2"}};
 
 }
 
@@ -105,22 +110,20 @@ protected:
 };
 
 TEST_F(OrderByAggregateKeyTest, ordersGroupsByTheirCountOfRows) {
-    expectRowsInOrder("MATCH (a:Person)-->(b) RETURN a.name ORDER BY count(*) DESC, a.name",
-                      peopleByOutDegreeDescending);
+    expectRowsInOrder("MATCH (a:Person)-->(b) RETURN a.name, count(b) ORDER BY count(*) DESC, a.name",
+                      peopleAndOutDegreeDescending);
 }
 
 TEST_F(OrderByAggregateKeyTest, ordersGroupsByTheirCountOfRowsAscending) {
-    expectRowsInOrder("MATCH (a:Person)-->(b) RETURN a.name ORDER BY count(*), a.name",
-                      peopleByOutDegreeAscending);
+    expectRowsInOrder("MATCH (a:Person)-->(b) RETURN a.name, count(b) ORDER BY count(*), a.name",
+                      peopleAndOutDegreeAscending);
 }
 
 // The top-N shape the key exists for: the three people with the most out-edges, not the
 // three that come first alphabetically.
 TEST_F(OrderByAggregateKeyTest, takesTheGroupsWithTheMostRows) {
-    const Rows topThree {peopleByOutDegreeDescending.begin(), peopleByOutDegreeDescending.begin() + 3};
-
-    expectRowsInOrder("MATCH (a:Person)-->(b) RETURN a.name ORDER BY count(*) DESC, a.name LIMIT 3",
-                      topThree);
+    expectRowsInOrder("MATCH (a:Person)-->(b) RETURN a.name, count(b) ORDER BY count(*) DESC, a.name LIMIT 3",
+                      topThreePeopleByOutDegree);
 }
 
 // The key orders the groups whether or not the projection returns the count as well.
@@ -138,19 +141,15 @@ TEST_F(OrderByAggregateKeyTest, takesTheGroupWithTheFewestRows) {
 
 // count(1) reduces a value per group as count(*) does, so it is a key on the same terms.
 TEST_F(OrderByAggregateKeyTest, ordersGroupsByTheirCountOverAConstant) {
-    const Rows topThree {peopleByOutDegreeDescending.begin(), peopleByOutDegreeDescending.begin() + 3};
-
-    expectRowsInOrder("MATCH (a:Person)-->(b) RETURN a.name ORDER BY count(1) DESC, a.name LIMIT 3",
-                      topThree);
+    expectRowsInOrder("MATCH (a:Person)-->(b) RETURN a.name, count(b) ORDER BY count(1) DESC, a.name LIMIT 3",
+                      topThreePeopleByOutDegree);
 }
 
 // An item may carry an aggregate without being one, and so may a key: negating the count
 // orders the groups by it ascending, which is the descending order of the count itself.
 TEST_F(OrderByAggregateKeyTest, ordersGroupsByAnArithmeticOverTheirCountOfRows) {
-    const Rows topThree {peopleByOutDegreeDescending.begin(), peopleByOutDegreeDescending.begin() + 3};
-
-    expectRowsInOrder("MATCH (a:Person)-->(b) RETURN a.name ORDER BY count(*) * -1, a.name LIMIT 3",
-                      topThree);
+    expectRowsInOrder("MATCH (a:Person)-->(b) RETURN a.name, count(b) ORDER BY count(*) * -1, a.name LIMIT 3",
+                      topThreePeopleByOutDegree);
 }
 
 TEST_F(OrderByAggregateKeyTest, ordersGroupsByTheirCountOfRowsAtABarrier) {
@@ -163,10 +162,8 @@ TEST_F(OrderByAggregateKeyTest, ordersGroupsByTheirCountOfRowsAtABarrier) {
 // the count: the two spellings that already order the groups, so the key above has to
 // land on the same rows as these.
 TEST_F(OrderByAggregateKeyTest, ordersGroupsByACountOverAColumn) {
-    const Rows topThree {peopleByOutDegreeDescending.begin(), peopleByOutDegreeDescending.begin() + 3};
-
-    expectRowsInOrder("MATCH (a:Person)-->(b) RETURN a.name ORDER BY count(b) DESC, a.name LIMIT 3",
-                      topThree);
+    expectRowsInOrder("MATCH (a:Person)-->(b) RETURN a.name, count(*) ORDER BY count(b) DESC, a.name LIMIT 3",
+                      topThreePeopleByOutDegree);
 }
 
 TEST_F(OrderByAggregateKeyTest, ordersGroupsByTheAliasOfTheirCountOfRows) {
