@@ -154,6 +154,17 @@ void NLEntityProperties::readKeys(IDT entity, std::vector<std::string_view>& key
 }
 
 template <TypedInternalID IDT>
+void NLEntityProperties::readIDs(IDT entity, std::vector<PropertyTypeID>& ids) {
+    _readsValues = false;
+    collect(entity);
+
+    ids.clear();
+    for (const Property& property : _properties) {
+        ids.push_back(property._id);
+    }
+}
+
+template <TypedInternalID IDT>
 void NLEntityProperties::readEntries(IDT entity, std::vector<Entry>& entries) {
     _readsValues = true;
     collect(entity);
@@ -247,7 +258,12 @@ void NLEntityProperties::collectPending(IDT entity) {
 
 template <TypedInternalID IDT>
 void NLEntityProperties::collectUpdates(IDT entity) {
-    if (!_writeBuffer || !_written->hasUpdates()) {
+    if (!_writeBuffer) {
+        return;
+    }
+
+    _written->indexUpdates(_writeBuffer);
+    if (!_written->hasUpdates()) {
         return;
     }
 
@@ -320,6 +336,8 @@ ValueType NLEntityProperties::getValueType(PropertyTypeID id) const {
 
 template void NLEntityProperties::readKeys<NodeID>(NodeID entity, std::vector<std::string_view>& keys);
 template void NLEntityProperties::readKeys<EdgeID>(EdgeID entity, std::vector<std::string_view>& keys);
+template void NLEntityProperties::readIDs<NodeID>(NodeID entity, std::vector<PropertyTypeID>& ids);
+template void NLEntityProperties::readIDs<EdgeID>(EdgeID entity, std::vector<PropertyTypeID>& ids);
 template void NLEntityProperties::readEntries<NodeID>(NodeID entity, std::vector<Entry>& entries);
 template void NLEntityProperties::readEntries<EdgeID>(EdgeID entity, std::vector<Entry>& entries);
 template bool NLEntityProperties::readEntry<NodeID>(NodeID entity, std::string_view key, Entry& entry);

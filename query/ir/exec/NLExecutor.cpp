@@ -88,6 +88,7 @@
 #include "NLPendingEdges.h"
 #include "NLPendingNodes.h"
 #include "NLPropertyValueScan.h"
+#include "NLEntityProperties.h"
 #include "NLWriteProperties.h"
 #include "NLWrittenValues.h"
 #include "NLPropertyFunctions.h"
@@ -6071,6 +6072,7 @@ void runSetProperties(NLExecutionContext* context, NLFunctionData* data) {
     const GraphView* view = context->getView();
     const MetadataBuilder* metadataBuilder = context->getMetadataBuilder();
     const ColumnMask* rows = setData->getRows();
+    const bool replaces = setData->getReplaces();
     const auto& raw = entities->getRaw();
 
     CommitWriteBuffer::UntypedProperties& mapProperties = setData->getMapProperties();
@@ -6105,6 +6107,15 @@ void runSetProperties(NLExecutionContext* context, NLFunctionData* data) {
     const PendingRows pendingRows(setData->getPending(), setData->isAllPending(), firstPendingID, pendingCount);
     NLWrittenValues& written = context->getWrittenValues();
 
+    std::optional<NLEntityProperties> heldProperties;
+    if (replaces) {
+        heldProperties.emplace(context, nullptr);
+    }
+
+    CommitWriteBuffer::UntypedProperties& removals = setData->getRemovals();
+    std::vector<PropertyTypeID>& held = setData->getHeld();
+    std::vector<ValueType>& heldTypes = setData->getHeldTypes();
+
     for (size_t row = 0; row < rowCount; row++) {
         if (!writeTouchesRow(rows, row) || !raw[row].isValid()) {
             continue;
@@ -6113,6 +6124,12 @@ void runSetProperties(NLExecutionContext* context, NLFunctionData* data) {
         const StagedRange& range = mapRanges[row];
         const std::span<CommitWriteBuffer::UntypedProperty> writes {mapProperties.begin() + range._begin,
                                                                     mapProperties.begin() + range._end};
+
+        removals.clear();
+        if (replaces) {
+            heldProperties->readIDs(raw[row], held);
+            stageRemovals(held, writes, view, metadataBuilder, heldTypes, removals);
+        }
 
         const uint64_t id = raw[row].getValue();
 
@@ -6127,6 +6144,7 @@ void runSetProperties(NLExecutionContext* context, NLFunctionData* data) {
                 };
 
                 std::ranges::for_each(writes, writeProperty);
+                std::ranges::for_each(removals, writeProperty);
             } else {
                 CommitWriteBuffer::PendingEdge& edge = writeBuffer->getPendingEdge(offset);
                 const auto writeProperty = [&](const CommitWriteBuffer::UntypedProperty& property) {
@@ -6134,6 +6152,7 @@ void runSetProperties(NLExecutionContext* context, NLFunctionData* data) {
                 };
 
                 std::ranges::for_each(writes, writeProperty);
+                std::ranges::for_each(removals, writeProperty);
             }
         } else {
             const auto writeProperty = [&](CommitWriteBuffer::UntypedProperty& property) {
@@ -6145,6 +6164,7 @@ void runSetProperties(NLExecutionContext* context, NLFunctionData* data) {
             };
 
             std::ranges::for_each(writes, writeProperty);
+            std::ranges::for_each(removals, writeProperty);
         }
     }
 }

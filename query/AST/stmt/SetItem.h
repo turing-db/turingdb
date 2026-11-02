@@ -28,6 +28,7 @@ public:
     struct EntityPropertiesAssign {
         SymbolExpr* _entity {nullptr};
         Expr* _value {nullptr};
+        bool _replaces {false};
         std::vector<EntityPropertyConstraint> _createdProperties;
     };
 
@@ -41,7 +42,7 @@ public:
 
     static SetItem* create(CypherAST* ast, PropertyExpr* expr, Expr* value);
     static SetItem* create(CypherAST* ast, EntityTypeExpr* value);
-    static SetItem* create(CypherAST* ast, SymbolExpr* entity, Expr* value);
+    static SetItem* create(CypherAST* ast, SymbolExpr* entity, Expr* value, bool replaces);
 
     Variant& item() { return _item; }
     const Variant& item() const { return _item; }

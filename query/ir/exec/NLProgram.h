@@ -3784,14 +3784,16 @@ class NLSetPropertiesData : public NLFunctionData {
 public:
     using IDColumnType = IDColumn;
 
-    NLSetPropertiesData(const IDColumn* input, const Column* value)
+    NLSetPropertiesData(const IDColumn* input, const Column* value, bool replaces)
         : _input(input),
-        _value(value)
+        _value(value),
+        _replaces(replaces)
     {
     }
 
     const IDColumn* getInput() const { return _input; }
     const Column* getValue() const { return _value; }
+    bool getReplaces() const { return _replaces; }
 
     const ColumnMask* getPending() const { return _pending; }
     void setPending(const ColumnMask* pending) { _pending = pending; }
@@ -3805,6 +3807,9 @@ public:
     std::vector<WrittenMap>& getMaps() { return _maps; }
     CommitWriteBuffer::UntypedProperties& getMapProperties() { return _mapProperties; }
     std::vector<StagedRange>& getMapRanges() { return _mapRanges; }
+    CommitWriteBuffer::UntypedProperties& getRemovals() { return _removals; }
+    std::vector<PropertyTypeID>& getHeld() { return _held; }
+    std::vector<ValueType>& getHeldTypes() { return _heldTypes; }
     std::vector<MapKeyPropertyType>& getKeyTypes() { return _keyTypes; }
 
 private:
@@ -3813,9 +3818,13 @@ private:
     const ColumnMask* _pending {nullptr};
     const ColumnMask* _rows {nullptr};
     bool _allPending {false};
+    bool _replaces {false};
     std::vector<WrittenMap> _maps;
     CommitWriteBuffer::UntypedProperties _mapProperties;
     std::vector<StagedRange> _mapRanges;
+    CommitWriteBuffer::UntypedProperties _removals;
+    std::vector<PropertyTypeID> _held;
+    std::vector<ValueType> _heldTypes;
     std::vector<MapKeyPropertyType> _keyTypes;
 };
 
