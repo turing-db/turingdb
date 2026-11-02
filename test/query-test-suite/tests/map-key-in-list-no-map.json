@@ -3,7 +3,7 @@
   "graph": "simpledb",
   "query": "WITH [1, {a: 2}] AS xs, 'a' AS k RETURN xs[0][k], xs[1][k]",
   "expect": {
-    "result": "xs[0][k],xs[1][k]\nnull,2"
+    "result": "EXEC ERROR\nType mismatch: key 'a' is read off a map, a node or a relationship, and this row holds none of them"
   },
   "tags": [
     "map",

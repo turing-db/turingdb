@@ -154,6 +154,8 @@ add_ir_tests(test_query_ir_raise_effect RaiseEffectTest.cpp)
 
 add_ir_tests(test_query_ir_unwind_range_window_speculatability UnwindRangeWindowSpeculatabilityTest.cpp)
 
+add_ir_tests(test_query_ir_map_key_read_speculatability MapKeyReadSpeculatabilityTest.cpp)
+
 add_turing_test(test_query_ir_unwound_value_bound_by_an_equality UnwoundValueBoundByAnEqualityTest.cpp)
 
 add_turing_test(test_query_ir_fuse_unwind_equality_stand_in FuseUnwindEqualityStandInTest.cpp)

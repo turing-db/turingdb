@@ -5289,8 +5289,6 @@ NLKeyedValue mapRead(const Column* input, size_t row) {
     return *map;
 }
 
-// The map, the node or the edge a type-erased cell holds, nothing where it holds anything
-// else
 NLKeyedValue readKeyedCell(const CellView cell) {
     switch (cell.getTag()) {
         case CellTag::MapView:
@@ -5302,10 +5300,31 @@ NLKeyedValue readKeyedCell(const CellView cell) {
         case CellTag::EdgeID:
             return cell.getAs<EdgeID>();
         break;
-        default:
+        case CellTag::DateTime:
+            return cell.getAs<DateTime>();
+        break;
+        case CellTag::Duration:
+            return cell.getAs<Duration>();
+        break;
+        case CellTag::Null:
             return std::monostate {};
         break;
+        case CellTag::Int:
+        case CellTag::UInt:
+        case CellTag::Double:
+        case CellTag::Bool:
+        case CellTag::String:
+        case CellTag::Embedding:
+        case CellTag::ListView:
+        case CellTag::Path:
+            return NLKeylessValue {};
+        break;
+        case CellTag::INVALID:
+            throw IRException("a map key read reads an untagged cell");
+        break;
     }
+
+    throw IRException("Unknown CellTag");
 }
 
 NLKeyedValue readKeyedCell(const std::optional<CellView>& cell) {
@@ -5325,7 +5344,7 @@ NLKeyedValue readTaggedKeyed(const Column* input, size_t row) {
 
 // The entry @param keyed holds under @param key: the one its map holds, or its node's or
 // edge's property, written into @param mapBuffer as a map of that one entry. False where
-// it holds no such entry.
+// it holds null or no such entry, and raises where it holds a value with no entries.
 bool findKeyedEntry(const NLKeyedValue& keyed,
                     std::string_view key,
                     NLEntityProperties& properties,
@@ -5333,7 +5352,9 @@ bool findKeyedEntry(const NLKeyedValue& keyed,
                     MapEntryView& entry) {
     MapBuffer<>::MapKeyValuePair property;
 
-    if (const MapView* map = std::get_if<MapView>(&keyed)) {
+    if (std::holds_alternative<std::monostate>(keyed)) {
+        return false;
+    } else if (const MapView* map = std::get_if<MapView>(&keyed)) {
         return findMapEntry(*map, key, entry);
     } else if (const NodeID* node = std::get_if<NodeID>(&keyed)) {
         if (!properties.readEntry(*node, key, property)) {
@@ -5344,11 +5365,61 @@ bool findKeyedEntry(const NLKeyedValue& keyed,
             return false;
         }
     } else {
-        return false;
+        throw IRException(fmt::format("Type mismatch: key '{}' is read off a map, a node or a relationship, "
+                                      "and this row holds none of them",
+                                      key));
     }
 
     entry = mapBuffer.insert(std::span<const MapBuffer<>::MapKeyValuePair> {&property, 1}).front();
     return true;
+}
+
+// The component @param part names of @param value, written into @param mapBuffer as the
+// value of a map of one entry, as an entity's property is
+template <typename Owner, typename Part>
+CellView componentCell(Owner value,
+                       std::optional<Part> part,
+                       std::string_view key,
+                       std::string_view ownerName,
+                       MapBuffer<>& mapBuffer) {
+    if (!part) {
+        throw IRException(fmt::format("'{}' is not a component of a {}", key, ownerName));
+    }
+
+    const MapBuffer<>::MapKeyValuePair component {
+        .key = key,
+        .value = Owner::component(value, *part),
+    };
+
+    const MapView map = mapBuffer.insert(std::span<const MapBuffer<>::MapKeyValuePair> {&component, 1});
+
+    return map.front().getValue();
+}
+
+// The value a property read finds in @param keyed: a key of its map, a property of its node
+// or edge, or a component of its instant or duration. Null where it holds null or no such key.
+CellView readStaticKey(const NLKeyedValue& keyed,
+                       const NLStaticMapKeyData* mapKey,
+                       NLEntityProperties& properties,
+                       MapBuffer<>& mapBuffer) {
+    const std::string_view key = mapKey->getKey();
+
+    if (const DateTime* instant = std::get_if<DateTime>(&keyed)) {
+        return componentCell(*instant, mapKey->getDateTimePart(), key, "datetime", mapBuffer);
+    } else if (const Duration* duration = std::get_if<Duration>(&keyed)) {
+        return componentCell(*duration, mapKey->getDurationPart(), key, "duration", mapBuffer);
+    } else if (std::holds_alternative<NLKeylessValue>(keyed)) {
+        throw IRException(fmt::format("Type mismatch: property '{}' is read off a map, a node, a relationship, "
+                                      "a datetime or a duration, and this row holds none of them",
+                                      key));
+    }
+
+    MapEntryView entry;
+    if (!findKeyedEntry(keyed, key, properties, mapBuffer, entry)) {
+        return CellView::nullElement();
+    }
+
+    return entry.getValue();
 }
 
 // The key one column of a dynamic map key read holds at @param row, or nothing where the
@@ -9615,14 +9686,12 @@ NLIntegerArgumentRead NLExecutor::selectIntegerArgumentRead(const Column* input)
 }
 
 // Row r of the result views the value row r's map already holds under the key, so the read
-// copies nothing. A row holding no map, and a map holding no such key, read back as a null
-// cell.
+// copies nothing. A null row, and a map holding no such key, read back as a null cell.
 void NLExecutor::runStaticMapKey(NLExecutionContext* context, NLFunctionData* data) {
     const NLStaticMapKeyData* mapKey = static_cast<NLStaticMapKeyData*>(data);
 
     const Column* input = mapKey->getInput();
     const NLKeyedReadFunction read = mapKey->getKeyedRead();
-    const std::string_view key = mapKey->getKey();
 
     NLStepBuffers* const stepBuffers = mapKey->getStepBuffers();
     stepBuffers->clear();
@@ -9630,13 +9699,8 @@ void NLExecutor::runStaticMapKey(NLExecutionContext* context, NLFunctionData* da
     MapBuffer<>& mapBuffer = stepBuffers->mapBuffer();
     NLEntityProperties properties(context, &stepBuffers->valueStore());
 
-    const auto valueAt = [input, read, key, &properties, &mapBuffer](size_t row) {
-        MapEntryView entry;
-        if (!findKeyedEntry(read(input, row), key, properties, mapBuffer, entry)) {
-            return CellView::nullElement();
-        }
-
-        return entry.getValue();
+    const auto valueAt = [input, read, mapKey, &properties, &mapBuffer](size_t row) {
+        return readStaticKey(read(input, row), mapKey, properties, mapBuffer);
     };
 
     Column* result = mapKey->getResult();

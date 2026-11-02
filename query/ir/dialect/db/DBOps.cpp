@@ -151,6 +151,72 @@ bool isSafeLiteralDivisor(Value divisor, bool minusOneOverflows) {
     return false;
 }
 
+bool isMapOrNullLiteral(Attribute literal) {
+    return isa<DictionaryAttr, UnitAttr>(literal);
+}
+
+Value yieldedFactorColumn(Region& leftFactor, Region& rightFactor, size_t resultNumber) {
+    Yield leftYield = cast<Yield>(leftFactor.front().getTerminator());
+    const OperandRange leftColumns = leftYield.getColumns();
+    if (resultNumber < leftColumns.size()) {
+        return leftColumns[resultNumber];
+    }
+
+    Yield rightYield = cast<Yield>(rightFactor.front().getTerminator());
+
+    return rightYield.getColumns()[resultNumber - leftColumns.size()];
+}
+
+// Whether every row of @param column holds a map, a node, an edge or null, so that a key read
+// over it raises on none. A column whose type names another value never reaches a key read:
+// only a type-erased or unresolved one is followed back to where it was made.
+bool holdsOnlyKeyedValues(Value column) {
+    llvm::SmallVector<Value> worklist {column};
+    llvm::DenseSet<Value> visited;
+
+    while (!worklist.empty()) {
+        const Value value = worklist.pop_back_val();
+        if (!visited.insert(value).second || !mayHoldAnyType(value)) {
+            continue;
+        }
+
+        if (const BlockArgument argument = dyn_cast<BlockArgument>(value)) {
+            LazyCase selection = dyn_cast_or_null<LazyCase>(argument.getOwner()->getParentOp());
+            if (!selection) {
+                return false;
+            }
+
+            worklist.push_back(selection.getColumnsToFilter()[argument.getArgNumber()]);
+            continue;
+        }
+
+        Operation* const definingOp = value.getDefiningOp();
+        const size_t resultNumber = cast<OpResult>(value).getResultNumber();
+
+        if (isa<MergeMaps>(definingOp)) {
+            continue;
+        } else if (UnwindConst unwind = dyn_cast<UnwindConst>(definingOp)) {
+            if (!llvm::all_of(unwind.getElements(), isMapOrNullLiteral)) {
+                return false;
+            }
+        } else if (Case selection = dyn_cast<Case>(definingOp)) {
+            selection.collectSelectedValues(worklist);
+        } else if (LazyCase selection = dyn_cast<LazyCase>(definingOp)) {
+            selection.collectSelectedValues(worklist);
+        } else if (FilterOp filter = dyn_cast<FilterOp>(definingOp)) {
+            worklist.push_back(filter.getColumnsToFilter()[resultNumber]);
+        } else if (CrossProduct product = dyn_cast<CrossProduct>(definingOp)) {
+            worklist.push_back(yieldedFactorColumn(product.getLeftFactor(), product.getRightFactor(), resultNumber));
+        } else if (HashJoin join = dyn_cast<HashJoin>(definingOp)) {
+            worklist.push_back(yieldedFactorColumn(join.getLeftFactor(), join.getRightFactor(), resultNumber));
+        } else {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 // What a filter reads as a mask: a boolean column, a boolean literal, one whose values may be
 // null, a property read whose type lowering resolves, or the untyped null an expression over a
 // property no row carries evaluates to
@@ -2596,6 +2662,14 @@ Speculation::Speculatability ListSlice::getSpeculatability() {
 
 Speculation::Speculatability ListIndex::getSpeculatability() {
     return speculatableOverKnownTypes(getLhs());
+}
+
+Speculation::Speculatability StaticMapKey::getSpeculatability() {
+    return speculatableWhen(holdsOnlyKeyedValues(getMap()));
+}
+
+Speculation::Speculatability DynamicMapKey::getSpeculatability() {
+    return speculatableWhen(holdsOnlyKeyedValues(getMap()));
 }
 
 // The window raises as the slice it was folded from does, on a type-erased bound holding no

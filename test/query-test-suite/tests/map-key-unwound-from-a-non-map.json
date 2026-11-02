@@ -3,7 +3,7 @@
   "graph": "simpledb",
   "query": "UNWIND [1, 'x'] AS m RETURN m.a",
   "expect": {
-    "result": "m.a\nnull\nnull"
+    "result": "EXEC ERROR\nType mismatch: property 'a' is read off a map, a node, a relationship, a datetime or a duration, and this row holds none of them"
   },
   "tags": [
     "map",

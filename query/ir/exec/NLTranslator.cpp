@@ -680,6 +680,16 @@ bool columnHoldsNulls(const Column* column) {
     return NULL_HOLDING_INTERNAL_KINDS[internalKind];
 }
 
+template <typename Part, typename Owner>
+std::optional<Part> componentNamed(std::string_view name) {
+    Part part {};
+    if (!Owner::partNamed(name, part)) {
+        return std::nullopt;
+    }
+
+    return part;
+}
+
 // A drain wires its emit loop's variables into the accumulator's one output slot per
 // column, so an accumulator can serve exactly one nl.collect or nl.unwind_collect. A
 // second drain would rebind the first's outputs to its own, incompatible column types
@@ -3743,6 +3753,8 @@ void NLTranslator::translateStaticMapKey(nl::StaticMapKey mapKey, NLStmtContaine
                                                                    result,
                                                                    NLExecutor::selectKeyedRead(input),
                                                                    key,
+                                                                   componentNamed<DateTimePart, DateTime>(key),
+                                                                   componentNamed<DurationPart, Duration>(key),
                                                                    _program->allocStepBuffers());
 
     body->emplaceStmt(&NLExecutor::runStaticMapKey, data);

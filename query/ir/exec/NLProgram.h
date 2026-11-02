@@ -36,6 +36,8 @@
 #include "list/ListView.h"
 #include "map/MapView.h"
 #include "list/PathTrie.h"
+#include "metadata/DateTime.h"
+#include "metadata/Duration.h"
 #include "metadata/LabelSet.h"
 #include "metadata/LabelSetHandle.h"
 #include "metadata/PropertyType.h"
@@ -4323,10 +4325,15 @@ private:
     std::vector<Entry> _entries;
 };
 
-// What one row of an nl.static_map_key or an nl.dynamic_map_key reads its key in: a map, or
-// the node or the edge whose properties are its keys. Nothing where the row holds none of
-// them.
-using NLKeyedValue = std::variant<std::monostate, MapView, NodeID, EdgeID>;
+// A row holding a value no key reads into: a number, a string, a boolean, an embedding or a
+// list
+struct NLKeylessValue {
+};
+
+// What one row of an nl.static_map_key or an nl.dynamic_map_key reads its key in: a map, the
+// node or the edge whose properties are its keys, or the instant or the duration whose
+// components are. Nothing where the row holds null.
+using NLKeyedValue = std::variant<std::monostate, MapView, NodeID, EdgeID, DateTime, Duration, NLKeylessValue>;
 
 // The keyed value one column of a map key read holds at @param row. One per column shape,
 // selected during translation.
@@ -4338,18 +4345,23 @@ using NLStringReadFunction = std::optional<types::String::Primitive> (*)(const C
                                                                         size_t row);
 
 // Row-wise map key read (nl.static_map_key): row r of the result views the value row r's map
-// holds under the key, or a null cell where it holds none.
+// holds under the key, or a null cell where it holds none. The components of an instant and
+// of a duration the key names are resolved during translation.
 class NLStaticMapKeyData : public NLFunctionData {
 public:
     NLStaticMapKeyData(const Column* input,
                  Column* result,
                  NLKeyedReadFunction keyedRead,
                  std::string_view key,
+                 std::optional<DateTimePart> dateTimePart,
+                 std::optional<DurationPart> durationPart,
                  NLStepBuffers* stepBuffers)
         : _input(input),
         _result(result),
         _keyedRead(keyedRead),
         _key(key),
+        _dateTimePart(dateTimePart),
+        _durationPart(durationPart),
         _stepBuffers(stepBuffers)
     {
     }
@@ -4358,6 +4370,8 @@ public:
     Column* getResult() const { return _result; }
     NLKeyedReadFunction getKeyedRead() const { return _keyedRead; }
     std::string_view getKey() const { return _key; }
+    std::optional<DateTimePart> getDateTimePart() const { return _dateTimePart; }
+    std::optional<DurationPart> getDurationPart() const { return _durationPart; }
     NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
 private:
@@ -4365,6 +4379,8 @@ private:
     Column* _result {nullptr};
     NLKeyedReadFunction _keyedRead {nullptr};
     std::string_view _key {};
+    std::optional<DateTimePart> _dateTimePart;
+    std::optional<DurationPart> _durationPart;
     NLStepBuffers* _stepBuffers {nullptr};
 };
 

@@ -43,9 +43,9 @@ lowers one-for-one to `nl.map_key`.
 A map entry is a key and a cell: `MapEntryView::getValue()` views the `[tag][value]` bytes that
 follow the key, which are laid out as a list element's are. The result of a key read is a
 `!storage.any` chunk, `ColumnVector<CellView>`, one cell per row, viewing the value the map
-already holds, so the read copies nothing. A row whose map holds no such key, and a row holding no
-map, read `CellView::nullElement()`. The null therefore lives in the cell's own tag, and
-the column is never wrapped in a `nullable`.
+already holds, so the read copies nothing. A row whose map holds no such key, and a null row, read
+`CellView::nullElement()`. The null therefore lives in the cell's own tag, and the column is
+never wrapped in a `nullable`.
 
 From there a map value is any other value of type any: the binary protocol writes it as a
 `CELL_VIEW` column, the renderers print it as a cell, and `IS NULL`, `=`, `<>`, the
@@ -69,8 +69,17 @@ entry's tag holds.
 
 A map value is a tagged cell, so a read through one asks the row's tag rather than the column's
 type. `m[k].b` reads `b` out of the map `m[k]` holds, and `m.l[0]` reads the first element of
-the list `m.l` holds. Where the tag says something else the key read answers a `Null`-tagged
-cell, as a key the map does not hold does, and the index answers no element at all.
+the list `m.l` holds. Where the tag says a node or an edge the key read answers its property,
+and where it says a datetime or a duration the dotted form answers the component the key names,
+as Neo4j does: `WITH {d: datetime('2020-03-04T00:00:00Z')} AS m WITH m.d AS d RETURN d.year`
+is 2020. Any other value has no key, and the key read raises on it, as `d[k]` does on a
+datetime or a duration. Where the tag says no list the index raises too. A null reads null.
+
+A key read is speculatable only where its operand provably holds maps, nodes, edges and nulls
+alone: a column of one of those types, a merge of maps, an unwound literal list of maps, a
+selection between such columns, or one of them carried through a filter, a cross product or a
+hash join. So `row.src` in `UNWIND [{src: 'Remy'}, {src: 7}] AS row MATCH (a {name: row.src})`
+can still be sunk into its factor as a hash join key.
 
 A key read takes a cell column wherever it takes a map column: `holdsAMapPerRow` says so in
 `DBLowering` and in the two nl verifiers, and `NLExecutor::selectMapRead` takes the `MapView`

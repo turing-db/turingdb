@@ -585,7 +585,7 @@ def MergeMaps : TuringOp<"merge_maps", [Pure, ConstantThroughOperands]> {
 /**
 * StaticMapKey
 */
-def StaticMapKey : TuringOp<"static_map_key", [Pure, ConstantThroughOperands]> {
+def StaticMapKey : TuringOp<"static_map_key", [MayRaise, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Row-wise read of one value of a map column, by a key known at plan time";
 
   let description = [{
@@ -595,10 +595,12 @@ def StaticMapKey : TuringOp<"static_map_key", [Pure, ConstantThroughOperands]> {
       %v = db.static_map_key %m key "name" : (!db.column<none>) -> !db.column<any>
 
     Row r of the result is the value row r's map holds under the key, a tagged cell. A row
-    whose map holds no such key - and a row holding no map at all - reads back as a
-    Null-tagged cell. The map column is a column of tagged cells where
-    the map was itself read out of a list or a map. A cell holding a node or an edge reads
-    that entity's property under the key, as `n.name` does.
+    whose map holds no such key - and a null row - reads back as a Null-tagged cell. The
+    map column is a column of tagged cells where the map was itself read out of a list or a
+    map. A cell holding a node or an edge reads that entity's property under the key, as
+    `n.name` does, and one holding a datetime or a duration reads the component the key
+    names, as `d.year` does. A cell holding any other value, or a datetime or a duration
+    with no such component, raises.
   }];
 
   let arguments = (ins Column:$map, StrAttr:$key);
@@ -3464,7 +3466,7 @@ def IndexOf : BinaryOp<"index_of", [Pure]> {
   let assemblyFormat = "$list `,` $value attr-dict `:` functional-type(operands, results)";
 }
 
-def DynamicMapKey : BinaryOp<"dynamic_map_key", [Pure]> {
+def DynamicMapKey : BinaryOp<"dynamic_map_key", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Row-wise read of one value of a map column, by a key computed per row";
 
   let description = [{
@@ -3474,10 +3476,11 @@ def DynamicMapKey : BinaryOp<"dynamic_map_key", [Pure]> {
       %v = db.dynamic_map_key %m, %k : (!db.column<none>, !db.column<none>) -> !db.column<any>
 
     Row r of the result is the value row r's map holds under row r's key, a tagged cell. A
-    row whose map holds no such key - and a row holding no map at all - reads back as a
-    Null-tagged cell, as db.static_map_key's does. The map column is a column of tagged cells where the map was
+    row whose map holds no such key - and a null row - reads back as a Null-tagged cell, as
+    db.static_map_key's does. The map column is a column of tagged cells where the map was
     itself read out of a list or a map, and a cell holding a node or an edge reads that
-    entity's property under the key.
+    entity's property under the key. A cell holding any other value raises: a datetime and
+    a duration have components, which only `d.year` reads.
   }];
 
   let arguments = (ins Column:$map, Column:$key);
