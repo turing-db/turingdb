@@ -242,6 +242,11 @@ add_ir_tests(test_query_ir_row_constant RowConstantTest.cpp)
 # A body run once per row reads its imports past every barrier: TUR-304.
 add_turing_test(test_query_ir_per_run_import PerRunImportTest.cpp)
 
+# A body run once per row takes a node or an edge out of a list it imports.
+add_turing_test(test_query_ir_per_run_import_list_index PerRunImportListIndexTest.cpp)
+target_sources(test_query_ir_per_run_import_list_index PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_per_run_import_list_index PRIVATE ${IR_TEST_DIR})
+
 # A subquery expression whose body runs per row, beside outer ORDER BY, LIMIT, DISTINCT,
 # aggregation, OPTIONAL MATCH and inputs spanning several chunks.
 add_ir_tests(test_query_ir_per_row_subquery_composition PerRowSubqueryCompositionTest.cpp)
