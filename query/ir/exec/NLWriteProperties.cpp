@@ -1,5 +1,6 @@
 #include "NLWriteProperties.h"
 
+#include <algorithm>
 #include <optional>
 #include <string_view>
 #include <variant>
@@ -19,9 +20,12 @@
 #include "list/ListView.h"
 #include "map/MapEntryView.h"
 #include "map/MapView.h"
+#include "metadata/GraphMetadata.h"
 #include "metadata/PropertyType.h"
+#include "metadata/PropertyTypeMap.h"
 #include "reader/GraphReader.h"
 #include "views/GraphView.h"
+#include "writers/MetadataBuilder.h"
 
 #include "IRException.h"
 
@@ -411,10 +415,11 @@ void stageCellAsItsType(const CellView cell,
     }
 }
 
-// An integer widens to the other numeric types an integer literal can be written to
-void stageCell(const CellView cell,
-               ValueType valueType,
-               CommitWriteBuffer::SupportedTypeVariant& value) {
+// An integer widens to the other numeric types an integer literal can be written to. False
+// for a cell of another type, which stages nothing.
+bool stageCellIfItFits(const CellView cell,
+                       ValueType valueType,
+                       CommitWriteBuffer::SupportedTypeVariant& value) {
     const CellTag tag = cell.getTag();
 
     const bool holdsAnInteger = tag == CellTag::Int;
@@ -430,10 +435,79 @@ void stageCell(const CellView cell,
     } else if (tag == cellTagOf(valueType)) {
         stageCellAsItsType(cell, valueType, value);
     } else {
+        return false;
+    }
+
+    return true;
+}
+
+void stageCell(const CellView cell,
+               ValueType valueType,
+               CommitWriteBuffer::SupportedTypeVariant& value) {
+    if (!stageCellIfItFits(cell, valueType, value)) {
         throw IRException(fmt::format("Cannot set a property of type '{}' to a value of type '{}'",
                                       ValueTypeName::value(valueType),
-                                      cellTypeName(tag)));
+                                      cellTypeName(cell.getTag())));
     }
+}
+
+WrittenMap writtenMap(const MapView& map) {
+    return WrittenMap {map};
+}
+
+WrittenMap writtenMap(const std::optional<MapView>& map) {
+    if (!map) {
+        return WrittenMap {std::nullopt, CellTag::Null};
+    }
+
+    return WrittenMap {map};
+}
+
+WrittenMap writtenMap(const CellView cell) {
+    const CellTag tag = cell.getTag();
+
+    if (tag == CellTag::MapView) {
+        return WrittenMap {cell.getAs<MapView>()};
+    }
+
+    return WrittenMap {std::nullopt, tag};
+}
+
+WrittenMap writtenMap(const std::optional<CellView>& cell) {
+    if (!cell) {
+        return WrittenMap {std::nullopt, CellTag::Null};
+    }
+
+    return writtenMap(*cell);
+}
+
+template <typename ColumnType>
+void readWrittenMaps(const Column* column, std::vector<WrittenMap>& maps) {
+    const auto& values = static_cast<const ColumnType*>(column)->getRaw();
+
+    maps.resize(values.size());
+    std::transform(values.begin(), values.end(), maps.begin(), [](const auto& value) { return writtenMap(value); });
+}
+
+template <typename ColumnType>
+void readWrittenConstMap(const Column* column, size_t rowCount, std::vector<WrittenMap>& maps) {
+    const ColumnType* constant = static_cast<const ColumnType*>(column);
+
+    maps.assign(rowCount, writtenMap(constant->getRaw()));
+}
+
+std::optional<PropertyType> findWrittenPropertyType(const GraphView* view,
+                                                    const MetadataBuilder* metadataBuilder,
+                                                    std::string_view name) {
+    const GraphMetadata& metadata = view->metadata();
+    const PropertyTypeMap& propertyTypes = metadata.propTypes();
+
+    const std::optional<PropertyType> graphType = propertyTypes.get(name);
+    if (graphType || !metadataBuilder) {
+        return graphType;
+    }
+
+    return metadataBuilder->findPropertyType(name);
 }
 
 void stageCellRows(const CellView cell,
@@ -469,6 +543,84 @@ size_t db::committedEdgeCount(const GraphView* view) {
 
 bool db::holdsValue(const CommitWriteBuffer::SupportedTypeVariant& value) {
     return std::visit([](const auto& held) { return held.has_value(); }, value);
+}
+
+void db::extractWrittenMaps(const Column* column,
+                            size_t rowCount,
+                            std::vector<WrittenMap>& maps) {
+    const ColumnKind::Code kind = column->getKind();
+
+    if (kind == ColumnVector<MapView>::staticKind()) {
+        readWrittenMaps<ColumnVector<MapView>>(column, maps);
+    } else if (kind == ColumnOptVector<MapView>::staticKind()) {
+        readWrittenMaps<ColumnOptVector<MapView>>(column, maps);
+    } else if (kind == ColumnConst<MapView>::staticKind()) {
+        readWrittenConstMap<ColumnConst<MapView>>(column, rowCount, maps);
+    } else if (kind == ColumnConst<std::optional<MapView>>::staticKind()) {
+        readWrittenConstMap<ColumnConst<std::optional<MapView>>>(column, rowCount, maps);
+    } else if (kind == ColumnVector<CellView>::staticKind()) {
+        readWrittenMaps<ColumnVector<CellView>>(column, maps);
+    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
+        readWrittenMaps<ColumnOptVector<CellView>>(column, maps);
+    } else if (kind == ColumnConst<CellView>::staticKind()) {
+        readWrittenConstMap<ColumnConst<CellView>>(column, rowCount, maps);
+    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
+        readWrittenConstMap<ColumnConst<std::optional<CellView>>>(column, rowCount, maps);
+    } else {
+        throw IRException("A properties write reads a column of maps or of cells");
+    }
+}
+
+void db::stageMapProperties(const WrittenMap& map,
+                            const GraphView* view,
+                            const MetadataBuilder* metadataBuilder,
+                            std::vector<MapKeyPropertyType>& keyTypes,
+                            CommitWriteBuffer::UntypedProperties& staged) {
+    const bool holdsAMap = map._tag == CellTag::MapView || map._tag == CellTag::Null;
+    if (!holdsAMap) {
+        throw IRException(fmt::format("Cannot set the properties of an entity to a value of type '{}', which is not a map",
+                                      cellTypeName(map._tag)));
+    }
+
+    if (!map._map) {
+        return;
+    }
+
+    const std::span<const MapEntryView> entries = map._map->entries();
+    if (keyTypes.size() < entries.size()) {
+        keyTypes.resize(entries.size());
+    }
+
+    for (size_t index = 0; index < entries.size(); index++) {
+        const MapEntryView& entry = entries[index];
+        const std::string_view key = entry.getKey();
+        const CellView value = entry.getValue();
+
+        MapKeyPropertyType& keyType = keyTypes[index];
+        const bool resolvesTheKey = !keyType._resolved || keyType._key != key;
+        if (resolvesTheKey) {
+            keyType._key = key;
+            keyType._type = findWrittenPropertyType(view, metadataBuilder, key);
+            keyType._resolved = true;
+        }
+
+        const std::optional<PropertyType>& propertyType = keyType._type;
+        const bool removesNothing = !propertyType && value.getTag() == CellTag::Null;
+
+        if (removesNothing) {
+            continue;
+        } else if (!propertyType) {
+            throw IRException(fmt::format("Cannot create property '{}' from a value whose type is only known per row", key));
+        }
+
+        CommitWriteBuffer::UntypedProperty& property = staged.emplace_back(propertyType->_id);
+        if (!stageCellIfItFits(value, propertyType->_valueType, property.value)) {
+            throw IRException(fmt::format("Cannot set property '{}' of type '{}' to a value of type '{}'",
+                                          key,
+                                          ValueTypeName::value(propertyType->_valueType),
+                                          cellTypeName(value.getTag())));
+        }
+    }
 }
 
 void db::fillNullProperties(size_t rowCount,

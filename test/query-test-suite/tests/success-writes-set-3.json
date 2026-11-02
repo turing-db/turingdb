@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n:Person {name: \"Remy\"}) SET n += {name: \"Node\"} RETURN n.name, n.age",
+  "expect": {
+    "result": "n.name,n.age\nNode,32",
+    "resultJson": "{\"header\":{\"column_names\":[\"n.name\",\"n.age\"],\"column_types\":[\"String\",\"Int64\"]},\"data\":[[[\"Node\"],[32]]]}"
+  },
+  "tags": [
+    "success",
+    "writes",
+    "set"
+  ],
+  "write-required": true
+}

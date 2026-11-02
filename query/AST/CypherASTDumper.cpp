@@ -707,11 +707,11 @@ void CypherASTDumper::dump(std::ostream& out, const SetItem* setItem) {
             out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << assign._propValueExpr << " : \"\"\n";
             dump(out, assign._propValueExpr);
         },
-        [&](const SetItem::SymbolAddAssign& symbolAdd) {
-            out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << symbolAdd._symbol << " : \"\"\n";
-            dump(out, symbolAdd._symbol);
-            out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << symbolAdd._value << " : \"\"\n";
-            dump(out, symbolAdd._value);
+        [&](const SetItem::EntityPropertiesAssign& assign) {
+            out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << assign._entity << " : \"\"\n";
+            dump(out, assign._entity);
+            out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << assign._value << " : \"\"\n";
+            dump(out, assign._value);
         },
         [&](const SetItem::SymbolEntityTypes& symbolEntityTypes) {
             out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << symbolEntityTypes._value << " : \"\"\n";

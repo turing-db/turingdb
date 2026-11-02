@@ -64,3 +64,5 @@ add_turing_test(test_query_ir_created_property_lookup CreatedPropertyLookupTest.
 add_turing_test(test_query_ir_path_property_value PathPropertyValueTest.cpp)
 
 add_turing_test(test_query_ir_map_value_write MapValueWriteTest.cpp)
+
+add_turing_test(test_query_ir_set_merge_from_map SetMergeFromMapTest.cpp)

@@ -1,5 +1,6 @@
 #include "IRValueTypes.h"
 
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Builders.h"
 
 #include "StorageTypes.h"
@@ -107,6 +108,22 @@ ValueType db::elementTypeToValueType(mlir::Type elementType) {
     }
 
     return ValueType::Int64;
+}
+
+bool db::namesPropertyElementTypes(mlir::DictionaryAttr types) {
+    if (!types) {
+        return true;
+    }
+
+    for (const mlir::NamedAttribute entry : types) {
+        const mlir::TypeAttr typeAttr = mlir::dyn_cast<mlir::TypeAttr>(entry.getValue());
+        const bool namesAnElementType = typeAttr && elementTypeToValueType(typeAttr.getValue()) != ValueType::Invalid;
+        if (!namesAnElementType) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 mlir::Type db::unwoundElementType(mlir::MLIRContext* context, mlir::Type sourceElement) {

@@ -1040,6 +1040,11 @@ private:
 
     void translateSetEdgeProperty(mlir::nl::SetEdgeProperty setEdgeProperty, NLStmtContainer* body);
 
+    void createMapKeyProperties(mlir::DictionaryAttr createdTypes) const;
+
+    template <typename SetPropertiesData, typename SetPropertiesOp>
+    void translateSetProperties(SetPropertiesOp setProperties, mlir::Value input, NLStmtContainer* body);
+
     void translateDeleteNode(mlir::nl::DeleteNode deleteNode, NLStmtContainer* body);
 
     void translateDeleteEdge(mlir::nl::DeleteEdge deleteEdge, NLStmtContainer* body);

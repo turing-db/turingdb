@@ -266,7 +266,15 @@ struct FuseScanByLabel : public impl::FuseScanByLabelBase<FuseScanByLabel> {
 };
 
 bool isGraphWrite(Operation* op) {
-    return isa<CreateNode, CreateEdge, Merge, SetNodeProperty, SetEdgeProperty, DeleteNode, DeleteEdge>(op);
+    return isa<CreateNode,
+               CreateEdge,
+               Merge,
+               SetNodeProperty,
+               SetEdgeProperty,
+               SetNodeProperties,
+               SetEdgeProperties,
+               DeleteNode,
+               DeleteEdge>(op);
 }
 
 bool isNodeSource(Operation* op) {
@@ -7607,6 +7615,18 @@ bool matchPropertyWrite(Operation* op, StringAttr& property, bool& nodeProperty)
     return false;
 }
 
+bool matchPropertiesWrite(Operation* op, bool& nodeProperty) {
+    if (isa<SetNodeProperties>(op)) {
+        nodeProperty = true;
+        return true;
+    } else if (isa<SetEdgeProperties>(op)) {
+        nodeProperty = false;
+        return true;
+    }
+
+    return false;
+}
+
 // Widens an op's carry set by one column and hands back the result it comes out as. A carry
 // set is the trailing operands and the trailing results of the op holding it, so the column
 // appends to both; an op's arity is fixed once built, hence the rebuild.
@@ -7789,6 +7809,8 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
         llvm::SmallVector<Operation*> reads;
         llvm::DenseSet<Attribute> writtenNodeProperties;
         llvm::DenseSet<Attribute> writtenEdgeProperties;
+        bool writesEveryNodeProperty = false;
+        bool writesEveryEdgeProperty = false;
         root->walk([&](Operation* op) {
             StringAttr writtenProperty;
             bool writesNodes = false;
@@ -7800,6 +7822,12 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
                     writtenNodeProperties.insert(writtenProperty);
                 } else {
                     writtenEdgeProperties.insert(writtenProperty);
+                }
+            } else if (matchPropertiesWrite(op, writesNodes)) {
+                if (writesNodes) {
+                    writesEveryNodeProperty = true;
+                } else {
+                    writesEveryEdgeProperty = true;
                 }
             }
         });
@@ -7815,7 +7843,8 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
             // A read standing before this one saw what the property held before the write,
             // and a projection behind a SET reads what the statement wrote
             const llvm::DenseSet<Attribute>& written = nodeProperty ? writtenNodeProperties : writtenEdgeProperties;
-            if (written.contains(property)) {
+            const bool writesEveryProperty = nodeProperty ? writesEveryNodeProperty : writesEveryEdgeProperty;
+            if (writesEveryProperty || written.contains(property)) {
                 continue;
             }
 

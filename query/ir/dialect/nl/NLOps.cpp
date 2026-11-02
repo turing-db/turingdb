@@ -8,6 +8,7 @@
 #include "llvm/ADT/SmallVector.h"
 
 #include "IRLiteralList.h"
+#include "IRValueTypes.h"
 #include "StorageEnums.h"
 #include "ColumnIndicesFormat.h"
 #include "EdgeDirectionsFormat.h"
@@ -1473,6 +1474,26 @@ LogicalResult SetNodeProperty::verify() {
 LogicalResult SetEdgeProperty::verify() {
     if (getProperty().empty()) {
         return emitOpError("requires a non-empty property name");
+    }
+
+    return success();
+}
+
+LogicalResult SetNodeProperties::verify() {
+    if (!holdsAMapPerRow(getValue().getType())) {
+        return emitOpError("writes a chunk of maps or of tagged cells, optionally nullable");
+    } else if (!::db::namesPropertyElementTypes(getCreatedTypesAttr())) {
+        return emitOpError("creates each property with the element type of a stored value");
+    }
+
+    return success();
+}
+
+LogicalResult SetEdgeProperties::verify() {
+    if (!holdsAMapPerRow(getValue().getType())) {
+        return emitOpError("writes a chunk of maps or of tagged cells, optionally nullable");
+    } else if (!::db::namesPropertyElementTypes(getCreatedTypesAttr())) {
+        return emitOpError("creates each property with the element type of a stored value");
     }
 
     return success();

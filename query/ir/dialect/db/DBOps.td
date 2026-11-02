@@ -3852,6 +3852,60 @@ def SetEdgeProperty : TuringOp<"set_edge_property", [AttrSizedOperandSegments]> 
   let hasVerifier = 1;
 }
 
+def SetNodeProperties : TuringOp<"set_node_properties", [AttrSizedOperandSegments]> {
+  let summary = "Write the entries of a row-aligned map as the properties of each input node";
+
+  let description = [{
+      %n = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+      %m = db.constant({age = 32 : i64, name = "Remy" : !storage.string})
+      db.set_node_properties(%n, %m)
+        : (!db.column<!storage.node_id>, !db.column<!storage.map>) -> ()
+
+    Cypher's SET n += m. Each entry of the row's map sets the property its key names, and
+    an entry holding null removes it. A row holding a null map writes an empty one. `creates` gives the element type of each property a
+    map literal names and the graph may not hold yet.
+  }];
+
+  let arguments = (ins Column:$input_nodes,
+                       Column:$value,
+                       Optional<Column>:$pending,
+                       Optional<Column>:$rows,
+                       UnitAttr:$all_pending,
+                       OptionalAttr<DictionaryAttr>:$created_types);
+
+  let assemblyFormat = [{
+    `(` $input_nodes `,` $value `)` (`pending` $pending^)? (`rows` $rows^)?
+    (`all_pending` $all_pending^)? (`creates` $created_types^)?
+    attr-dict `:` functional-type(operands, results)
+  }];
+
+  let hasVerifier = 1;
+}
+
+def SetEdgeProperties : TuringOp<"set_edge_properties", [AttrSizedOperandSegments]> {
+  let summary = "Write the entries of a row-aligned map as the properties of each input edge";
+
+  let description = [{
+      db.set_edge_properties(%e, %m)
+        : (!db.column<!storage.edge_id>, !db.column<!storage.map>) -> ()
+  }];
+
+  let arguments = (ins Column:$input_edges,
+                       Column:$value,
+                       Optional<Column>:$pending,
+                       Optional<Column>:$rows,
+                       UnitAttr:$all_pending,
+                       OptionalAttr<DictionaryAttr>:$created_types);
+
+  let assemblyFormat = [{
+    `(` $input_edges `,` $value `)` (`pending` $pending^)? (`rows` $rows^)?
+    (`all_pending` $all_pending^)? (`creates` $created_types^)?
+    attr-dict `:` functional-type(operands, results)
+  }];
+
+  let hasVerifier = 1;
+}
+
 def DeleteNode : TuringOp<"delete_node"> {
   let summary = "Delete each input node, optionally detaching its incident edges";
 
