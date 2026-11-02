@@ -7882,7 +7882,7 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
             } else {
                 const mlir::Value entityColumn = resolveEntityColumn(decl);
                 if (entityColumn) {
-                    _part._exprMap[expr] = readWalkEntities(expr, entityColumn);
+                    _part._exprMap[expr] = entityColumn;
                 }
             }
 
@@ -7904,6 +7904,8 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
             }
 
             bioassert(bound, "Symbol refers to unknown variable: {}", varName);
+
+            _part._exprMap[expr] = readWalkEntities(expr, _part._exprMap.at(expr));
         }
         break;
 

@@ -248,8 +248,8 @@ private:
     // over @param cardinality, or over a single row where it is null
     void lowerWithConstantsLaidOut(mlir::Operation& operation, mlir::Value cardinality, ChunkPredicate laysOut);
 
-    // Whether @param chunk is a constant node, edge, path or mask, which no kernel reads as
-    // a constant: every op reading one has it laid out over its rows first
+    // Whether @param chunk is a constant node, edge, path, walk or mask, which no kernel reads
+    // as a constant: every op reading one has it laid out over its rows first
     bool isConstantReadAsRows(mlir::Value chunk);
     bool readsConstantsAsRows(mlir::Operation& operation);
 
