@@ -131,8 +131,8 @@ func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
   %0:3 = db.explore_paths(%n, {}) forward hops 1 to 3 : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
   %c = db.constant(1 : i64)
-  %rows = db.broadcast_constant(%c, %0#0) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%rows) : !db.column<none>
+  %rows = db.broadcast_constant(%c, %0#0) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<i64>
+  db.output(%rows) : !db.column<i64>
   return
 }
 )mlir";
@@ -144,8 +144,8 @@ func.func @main() {
   %0:3 = db.explore_paths(%n, {}) forward hops 1 to 3 : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
   %h:4 = db.get_out_edges(%0#1, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
   %c = db.constant(1 : i64)
-  %rows = db.broadcast_constant(%c, %h#3) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%rows) : !db.column<none>
+  %rows = db.broadcast_constant(%c, %h#3) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<i64>
+  db.output(%rows) : !db.column<i64>
   return
 }
 )mlir";
@@ -160,8 +160,8 @@ func.func @main() {
   %mask = db.gt %age, %c : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %1 = db.filter(%mask, {%0#1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   %one = db.constant(1 : i64)
-  %rows = db.broadcast_constant(%one, %1) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%rows) : !db.column<none>
+  %rows = db.broadcast_constant(%one, %1) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<i64>
+  db.output(%rows) : !db.column<i64>
   return
 }
 )mlir";

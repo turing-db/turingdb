@@ -3173,7 +3173,7 @@ def ConstantOp : TuringOp<"constant", [Pure, ConstantLike, DeclareOpInterfaceMet
   let assemblyFormat = "`(` $value `)` attr-dict";
 }
 
-def BroadcastConstant : TuringOp<"broadcast_constant", [Pure]> {
+def BroadcastConstant : TuringOp<"broadcast_constant", [Pure, AllTypesMatch<["value", "result"]>]> {
   let summary = "Lay a constant column's single value out over the rows of a relation";
   let description = [{
     A constant column holds one value standing for every row rather than one per row,
@@ -3184,7 +3184,7 @@ def BroadcastConstant : TuringOp<"broadcast_constant", [Pure]> {
 
       %p = db.scan_nodes() : !db.column<!storage.node_id>
       %c = db.constant(1 : i64) : !db.column<i64>
-      %x = db.broadcast_constant(%c, %p) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<none>
+      %x = db.broadcast_constant(%c, %p) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<i64>
 
     It is what a WITH publishing constants alone emits: `MATCH (p:Person) WITH 1 AS x`
     publishes one row per Person, not the single row the literal is, so the statements
@@ -3195,11 +3195,9 @@ def BroadcastConstant : TuringOp<"broadcast_constant", [Pure]> {
     the constants are - `WITH 1 AS x WHERE x > 100`, whose one row the filter drops - so
     the value is laid out over that row:
 
-      %x = db.broadcast_constant(%c) : (!db.column<i64>) -> !db.column<none>
+      %x = db.broadcast_constant(%c) : (!db.column<i64>) -> !db.column<i64>
 
-    The result names the value's element type, or none for lowering to resolve it, as
-    for the arithmetic ops. Either way the rows are laid out as a nullable value column,
-    present in every row.
+    The result holds the value it lays out, so it has the value's type.
   }];
 
   // The driver is the only optional operand, so MLIR tells it from the value without

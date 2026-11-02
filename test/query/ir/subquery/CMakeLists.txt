@@ -247,6 +247,11 @@ add_turing_test(test_query_ir_per_run_import_list_index PerRunImportListIndexTes
 target_sources(test_query_ir_per_run_import_list_index PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
 target_include_directories(test_query_ir_per_run_import_list_index PRIVATE ${IR_TEST_DIR})
 
+# A path a body run once per row returns is read as a path after the CALL.
+add_turing_test(test_query_ir_per_run_import_path PerRunImportPathTest.cpp)
+target_sources(test_query_ir_per_run_import_path PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_per_run_import_path PRIVATE ${IR_TEST_DIR})
+
 # A subquery expression whose body runs per row, beside outer ORDER BY, LIMIT, DISTINCT,
 # aggregation, OPTIONAL MATCH and inputs spanning several chunks.
 add_ir_tests(test_query_ir_per_row_subquery_composition PerRowSubqueryCompositionTest.cpp)

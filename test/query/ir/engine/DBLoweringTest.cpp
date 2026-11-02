@@ -684,8 +684,8 @@ constexpr const char* constantOverMatchProgram = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
   %c = db.constant(5 : i64)
-  %rows = db.broadcast_constant(%c, %n) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%rows) : !db.column<none>
+  %rows = db.broadcast_constant(%c, %n) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<i64>
+  db.output(%rows) : !db.column<i64>
   return
 }
 )mlir";
@@ -697,8 +697,8 @@ func.func @main() {
   %x = db.constant(40 : i64)
   %y = db.constant(2 : i64)
   %s = db.add %x, %y : (!db.column<i64>, !db.column<i64>) -> !db.column<i64>
-  %rows = db.broadcast_constant(%s, %n) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%rows) : !db.column<none>
+  %rows = db.broadcast_constant(%s, %n) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<i64>
+  db.output(%rows) : !db.column<i64>
   return
 }
 )mlir";
@@ -759,8 +759,8 @@ func.func @main() {
     db.yield %b : !db.column<!storage.node_id>
   }
   %c = db.constant(5 : i64)
-  %rows = db.broadcast_constant(%c, %0#0) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%rows) : !db.column<none>
+  %rows = db.broadcast_constant(%c, %0#0) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<i64>
+  db.output(%rows) : !db.column<i64>
   return
 }
 )mlir";
@@ -782,8 +782,8 @@ func.func @main() {
     db.yield %c : !db.column<!storage.node_id>
   }
   %d = db.constant(5 : i64)
-  %rows = db.broadcast_constant(%d, %0#0) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%rows) : !db.column<none>
+  %rows = db.broadcast_constant(%d, %0#0) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<i64>
+  db.output(%rows) : !db.column<i64>
   return
 }
 )mlir";
