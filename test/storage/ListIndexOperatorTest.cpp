@@ -13,6 +13,8 @@
 
 #include "metadata/PropertyNull.h"
 
+#include "TuringException.h"
+
 using namespace db;
 
 namespace {
@@ -94,8 +96,16 @@ TEST_F(ListIndexOperatorTest, readsThroughACellHoldingAList) {
     EXPECT_FALSE(ListIndex {}(nested, int64_t {2}).has_value());
 }
 
-TEST_F(ListIndexOperatorTest, readsNothingThroughACellHoldingAScalar) {
+TEST_F(ListIndexOperatorTest, readsNothingThroughACellHoldingNull) {
+    const CellView nullCell = cell(PropertyNull {});
+
+    EXPECT_FALSE(ListIndex {}(nullCell, int64_t {0}).has_value());
+    EXPECT_FALSE(ListIndex {}(nullCell, uint64_t {0}).has_value());
+}
+
+TEST_F(ListIndexOperatorTest, raisesThroughACellHoldingAScalar) {
     const CellView scalar = cell(int64_t {10});
 
-    EXPECT_FALSE(ListIndex {}(scalar, int64_t {0}).has_value());
+    EXPECT_THROW(ListIndex {}(scalar, int64_t {0}), TuringException);
+    EXPECT_THROW(ListIndex {}(scalar, uint64_t {0}), TuringException);
 }

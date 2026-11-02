@@ -834,11 +834,11 @@ struct ListIndexImpl {
     }
 
     inline std::optional<CellView> operator()(CellView cell, int64_t index) const {
-        if (cell.getTag() != CellTag::ListView) {
+        if (holdsNull(cell)) {
             return std::nullopt;
         }
 
-        return operator()(cell.getAs<ListView>(), index);
+        return operator()(indexedList(cell), index);
     }
 
     inline std::optional<CellView> operator()(ListView list, uint64_t index) const {
@@ -850,11 +850,11 @@ struct ListIndexImpl {
     }
 
     inline std::optional<CellView> operator()(CellView cell, uint64_t index) const {
-        if (cell.getTag() != CellTag::ListView) {
+        if (holdsNull(cell)) {
             return std::nullopt;
         }
 
-        return operator()(cell.getAs<ListView>(), index);
+        return operator()(indexedList(cell), index);
     }
 
     inline std::optional<CellView> operator()(ListView /*unused*/, PropertyNull /*unused*/) const {
@@ -883,6 +883,14 @@ struct ListIndexImpl {
     }
     std::optional<CellView> operator()(uint64_t /*unused*/, CellView /*unused*/) const {
         throw TuringException("Index operands the wrong way round.");
+    }
+
+    static ListView indexedList(CellView cell) {
+        if (!holdsAList(cell)) {
+            throw TuringException("A list index reads a list, and this row holds a value that is not one");
+        }
+
+        return operandList(cell);
     }
 };
 

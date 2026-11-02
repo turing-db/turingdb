@@ -2688,8 +2688,9 @@ def ListIndex : NLOp<"list_index", [Pure, ConstantThroughOperands, RowAlignedThr
 
       %n = nl.list_index %ns, %i : (!nl.chunk<!storage.list<!storage.node_id>>, !nl.chunk<i64>) -> !nl.chunk<!storage.node_id>
 
-      A chunk of tagged cells is indexed too - a list read out of a list or out of a map -
-      and a cell holding no list reads back as the absent element.
+      A chunk of tagged cells is indexed too - a list read out of a list or out of a map. A
+      cell holding null reads back as the absent element, and one holding another value
+      raises.
   }];
 
   let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);

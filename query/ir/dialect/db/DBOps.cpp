@@ -2590,12 +2590,12 @@ Speculation::Speculatability Range::getSpeculatability() {
     return speculatableWhen(::db::countRangeSteps(from, to, by) < ::db::RANGE_LENGTH_LIMIT);
 }
 
-// A type-erased list reads as null where it holds no list, so only a bound may raise. Its
-// first operand is the list, every other one a bound
 Speculation::Speculatability ListSlice::getSpeculatability() {
-    const OperandRange operands = getOperands();
+    return speculatableOverKnownTypes(getOperands());
+}
 
-    return speculatableOverKnownTypes(operands.drop_front());
+Speculation::Speculatability ListIndex::getSpeculatability() {
+    return speculatableOverKnownTypes(getLhs());
 }
 
 // The window raises as the slice it was folded from does, on a type-erased bound holding no

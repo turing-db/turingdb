@@ -50,6 +50,7 @@
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
+#include "TuringException.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
@@ -559,12 +560,8 @@ TEST_F(ListIndexTest, readsAnElementOfAnIndexedList) {
     EXPECT_EQ(evalElement("MATCH (n) WHERE n.name = 'Remy' RETURN [[1, 2], [3, 4]][1][0]"), 3);
 }
 
-TEST_F(ListIndexTest, readsNullWhereTheCellIsNotAList) {
-    const std::vector<std::optional<types::Int64::Primitive>> rows =
-        evalElements("UNWIND [1, [2, 3]] AS xs RETURN xs[0]");
-
-    const std::vector<std::optional<types::Int64::Primitive>> expected = {std::nullopt, 2};
-    EXPECT_EQ(rows, expected);
+TEST_F(ListIndexTest, raisesWhereTheCellIsNotAList) {
+    EXPECT_THROW(evalElements("UNWIND [1, [2, 3]] AS xs RETURN xs[0]"), TuringException);
 }
 
 TEST_F(ListIndexTest, readsNullPastTheEndOfAnIndexedList) {

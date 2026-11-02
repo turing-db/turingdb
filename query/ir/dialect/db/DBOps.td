@@ -661,8 +661,8 @@ def ListSlice : TuringOp<"list_slice", [MayRaise, ConstantThroughOperands, AttrS
     A bound is absent where the query left it out, which runs from the start or to the
     end. A negative bound counts from the end, and one running past the list is clamped to
     it, so no row errors on an integer bound; a row whose list or whose bound is null gets a
-    null cell, which is what Cypher reads `null[1..2]` as. A bound read out of a type-erased
-    cell may hold another value, which raises.
+    null cell, which is what Cypher reads `null[1..2]` as. A list or a bound read out of a
+    type-erased cell may hold another value, which raises.
 
     The elements are the ones the list already holds, so the result element type is the
     input's and is resolved during lowering, as db.list_comprehension's is.
@@ -3427,13 +3427,16 @@ def ConcatOp : BinaryOp<"concat", [MayRaise, DeclareOpInterfaceMethods<Condition
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def ListIndex : BinaryOp<"list_index", [Pure]> {
+def ListIndex : BinaryOp<"list_index", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Row-wise read of one element of a list column, by position";
 
   let description = [{
     `[1, 3, 4][2]`
 
       %e = db.list_index %xs, %i : (!db.column<none>, !db.column<i64>) -> !db.column<none>
+
+    A position past either end of the list reads null. A list read out of a type-erased
+    cell may hold another value, which raises; a cell holding null reads null.
   }];
 
   let arguments = (ins Column:$lhs, Column:$rhs);

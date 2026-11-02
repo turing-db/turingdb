@@ -3,7 +3,7 @@
   "graph": "simpledb",
   "query": "WITH {a: 1} AS m RETURN m.a[0]",
   "expect": {
-    "result": "m.a[0]\nnull"
+    "result": "EXEC ERROR\nA list index reads a list, and this row holds a value that is not one"
   },
   "tags": [
     "map",

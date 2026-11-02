@@ -5403,13 +5403,14 @@ std::optional<types::String::Primitive> nullStringRead(const Column*, size_t) {
     return std::nullopt;
 }
 
-// The list a type-erased cell holds, absent where the cell holds anything else
 std::optional<ListView> cellListRead(const CellView cell) {
-    if (cell.getTag() != CellTag::ListView) {
+    if (holdsNull(cell)) {
         return std::nullopt;
+    } else if (holdsAList(cell)) {
+        return operandList(cell);
     }
 
-    return cell.getAs<ListView>();
+    throw IRException("A list slice or a percentile reads a list, and this row holds a value that is not one");
 }
 
 std::optional<ListView> taggedListRead(const Column* input, size_t row) {
