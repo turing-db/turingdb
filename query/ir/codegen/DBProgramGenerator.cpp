@@ -5431,6 +5431,7 @@ void DBProgramGenerator::generatePropertiesWrite(const SetItem::EntityProperties
 
     const mlir::Value pending = findPendingMask(entityDecl);
     const bool allPending = isPendingThroughout(entityDecl);
+    const bool replaces = assign._replaces;
 
     llvm::SmallVector<mlir::NamedAttribute> createdTypes;
     for (const EntityPropertyConstraint& created : assign._createdProperties) {
@@ -5453,6 +5454,7 @@ void DBProgramGenerator::generatePropertiesWrite(const SetItem::EntityProperties
                                          pending,
                                          rows,
                                          allPending,
+                                         replaces,
                                          createdTypesAttr);
     };
 

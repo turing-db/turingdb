@@ -76,6 +76,15 @@ void stageMapProperties(const WrittenMap& map,
                         std::vector<MapKeyPropertyType>& keyTypes,
                         CommitWriteBuffer::UntypedProperties& staged);
 
+// A removal of each held property that @param written does not write. @param heldTypes
+// keeps the value type of each property ID it has looked up.
+void stageRemovals(std::span<const PropertyTypeID> held,
+                   std::span<const CommitWriteBuffer::UntypedProperty> written,
+                   const GraphView* view,
+                   const MetadataBuilder* metadataBuilder,
+                   std::vector<ValueType>& heldTypes,
+                   CommitWriteBuffer::UntypedProperties& removals);
+
 // The disengaged value of one property, repeated over every row. A write of a null has no
 // value column to read a type off, so the property's own type picks the variant it stages.
 void fillNullProperties(size_t rowCount,

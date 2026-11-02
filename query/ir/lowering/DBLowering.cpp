@@ -6084,6 +6084,7 @@ void DBLowering::lowerSetProperties(DBSetProperties setProperties, mlir::Value i
                                      mapOptionalMask(setProperties.getPending()),
                                      mapOptionalMask(setProperties.getRows()),
                                      setProperties.getAllPending(),
+                                     setProperties.getReplaces(),
                                      setProperties.getCreatedTypesAttr());
 }
 

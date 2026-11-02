@@ -27,6 +27,7 @@
 #include "views/GraphView.h"
 #include "writers/MetadataBuilder.h"
 
+#include "BioAssert.h"
 #include "IRException.h"
 
 using namespace db;
@@ -510,6 +511,20 @@ std::optional<PropertyType> findWrittenPropertyType(const GraphView* view,
     return metadataBuilder->findPropertyType(name);
 }
 
+std::optional<PropertyType> findWrittenPropertyType(const GraphView* view,
+                                                    const MetadataBuilder* metadataBuilder,
+                                                    PropertyTypeID id) {
+    const GraphMetadata& metadata = view->metadata();
+    const PropertyTypeMap& propertyTypes = metadata.propTypes();
+
+    const std::optional<PropertyType> graphType = propertyTypes.get(id);
+    if (graphType || !metadataBuilder) {
+        return graphType;
+    }
+
+    return metadataBuilder->findPropertyType(id);
+}
+
 void stageCellRows(const CellView cell,
                    size_t rowCount,
                    PropertyTypeID propID,
@@ -620,6 +635,35 @@ void db::stageMapProperties(const WrittenMap& map,
                                           ValueTypeName::value(propertyType->_valueType),
                                           cellTypeName(value.getTag())));
         }
+    }
+}
+
+void db::stageRemovals(std::span<const PropertyTypeID> held,
+                       std::span<const CommitWriteBuffer::UntypedProperty> written,
+                       const GraphView* view,
+                       const MetadataBuilder* metadataBuilder,
+                       std::vector<ValueType>& heldTypes,
+                       CommitWriteBuffer::UntypedProperties& removals) {
+    for (const PropertyTypeID id : held) {
+        const auto writes = std::ranges::find(written, id, &CommitWriteBuffer::UntypedProperty::propertyID);
+        if (writes != written.end()) {
+            continue;
+        }
+
+        const size_t index = id.getValue();
+        if (index >= heldTypes.size()) {
+            heldTypes.resize(index + 1, ValueType::Invalid);
+        }
+
+        if (heldTypes[index] == ValueType::Invalid) {
+            const std::optional<PropertyType> propertyType = findWrittenPropertyType(view, metadataBuilder, id);
+            bioassert(propertyType, "Property type {} is held by an entity and known to no metadata", index);
+
+            heldTypes[index] = propertyType->_valueType;
+        }
+
+        CommitWriteBuffer::UntypedProperty& property = removals.emplace_back(id);
+        disengagedValue(heldTypes[index], property.value);
     }
 }
 

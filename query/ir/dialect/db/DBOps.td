@@ -3858,11 +3858,13 @@ def SetNodeProperties : TuringOp<"set_node_properties", [AttrSizedOperandSegment
   let description = [{
       %n = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
       %m = db.constant({age = 32 : i64, name = "Remy" : !storage.string})
-      db.set_node_properties(%n, %m)
+      db.set_node_properties(%n, %m) replaces
         : (!db.column<!storage.node_id>, !db.column<!storage.map>) -> ()
 
-    Cypher's SET n += m. Each entry of the row's map sets the property its key names, and
-    an entry holding null removes it. A row holding a null map writes an empty one. `creates` gives the element type of each property a
+    Cypher's SET n = m, and SET n += m without `replaces`. Each entry of the row's map
+    sets the property its key names, and an entry holding null removes it. `replaces`
+    also removes every property the node holds that the map does not name. A row holding
+    a null map writes an empty one. `creates` gives the element type of each property a
     map literal names and the graph may not hold yet.
   }];
 
@@ -3871,11 +3873,12 @@ def SetNodeProperties : TuringOp<"set_node_properties", [AttrSizedOperandSegment
                        Optional<Column>:$pending,
                        Optional<Column>:$rows,
                        UnitAttr:$all_pending,
+                       UnitAttr:$replaces,
                        OptionalAttr<DictionaryAttr>:$created_types);
 
   let assemblyFormat = [{
     `(` $input_nodes `,` $value `)` (`pending` $pending^)? (`rows` $rows^)?
-    (`all_pending` $all_pending^)? (`creates` $created_types^)?
+    (`all_pending` $all_pending^)? (`replaces` $replaces^)? (`creates` $created_types^)?
     attr-dict `:` functional-type(operands, results)
   }];
 
@@ -3886,7 +3889,7 @@ def SetEdgeProperties : TuringOp<"set_edge_properties", [AttrSizedOperandSegment
   let summary = "Write the entries of a row-aligned map as the properties of each input edge";
 
   let description = [{
-      db.set_edge_properties(%e, %m)
+      db.set_edge_properties(%e, %m) replaces
         : (!db.column<!storage.edge_id>, !db.column<!storage.map>) -> ()
   }];
 
@@ -3895,11 +3898,12 @@ def SetEdgeProperties : TuringOp<"set_edge_properties", [AttrSizedOperandSegment
                        Optional<Column>:$pending,
                        Optional<Column>:$rows,
                        UnitAttr:$all_pending,
+                       UnitAttr:$replaces,
                        OptionalAttr<DictionaryAttr>:$created_types);
 
   let assemblyFormat = [{
     `(` $input_edges `,` $value `)` (`pending` $pending^)? (`rows` $rows^)?
-    (`all_pending` $all_pending^)? (`creates` $created_types^)?
+    (`all_pending` $all_pending^)? (`replaces` $replaces^)? (`creates` $created_types^)?
     attr-dict `:` functional-type(operands, results)
   }];
 

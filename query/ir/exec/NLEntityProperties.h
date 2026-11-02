@@ -32,6 +32,9 @@ public:
     void readKeys(IDT entity, std::vector<std::string_view>& keys);
 
     template <TypedInternalID IDT>
+    void readIDs(IDT entity, std::vector<PropertyTypeID>& ids);
+
+    template <TypedInternalID IDT>
     void readEntries(IDT entity, std::vector<Entry>& entries);
 
     template <TypedInternalID IDT>

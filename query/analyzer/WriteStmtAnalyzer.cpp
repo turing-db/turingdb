@@ -444,7 +444,7 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
         },
 
         // EntityPropertiesAssign case, e.g;
-        // MATCH (n) SET n += {name: 'Remy', age: 32}
+        // MATCH (n) SET n = {name: 'Remy', age: 32}
         [this, item](SetItem::EntityPropertiesAssign& v) {
             analyzePropertiesAssign(v, item);
         },
@@ -465,12 +465,14 @@ void WriteStmtAnalyzer::analyzePropertiesAssign(SetItem::EntityPropertiesAssign&
 
     const Symbol* entitySymbol = entity->getSymbol();
     const std::string_view entityName = entitySymbol->getName();
+    const std::string_view assignOperator = assign._replaces ? "=" : "+=";
     const EvaluatedType entityType = entity->getType();
     const bool setsAnEntity = entityType == EvaluatedType::NodePattern || entityType == EvaluatedType::EdgePattern;
 
     if (!setsAnEntity) {
-        throwError(fmt::format("SET {} += ... takes a node or a relationship, not '{}'",
+        throwError(fmt::format("SET {} {} ... takes a node or a relationship, not '{}'",
                                entityName,
+                               assignOperator,
                                EvaluatedTypeName::value(entityType)),
                    entity);
     }
@@ -488,14 +490,15 @@ void WriteStmtAnalyzer::analyzePropertiesAssign(SetItem::EntityPropertiesAssign&
     } else if (valueType == EvaluatedType::Any) {
         return;
     } else if (valueType == EvaluatedType::NodePattern || valueType == EvaluatedType::EdgePattern) {
-        throwError(fmt::format("SET {} += <node or relationship> is not supported yet", entityName), item);
+        throwError(fmt::format("SET {} {} <node or relationship> is not supported yet", entityName, assignOperator), item);
     } else if (valueType == EvaluatedType::Null) {
-        throwError(fmt::format("SET {} += null is not supported yet", entityName), item);
+        throwError(fmt::format("SET {} {} null is not supported yet", entityName, assignOperator), item);
     } else if (valueType == EvaluatedType::Parameter) {
-        throwError(fmt::format("SET {} += <parameter> is not supported yet", entityName), item);
+        throwError(fmt::format("SET {} {} <parameter> is not supported yet", entityName, assignOperator), item);
     } else {
-        throwError(fmt::format("SET {} += ... takes a map, not '{}'",
+        throwError(fmt::format("SET {} {} ... takes a map, not '{}'",
                                entityName,
+                               assignOperator,
                                EvaluatedTypeName::value(valueType)),
                    value);
     }

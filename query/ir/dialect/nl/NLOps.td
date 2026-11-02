@@ -3766,7 +3766,7 @@ def SetNodeProperties : NLOp<"set_node_properties", [AttrSizedOperandSegments]> 
   let summary = "Write each input node's map as its properties in the open transaction's write buffer";
   let description = [{
       nl.for %nodes in %scan {
-        nl.set_node_properties %nodes, %maps : !nl.chunk<!storage.map>
+        nl.set_node_properties %nodes, %maps replaces : !nl.chunk<!storage.map>
       }
   }];
 
@@ -3775,11 +3775,12 @@ def SetNodeProperties : NLOp<"set_node_properties", [AttrSizedOperandSegments]> 
                        Optional<NLBoolChunk>:$pending,
                        Optional<NLBoolChunk>:$rows,
                        UnitAttr:$all_pending,
+                       UnitAttr:$replaces,
                        OptionalAttr<DictionaryAttr>:$created_types);
 
   let assemblyFormat = [{
     $input_nodes `,` $value (`pending` $pending^)? (`rows` $rows^)?
-    (`all_pending` $all_pending^)? (`creates` $created_types^)?
+    (`all_pending` $all_pending^)? (`replaces` $replaces^)? (`creates` $created_types^)?
     attr-dict `:` qualified(type($value))
   }];
 
@@ -3790,7 +3791,7 @@ def SetEdgeProperties : NLOp<"set_edge_properties", [AttrSizedOperandSegments]> 
   let summary = "Write each input edge's map as its properties in the open transaction's write buffer";
   let description = [{
       nl.for %s, %e, %t in %edges {
-        nl.set_edge_properties %e, %maps : !nl.chunk<!storage.map>
+        nl.set_edge_properties %e, %maps replaces : !nl.chunk<!storage.map>
       }
   }];
 
@@ -3799,11 +3800,12 @@ def SetEdgeProperties : NLOp<"set_edge_properties", [AttrSizedOperandSegments]> 
                        Optional<NLBoolChunk>:$pending,
                        Optional<NLBoolChunk>:$rows,
                        UnitAttr:$all_pending,
+                       UnitAttr:$replaces,
                        OptionalAttr<DictionaryAttr>:$created_types);
 
   let assemblyFormat = [{
     $input_edges `,` $value (`pending` $pending^)? (`rows` $rows^)?
-    (`all_pending` $all_pending^)? (`creates` $created_types^)?
+    (`all_pending` $all_pending^)? (`replaces` $replaces^)? (`creates` $created_types^)?
     attr-dict `:` qualified(type($value))
   }];
 

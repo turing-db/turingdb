@@ -708,7 +708,7 @@ void CypherASTDumper::dump(std::ostream& out, const SetItem* setItem) {
             dump(out, assign._propValueExpr);
         },
         [&](const SetItem::EntityPropertiesAssign& assign) {
-            out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << assign._entity << " : \"\"\n";
+            out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << assign._entity << " : \"" << (assign._replaces ? "=" : "+=") << "\"\n";
             dump(out, assign._entity);
             out << "    _" << std::hex << setItem << " ||--o{ _" << std::hex << assign._value << " : \"\"\n";
             dump(out, assign._value);

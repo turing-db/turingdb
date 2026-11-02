@@ -3259,7 +3259,8 @@ void NLTranslator::translateSetProperties(SetPropertiesOp setProperties, mlir::V
     const IDColumn* inputColumn = static_cast<const IDColumn*>(getColumn(input));
 
     SetPropertiesData* data = _program->allocFunctionData<SetPropertiesData>(inputColumn,
-                                                                             getColumn(setProperties.getValue()));
+                                                                             getColumn(setProperties.getValue()),
+                                                                             setProperties.getReplaces());
 
     data->setPending(getMaskColumn(setProperties.getPending()));
     data->setAllPending(setProperties.getAllPending() || isPendingValue(input, WRITES_NODES));
