@@ -1184,15 +1184,13 @@ bool onlyCountsRows(Value column) {
     });
 }
 
-// A clause reading the rows through a region of its own spells the type of every column it
-// takes in the block argument standing for it, and in the results it hands back, so a
-// column of another type cannot be put in its place.
-bool readThroughABlockArgument(Value column) {
-    const auto takesItThroughARegion = [](Operation* user) {
-        return isa<OptionalMatch, CallSubquery, ExistsSubquery, CountSubquery, CollectSubquery, PatternComprehension>(user);
-    };
-
-    return llvm::any_of(column.getUsers(), takesItThroughARegion);
+// An output writes out whatever column it is handed. Any other reader may spell the type of
+// the column it reads, in its results, a block argument or a list it builds, so a column of
+// another type cannot be put in its place.
+bool onlyOutputsRead(Value column) {
+    return llvm::all_of(column.getUsers(), [](Operation* user) {
+        return isa<Output>(user);
+    });
 }
 
 // The one equality among the users of @param unwoundColumn, provided nothing else reads it
@@ -1299,8 +1297,8 @@ bool matchUnwindEqualityCross(CrossProduct product, UnwindEqualityCross& match) 
 
     // One element is what every row the filter keeps was compared equal to, whatever the
     // compared column holds, so it is read back as itself where no column stands for it.
-    // Several are read back from a column holding them, through toInteger where a region
-    // spells a type the column does not declare.
+    // Several are compared to a node's ID, and are read back as that ID, typed as the
+    // elements, where something other than an output reads them.
     size_t survivingColumns = 0;
     for (size_t index = 0; index < carried.size(); index++) {
         const bool holdsTheElements = carried[index] == match._unwoundColumn;
@@ -1309,12 +1307,12 @@ bool matchUnwindEqualityCross(CrossProduct product, UnwindEqualityCross& match) 
             const Value elements = filtered[index];
             const bool readsTheValues = !onlyCountsRows(elements);
             const bool sameType = elements.getType() == match._comparedColumn.getType();
-            const bool acceptsTheComparedType = sameType || !readThroughABlockArgument(elements);
+            const bool acceptsTheComparedType = sameType || onlyOutputsRead(elements);
             const bool readsTheIDs = entityCompared && readsTheValues;
             const bool readsTheComparedColumn = !entityCompared && standsForTheElements && acceptsTheComparedType;
             const bool convertsTheStandIn = readsTheValues && !readsTheIDs && !readsTheComparedColumn;
             const bool readsTheElement = convertsTheStandIn && unwindsOneElement;
-            const bool readsTheIntegers = convertsTheStandIn && !unwindsOneElement && standsForTheElements && integerElements;
+            const bool readsTheIntegers = convertsTheStandIn && comparesNodeIDs && !unwindsOneElement && standsForTheElements && integerElements;
 
             if (elements.use_empty()) {
                 continue;
@@ -1424,10 +1422,11 @@ void fuseUnwindEquality(UnwindEqualityCross& match, mlir::OpBuilder& builder) {
         keptColumns.push_back(index);
     }
 
-    const size_t comparedIndex = llvm::find(columns, match._comparedColumn) - columns.begin();
-    if (convertsTheStandIn && comparedIndex == columns.size()) {
-        columns.push_back(match._comparedColumn);
-        resultTypes.push_back(match._comparedColumn.getType());
+    const Value standInSource = match._readsTheIntegers ? comparedNodeColumn(match._comparedColumn) : match._comparedColumn;
+    const size_t standInIndex = llvm::find(columns, standInSource) - columns.begin();
+    if (convertsTheStandIn && standInIndex == columns.size()) {
+        columns.push_back(standInSource);
+        resultTypes.push_back(standInSource.getType());
     }
 
     builder.setInsertionPoint(match._filter);
@@ -1442,13 +1441,11 @@ void fuseUnwindEquality(UnwindEqualityCross& match, mlir::OpBuilder& builder) {
 
         const Location loc = match._filter.getLoc();
         const Type elementsType = match._unwoundColumn.getType();
-        const Value standIn = fused.getResult(comparedIndex);
+        const Value standIn = fused.getResult(standInIndex);
 
         Value elements;
-        if (match._readsTheIDs) {
+        if (match._readsTheIDs || match._readsTheIntegers) {
             elements = builder.create<ElementID>(loc, elementsType, standIn).getResult();
-        } else if (match._readsTheIntegers) {
-            elements = builder.create<ToInteger>(loc, elementsType, standIn).getResult();
         } else {
             ConstantOp element = builder.create<ConstantOp>(loc, match._unwind.getElements()[0]);
             elements = builder.create<BroadcastConstant>(loc, element.getResult(), standIn).getResult();
