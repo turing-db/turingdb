@@ -129,6 +129,12 @@ private:
         size_t _nextOperand {0};
     };
 
+    struct LaidOutOperand {
+        mlir::Value _operand;
+        mlir::Value _constantChunk;
+        mlir::Value _laidOutChunk;
+    };
+
     mlir::OpBuilder _builder;
 
     // Graph schema, used to resolve a property name to its value type
@@ -143,6 +149,11 @@ private:
     // db column SSA value -> the nl chunk, and a db.distinct_set -> the nl.distinct
     // handle the branches of a union share
     llvm::DenseMap<mlir::Value, mlir::Value> _valueMap;
+
+    // The constant operands of the ops being lowered, bound in _valueMap to chunks laid out
+    // over those ops' rows. An op in their regions runs over other rows, so it reads the
+    // constant chunks instead.
+    llvm::SmallVector<LaidOutOperand, 4> _laidOutOperands;
 
     // Property name -> the hoisted nl.get_property_type handle, so a name is
     // resolved once and shared by every fetch that reads it

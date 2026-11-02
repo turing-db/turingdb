@@ -1246,6 +1246,10 @@ void DBLowering::hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock
 }
 
 void DBLowering::lowerOperation(mlir::Operation& operation) {
+    for (const LaidOutOperand& laidOut : llvm::reverse(_laidOutOperands)) {
+        _valueMap[laidOut._operand] = laidOut._constantChunk;
+    }
+
     if (computesOnceOverConstants(operation)) {
         lowerOnceOverConstants(operation);
     } else if (raisesOverConstants(operation)) {
@@ -1258,6 +1262,9 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerOperationByKind(operation);
     }
 
+    for (const LaidOutOperand& laidOut : _laidOutOperands) {
+        _valueMap[laidOut._operand] = laidOut._laidOutChunk;
+    }
 }
 
 bool DBLowering::isConstantReadAsRows(mlir::Value chunk) {
@@ -1304,7 +1311,8 @@ mlir::Value DBLowering::rowsInFlight() const {
 void DBLowering::lowerWithConstantsLaidOut(mlir::Operation& operation,
                                            mlir::Value cardinality,
                                            ChunkPredicate laysOut) {
-    llvm::SmallVector<std::pair<mlir::Value, mlir::Value>, 2> laidOutChunks;
+    const size_t enclosingLaidOutCount = _laidOutOperands.size();
+
     for (mlir::OpOperand& use : operation.getOpOperands()) {
         const mlir::Value operand = use.get();
         const mlir::Value chunk = _valueMap.lookup(operand);
@@ -1312,14 +1320,16 @@ void DBLowering::lowerWithConstantsLaidOut(mlir::Operation& operation,
             continue;
         }
 
-        laidOutChunks.emplace_back(operand, chunk);
-        _valueMap[operand] = rowAlignedChunk(chunk, cardinality);
+        const mlir::Value laidOutChunk = rowAlignedChunk(chunk, cardinality);
+        _laidOutOperands.push_back(LaidOutOperand {operand, chunk, laidOutChunk});
+        _valueMap[operand] = laidOutChunk;
     }
 
     lowerOperationByKind(operation);
 
-    for (const auto& [operand, chunk] : llvm::reverse(laidOutChunks)) {
-        _valueMap[operand] = chunk;
+    while (_laidOutOperands.size() > enclosingLaidOutCount) {
+        const LaidOutOperand laidOut = _laidOutOperands.pop_back_val();
+        _valueMap[laidOut._operand] = laidOut._constantChunk;
     }
 }
 
