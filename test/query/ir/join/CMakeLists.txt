@@ -65,3 +65,6 @@ add_ir_tests(test_query_ir_edge_statistics_after_writes EdgeStatisticsAfterWrite
 
 # A hash join answers the same whichever side it builds, over null, mixed-type and duplicate keys.
 add_ir_tests(test_query_ir_hash_join_build_side HashJoinBuildSideTest.cpp)
+
+# A LIMIT past an aggregate does not cut the product it reads, so it keeps no product from fusing.
+add_ir_tests(test_query_ir_hash_join_limit_past_aggregate HashJoinLimitPastAggregateTest.cpp)
