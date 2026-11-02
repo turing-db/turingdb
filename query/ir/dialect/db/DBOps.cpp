@@ -36,6 +36,27 @@ Type columnElement(Value column) {
     return ::db::inferredColumnElement(column);
 }
 
+// A selection whose result names an element holds the one its values select into. A result
+// of none leaves it to lowering, and so does a value of none, which a pass can put in place
+// of a typed one after codegen typed the result
+LogicalResult verifySelectedResult(Operation* op, Value result, ValueRange values) {
+    const Type resultElement = cast<ColumnType>(result.getType()).getType();
+    const bool selectsAValueLoweringTypes = llvm::any_of(values, [](Value value) {
+        return isa<NoneType>(cast<ColumnType>(value.getType()).getType());
+    });
+
+    if (isa<NoneType>(resultElement) || selectsAValueLoweringTypes) {
+        return success();
+    }
+
+    const Type selectedElement = ::db::selectedColumnElement(op->getContext(), values);
+    if (resultElement != selectedElement) {
+        return op->emitOpError("result holds ") << resultElement << " but its values select into " << selectedElement;
+    }
+
+    return success();
+}
+
 bool isNumberColumn(Value column) {
     return isa<IntegerType, FloatType>(columnElement(column));
 }
@@ -1511,6 +1532,15 @@ LogicalResult Output::verify() {
     return success();
 }
 
+void Case::collectSelectedValues(llvm::SmallVectorImpl<Value>& values) {
+    const OperandRange branchValues = getValues();
+    values.append(branchValues.begin(), branchValues.end());
+
+    if (const Value defaultValue = getDefaultValue()) {
+        values.push_back(defaultValue);
+    }
+}
+
 // db.case pairs each condition with the value the row takes when it holds, so the two
 // operand groups must be parallel; a CASE with no branch is not a selection at all.
 LogicalResult Case::verify() {
@@ -1524,7 +1554,30 @@ LogicalResult Case::verify() {
                << values.size() << " values for " << conditions.size() << " conditions";
     }
 
-    return success();
+    llvm::SmallVector<Value> selected;
+    collectSelectedValues(selected);
+
+    return verifySelectedResult(getOperation(), getResult(), selected);
+}
+
+void LazyCase::collectSelectedValues(llvm::SmallVectorImpl<Value>& values) {
+    const MutableArrayRef<Region> branches = getBranches();
+
+    const auto yieldedValue = [](Region& branch) {
+        Block& body = branch.front();
+        Operation* const yield = body.getTerminator();
+
+        return yield->getOperand(0);
+    };
+
+    for (size_t branchIndex = 1; branchIndex < branches.size(); branchIndex += 2) {
+        values.push_back(yieldedValue(branches[branchIndex]));
+    }
+
+    const bool hasElse = branches.size() % 2 == 1;
+    if (hasElse) {
+        values.push_back(yieldedValue(branches.back()));
+    }
 }
 
 LogicalResult LazyCase::verify() {
@@ -1554,6 +1607,13 @@ LogicalResult LazyCase::verify() {
     }
 
     return success();
+}
+
+LogicalResult LazyCase::verifyRegions() {
+    llvm::SmallVector<Value> selected;
+    collectSelectedValues(selected);
+
+    return verifySelectedResult(getOperation(), getResult(), selected);
 }
 
 LogicalResult EqOp::verify() {

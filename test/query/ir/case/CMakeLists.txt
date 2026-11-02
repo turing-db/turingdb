@@ -41,3 +41,7 @@ add_call_v3_test(test_query_ir_case_unshaped_list_branch CaseUnshapedListBranchT
 add_call_v3_test(test_query_ir_any_entity_property_read AnyEntityPropertyReadTest.cpp)
 
 add_call_v3_test(test_query_ir_any_entity_labels_and_type AnyEntityLabelsAndTypeTest.cpp)
+
+add_turing_test(test_query_ir_coalesce_over_an_id_equality CoalesceOverAnIdEqualityTest.cpp)
+
+add_ir_tests(test_query_ir_lazy_case_yield LazyCaseYieldTest.cpp)

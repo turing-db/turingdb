@@ -181,4 +181,6 @@ add_call_v3_test(test_query_ir_optional_match_yields OptionalMatchYieldsTest.cpp
 
 add_call_v3_test(test_query_ir_walk_read_past_a_scope WalkReadPastAScopeTest.cpp)
 
+add_ir_tests(test_query_ir_path_in_case PathInCaseTest.cpp)
+
 add_ir_tests(test_query_ir_path_under_two_names PathUnderTwoNamesTest.cpp)
