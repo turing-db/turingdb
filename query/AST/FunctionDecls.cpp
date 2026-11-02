@@ -590,11 +590,16 @@ void FunctionDecls::initDefault() {
     // range counts from its first bound to its second, both included, by the stride the
     // third gives - 1 where it is left out, and a negative one counting down. The list
     // holds integers whatever the bounds were, so the shape is the signature's to name.
-    FunctionSignature* range = createFunction("range");
-    range->setArguments({EvaluatedType::Integer, EvaluatedType::Integer, EvaluatedType::Integer});
-    range->setRequiredArgCount(2);
-    range->setReturnTypes({{EvaluatedType::List}});
-    range->setReturnedListShape(ListShape(EvaluatedType::Integer, 1));
+    const std::vector<FunctionArgumentType> integerOrCell = {EvaluatedType::Integer, EvaluatedType::Any};
+
+    std::vector<FunctionSignature*> ranges;
+    createOverloads("range", {integerOrCell, integerOrCell, integerOrCell}, ranges);
+
+    for (FunctionSignature* range : ranges) {
+        range->setRequiredArgCount(2);
+        range->setReturnTypes({{EvaluatedType::List}});
+        range->setReturnedListShape(ListShape(EvaluatedType::Integer, 1));
+    }
 
     // The three reads of a named path: its hop count, the nodes it runs through and its
     // relationships, the two lists typed so that a comprehension over them binds an entity

@@ -467,9 +467,10 @@ def Range : NLOp<"range", [Pure, RowAlignedThroughOperands]> {
               -> !nl.chunk<!storage.nullable<!storage.list<i64>>>
 
     Every bound carries rows - lowering lays a constant one out over them first - and is
-    read as a nullable value chunk, so a row whose bound is absent gets no list. The step
-    is absent where the query gave none, which counts by 1; a step of 0 is the error the
-    row raises, as is a row spanning more than 100000 integers.
+    read as a nullable value chunk, or as a chunk of type-erased cells whose integer each
+    row reads out of its cell, raising on any other value. A row whose bound is absent gets
+    no list. The step is absent where the query gave none, which counts by 1; a step of 0
+    is the error the row raises, as is a row spanning more than 100000 integers.
   }];
 
   // The step is the only variable-length operand, so MLIR tells it apart from the bounds

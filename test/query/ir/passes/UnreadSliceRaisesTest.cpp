@@ -12,12 +12,12 @@ class UnreadSliceRaisesTest : public WriteQueryTest {
 
 TEST_F(UnreadSliceRaisesTest, aSliceFromACellHoldingAString) {
     expectError("UNWIND [1, 'a'] AS b WITH b, [1, 2, 3][b..] AS s RETURN b",
-                "A list slice reads an integer bound, and this row holds a value that is not one");
+                "A range or a list slice reads an integer bound, and this row holds a value that is not one");
 }
 
 TEST_F(UnreadSliceRaisesTest, aSliceToACellHoldingAString) {
     expectError("UNWIND [1, 'a'] AS b WITH b, [1, 2, 3][..b] AS s RETURN b",
-                "A list slice reads an integer bound, and this row holds a value that is not one");
+                "A range or a list slice reads an integer bound, and this row holds a value that is not one");
 }
 
 TEST_F(UnreadSliceRaisesTest, returnsEveryRowPastASliceByIntegerCells) {

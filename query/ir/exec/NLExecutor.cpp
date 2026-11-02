@@ -5459,7 +5459,7 @@ std::optional<types::Int64::Primitive> cellBound(const std::optional<CellView>& 
         return cellInteger(*cell);
     }
 
-    throw IRException("A list slice reads an integer bound, and this row holds a value that is not one");
+    throw IRException("A range or a list slice reads an integer bound, and this row holds a value that is not one");
 }
 
 template <typename ColumnT>

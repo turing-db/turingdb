@@ -168,3 +168,5 @@ add_call_v3_test(test_query_ir_list_of_paths ListOfPathsTest.cpp)
 add_call_v3_test(test_query_ir_coll_index_of CollIndexOfTest.cpp)
 
 add_turing_test(test_query_ir_function_list_element_type FunctionListElementTypeTest.cpp)
+
+add_turing_test(test_query_ir_range_over_type_erased_bound RangeOverTypeErasedBoundTest.cpp)

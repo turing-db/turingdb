@@ -623,8 +623,8 @@ def Range : TuringOp<"range", [NoMemoryEffect, ConstantThroughOperands, DeclareO
     Row r's list counts from row r of `start` to row r of `end`, both included, by
     `step` - 1 where it is absent, and negative to count down. A step walking away from
     `end` gives the empty list; a step of 0 is the error the row raises, as is a row
-    spanning more than 100000 integers. A bound holding no value gives its row no list,
-    which is what Cypher reads `range(null, 3)` as.
+    spanning more than 100000 integers or a type-erased bound holding no integer. A bound
+    holding no value gives its row no list, which is what Cypher reads `range(null, 3)` as.
 
     The elements are integers whatever the bounds were, so the result element type is
     written here rather than inferred, unlike db.make_list's homogeneity verdict. A bound

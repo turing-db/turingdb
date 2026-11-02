@@ -33,7 +33,7 @@ TEST_F(SliceByTypeErasedBoundTest, returnsNullForACellHoldingANull) {
 
 TEST_F(SliceByTypeErasedBoundTest, raisesOnACellHoldingAString) {
     expectError("UNWIND [1, 'a'] AS b RETURN [1, 2, 3][b..]",
-                "A list slice reads an integer bound, and this row holds a value that is not one");
+                "A range or a list slice reads an integer bound, and this row holds a value that is not one");
 }
 
 TEST_F(SliceByTypeErasedBoundTest, raisesNothingForASliceNoRowReaches) {

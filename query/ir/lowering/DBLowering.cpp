@@ -2714,7 +2714,7 @@ void DBLowering::lowerRange(mlir::db::Range range) {
     const mlir::Value cardinality = cardinalityDriver(bounds);
 
     for (mlir::Value& bound : bounds) {
-        bound = nullableValueChunk(rowAlignedChunk(bound, cardinality));
+        bound = integerBoundChunk(rowAlignedChunk(bound, cardinality));
     }
 
     mlir::MLIRContext* const context = _builder.getContext();
