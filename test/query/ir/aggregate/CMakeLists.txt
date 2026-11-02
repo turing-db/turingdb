@@ -190,3 +190,6 @@ add_ir_tests(test_query_ir_constant_key_composition ConstantKeyCompositionTest.c
 
 # Grouping under constant keys over the rows a CREATE or a MERGE writes.
 add_ir_tests(test_query_ir_constant_key_write ConstantKeyWriteTest.cpp)
+
+# A collect or a percentile beside other aggregates of one projection, in either order.
+add_ir_tests(test_query_ir_collect_beside_aggregates CollectBesideAggregatesTest.cpp)
