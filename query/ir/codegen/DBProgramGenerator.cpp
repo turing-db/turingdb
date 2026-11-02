@@ -177,17 +177,17 @@ mlir::storage::UnicodeNormalForm toStorageNormalForm(UnicodeNormalForm form) {
     }
 }
 
-// Whether @param column is one @param aggregateOp bound, or one computed from what it
-// bound: anything computed before it holds the matched rows the aggregate consumed. A
-// column of another block is one the body being generated binds, which no aggregate reduced
-bool boundAtOrAfter(mlir::Value column, mlir::Operation* aggregateOp) {
+// Whether @param column is one @param reductionOp bound, or one computed from what it
+// bound: anything computed before it holds the matched rows the reduction consumed. A
+// column of another block is one the body being generated binds, which no reduction reduced
+bool boundAtOrAfter(mlir::Value column, mlir::Operation* reductionOp) {
     mlir::Operation* const definingOp = column.getDefiningOp();
 
-    if (!definingOp || definingOp->getBlock() != aggregateOp->getBlock()) {
+    if (!definingOp || definingOp->getBlock() != reductionOp->getBlock()) {
         return true;
     }
 
-    return definingOp == aggregateOp || aggregateOp->isBeforeInBlock(definingOp);
+    return definingOp == reductionOp || reductionOp->isBeforeInBlock(definingOp);
 }
 
 // Whether @param lhs is computed before @param rhs in the block both are bound in: a block
@@ -2556,14 +2556,13 @@ bool DBProgramGenerator::isRowAlignedHere(mlir::Value column) const {
 }
 
 // Whether @param column holds the rows in flight here: the rows of the block the insertion
-// point is in, and the groups rather than what the grouping consumed where an aggregate has
-// reduced them
+// point is in, and what an aggregate or a dedup kept rather than the rows it consumed
 bool DBProgramGenerator::holdsTheRowsInFlight(mlir::Value column) const {
     if (!isRowAlignedHere(column)) {
         return false;
     }
 
-    return !_part._aggregateOp || boundAtOrAfter(column, _part._aggregateOp);
+    return !_part._rowReductionOp || boundAtOrAfter(column, _part._rowReductionOp);
 }
 
 void DBProgramGenerator::collectInFlightColumns(InFlightColumns& inFlight) {
@@ -3814,7 +3813,6 @@ void DBProgramGenerator::generateMatchOrderBy(const MatchStmt* matchStmt) {
         const VarDecl* decl = walkReads[readIndex]._decl;
         const mlir::Value column = results[firstWalkRead + readIndex];
 
-        rebindNamedPath(decl, column);
         rebindVariableColumn(decl, column);
     }
 }
@@ -5261,6 +5259,7 @@ mlir::Value DBProgramGenerator::translateAggregateInput(const Expr* argExpr,
     // An aggregate reads the rows ahead of every reduction, one an earlier aggregate of the
     // same projection emitted included
     const llvm::SaveAndRestore<mlir::Operation*> readsTheRowsAhead(_part._aggregateOp, nullptr);
+    const llvm::SaveAndRestore<mlir::Operation*> readsTheRowsReduced(_part._rowReductionOp, nullptr);
 
     const EvaluatedType argType = argExpr->getType();
 
@@ -5304,12 +5303,12 @@ mlir::Value DBProgramGenerator::translateAggregateInput(const Expr* argExpr,
 
 mlir::Value DBProgramGenerator::resolveRowCarryingColumn() {
     const mlir::Value column = resolveColumnInScope([this](mlir::Value column) { return !yieldsConstantColumn(column, _constantColumns); });
-    if (column || !_part._aggregateOp) {
+    if (column || !_part._rowReductionOp) {
         return column;
     }
 
-    // Under a grouping key no variable names, the groups are held by the aggregate's results alone
-    return _part._aggregateOp->getResult(0);
+    // With no variable holding the rows in flight, the reduction's results alone hold them
+    return _part._rowReductionOp->getResult(0);
 }
 
 mlir::Value DBProgramGenerator::alignConstantToDriver(mlir::Value column) {
@@ -7521,6 +7520,8 @@ void DBProgramGenerator::translateDistinct(const Projection* projection,
         llvm::SmallVector<mlir::Value> deduped;
         emitRemoveDuplicates(dedupedColumns, mlir::Value(), deduped);
 
+        _part._rowReductionOp = deduped.front().getDefiningOp();
+
         // The dedup hands back one column per column it read, so its results take the place
         // of the ones it was given and the constant columns stay as they were
         for (size_t resultIndex = 0; resultIndex < dedupedItems.size(); resultIndex++) {
@@ -7579,6 +7580,7 @@ void DBProgramGenerator::rebindDistinctColumns(const Projection* projection,
 
 void DBProgramGenerator::rebindVariableColumn(const VarDecl* decl, mlir::Value column) {
     rebindYieldedColumn(decl, column);
+    rebindNamedPath(decl, column);
     rebindGroupVariable(decl, column);
 
     // An edge identity has no variable of its own: its column is published under the
@@ -7627,6 +7629,7 @@ void DBProgramGenerator::translateDistinctOverConstants(const Projection* projec
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     auto limitOp = _opBuilder.create<mlir::db::Limit>(loc, cappedTypes, mlir::ValueRange{capped}, keptRowCount);
+    _part._rowReductionOp = limitOp.getOperation();
 
     const mlir::ResultRange results = limitOp.getResults();
     for (size_t resultIndex = 0; resultIndex < cappedItems.size(); resultIndex++) {
@@ -8758,16 +8761,17 @@ mlir::Value DBProgramGenerator::generateSubqueryExpression(const RegularQuery* b
     mlir::Value consumedColumn;
 
     for (const PublishedColumn& column : scopeColumns) {
-        const bool consumedByTheAggregate = _part._aggregateOp
-                                         && !boundAtOrAfter(column._column, _part._aggregateOp);
+        const bool consumedByTheReduction = _part._rowReductionOp
+                                         && !boundAtOrAfter(column._column, _part._rowReductionOp);
 
         if (yieldsConstantColumn(column._column, _constantColumns)) {
             constants.push_back(column);
-        } else if (!consumedByTheAggregate) {
+        } else if (!consumedByTheReduction) {
             inputs.push_back(column);
         } else {
-            // A group holds no one value of a variable the aggregate consumed, and the analyzer
-            // turns away a body reading one: a WITH or a RETURN * in the body only carries it
+            // A group or a distinct row holds no one value of a variable the reduction consumed,
+            // and the analyzer turns away a body reading one: a WITH or a RETURN * in the body
+            // only carries it
             if (!consumedColumn) {
                 consumedColumn = nullConstantColumn();
             }
@@ -8776,10 +8780,10 @@ mlir::Value DBProgramGenerator::generateSubqueryExpression(const RegularQuery* b
         }
     }
 
-    // Under a grouping key no variable names, the groups are held by the aggregate's
-    // results alone, which the body then answers for under no name
-    if (inputs.empty() && _part._aggregateOp) {
-        for (const mlir::Value result : _part._aggregateOp->getResults()) {
+    // With no variable holding the rows in flight, the reduction's results alone hold them,
+    // and the body then answers for them under no name
+    if (inputs.empty() && _part._rowReductionOp) {
+        for (const mlir::Value result : _part._rowReductionOp->getResults()) {
             inputs.push_back({nullptr, std::string(), result});
         }
     }
@@ -10061,7 +10065,7 @@ void DBProgramGenerator::emitAggregate(const Expr* expr,
         throwError(fmt::format("Unsupported aggregate function: {}", funcName), expr);
     }
 
-    _part._aggregateOp = _part._exprMap.at(expr).getDefiningOp();
+    recordAggregate(_part._exprMap.at(expr).getDefiningOp());
 }
 
 mlir::Value DBProgramGenerator::translateArg(const Expr* argExpr) {
@@ -10432,7 +10436,7 @@ mlir::db::Collect DBProgramGenerator::createCollect(llvm::ArrayRef<mlir::Value> 
                                                                        kindsAttr,
                                                                        distinctAttr);
 
-    _part._aggregateOp = collectOp.getOperation();
+    recordAggregate(collectOp.getOperation());
 
     return collectOp;
 }
@@ -10927,7 +10931,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
             llvm::ArrayRef<int64_t>{aggKindValues});
 
         aggregateOp = groupAgg.getOperation();
-        _part._aggregateOp = aggregateOp;
+        recordAggregate(aggregateOp);
     }
 
     const mlir::ResultRange results = aggregateOp->getResults();
@@ -11024,6 +11028,11 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
     }
 
     bindOrderByKeyColumns(projection, groupedColumns);
+}
+
+void DBProgramGenerator::recordAggregate(mlir::Operation* aggregateOp) {
+    _part._aggregateOp = aggregateOp;
+    _part._rowReductionOp = aggregateOp;
 }
 
 void DBProgramGenerator::bindOrderByKeyColumns(const Projection* projection,

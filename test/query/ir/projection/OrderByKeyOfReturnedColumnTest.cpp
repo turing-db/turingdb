@@ -325,27 +325,25 @@ TEST_F(OrderByKeyOfReturnedColumnTest, ordersGroupsOnAKeyOfAMapReturnedByName) {
                        {"{name: Cyrus}", "1"}});
 }
 
-// Disabled (TUR-368): the variables a DISTINCT consumed stay bound in codegen, so a body in its
-// ORDER BY carries their undeduplicated rows beside the deduplicated ones.
-TEST_F(OrderByKeyOfReturnedColumnTest, DISABLED_ordersDistinctRowsOnAPatternComprehensionOverAVariable) {
+TEST_F(OrderByKeyOfReturnedColumnTest, ordersDistinctRowsOnAPatternComprehensionOverAVariable) {
     expectOrderedRows("MATCH (n:Person)-[e]->(m) RETURN DISTINCT n ORDER BY size([(n)-->(y) | y]) DESC LIMIT 2",
                       {{"0"},
                        {"1"}});
 }
 
-TEST_F(OrderByKeyOfReturnedColumnTest, DISABLED_ordersDistinctRowsOnACountSubqueryOverAVariable) {
+TEST_F(OrderByKeyOfReturnedColumnTest, ordersDistinctRowsOnACountSubqueryOverAVariable) {
     expectOrderedRows("MATCH (n:Person)-[e]->(m) RETURN DISTINCT n ORDER BY COUNT { (n)-->() } DESC LIMIT 2",
                       {{"0"},
                        {"1"}});
 }
 
-TEST_F(OrderByKeyOfReturnedColumnTest, DISABLED_ordersDistinctRowsOnAPatternComprehensionOverAComputedNode) {
+TEST_F(OrderByKeyOfReturnedColumnTest, ordersDistinctRowsOnAPatternComprehensionOverAComputedNode) {
     expectOrderedRows("MATCH (n:Person)-[e]->(m) RETURN DISTINCT startNode(e) AS x ORDER BY size([(x)-->(y) | y]) DESC LIMIT 2",
                       {{"0"},
                        {"1"}});
 }
 
-TEST_F(OrderByKeyOfReturnedColumnTest, DISABLED_ordersDistinctRowsOnACountSubqueryOverAComputedNode) {
+TEST_F(OrderByKeyOfReturnedColumnTest, ordersDistinctRowsOnACountSubqueryOverAComputedNode) {
     expectOrderedRows("MATCH (n:Person)-[e]->(m) RETURN DISTINCT startNode(e) AS x ORDER BY COUNT { (x)-->() } DESC LIMIT 2",
                       {{"0"},
                        {"1"}});
