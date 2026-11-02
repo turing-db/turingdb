@@ -241,3 +241,25 @@ add_ir_tests(test_query_ir_row_constant RowConstantTest.cpp)
 
 # A body run once per row reads its imports past every barrier: TUR-304.
 add_turing_test(test_query_ir_per_run_import PerRunImportTest.cpp)
+
+# A subquery expression whose body runs per row, beside outer ORDER BY, LIMIT, DISTINCT,
+# aggregation, OPTIONAL MATCH and inputs spanning several chunks.
+add_ir_tests(test_query_ir_per_row_subquery_composition PerRowSubqueryCompositionTest.cpp)
+
+# A body run once per row reads its import past a keyless WITH or a NEXT, beside the other clauses.
+add_ir_tests(test_query_ir_per_run_import_composition PerRunImportCompositionTest.cpp)
+
+# exists(<pattern>) as a grouping key, in comprehensions, folds, boolean operators and ORDER BY.
+add_ir_tests(test_query_ir_exists_function_composition ExistsFunctionCompositionTest.cpp)
+
+# Functions and operators over a node, an edge, a path or a list a body run once per row imports.
+add_ir_tests(test_query_ir_run_constant_read RunConstantReadTest.cpp)
+
+# A body run once per row walks from, or to, the nodes it imports.
+add_ir_tests(test_query_ir_run_constant_walk RunConstantWalkTest.cpp)
+
+# A body run once per row writes from its import, and a merge reads back the rows it wrote.
+add_ir_tests(test_query_ir_per_run_import_write PerRunImportWriteTest.cpp)
+
+# A variable-length named path read inside and past a subquery.
+add_ir_tests(test_query_ir_named_walk_across_subquery NamedWalkAcrossSubqueryTest.cpp)

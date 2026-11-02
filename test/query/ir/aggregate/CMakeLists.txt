@@ -184,3 +184,9 @@ target_include_directories(test_query_ir_aggregate_over_computed_constant PRIVAT
 add_call_v3_test(test_query_ir_grouped_count_distinct GroupedCountDistinctTest.cpp)
 
 add_call_v3_test(test_query_ir_constant_key_empty_input ConstantKeyEmptyInputTest.cpp)
+
+# Grouping under constant keys, over OPTIONAL MATCH, WITH chains, CALL bodies and every aggregate.
+add_ir_tests(test_query_ir_constant_key_composition ConstantKeyCompositionTest.cpp)
+
+# Grouping under constant keys over the rows a CREATE or a MERGE writes.
+add_ir_tests(test_query_ir_constant_key_write ConstantKeyWriteTest.cpp)
