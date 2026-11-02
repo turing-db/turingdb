@@ -1373,8 +1373,9 @@ private:
 
     void translateFunctionExpr(const Expr* expr, const FunctionInvocation* invocation);
 
-    // coalesce over @param args, emitted as the selection it is: every argument but the
-    // last guarded by its own presence, the last standing as the default
+    // coalesce over @param args, folded from the left: each argument after the first is a
+    // db.lazy_case over the coalesce of the ones before it, computing the argument only
+    // over the rows they all left null
     void translateCoalesce(const Expr* expr, const ExprChain* args);
 
     void translateRange(const Expr* expr, const ExprChain* args);

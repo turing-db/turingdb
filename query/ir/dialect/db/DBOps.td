@@ -3564,7 +3564,7 @@ def Case : TuringOp<"case", [Pure, ConstantThroughOperands, AttrSizedOperandSegm
   let summary = "Row-wise selection of the first branch whose condition holds";
 
   let description = [{
-    A selection between columns computed for every row, which is what coalesce() emits.
+    A selection between columns computed for every row.
     `conditions` and `values` are parallel: a row takes the value of the first branch
     whose condition is true, the default when none is, and null when there is no default.
 
@@ -3572,8 +3572,8 @@ def Case : TuringOp<"case", [Pure, ConstantThroughOperands, AttrSizedOperandSegm
              : (!db.column<!storage.bool>, !db.column<!storage.bool>,
                 !db.column<i64>, !db.column<i64>, !db.column<i64>) -> !db.column<none>
 
-    A Cypher CASE is a db.lazy_case instead, which computes a branch only over the rows
-    that reach it.
+    A Cypher CASE and a coalesce() are a db.lazy_case instead, which computes a branch only
+    over the rows that reach it.
 
     The result is the one element every value holds, nullable unless it holds its own
     null, the null literal holding whatever the others do. Nodes, edges and paths are
