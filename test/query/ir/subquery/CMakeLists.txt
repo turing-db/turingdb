@@ -242,6 +242,11 @@ add_ir_tests(test_query_ir_row_constant RowConstantTest.cpp)
 # A body run once per row reads its imports past every barrier: TUR-304.
 add_turing_test(test_query_ir_per_run_import PerRunImportTest.cpp)
 
+# A list expression in a body run once per row reads a property of an imported node.
+add_turing_test(test_query_ir_per_run_import_list_expression PerRunImportListExpressionTest.cpp)
+target_sources(test_query_ir_per_run_import_list_expression PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_per_run_import_list_expression PRIVATE ${IR_TEST_DIR})
+
 # A body run once per row takes a node or an edge out of a list it imports.
 add_turing_test(test_query_ir_per_run_import_list_index PerRunImportListIndexTest.cpp)
 target_sources(test_query_ir_per_run_import_list_index PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
