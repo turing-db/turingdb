@@ -1005,6 +1005,15 @@ mlir::Operation* nearestPerRowSubquery(mlir::Operation* operation) {
     return nullptr;
 }
 
+// Reads every row it is handed before it emits any, then emits through a loop of its own
+bool accumulatesThenEmits(mlir::Operation* operation) {
+    return mlir::isa<mlir::db::Sort,
+                     mlir::db::GroupAggregate,
+                     mlir::db::Collect,
+                     mlir::db::UnwindCollect,
+                     mlir::db::ShortestPath>(operation);
+}
+
 // The db ops whose rows a projection is emitted over: a source, the nest a cross product
 // or a hash join builds, and the emit loop a pipeline breaker opens over what it
 // accumulated
@@ -1014,10 +1023,9 @@ bool opensRowLoop(mlir::Operation* operation) {
 
     return opensSourceLoop(operation)
         || returningSubquery
+        || accumulatesThenEmits(operation)
         || mlir::isa<mlir::db::CrossProduct,
                      mlir::db::HashJoin,
-                     mlir::db::Sort,
-                     mlir::db::GroupAggregate,
                      mlir::db::OptionalMatch>(operation);
 }
 
@@ -5436,19 +5444,15 @@ void DBLowering::visitProducer(mlir::Value column,
     const bool isSubquery = mlir::isa<mlir::db::CallSubquery>(definingOp);
 
     const bool emitsThroughLoop = isSubquery
-                                  || mlir::isa<mlir::db::Sort,
-                                               mlir::db::GroupAggregate,
-                                               mlir::db::OptionalMatch>(definingOp);
+                                  || accumulatesThenEmits(definingOp)
+                                  || mlir::isa<mlir::db::OptionalMatch>(definingOp);
 
-    // A sort or a grouped aggregate accumulates the whole relation before emitting any of
-    // it, so the loops feeding it have to see every row: the walk stops and the limit
-    // budgets the emit loop alone. So does a materialize, whose scans are the emit loops.
-    // An optional match accumulates one step of the rows it joins onto rather than the
-    // relation, and emits them in input order, so once the budget is spent no later step
-    // can contribute a row - the walk carries on and bounds the loops feeding it too.
-    const bool accumulatesTheRelation = mlir::isa<mlir::db::Sort,
-                                                  mlir::db::GroupAggregate,
-                                                  mlir::db::Materialize>(definingOp);
+    // An op reading the whole relation before emitting any of it, and a materialize, whose
+    // scans are the emit loops, need every row fed to them: the walk stops, and the limit
+    // budgets the emit loop alone. An optional match emits each step's rows in input order, so
+    // once the budget is spent no later step adds a row: the walk goes on to bound its inputs.
+    const bool accumulatesTheRelation = accumulatesThenEmits(definingOp)
+                                     || mlir::isa<mlir::db::Materialize>(definingOp);
     const bool breaksPipeline = accumulatesTheRelation || reducesToOneRow(definingOp);
 
     frame._reachedALoop = opensLoop || isCrossProduct || isHashJoin || emitsThroughLoop;
