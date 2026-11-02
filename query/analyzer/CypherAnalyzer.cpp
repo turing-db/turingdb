@@ -1486,7 +1486,7 @@ bool CypherAnalyzer::isGroupWise(const Expr* expr,
 
     // An aggregate reduces its group to one value, which is what a group-wise key is: a
     // count of the group orders the groups whether or not the projection returns it
-    if (expr->isAggregate()) {
+    if (aggregateSignatureOf(expr)) {
         return true;
     }
 

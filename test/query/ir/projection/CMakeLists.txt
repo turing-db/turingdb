@@ -68,3 +68,5 @@ add_call_v3_test(test_query_ir_nan_ordering NaNOrderingTest.cpp)
 add_call_v3_test(test_query_ir_constant_projection_rows ConstantProjectionRowsTest.cpp)
 
 add_call_v3_test(test_query_ir_multi_line_item_name MultiLineItemNameTest.cpp)
+
+add_call_v3_test(test_query_ir_order_by_aggregate_mixed_key OrderByAggregateMixedKeyTest.cpp)
