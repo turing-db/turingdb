@@ -50,6 +50,17 @@ TEST_F(LabelDisjunctionOrBarTest, readsAPipeAsALabelDisjunctionWhenTheBarFollows
                                                                                                             labels({"Supernatural"})}))))}),
                                                        property({"b", "name"}))}))});
 
+    expectParse("RETURN [(a)-->(b) WHERE b:Admin|Owner|Guest | b.name]",
+                {query({},
+                       returning({patternComprehension(match({._pattern = pattern({path({node({._symbol = "a"}),
+                                                                                         edge({._direction = EdgePattern::Direction::Forward}),
+                                                                                         node({._symbol = "b"})})},
+                                                                                  where(entityType("b",
+                                                                                                   labelOr({labels({"Admin"}),
+                                                                                                            labels({"Owner"}),
+                                                                                                            labels({"Guest"})}))))}),
+                                                       property({"b", "name"}))}))});
+
     expectParse("RETURN [x IN xs WHERE x:A|B | x]",
                 {query({},
                        returning({listComprehension("x",

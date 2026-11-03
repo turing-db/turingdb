@@ -116,6 +116,41 @@ TEST_F(KeywordNameDecisionTest, anyBeforeAnOperatorIsAVariable) {
     expectParse("RETURN any + 1", {query({}, returning({binary(BinaryOperator::Add, symbol("any"), integer(1))}))});
 }
 
+TEST_F(KeywordNameDecisionTest, quantifierBeforeAParenthesisWithoutWhereOpensAPredicate) {
+    expectParse("RETURN any(x IN list)",
+                {query({},
+                       returning({listPredicate(ListPredicateExpr::Quantifier::Any,
+                                                listComprehension("x", symbol("list")))}))});
+
+    expectParse("RETURN none(x IN list)",
+                {query({},
+                       returning({listPredicate(ListPredicateExpr::Quantifier::None,
+                                                listComprehension("x", symbol("list")))}))});
+
+    expectParse("RETURN single(x IN list)",
+                {query({},
+                       returning({listPredicate(ListPredicateExpr::Quantifier::Single,
+                                                listComprehension("x", symbol("list")))}))});
+}
+
+TEST_F(KeywordNameDecisionTest, filterBeforeAParenthesisCallsAFunction) {
+    expectParse("RETURN filter(x IN list)",
+                {query({},
+                       returning({invocation({"filter"}, {binary(BinaryOperator::In, symbol("x"), symbol("list"))})}))});
+}
+
+TEST_F(KeywordNameDecisionTest, anyBeforeAnEqualsSignNamesAPath) {
+    expectParse("MATCH any = (a)-[:R]->+(b) RETURN any",
+                {query({match({._pattern = pattern({namedPath("any",
+                                                              {node({._symbol = "a"}),
+                                                               walk({._direction = EdgePattern::Direction::Forward,
+                                                                     ._quantifier = quantifier(1, QuantifiedPath::UNBOUNDED),
+                                                                     ._hops = {edge({._direction = EdgePattern::Direction::Forward,
+                                                                                     ._labels = labels({"R"})})}}),
+                                                               node({._symbol = "b"})})})})},
+                       returning({symbol("any")}))});
+}
+
 TEST_F(KeywordNameDecisionTest, allBeforeAParenthesisOpensAPredicate) {
     expectParse("RETURN all(x IN [1] WHERE x = 1)",
                 {query({},
@@ -284,4 +319,18 @@ TEST_F(KeywordNameDecisionTest, isFirstInANodeBeforeAColonNamesTheNode) {
     expectParse("MATCH (is:Person) RETURN is",
                 {query({match({._pattern = pattern({path({node({._symbol = "is", ._labels = labels({"Person"})})})})})},
                        returning({symbol("is")}))});
+}
+
+TEST_F(KeywordNameDecisionTest, normalizedAfterIsOpensANormalizationTest) {
+    expectParse("MATCH (x) WHERE x IS NORMALIZED RETURN x",
+                {query({match({._pattern = pattern({path({node({._symbol = "x"})})},
+                                                   where(invocation({"is_normalized"},
+                                                                    {symbol("x"), normalForm(UnicodeNormalForm::NFC)})))})},
+                       returning({symbol("x")}))});
+}
+
+TEST_F(KeywordNameDecisionTest, aNameAfterIsTestsALabel) {
+    expectParse("MATCH (x) WHERE x IS Person RETURN x",
+                {query({match({._pattern = pattern({path({node({._symbol = "x"})})}, where(entityType("x", labels({"Person"}))))})},
+                       returning({symbol("x")}))});
 }

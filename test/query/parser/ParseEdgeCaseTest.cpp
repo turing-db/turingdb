@@ -2916,6 +2916,10 @@ TEST_F(ParseEdgeCaseTest, parsesLabelExpressionsAndComprehensions) {
                                         nullptr,
                                         nullptr)}))});
 
+    expectParse("RETURN n.address.city", {query({}, returning({property({"n", "address", "city"})}))});
+
+    expectParse("RETURN apoc.coll.sum(xs)", {query({}, returning({invocation({"apoc", "coll", "sum"}, {symbol("xs")})}))});
+
     expectParse("RETURN [x IN [1] WHERE x:A|B]",
                 {query({},
                        returning({listComprehension("x",
