@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN 'ab' + 'b' STARTS WITH 'a'",
+  "expect": {
+    "result": "'ab' + 'b' STARTS WITH 'a'\ntrue"
+  },
+  "tags": [
+    "operators",
+    "string",
+    "return"
+  ],
+  "write-required": false
+}

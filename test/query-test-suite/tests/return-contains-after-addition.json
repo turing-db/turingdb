@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN 'ab' + 'b' CONTAINS 'b'",
+  "expect": {
+    "result": "'ab' + 'b' CONTAINS 'b'\ntrue"
+  },
+  "tags": [
+    "operators",
+    "string",
+    "return"
+  ],
+  "write-required": false
+}

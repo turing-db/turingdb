@@ -2207,13 +2207,10 @@ TEST_F(ParseEdgeCaseTest, parsesValueTestsAndCases) {
 
     expectParse("RETURN 1 < 2 <= 3 IS NULL = true",
                 {query({},
-                       returning({binary(BinaryOperator::Equal,
-                                         binary(BinaryOperator::IsNull,
-                                                comparisonChain(integer(1),
-                                                                {{BinaryOperator::LessThan, integer(2)},
-                                                                 {BinaryOperator::LessThanOrEqual, integer(3)}}),
-                                                null()),
-                                         boolean(true))}))});
+                       returning({comparisonChain(integer(1),
+                                                  {{BinaryOperator::LessThan, integer(2)},
+                                                   {BinaryOperator::LessThanOrEqual, binary(BinaryOperator::IsNull, integer(3), null())},
+                                                   {BinaryOperator::Equal, boolean(true)}})}))});
 
     expectError("RETURN CASE WHEN IS NOT 5 THEN 1 END",
                 "     1 | RETURN CASE WHEN IS NOT 5 THEN 1 END\n"

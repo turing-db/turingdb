@@ -50,15 +50,6 @@ using namespace db;
 
 namespace {
 
-bool isChainableComparison(BinaryOperator op) {
-    return op == BinaryOperator::Equal
-           || op == BinaryOperator::NotEqual
-           || op == BinaryOperator::LessThan
-           || op == BinaryOperator::GreaterThan
-           || op == BinaryOperator::LessThanOrEqual
-           || op == BinaryOperator::GreaterThanOrEqual;
-}
-
 const BinaryExpr* getListComprehensionHead(const Expr* head) {
     if (head->getKind() != Expr::Kind::BINARY || head->isParenthesized()) {
         return nullptr;
@@ -713,7 +704,7 @@ void ParserUtils::startComparisonChain(CypherAST* ast,
                                        const SourceLocation& rhsLocation,
                                        const SourceLocation& chainLocation) {
     chain._expr = BinaryExpr::create(ast, op, lhs, rhs);
-    chain._rightOperand = isChainableComparison(op) ? rhs : nullptr;
+    chain._rightOperand = rhs;
     chain._rightOperandLocation = rhsLocation;
 
     ast->getSourceManager()->setLocation(chain._expr, chainLocation);
@@ -726,18 +717,6 @@ void ParserUtils::extendComparisonChain(CypherAST* ast,
                                         const SourceLocation& rhsLocation,
                                         const SourceLocation& chainLocation) {
     SourceManager* const sourceManager = ast->getSourceManager();
-    const bool chains = isChainableComparison(op);
-
-    // IN and the two IS tests take a right side of their own, so what stands to their left
-    // is the comparison before them rather than the operand it ended on
-    if (!chains || !chain._rightOperand) {
-        chain._expr = BinaryExpr::create(ast, op, chain._expr, rhs);
-        chain._rightOperand = chains ? rhs : nullptr;
-        chain._rightOperandLocation = rhsLocation;
-
-        sourceManager->setLocation(chain._expr, chainLocation);
-        return;
-    }
 
     // A link spans the two operands it compares, not the chain that ended on the left
     // one: a diagnostic about `2 < 'a'` of `1 < 2 < 'a'` underlines that much
@@ -753,23 +732,25 @@ void ParserUtils::extendComparisonChain(CypherAST* ast,
     sourceManager->setLocation(chain._expr, chainLocation);
 }
 
-void ParserUtils::createIsTest(CypherAST* ast,
-                               ComparisonChain& chain,
-                               Expr* operand,
-                               const IsTest& test,
-                               const SourceLocation& testLocation,
-                               const SourceLocation& chainLocation) {
+Expr* ParserUtils::createIsTest(CypherAST* ast,
+                                Expr* operand,
+                                const IsTest& test,
+                                const SourceLocation& testLocation,
+                                const SourceLocation& location) {
     if (test._normalForm) {
-        chain._expr = createIsNormalized(ast, operand, *test._normalForm, test._negated, chainLocation);
-        chain._rightOperand = nullptr;
-        return;
+        return createIsNormalized(ast, operand, *test._normalForm, test._negated, location);
     }
 
+    SourceManager* const sourceManager = ast->getSourceManager();
+
     Expr* null = LiteralExpr::create(ast, NullLiteral::create(ast));
-    ast->getSourceManager()->setLocation(null, testLocation);
+    sourceManager->setLocation(null, testLocation);
 
     const BinaryOperator nullTest = test._negated ? BinaryOperator::IsNotNull : BinaryOperator::IsNull;
-    startComparisonChain(ast, chain, operand, nullTest, null, testLocation, chainLocation);
+    Expr* nullTestExpr = BinaryExpr::create(ast, nullTest, operand, null);
+    sourceManager->setLocation(nullTestExpr, location);
+
+    return nullTestExpr;
 }
 
 Parameter* ParserUtils::createNumberedParameter(CypherAST* ast, int64_t number) {

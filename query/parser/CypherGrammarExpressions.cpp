@@ -120,19 +120,19 @@ Expr* CypherGrammar::parseExpr(ExprFollower follower) {
     const size_t operatorBase = _operators.size();
     parseOperand(operatorBase);
 
-    OperatorLevel tightest = OperatorLevel::STRING;
+    OperatorLevel tightest = OperatorLevel::POWER;
     for (OperatorLevel level = findBinaryOperator(tightest); level != OperatorLevel::NONE; level = findBinaryOperator(tightest)) {
         reduceOperators(operatorBase, level);
 
         if (accept(CypherTokenKind::IS_VALUE_TEST)) {
             applyIsTest();
-            tightest = OperatorLevel::COMPARISON;
+            tightest = OperatorLevel::PREDICATE;
             continue;
         }
 
         pushBinaryOperator(level);
         parseOperand(operatorBase);
-        tightest = OperatorLevel::STRING;
+        tightest = OperatorLevel::POWER;
     }
 
     reduceOperators(operatorBase, OperatorLevel::OR);
@@ -221,16 +221,16 @@ bool CypherGrammar::startsNegation(size_t operatorBase) {
 }
 
 CypherGrammar::OperatorLevel CypherGrammar::findBinaryOperator(OperatorLevel tightest) {
-    const bool takesArithmetic = tightest > OperatorLevel::COMPARISON;
+    const bool takesArithmetic = tightest > OperatorLevel::PREDICATE;
 
-    if (takesArithmetic && (check(CypherTokenKind::STARTS) || check(CypherTokenKind::ENDS) || check(CypherTokenKind::CONTAINS))) {
-        return OperatorLevel::STRING;
-    } else if (takesArithmetic && check(CypherTokenKind::CARET)) {
+    if (takesArithmetic && check(CypherTokenKind::CARET)) {
         return OperatorLevel::POWER;
     } else if (takesArithmetic && (check(CypherTokenKind::MULT) || check(CypherTokenKind::DIV) || check(CypherTokenKind::MOD))) {
         return OperatorLevel::MULT_DIV;
     } else if (takesArithmetic && (check(CypherTokenKind::PLUS) || check(CypherTokenKind::SUB) || check(CypherTokenKind::CONCAT))) {
         return OperatorLevel::ADD_SUB;
+    } else if (startsPredicate()) {
+        return OperatorLevel::PREDICATE;
     } else if (startsComparison()) {
         return OperatorLevel::COMPARISON;
     } else if (check(CypherTokenKind::AND)) {
@@ -249,7 +249,7 @@ void CypherGrammar::pushBinaryOperator(OperatorLevel level) {
 
     if (level == OperatorLevel::COMPARISON) {
         pending._comparison = parseComparisonSign();
-    } else if (level == OperatorLevel::STRING) {
+    } else if (level == OperatorLevel::PREDICATE && pending._kind != CypherTokenKind::IN) {
         pending._stringOperator = parseStringExprPrefix();
     } else {
         consume();
@@ -345,6 +345,9 @@ void CypherGrammar::reduceBinary(const PendingOperator& pending) {
         case CypherTokenKind::CARET:
             expr = BinaryExpr::create(_ast, BinaryOperator::Pow, leftExpr, rightExpr);
         break;
+        case CypherTokenKind::IN:
+            expr = BinaryExpr::create(_ast, BinaryOperator::In, leftExpr, rightExpr);
+        break;
         default:
             expr = StringExpr::create(_ast, pending._stringOperator, leftExpr, rightExpr);
         break;
@@ -365,9 +368,8 @@ void CypherGrammar::applyIsTest() {
     PendingOperand& operand = _operands.back();
     Expr* tested = getExpr(operand);
 
-    operand._chain = ParserUtils::ComparisonChain {};
-    ParserUtils::createIsTest(_ast, operand._chain, tested, test, testLocation, locationFrom(operand._start));
-    operand._chained = true;
+    operand._expr = ParserUtils::createIsTest(_ast, tested, test, testLocation, locationFrom(operand._start));
+    operand._chained = false;
 }
 
 BinaryOperator CypherGrammar::parseComparisonSign() {
@@ -381,13 +383,11 @@ BinaryOperator CypherGrammar::parseComparisonSign() {
         return BinaryOperator::GreaterThan;
     } else if (accept(CypherTokenKind::LT)) {
         return BinaryOperator::LessThan;
-    } else if (accept(CypherTokenKind::NOT_EQUAL)) {
-        return BinaryOperator::NotEqual;
     }
 
-    expect(CypherTokenKind::IN);
+    expect(CypherTokenKind::NOT_EQUAL);
 
-    return BinaryOperator::In;
+    return BinaryOperator::NotEqual;
 }
 
 ParserUtils::IsTest CypherGrammar::parseIsTest(SourceLocation& testLocation) {
@@ -1623,15 +1623,21 @@ CypherGrammar::ParenthesizedAtom CypherGrammar::classifyParenthesis() {
     return ParenthesizedAtom::EXPRESSION;
 }
 
+bool CypherGrammar::startsPredicate() {
+    return check(CypherTokenKind::STARTS)
+           || check(CypherTokenKind::ENDS)
+           || check(CypherTokenKind::CONTAINS)
+           || check(CypherTokenKind::IN)
+           || check(CypherTokenKind::IS_VALUE_TEST);
+}
+
 bool CypherGrammar::startsComparison() {
     return check(CypherTokenKind::ASSIGN)
            || check(CypherTokenKind::LE)
            || check(CypherTokenKind::GE)
            || check(CypherTokenKind::GT)
            || check(CypherTokenKind::LT)
-           || check(CypherTokenKind::NOT_EQUAL)
-           || check(CypherTokenKind::IN)
-           || check(CypherTokenKind::IS_VALUE_TEST);
+           || check(CypherTokenKind::NOT_EQUAL);
 }
 
 size_t CypherGrammar::skipBalanced(size_t offset) {

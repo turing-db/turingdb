@@ -176,13 +176,11 @@ public:
                                       const SourceLocation& rhsLocation,
                                       const SourceLocation& chainLocation);
 
-    // An IS test takes what stands to its left whole: it does not chain like a comparison
-    static void createIsTest(CypherAST* ast,
-                             ComparisonChain& chain,
-                             Expr* operand,
-                             const IsTest& test,
-                             const SourceLocation& testLocation,
-                             const SourceLocation& chainLocation);
+    static Expr* createIsTest(CypherAST* ast,
+                              Expr* operand,
+                              const IsTest& test,
+                              const SourceLocation& testLocation,
+                              const SourceLocation& location);
 
 private:
     static void listExprToFloatVector(const ListLiteral* list, std::vector<float>& out);

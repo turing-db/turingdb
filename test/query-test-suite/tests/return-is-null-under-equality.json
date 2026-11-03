@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN false = null IS NULL",
+  "expect": {
+    "result": "false = null IS NULL\nfalse"
+  },
+  "tags": [
+    "operators",
+    "null",
+    "return"
+  ],
+  "write-required": false
+}

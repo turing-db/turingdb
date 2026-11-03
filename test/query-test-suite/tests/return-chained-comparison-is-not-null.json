@@ -3,8 +3,7 @@
   "graph": "simpledb",
   "query": "MATCH (n) RETURN 40 < n.age IS NOT NULL",
   "expect": {
-    "result": "40 < n.age IS NOT NULL\ntrue\ntrue\nfalse\nfalse\nfalse\nfalse\nfalse\nfalse\nfalse\nfalse\nfalse\nfalse\nfalse\nfalse\nfalse\nfalse\nfalse\nfalse",
-    "resultJson": "{\"header\":{\"column_names\":[\"40 < n.age IS NOT NULL\"],\"column_types\":[\"Bool\"]},\"data\":[[[true,true,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false]]]}"
+    "result": "40 < n.age IS NOT NULL\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull"
   },
   "tags": [
     "chained-comparison",
