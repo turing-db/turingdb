@@ -23,7 +23,8 @@ public:
 
     /// Whether every row this UNWIND emits is known at plan time: the argument is a
     /// literal, and a list literal's items are literals too, at any depth. Anything else
-    /// is evaluated per row, against the rows already in flight.
+    /// is evaluated per row, against the rows already in flight, and so is a literal whose
+    /// variable a pattern reads as an entity, which each row is checked to hold.
     bool unwindsLiteral() const;
 
 private:

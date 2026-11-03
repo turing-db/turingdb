@@ -66,6 +66,17 @@ protected:
         EXPECT_NE(error.find(reason), std::string::npos) << "query: " << query << "\nerror: " << error;
     }
 
+    void expectExecutionError(std::string_view query, std::string_view reason) {
+        RowCountingSink sink;
+        QueryStatus status;
+        runQuery(query, status, sink);
+
+        EXPECT_EQ(status.getStatus(), QueryStatus::Status::EXEC_ERROR) << "query: " << query;
+
+        const std::string error = status.getError();
+        EXPECT_NE(error.find(reason), std::string::npos) << "query: " << query << "\nerror: " << error;
+    }
+
     void expectRowCount(std::string_view query, size_t expected) {
         RowCountingSink sink;
         QueryStatus status;
@@ -106,20 +117,19 @@ TEST_F(VariableTypeConflictTest, rejectsANodeVariableReusedAsAnEdge) {
 }
 
 // An UNWIND of node IDs may name a pattern node, which seeds the traversal from them, so
-// only a list whose items are not node IDs conflicts with the pattern.
+// a list of strings conflicts with the pattern. The elements of a mixed list are typed per
+// row only, so each is checked to be a node, and an empty list matches nothing.
 TEST_F(VariableTypeConflictTest, rejectsAStringUnwoundIntoANodePattern) {
     expectTypeConflictRejection("UNWIND ['a', 'b'] AS x MATCH (x) RETURN x;",
                                 "Variable 'x' is already declared with type 'String'");
 }
 
-TEST_F(VariableTypeConflictTest, rejectsAHeterogeneousListUnwoundIntoANodePattern) {
-    expectTypeConflictRejection("UNWIND [1, 'a'] AS x MATCH (x) RETURN x;",
-                                "Variable 'x' is already declared with type 'Any'");
+TEST_F(VariableTypeConflictTest, raisesOnAHeterogeneousListUnwoundIntoANodePattern) {
+    expectExecutionError("UNWIND [1, 'a'] AS x MATCH (x) RETURN x;", "A pattern reads a node");
 }
 
-TEST_F(VariableTypeConflictTest, rejectsAnEmptyListUnwoundIntoANodePattern) {
-    expectTypeConflictRejection("UNWIND [] AS x MATCH (x) RETURN x;",
-                                "Variable 'x' is already declared with type 'Null'");
+TEST_F(VariableTypeConflictTest, matchesNothingFromAnEmptyListUnwoundIntoANodePattern) {
+    expectRowCount("UNWIND [] AS x MATCH (x) RETURN x;", 0);
 }
 
 // The seed must be in scope before the pattern names it: an UNWIND naming a variable the

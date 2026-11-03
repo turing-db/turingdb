@@ -3,6 +3,7 @@
 #include "CypherAST.h"
 #include "Literal.h"
 #include "expr/LiteralExpr.h"
+#include "decl/VarDecl.h"
 
 using namespace db;
 
@@ -10,7 +11,7 @@ UnwindStmt::~UnwindStmt() {
 }
 
 bool UnwindStmt::unwindsLiteral() const {
-    if (_arg->getKind() != Expr::Kind::LITERAL) {
+    if (_arg->getKind() != Expr::Kind::LITERAL || _decl->isCastToAnEntity()) {
         return false;
     }
 

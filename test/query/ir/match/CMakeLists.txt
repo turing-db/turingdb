@@ -93,3 +93,4 @@ target_sources(test_query_ir_supplier_keyword PRIVATE ${IR_TEST_DIR}/StringRowSi
 target_include_directories(test_query_ir_supplier_keyword PRIVATE ${IR_TEST_DIR})
 
 add_call_v3_test(test_query_ir_token_whitespace TokenWhitespaceTest.cpp)
+add_call_v3_test(test_query_ir_pattern_from_a_tagged_cell PatternFromATaggedCellTest.cpp)

@@ -560,6 +560,7 @@ private:
     void lowerBroadcastConstant(mlir::db::BroadcastConstant broadcast);
     void lowerRowConstant(mlir::db::RowConstant rowConstant);
     void lowerToNullable(mlir::db::ToNullable toNullable);
+    void lowerCheckedCast(mlir::db::CheckedCast checkedCast);
     void lowerLimit(mlir::db::Limit limit);
     void lowerSkip(mlir::db::Skip skip);
 

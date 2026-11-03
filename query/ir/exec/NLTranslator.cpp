@@ -1017,6 +1017,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateNot(notOp, body);
         } else if (nl::ToNullable toNullable = mlir::dyn_cast<nl::ToNullable>(operation)) {
             translateToNullable(toNullable, body);
+        } else if (nl::CheckedCast checkedCast = mlir::dyn_cast<nl::CheckedCast>(operation)) {
+            translateCheckedCast(checkedCast, body);
         } else if (nl::ToAny toAny = mlir::dyn_cast<nl::ToAny>(operation)) {
             translateToAny(toAny, body);
         } else if (nl::Case caseOp = mlir::dyn_cast<nl::Case>(operation)) {
@@ -3557,6 +3559,34 @@ void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContaine
         fn = NLExecutor::selectToNullable(valueType, operand, _memory, result);
     }
     bindKernelResult(toNullable.getResult(), result);
+
+    NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
+    body->emplaceStmt(&NLExecutor::runUnary, data);
+}
+
+void NLTranslator::translateCheckedCast(nl::CheckedCast checkedCast, NLStmtContainer* body) {
+    const mlir::Value operandValue = checkedCast.getOperand();
+    const Column* operand = getColumn(operandValue);
+
+    const auto resultChunk = mlir::cast<nl::ChunkType>(checkedCast.getResult().getType());
+
+    if (isUntypedNullChunk(operandValue.getType())) {
+        Column* const nulls = allocColumnForChunkType(resultChunk);
+        _valueSlots[checkedCast.getResult()] = nulls;
+
+        NLFillNullData* fillData = _program->allocFunctionData<NLFillNullData>(operand,
+                                                                               nulls,
+                                                                               selectFillNullForChunkType(resultChunk));
+        body->emplaceStmt(&NLExecutor::runFillNull, fillData);
+        return;
+    }
+
+    Column* result = nullptr;
+    const NLUnaryFn fn = NLExecutor::selectCheckedCast(chunkKindFromElementType(resultChunk.getElementType()),
+                                                       operand,
+                                                       _memory,
+                                                       result);
+    bindKernelResult(checkedCast.getResult(), result);
 
     NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
     body->emplaceStmt(&NLExecutor::runUnary, data);

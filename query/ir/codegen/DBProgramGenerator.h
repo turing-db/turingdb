@@ -389,6 +389,15 @@ private:
     // One query part: the statements between two WITH barriers
     void generatePart(std::span<Stmt* const> stmts);
 
+    // The variables the patterns of @param stmts bind through a db.checked_cast
+    static void collectCheckedCasts(std::span<Stmt* const> stmts, llvm::SmallVectorImpl<const VarDecl*>& casts);
+
+    // Binds each of those casts whose value is already bound to the db.checked_cast of its
+    // column, the way its value is bound: as a variable a barrier published, or as a column
+    // a statement of the part yielded. A cast already bound is left as it is.
+    void bindCheckedCasts(std::span<Stmt* const> stmts);
+    mlir::Value checkedCastColumn(const VarDecl* cast, mlir::Value value);
+
     // Emits the db.call_subquery of one CALL { ... }: the columns in flight become the
     // inputs its body reads through block arguments, the body is generated into the op's
     // region as a query of its own, and - for a returning body - the op's results, the

@@ -34,6 +34,14 @@ public:
     void setImportSource(const VarDecl* source) { _importSource = source; }
     const VarDecl* getImportSource() const { return _importSource; }
 
+    // The variable whose value, known per row only, a pattern reads this node or
+    // relationship out of; null for a variable holding its entity from the start
+    void setCastSource(const VarDecl* source) { _castSource = source; }
+    const VarDecl* getCastSource() const { return _castSource; }
+
+    void setIsCastToAnEntity(bool isCast) { _isCastToAnEntity = isCast; }
+    bool isCastToAnEntity() const { return _isCastToAnEntity; }
+
     EvaluatedType getType() const { return _exprType._type; }
 
     EvaluatedTypeSet getCandidateTypes() const { return _exprType._candidates; }
@@ -61,9 +69,11 @@ private:
     ExprType _exprType;
     std::string_view _name;
     const VarDecl* _importSource {nullptr};
+    const VarDecl* _castSource {nullptr};
     bool _isUnnamed {false};
     bool _isUnwound {false};
     bool _isQuantifiedPath {false};
+    bool _isCastToAnEntity {false};
 
     VarDecl(EvaluatedType type, std::string_view name)
         : _exprType {type, {}, {}},
