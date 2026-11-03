@@ -163,3 +163,7 @@ add_turing_test(test_query_ir_fuse_unwind_equality_stand_in FuseUnwindEqualitySt
 add_ir_tests(test_query_ir_canonicalize_coalesce CanonicalizeCoalesceTest.cpp)
 
 add_ir_tests(test_query_ir_coalesce_raise_effect CoalesceRaiseEffectTest.cpp)
+
+add_ir_tests(test_query_ir_selection_region_reads SelectionRegionReadsTest.cpp)
+
+add_ir_tests(test_query_ir_selection_region_reads_cypher SelectionRegionReadsCypherTest.cpp)

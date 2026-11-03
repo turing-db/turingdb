@@ -48,6 +48,20 @@ namespace storage = mlir::storage;
 
 namespace {
 
+void collectLastReaders(mlir::MutableArrayRef<mlir::Region> regions, llvm::SmallVectorImpl<size_t>& lastReaders) {
+    lastReaders.assign(regions.front().getNumArguments(), 0);
+
+    for (size_t regionIndex = 0; regionIndex < regions.size(); regionIndex++) {
+        const mlir::Block::BlockArgListType columns = regions[regionIndex].front().getArguments();
+
+        for (size_t carriedIndex = 0; carriedIndex < columns.size(); carriedIndex++) {
+            if (!columns[carriedIndex].use_empty()) {
+                lastReaders[carriedIndex] = regionIndex;
+            }
+        }
+    }
+}
+
 // The name a result column's value type goes out under. A rejection is read by whoever
 // wrote the query, so it names the type the value has rather than the chunk spelling it
 // is carried in.
@@ -6623,6 +6637,9 @@ void DBLowering::lowerLazyCase(mlir::db::LazyCase caseOp) {
     const size_t branchCount = regions.size() / 2;
     const bool hasDefault = regions.size() % 2 == 1;
 
+    llvm::SmallVector<size_t, 8> lastReaders;
+    collectLastReaders(regions, lastReaders);
+
     llvm::SmallVector<mlir::Value, 4> conditions;
     llvm::SmallVector<mlir::Value, 4> values;
 
@@ -6630,11 +6647,16 @@ void DBLowering::lowerLazyCase(mlir::db::LazyCase caseOp) {
         const mlir::Value condition = lowerCaseRegion(regions[2 * branchIndex], reaching, reachingCardinality);
         conditions.push_back(condition);
 
-        llvm::SmallVector<mlir::Value, 8> taken;
-        filterCaseRows(condition, reaching, taken);
+        const size_t valueIndex = 2 * branchIndex + 1;
+        mlir::Region& valueRegion = regions[valueIndex];
+        mlir::Block& valueBody = valueRegion.front();
+        const auto readByTheValue = [&valueBody](size_t carriedIndex) {
+            return !valueBody.getArgument(static_cast<unsigned>(carriedIndex)).use_empty();
+        };
 
-        const llvm::ArrayRef<mlir::Value> takenChunks = llvm::ArrayRef<mlir::Value>(taken).drop_front();
-        values.push_back(lowerCaseRegion(regions[2 * branchIndex + 1], takenChunks, taken.front()));
+        llvm::SmallVector<mlir::Value, 8> taken;
+        const mlir::Value takenCardinality = cutCarriedChunks(condition, reaching, readByTheValue, taken);
+        values.push_back(lowerCaseRegion(valueRegion, taken, takenCardinality));
 
         const bool rowsFallThrough = hasDefault || branchIndex + 1 < branchCount;
         if (!rowsFallThrough) {
@@ -6644,11 +6666,13 @@ void DBLowering::lowerLazyCase(mlir::db::LazyCase caseOp) {
         setInsertionForUnaryOp(condition);
         const mlir::Value fallsThrough = _builder.create<nl::IsNotTrue>(loc, maskType, condition).getResult();
 
-        llvm::SmallVector<mlir::Value, 8> rest;
-        filterCaseRows(fallsThrough, reaching, rest);
+        const auto readLater = [&lastReaders, valueIndex](size_t carriedIndex) {
+            return lastReaders[carriedIndex] > valueIndex;
+        };
 
-        reachingCardinality = rest.front();
-        reaching.assign(rest.begin() + 1, rest.end());
+        llvm::SmallVector<mlir::Value, 8> rest;
+        reachingCardinality = cutCarriedChunks(fallsThrough, reaching, readLater, rest);
+        reaching.assign(rest.begin(), rest.end());
     }
 
     mlir::Value defaultValue;
@@ -6692,21 +6716,12 @@ void DBLowering::lowerCoalesce(mlir::db::Coalesce coalesce) {
     const nl::ChunkType maskType = nl::ChunkType::get(context, storage::BoolType::get(context));
 
     const mlir::MutableArrayRef<mlir::Region> arguments = coalesce.getArguments();
-    const mlir::OperandRange carried = coalesce.getColumnsToFilter();
 
-    llvm::SmallVector<size_t, 8> lastReaders(carried.size(), 0);
-    for (size_t argumentIndex = 0; argumentIndex < arguments.size(); argumentIndex++) {
-        const mlir::Block::BlockArgListType columns = arguments[argumentIndex].front().getArguments();
-
-        for (size_t carriedIndex = 0; carriedIndex < columns.size(); carriedIndex++) {
-            if (!columns[carriedIndex].use_empty()) {
-                lastReaders[carriedIndex] = argumentIndex;
-            }
-        }
-    }
+    llvm::SmallVector<size_t, 8> lastReaders;
+    collectLastReaders(arguments, lastReaders);
 
     llvm::SmallVector<mlir::Value, 8> reaching;
-    for (const mlir::Value column : carried) {
+    for (const mlir::Value column : coalesce.getColumnsToFilter()) {
         reaching.push_back(mapValue(column));
     }
 
@@ -6725,28 +6740,17 @@ void DBLowering::lowerCoalesce(mlir::db::Coalesce coalesce) {
             continue;
         }
 
-        llvm::SmallVector<size_t, 8> readLater;
-        llvm::SmallVector<mlir::Value, 8> chunksReadLater;
-        for (size_t carriedIndex = 0; carriedIndex < reaching.size(); carriedIndex++) {
-            if (lastReaders[carriedIndex] > argumentIndex) {
-                readLater.push_back(carriedIndex);
-                chunksReadLater.push_back(reaching[carriedIndex]);
-            }
-
-            reaching[carriedIndex] = mlir::Value();
-        }
-
         setInsertionForUnaryOp(value);
         const mlir::Value stillNull = _builder.create<nl::IsNull>(_builder.getUnknownLoc(), maskType, value).getResult();
         nullRows.back() = stillNull;
 
-        llvm::SmallVector<mlir::Value, 8> rest;
-        filterCaseRows(stillNull, chunksReadLater, rest);
+        const auto readLater = [&lastReaders, argumentIndex](size_t carriedIndex) {
+            return lastReaders[carriedIndex] > argumentIndex;
+        };
 
-        reachingCardinality = rest.front();
-        for (size_t laterIndex = 0; laterIndex < readLater.size(); laterIndex++) {
-            reaching[readLater[laterIndex]] = rest[laterIndex + 1];
-        }
+        llvm::SmallVector<mlir::Value, 8> rest;
+        reachingCardinality = cutCarriedChunks(stillNull, reaching, readLater, rest);
+        reaching.assign(rest.begin(), rest.end());
     }
 
     _valueMap[coalesce.getResult()] = mergeCoalescedValues(values, nullRows);
@@ -6810,6 +6814,30 @@ mlir::Value DBLowering::lowerBlockOverRows(mlir::Block& block, mlir::Value cardi
     _innermostCardinality = previousInnermostCardinality;
 
     return rowAlignedChunk(value, cardinality);
+}
+
+mlir::Value DBLowering::cutCarriedChunks(mlir::Value mask,
+                                         llvm::ArrayRef<mlir::Value> chunks,
+                                         llvm::function_ref<bool(size_t)> isRead,
+                                         llvm::SmallVectorImpl<mlir::Value>& cut) {
+    llvm::SmallVector<size_t, 8> readIndices;
+    llvm::SmallVector<mlir::Value, 8> readChunks;
+    for (size_t carriedIndex = 0; carriedIndex < chunks.size(); carriedIndex++) {
+        if (isRead(carriedIndex)) {
+            readIndices.push_back(carriedIndex);
+            readChunks.push_back(chunks[carriedIndex]);
+        }
+    }
+
+    llvm::SmallVector<mlir::Value, 8> filtered;
+    filterCaseRows(mask, readChunks, filtered);
+
+    cut.assign(chunks.size(), mlir::Value());
+    for (size_t readIndex = 0; readIndex < readIndices.size(); readIndex++) {
+        cut[readIndices[readIndex]] = filtered[readIndex + 1];
+    }
+
+    return filtered.front();
 }
 
 void DBLowering::filterCaseRows(mlir::Value mask,

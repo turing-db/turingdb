@@ -207,6 +207,11 @@ def CanonicalizeCoalesce : Pass<"canonicalize_coalesce"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def HoistUnconditionalRegions : Pass<"hoist_unconditional_regions"> {
+    let summary = "Compute the region of a CASE or a coalesce that every row reaches before the op, as a column it carries: the first condition of a CASE and the first argument of a coalesce";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def TrimUnreadColumns : Pass<"trim_unread_columns"> {
     let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products, grouping ops, calls, CASEs, optional matches and the ops over the elements of a list, and the values computed per row that nothing reads";
     let dependentDialects = ["mlir::db::DB"];

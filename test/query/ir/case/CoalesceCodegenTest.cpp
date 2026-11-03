@@ -108,12 +108,18 @@ protected:
         return coalesces.front();
     }
 
-    // The op computing what region @param regionIndex of @param coalesce yields
+    // The op computing what region @param regionIndex of @param coalesce yields, in front of
+    // the coalesce when the region yields a column it carries
     mlir::Operation* yieldingOp(mlir::db::Coalesce coalesce, size_t regionIndex) {
         mlir::Block& body = coalesce.getArguments()[regionIndex].front();
         mlir::db::CaseYield yield = mlir::cast<mlir::db::CaseYield>(body.getTerminator());
+        const mlir::Value yielded = yield.getValue();
 
-        return yield.getValue().getDefiningOp();
+        if (const mlir::BlockArgument carried = mlir::dyn_cast<mlir::BlockArgument>(yielded)) {
+            return coalesce.getColumnsToFilter()[carried.getArgNumber()].getDefiningOp();
+        }
+
+        return yielded.getDefiningOp();
     }
 
     // The property a region yields the read of, empty when it yields no property read

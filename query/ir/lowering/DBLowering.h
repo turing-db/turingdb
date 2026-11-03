@@ -707,6 +707,13 @@ private:
     // counts them whether or not there are chunks, then the chunks
     void filterCaseRows(mlir::Value mask, llvm::ArrayRef<mlir::Value> chunks, llvm::SmallVectorImpl<mlir::Value>& filtered);
 
+    // The chunks @param isRead marks cut down to the rows @param mask holds for, the others
+    // null: no region past the cut reads them. Returns the cut mask, which counts the rows.
+    mlir::Value cutCarriedChunks(mlir::Value mask,
+                                 llvm::ArrayRef<mlir::Value> chunks,
+                                 llvm::function_ref<bool(size_t)> isRead,
+                                 llvm::SmallVectorImpl<mlir::Value>& cut);
+
     // The chunk a CASE over @param resultElement lands in: the entity chunk for nodes and
     // edges, which holds the null of an unmatched row in its ID, and a nullable one otherwise
     mlir::nl::ChunkType caseResultChunkType(mlir::Type resultElement);

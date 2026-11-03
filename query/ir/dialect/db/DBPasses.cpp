@@ -88,6 +88,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
 #define GEN_PASS_DEF_COUNTFROMMETADATA
 #define GEN_PASS_DEF_CANONICALIZECOALESCE
+#define GEN_PASS_DEF_HOISTUNCONDITIONALREGIONS
 #include "DBPasses.h.inc"
 
 namespace {
@@ -7178,8 +7179,69 @@ void trimElementCarrySet(Operation* op, Value source, OperandRange carried) {
     op->eraseOperands(erasedOperands);
 }
 
-bool readsCarriedColumnsInItsRegions(Operation* op) {
-    return isa<LazyCase, Coalesce, ListComprehension, ListPredicate, Reduce, AllReduce>(op);
+// The columns an op hands its regions are its last operands, from @param offset on. Each
+// comes into every region as the argument at the same position from the end of its arguments.
+bool matchRegionCarrySet(Operation* op, size_t& offset) {
+    const size_t operandCount = op->getNumOperands();
+
+    if (isa<LazyCase, Coalesce>(op)) {
+        offset = 0;
+        return true;
+    } else if (ListComprehension comprehension = dyn_cast<ListComprehension>(op)) {
+        offset = operandCount - comprehension.getColumnsToFilter().size();
+        return true;
+    } else if (ListPredicate predicate = dyn_cast<ListPredicate>(op)) {
+        offset = operandCount - predicate.getColumnsToFilter().size();
+        return true;
+    } else if (Reduce reduce = dyn_cast<Reduce>(op)) {
+        offset = operandCount - reduce.getColumnsToFilter().size();
+        return true;
+    } else if (AllReduce allReduce = dyn_cast<AllReduce>(op)) {
+        offset = operandCount - allReduce.getColumnsToFilter().size();
+        return true;
+    }
+
+    return false;
+}
+
+// Null for an argument the op binds itself: a list element, an accumulator or a row tag
+Value carriedColumnOf(Operation* op, size_t offset, BlockArgument argument) {
+    const size_t carriedCount = op->getNumOperands() - offset;
+    const size_t firstCarriedArgument = argument.getOwner()->getNumArguments() - carriedCount;
+    const size_t argumentIndex = argument.getArgNumber();
+
+    if (argumentIndex < firstCarriedArgument) {
+        return {};
+    }
+
+    return op->getOperand(offset + argumentIndex - firstCarriedArgument);
+}
+
+BlockArgument carryIntoRegion(Region& region, Value column, mlir::RewriterBase& rewriter) {
+    Operation* const op = region.getParentOp();
+
+    size_t offset = 0;
+    const bool carries = matchRegionCarrySet(op, offset);
+    bioassert(carries, "A region a column is carried into belongs to an op with a carry set");
+
+    const OperandRange carried = op->getOperands().drop_front(offset);
+    const auto carriedIt = llvm::find(carried, column);
+    const size_t carriedIndex = static_cast<size_t>(carriedIt - carried.begin());
+
+    if (carriedIt == carried.end()) {
+        rewriter.modifyOpInPlace(op, [op, column] {
+            op->insertOperands(op->getNumOperands(), column);
+
+            for (Region& carryingRegion : op->getRegions()) {
+                carryingRegion.front().addArgument(column.getType(), column.getLoc());
+            }
+        });
+    }
+
+    Block& body = region.front();
+    const size_t carriedCount = op->getNumOperands() - offset;
+
+    return body.getArgument(static_cast<unsigned>(body.getNumArguments() - carriedCount + carriedIndex));
 }
 
 struct TrimVisit {
@@ -7213,7 +7275,8 @@ void collectTrimOrder(Operation* root, llvm::SmallVectorImpl<Operation*>& order)
             continue;
         }
 
-        if (readsCarriedColumnsInItsRegions(op)) {
+        size_t carrySetOffset = 0;
+        if (matchRegionCarrySet(op, carrySetOffset)) {
             worklist.push_back(TrimVisit {._op = op, ._regionsVisited = true});
         } else if (trimsColumns(op)) {
             order.push_back(op);
@@ -7408,6 +7471,70 @@ struct CanonicalizeCoalesce : public impl::CanonicalizeCoalesceBase<Canonicalize
 
         if (failed(mlir::applyOpPatternsGreedily(coalesces, frozenPatterns, config))) {
             signalPassFailure();
+        }
+    }
+};
+
+// A CASE's first condition and a coalesce's first argument see every row the op receives;
+// each later region sees only the rows the regions before it passed on.
+Region& unconditionalRegion(Operation* selection) {
+    return selection->getRegion(0);
+}
+
+bool computesOverCarriedColumns(Region& region) {
+    Block& body = region.front();
+    Operation* const yielding = body.getTerminator()->getOperand(0).getDefiningOp();
+
+    const bool computedInTheRegion = yielding && yielding->getBlock() == &body;
+    const bool readsACarriedColumn = llvm::any_of(body.getArguments(), [](BlockArgument argument) {
+        return !argument.use_empty();
+    });
+
+    return computedInTheRegion && readsACarriedColumn;
+}
+
+void hoistUnconditionalRegion(Operation* selection, mlir::RewriterBase& rewriter) {
+    Region& region = unconditionalRegion(selection);
+    Block& body = region.front();
+    Operation* const yield = body.getTerminator();
+
+    for (Operation& op : llvm::make_early_inc_range(body.without_terminator())) {
+        rewriter.moveOpBefore(&op, selection);
+    }
+
+    size_t offset = 0;
+    const bool carries = matchRegionCarrySet(selection, offset);
+    bioassert(carries, "A CASE or a coalesce carries columns into its regions");
+
+    for (const BlockArgument argument : body.getArguments()) {
+        rewriter.replaceAllUsesWith(argument, carriedColumnOf(selection, offset, argument));
+    }
+
+    const Value yielded = yield->getOperand(0);
+    if (::db::yieldsConstantColumn(yielded)) {
+        return;
+    }
+
+    const BlockArgument value = carryIntoRegion(region, yielded, rewriter);
+    rewriter.modifyOpInPlace(yield, [yield, value] {
+        yield->setOperand(0, value);
+    });
+}
+
+struct HoistUnconditionalRegions : public impl::HoistUnconditionalRegionsBase<HoistUnconditionalRegions> {
+    void runOnOperation() override {
+        llvm::SmallVector<Operation*> selections;
+        getOperation()->walk([&selections](Operation* op) {
+            if (isa<LazyCase, Coalesce>(op)) {
+                selections.push_back(op);
+            }
+        });
+
+        mlir::IRRewriter rewriter(&getContext());
+        for (Operation* const selection : selections) {
+            if (computesOverCarriedColumns(unconditionalRegion(selection))) {
+                hoistUnconditionalRegion(selection, rewriter);
+            }
         }
     }
 };
@@ -7778,56 +7905,109 @@ private:
     llvm::DenseMap<Value, llvm::SmallVector<KnownProperty, 1>> _columns;
 };
 
-// The column holding `property` for the rows of `column`, taken from a read already
-// standing before `useSite` and carried down through the ops in between when that read was
-// taken further up the chain. Null when there is none: this adds no read of its own.
+// The rows come out of _op as its result at _position or, when _op carries columns into its
+// regions, as the argument at _position of _region. _outerRows are the rows they come from.
+struct RowsStep {
+    Operation* _op {nullptr};
+    Region* _region {nullptr};
+    size_t _position {0};
+    Value _outerRows;
+};
+
+bool matchRegionStep(BlockArgument argument, RowsStep& step) {
+    Operation* const carrier = argument.getOwner()->getParentOp();
+
+    size_t offset = 0;
+    if (!carrier || !matchRegionCarrySet(carrier, offset)) {
+        return false;
+    }
+
+    const Value carried = carriedColumnOf(carrier, offset, argument);
+    if (!carried) {
+        return false;
+    }
+
+    step = RowsStep {._op = carrier,
+                     ._region = argument.getParentRegion(),
+                     ._position = argument.getArgNumber(),
+                     ._outerRows = carried};
+
+    return true;
+}
+
+bool matchRowMappingStep(OpResult result, RowsStep& step) {
+    Operation* const carrier = result.getOwner();
+    if (!mapsRowsThrough(carrier)) {
+        return false;
+    }
+
+    CarrySetLayout layout;
+    const bool carries = matchCarrySetLayout(carrier, layout);
+    bioassert(carries, "A row-mapping op has a carry set");
+
+    size_t sourceOperandIndex = 0;
+    const size_t resultIndex = result.getResultNumber();
+    if (!matchRowSourceOperand(carrier, layout, resultIndex, sourceOperandIndex)) {
+        return false;
+    }
+
+    step = RowsStep {._op = carrier, ._position = resultIndex, ._outerRows = carrier->getOperand(sourceOperandIndex)};
+
+    return true;
+}
+
+bool matchRowsStep(Value rows, RowsStep& step) {
+    if (const BlockArgument argument = dyn_cast<BlockArgument>(rows)) {
+        return matchRegionStep(argument, step);
+    }
+
+    return matchRowMappingStep(cast<OpResult>(rows), step);
+}
+
+// The column holding `property` for the rows of `column`, read before `useSite` and carried
+// down to it through the ops between: the ops mapping rows through, and the ops carrying
+// columns into the regions `useSite` sits in. Null when there is none: this adds no read.
 Value propertyColumnOf(Value column,
                        StringAttr property,
                        bool nodeProperty,
                        Operation* useSite,
                        KnownPropertyColumns& knownColumns,
                        mlir::RewriterBase& rewriter) {
-    llvm::SmallVector<Operation*> carriers;
-    llvm::SmallVector<size_t> carriedRowsResults;
+    llvm::SmallVector<RowsStep> steps;
+    Value propertyColumn = knownColumns.find(column, property, nodeProperty, useSite);
+
+    RowsStep step;
     Value rows = column;
-
-    Value propertyColumn = knownColumns.find(rows, property, nodeProperty, useSite);
-
-    while (!propertyColumn) {
-        Operation* const def = rows.getDefiningOp();
-        if (!def || !mapsRowsThrough(def)) {
-            return {};
-        }
-
-        CarrySetLayout layout;
-        const bool carries = matchCarrySetLayout(def, layout);
-        bioassert(carries, "A row-mapping op has a carry set");
-
-        size_t sourceOperandIndex = 0;
-        const size_t resultIndex = cast<OpResult>(rows).getResultNumber();
-        if (!matchRowSourceOperand(def, layout, resultIndex, sourceOperandIndex)) {
-            return {};
-        }
-
-        carriers.push_back(def);
-        carriedRowsResults.push_back(resultIndex);
-        rows = def->getOperand(sourceOperandIndex);
-
-        propertyColumn = knownColumns.find(rows, property, nodeProperty, def);
+    while (!propertyColumn && matchRowsStep(rows, step)) {
+        steps.push_back(step);
+        rows = step._outerRows;
+        propertyColumn = knownColumns.find(rows, property, nodeProperty, step._op);
     }
 
-    for (size_t carrierIndex = carriers.size(); carrierIndex > 0; carrierIndex--) {
-        Operation* const carrier = carriers[carrierIndex - 1];
-        const llvm::SmallVector<Value> carrierResults(carrier->getResults());
+    if (!propertyColumn) {
+        return {};
+    }
 
-        propertyColumn = carryThrough(carrier, propertyColumn, rewriter);
+    for (size_t stepIndex = steps.size(); stepIndex > 0; stepIndex--) {
+        const RowsStep& carrier = steps[stepIndex - 1];
 
-        Operation* const carrying = propertyColumn.getDefiningOp();
-        if (carrying != carrier) {
-            knownColumns.rebind(carrierResults, carrying);
+        if (carrier._region) {
+            propertyColumn = carryIntoRegion(*carrier._region, propertyColumn, rewriter);
+
+            const Value carriedRows = carrier._region->front().getArgument(static_cast<unsigned>(carrier._position));
+            knownColumns.addCarried(carriedRows, property, nodeProperty, propertyColumn);
+        } else {
+            const llvm::SmallVector<Value> carrierResults(carrier._op->getResults());
+
+            propertyColumn = carryThrough(carrier._op, propertyColumn, rewriter);
+
+            Operation* const carrying = propertyColumn.getDefiningOp();
+            if (carrying != carrier._op) {
+                knownColumns.rebind(carrierResults, carrying);
+            }
+
+            knownColumns.addCarried(carrying->getResult(carrier._position), property, nodeProperty, propertyColumn);
         }
-
-        knownColumns.addCarried(carrying->getResult(carriedRowsResults[carrierIndex - 1]), property, nodeProperty, propertyColumn);
     }
 
     return propertyColumn;
@@ -7885,8 +8065,7 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
                 continue;
             }
 
-            read->getResult(0).replaceAllUsesWith(reused);
-            read->erase();
+            rewriter.replaceOp(read, reused);
         }
     }
 };

@@ -10,7 +10,7 @@ namespace {
 
 using DBPassFactory = std::unique_ptr<mlir::Pass> (*)(const mlir::db::DBPassContext*);
 
-constexpr size_t DB_PASS_COUNT = 46;
+constexpr size_t DB_PASS_COUNT = 48;
 
 // The optimisation pipeline every query runs through, in order. An EXPLAIN prefix
 // reporting on a pass walks the same table one pass at a time, which is what keeps the
@@ -18,6 +18,8 @@ constexpr size_t DB_PASS_COUNT = 46;
 // the context; only the cost models and the metadata count read it, the rewrites beside
 // them answering off the IR alone.
 const std::array<DBPassFactory, DB_PASS_COUNT> dbPassPipeline = {
+    [](const mlir::db::DBPassContext*) { return mlir::db::createCanonicalizeCoalesce(); },
+    [](const mlir::db::DBPassContext*) { return mlir::db::createHoistUnconditionalRegions(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createCanonicalizeCoalesce(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createReuseLabelAndTypeReads(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createUnnestUnwindComprehension(); },
