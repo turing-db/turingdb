@@ -1491,8 +1491,11 @@ bool CypherGrammar::opensConstruct(size_t offset, bool aliasMayFollow) {
     switch (keyword) {
         case CypherTokenKind::COLLECT:
         case CypherTokenKind::EXISTS:
-        case CypherTokenKind::COUNT:
-            return next == CypherTokenKind::OPAREN || next == CypherTokenKind::OBRACE;
+        case CypherTokenKind::COUNT: {
+            const bool opensSubquery = next == CypherTokenKind::OBRACE && !braceOpensMapProjection(offset + 1);
+
+            return next == CypherTokenKind::OPAREN || opensSubquery;
+        }
         break;
         case CypherTokenKind::SINGLE:
         case CypherTokenKind::REDUCE:
@@ -1510,6 +1513,22 @@ bool CypherGrammar::opensConstruct(size_t offset, bool aliasMayFollow) {
             return false;
         break;
     }
+}
+
+// A subquery body opens with a clause, a pattern or a path name, never with what opens a
+// map projection body: }, a dot, or a name before :, a comma or }
+bool CypherGrammar::braceOpensMapProjection(size_t offset) {
+    const CypherTokenKind first = peek(offset + 1)._kind;
+
+    if (first == CypherTokenKind::CBRACE || first == CypherTokenKind::DOT) {
+        return true;
+    } else if (!CypherToken::isName(first)) {
+        return false;
+    }
+
+    const CypherTokenKind second = peek(offset + 2)._kind;
+
+    return second == CypherTokenKind::COLON || second == CypherTokenKind::COMMA || second == CypherTokenKind::CBRACE;
 }
 
 bool CypherGrammar::notOpensNegation(size_t offset, bool aliasMayFollow) {

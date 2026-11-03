@@ -25,6 +25,10 @@ TEST_F(KeywordNameDecisionTest, collectBeforeAnythingElseIsAVariable) {
     expectParse("RETURN collect", {query({}, returning({symbol("collect")}))});
 }
 
+TEST_F(KeywordNameDecisionTest, collectBeforeABraceHoldingAMapProjectionIsAVariable) {
+    expectParse("RETURN collect {.name}", {query({}, returning({mapProjection("collect", {{._key = name("name")}})}))});
+}
+
 TEST_F(KeywordNameDecisionTest, existsBeforeABraceOpensASubquery) {
     expectParse("RETURN EXISTS { MATCH (n) }",
                 {query({}, returning({exists(query({match({._pattern = pattern({path({node({._symbol = "n"})})})})}))}))});
@@ -32,6 +36,10 @@ TEST_F(KeywordNameDecisionTest, existsBeforeABraceOpensASubquery) {
 
 TEST_F(KeywordNameDecisionTest, existsBeforeAnythingElseIsAVariable) {
     expectParse("RETURN exists", {query({}, returning({symbol("exists")}))});
+}
+
+TEST_F(KeywordNameDecisionTest, existsBeforeABraceHoldingAMapProjectionIsAVariable) {
+    expectParse("RETURN exists {.name}", {query({}, returning({mapProjection("exists", {{._key = name("name")}})}))});
 }
 
 TEST_F(KeywordNameDecisionTest, countBeforeABraceOpensASubquery) {
@@ -46,6 +54,48 @@ TEST_F(KeywordNameDecisionTest, countBeforeAParenthesisCallsTheAggregate) {
 
 TEST_F(KeywordNameDecisionTest, countBeforeADotIsAVariable) {
     expectParse("RETURN count.x", {query({}, returning({property({"count", "x"})}))});
+}
+
+TEST_F(KeywordNameDecisionTest, countBeforeABraceHoldingAPatternOpensASubquery) {
+    expectParse("RETURN count { (n)-->() }",
+                {query({},
+                       returning({countSubquery(query({match({._pattern = pattern({path({node({._symbol = "n"}),
+                                                                                         edge({._direction = EdgePattern::Direction::Forward}),
+                                                                                         node({})})})})}))}))});
+}
+
+TEST_F(KeywordNameDecisionTest, countBeforeABraceHoldingAMapProjectionIsAVariable) {
+    expectParse("RETURN count {.name}", {query({}, returning({mapProjection("count", {{._key = name("name")}})}))});
+
+    expectParse("RETURN count {.*}",
+                {query({}, returning({mapProjection("count", {{._kind = MapProjectionExpr::ItemKind::AllProperties}})}))});
+
+    expectParse("RETURN count {a: 1}",
+                {query({},
+                       returning({mapProjection("count",
+                                                {{._kind = MapProjectionExpr::ItemKind::Literal,
+                                                  ._key = name("a"),
+                                                  ._value = integer(1)}})}))});
+
+    expectParse("RETURN count {n, .x}",
+                {query({},
+                       returning({mapProjection("count",
+                                                {{._kind = MapProjectionExpr::ItemKind::Variable,
+                                                  ._key = name("n"),
+                                                  ._value = symbol("n")},
+                                                 {._key = name("x")}})}))});
+
+    expectParse("RETURN count {}", {query({}, returning({mapProjection("count", {})}))});
+
+    expectParse("RETURN (count {.name})",
+                {query({}, returning({parenthesized(mapProjection("count", {{._key = name("name")}}))}))});
+
+    expectParse("RETURN (count {a: 1})-->(b)",
+                {query({},
+                       returning({patternPredicate(pattern({path({node({._symbol = "count",
+                                                                        ._properties = properties({{"a", integer(1)}})}),
+                                                                  edge({._direction = EdgePattern::Direction::Forward}),
+                                                                  node({._symbol = "b"})})}))}))});
 }
 
 TEST_F(KeywordNameDecisionTest, singleBeforeAParenthesisOpensAPredicate) {
