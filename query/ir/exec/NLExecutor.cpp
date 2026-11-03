@@ -60,6 +60,7 @@
 #include "columns/UnaryPredicates.h"
 #include "CellOrder.h"
 #include "CellUtils.h"
+#include "IteratedList.h"
 #include "QueryTypeName.h"
 #include "list/ListHash.h"
 #include "map/MapHash.h"
@@ -609,26 +610,18 @@ void unwindListPathEmit(const Column* source,
     }
 }
 
-// The rows one tagged cell unwinds into: a tagged list its elements, a tagged null none,
-// and any other tagged scalar the single row it is.
-size_t taggedCellRowCount(const CellView element) {
-    const CellTag tag = element.getTag();
-
-    if (tag == CellTag::ListView) {
-        return element.getAs<ListView>().size();
+template <typename Cell>
+size_t taggedCellRowCount(const Cell& element) {
+    const std::optional<ListView> list = iteratedList(element);
+    if (!list) {
+        return 0;
     }
 
-    return tag == CellTag::Null ? 0 : 1;
+    return list->size();
 }
 
-// The element one tagged cell gives up at @param position: that of the list it holds, or
-// the cell itself where it holds anything else.
-CellView taggedCellElement(const CellView element, size_t position) {
-    if (element.getTag() != CellTag::ListView) {
-        return element;
-    }
-
-    return element.getAs<ListView>().elements()[position];
+CellView taggedCellElement(const CellView& element, size_t position) {
+    return iteratedList(element)->elements()[position];
 }
 
 size_t unwindTaggedElementCount(const Column* source, size_t row) {
@@ -641,13 +634,8 @@ size_t unwindTaggedElementCount(const Column* source, size_t row) {
 // for does.
 size_t unwindOptTaggedElementCount(const Column* source, size_t row) {
     const auto* elements = static_cast<const ColumnOptVector<CellView>*>(source);
-    const std::optional<CellView>& element = (*elements)[row];
 
-    if (!element.has_value()) {
-        return 0;
-    }
-
-    return taggedCellRowCount(*element);
+    return taggedCellRowCount((*elements)[row]);
 }
 
 // Fill the element chunk from a type-erased column: a cell holding a nested list gives up
@@ -5277,16 +5265,16 @@ bool absentValueCell(const Column* source, size_t row) {
 // A cell of a type-erased column carries its own tag, so the null is the one that tag
 // names rather than a cell the column does not hold.
 bool absentTaggedCell(const Column* source, size_t row) {
-    const CellView element = (*static_cast<const ColumnVector<CellView>*>(source))[row];
+    const CellView& element = (*static_cast<const ColumnVector<CellView>*>(source))[row];
 
-    return element.getTag() == CellTag::Null;
+    return !iteratedList(element);
 }
 
 bool absentOptTaggedCell(const Column* source, size_t row) {
     const std::optional<CellView>& element =
         (*static_cast<const ColumnOptVector<CellView>*>(source))[row];
 
-    return !element.has_value() || element->getTag() == CellTag::Null;
+    return !iteratedList(element);
 }
 
 // Read one cell of a nullable value column as the value it contributes to a list or a map:

@@ -35,6 +35,10 @@ public:
     /// has clamped to this list: the elements are the ones this list already holds.
     ListView slice(size_t from, size_t count) const { return ListView {_elements.data() + from, count}; }
 
+    /// Returns the list of one element that @param element is, viewed where it is stored.
+    static ListView singleton(const CellView& element) { return ListView {&element, 1}; }
+    static ListView singleton(const CellView&&) = delete;
+
     explicit operator bool() { return _elements.data() != nullptr; }
 
 private:

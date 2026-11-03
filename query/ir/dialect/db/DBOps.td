@@ -3588,6 +3588,11 @@ def ContainsOp : PredicateOp<"contains", [Pure]> {
 
 def InOp : PredicateOp<"in", [Pure]> {
   let summary = "Row-wise test of whether each value is an element of the given list";
+
+  let description = [{
+    A type-erased cell on the right is iterated as db.unwind iterates its source: the list
+    it holds, or a list of one where it holds any other value.
+  }];
 }
 
 def Case : TuringOp<"case", [Pure, ConstantThroughOperands, AttrSizedOperandSegments]> {

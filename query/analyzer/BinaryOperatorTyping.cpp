@@ -269,8 +269,8 @@ RuleResult powerType(EvaluatedType a, EvaluatedType b) {
 }
 
 RuleResult membershipType(EvaluatedType b) {
-    // A type-erased cell holds whatever its row put there, so the test reads the
-    // list out of its tag and answers null for a row holding something else
+    // A type-erased cell holds whatever its row put there, so the test reads the list
+    // it holds, or a list of one where it holds something else
     const bool searchesACollection = b == EvaluatedType::List || b == EvaluatedType::Map;
     const bool searchesACell = b == EvaluatedType::Any;
     const bool searchesNull = b == EvaluatedType::Null;

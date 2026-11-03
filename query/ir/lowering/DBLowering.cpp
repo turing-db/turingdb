@@ -6403,8 +6403,8 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
         break;
 
         case BinaryResultKind::Membership: {
-            // A tagged cell holds whatever its row put there, a list among it, so the test
-            // reads the list out of the tag rather than out of the column's own type
+            // A tagged cell holds whatever its row put there, so the test reads the list the
+            // cell is iterated as rather than the column's own type
             if (!isListChunk(rhsType) && !holdsTaggedCells(rhsType)) {
                 throw IRException("db.in requires a list as its right operand");
             }

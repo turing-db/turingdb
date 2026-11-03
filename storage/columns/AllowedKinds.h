@@ -76,8 +76,8 @@ struct TextKindPairs {
         typename OptionalKindPairs<types::String::OwningPrimitive, T>::Pairs>::Type;
 };
 
-// A value tested against a list, or against the list a type-erased cell holds, which is what
-// an index of a nested list answers: `x IN list`
+// A value tested against a list, or against the list a type-erased cell is iterated as, which
+// is what an index of a nested list answers: `x IN list`
 template <typename T>
 struct MembershipKindPairs {
     using Pairs = TupleFlatten<

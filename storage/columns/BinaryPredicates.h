@@ -12,6 +12,7 @@
 
 #include "GraphPath.h"
 #include "ID.h"
+#include "IteratedList.h"
 #include "NumberOrder.h"
 #include "QueryTypeName.h"
 #include "TypeUtils.h"
@@ -67,14 +68,14 @@ concept MapOperand =
 template <typename T, typename U>
 concept ComparesTwoContainers = (ListOperand<T> && ListOperand<U>) || (MapOperand<T> && MapOperand<U>);
 
-// A list the membership test has to read out of a tag: what an index of a nested list
+// A cell the membership test reads the iterated list of: what an index of a nested list
 // answers, since the type of an element is settled row by row
 template <typename T>
 concept TaggedListOperand =
     std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, CellView>;
 
 // The list a type-erased cell holds, absent where it holds anything else - a number, a
-// string, a null - which is what a membership test over it then answers
+// string, a null
 template <typename C>
 inline std::optional<ListView> taggedList(const C& cell) {
     if constexpr (TypeUtils::is_optional_v<C>) {
@@ -1035,11 +1036,10 @@ struct TuringIn {
         return std::nullopt;
     }
 
-    // The list a type-erased cell holds is the list the value is looked for in
     template <typename T, typename C>
         requires TaggedListOperand<C>
     std::optional<CustomBool> operator()(const T& value, const C& cell) const {
-        const std::optional<ListView> list = taggedList(cell);
+        const std::optional<ListView> list = iteratedList(cell);
         if (!list) {
             return std::nullopt;
         }

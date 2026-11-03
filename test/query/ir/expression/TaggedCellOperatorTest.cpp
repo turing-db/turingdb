@@ -100,8 +100,9 @@ TEST_F(TaggedCellOperatorTest, findsNoValueInTheListACellHolds) {
     expectRows("WITH [[1, 2, 3]] AS nested RETURN 9 IN nested[0] AS present", {{"false"}});
 }
 
-TEST_F(TaggedCellOperatorTest, findsNothingInACellHoldingNoList) {
-    expectRows("WITH [[1, 2], 'three'] AS mixed RETURN 3 IN mixed[1] AS present", {{"null"}});
+TEST_F(TaggedCellOperatorTest, looksInACellHoldingNoListAsInAListOfOne) {
+    expectRows("WITH [[1, 2], 'three'] AS mixed RETURN 3 IN mixed[1] AS present", {{"false"}});
+    expectRows("WITH [[1, 2], 'three'] AS mixed RETURN 'three' IN mixed[1] AS present", {{"true"}});
 }
 
 TEST_F(TaggedCellOperatorTest, findsNothingInACellThatIsNotThere) {
