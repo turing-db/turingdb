@@ -1,22 +1,13 @@
 #include <gtest/gtest.h>
 
 #include <array>
-#include <memory>
 #include <string>
 #include <string_view>
 
-#include "CypherAST.h"
-#include "CypherParser.h"
-#include "EdgePattern.h"
-#include "Pattern.h"
-#include "PatternElement.h"
-#include "SinglePartQuery.h"
-#include "WhereClause.h"
-#include "expr/ExistsExpr.h"
-#include "stmt/MatchStmt.h"
-#include "stmt/StmtContainer.h"
+#include "ExpectedASTTest.h"
 
 using namespace db;
+using namespace turing::test;
 
 namespace {
 
@@ -38,80 +29,59 @@ void spellWithGaps(std::string_view arrow, std::string_view gap, std::string& sp
 
 // An arrow is read from its characters wherever a relationship may stand, so whitespace and
 // comments may separate them as they separate any two tokens
-class ArrowSpellingTest : public ::testing::Test {
+class ArrowSpellingTest : public ExpectedASTTest {
 protected:
-    const Pattern* parseMatchPattern(const std::string& query) {
-        _query = query;
-        _ast = std::make_unique<CypherAST>(nullptr, _query);
-
-        CypherParser parser(_ast.get());
-        parser.parse(_query);
-
-        const SinglePartQuery* single = static_cast<const SinglePartQuery*>(_ast->queries().front());
-        const MatchStmt* match = static_cast<const MatchStmt*>(single->getStmts()->stmts().front());
-
-        return match->getPattern();
-    }
-
-    static void expectHop(const PatternElement* element, EdgePattern::Direction direction, const std::string& query) {
-        const PatternElement::EntityPatterns& entities = element->getEntities();
-        ASSERT_EQ(entities.size(), 3u) << query;
-
-        const EdgePattern* edge = static_cast<const EdgePattern*>(entities[1]);
-        EXPECT_EQ(edge->getDirection(), direction) << query;
-    }
-
-    void expectArrow(std::string_view arrow, EdgePattern::Direction direction) {
+    void expectArrow(std::string_view arrow, EdgePattern::Direction direction, std::string_view edgeSymbol) {
         std::string spelled;
 
         for (const std::string_view gap : GAPS) {
             spellWithGaps(arrow, gap, spelled);
 
-            const std::string matched = "MATCH (a)" + spelled + "(b) RETURN a";
-            const Pattern* pattern = parseMatchPattern(matched);
-            expectHop(pattern->elements().front(), direction, matched);
+            expectParse("MATCH (a)" + spelled + "(b) RETURN a",
+                        {query({match({._pattern = pattern({path({node({._symbol = "a"}),
+                                                                  edge({._direction = direction, ._symbol = edgeSymbol}),
+                                                                  node({._symbol = "b"})})})})},
+                               returning({symbol("a")}))});
 
-            const std::string filtered = "MATCH (a), (b) WHERE (a)" + spelled + "(b) RETURN a";
-            const Expr* predicate = parseMatchPattern(filtered)->getWhere()->getExpr();
-            ASSERT_EQ(predicate->getKind(), Expr::Kind::EXISTS) << filtered;
-
-            const Pattern* predicatePattern = static_cast<const ExistsExpr*>(predicate)->getPredicatePattern();
-            expectHop(predicatePattern->elements().front(), direction, filtered);
+            expectParse("MATCH (a), (b) WHERE (a)" + spelled + "(b) RETURN a",
+                        {query({match({._pattern = pattern({path({node({._symbol = "a"})}), path({node({._symbol = "b"})})},
+                                                           where(patternPredicate(pattern({path({node({._symbol = "a"}),
+                                                                                                 edge({._direction = direction,
+                                                                                                       ._symbol = edgeSymbol}),
+                                                                                                 node({._symbol = "b"})})}))))})},
+                               returning({symbol("a")}))});
         }
     }
-
-    std::string _query;
-    std::unique_ptr<CypherAST> _ast;
 };
 
 TEST_F(ArrowSpellingTest, readsTwoMinusSignsAsAnUndirectedRelationship) {
-    expectArrow("--", EdgePattern::Direction::Undirected);
+    expectArrow("--", EdgePattern::Direction::Undirected, "");
 }
 
 TEST_F(ArrowSpellingTest, readsAnArrowPointingRight) {
-    expectArrow("-->", EdgePattern::Direction::Forward);
+    expectArrow("-->", EdgePattern::Direction::Forward, "");
 }
 
 TEST_F(ArrowSpellingTest, readsAnArrowPointingLeft) {
-    expectArrow("<--", EdgePattern::Direction::Backward);
+    expectArrow("<--", EdgePattern::Direction::Backward, "");
 }
 
 TEST_F(ArrowSpellingTest, readsAnArrowPointingBothWays) {
-    expectArrow("<-->", EdgePattern::Direction::Undirected);
+    expectArrow("<-->", EdgePattern::Direction::Undirected, "");
 }
 
 TEST_F(ArrowSpellingTest, readsAnUndirectedRelationshipWithADetail) {
-    expectArrow("-[e]-", EdgePattern::Direction::Undirected);
+    expectArrow("-[e]-", EdgePattern::Direction::Undirected, "e");
 }
 
 TEST_F(ArrowSpellingTest, readsARelationshipWithADetailPointingRight) {
-    expectArrow("-[e]->", EdgePattern::Direction::Forward);
+    expectArrow("-[e]->", EdgePattern::Direction::Forward, "e");
 }
 
 TEST_F(ArrowSpellingTest, readsARelationshipWithADetailPointingLeft) {
-    expectArrow("<-[e]-", EdgePattern::Direction::Backward);
+    expectArrow("<-[e]-", EdgePattern::Direction::Backward, "e");
 }
 
 TEST_F(ArrowSpellingTest, readsARelationshipWithADetailPointingBothWays) {
-    expectArrow("<-[e]->", EdgePattern::Direction::Undirected);
+    expectArrow("<-[e]->", EdgePattern::Direction::Undirected, "e");
 }

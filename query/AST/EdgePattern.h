@@ -43,6 +43,7 @@ public:
     // The nodes of the parenthesized form, one more than its hops, and the predicate, which
     // constrain every repetition of the pattern. Null for the bracketed form, [e*1..3].
     NodePattern* getHopNode(size_t position) const { return _hopNodes.empty() ? nullptr : _hopNodes[position]; }
+    size_t getHopNodeCount() const { return _hopNodes.size(); }
     WhereClause* getHopWhere() const { return _hopWhere; }
 
     // The declarations of a quantified pattern: inside it a hop's variable is the single edge
