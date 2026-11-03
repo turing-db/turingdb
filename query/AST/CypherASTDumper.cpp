@@ -647,6 +647,10 @@ void CypherASTDumper::dump(std::ostream& out, const YieldClause* yield) {
     out << "    }\n";
 
     const YieldItems* yieldItems = yield->getItems();
+    if (!yieldItems) {
+        return;
+    }
+
     for (const SymbolExpr* expr : yieldItems->getItems()) {
         out << "    _" << std::hex << yield << " ||--o{ _" << std::hex << expr << " : \"\"\n";
         dump(out, expr);
