@@ -860,37 +860,81 @@ const ParseCase UPDATING_CLAUSES[] = {
 
 const ParseCase RELATIONSHIPS[] = {
     {"MATCH (a)-->(b) RETURN 1 - [1, 2][0]",
-     "     1 | MATCH (a)-->(b) RETURN 1 - [1, 2][0]\n"
-     "       |                          ^^^\n"
-     "-------* syntax error, unexpected TAIL_BRACKET"},
+     "SINGLE_PART_QUERY\n"
+     "LITERAL `1`\n"
+     "LITERAL `1`\n"
+     "LITERAL `2`\n"
+     "LITERAL `[1, 2]`\n"
+     "LITERAL `0`\n"
+     "INDEX `[1, 2][0]`\n"
+     "BINARY `1 - [1, 2][0]`\n"
+     "node `(a)`\n"
+     "edge `-->`\n"
+     "node `(b)`"},
     {"RETURN 1 - [1, 2]",
-     "     1 | RETURN 1 - [1, 2]\n"
-     "       |          ^^^\n"
-     "-------* syntax error, unexpected TAIL_BRACKET"},
+     "SINGLE_PART_QUERY\n"
+     "LITERAL `1`\n"
+     "LITERAL `1`\n"
+     "LITERAL `2`\n"
+     "LITERAL `[1, 2]`\n"
+     "BINARY `1 - [1, 2]`"},
     {"RETURN -[1, 2][0]",
-     "     1 | RETURN -[1, 2][0]\n"
-     "       |        ^^\n"
-     "-------* syntax error, unexpected TAIL_BRACKET"},
+     "SINGLE_PART_QUERY\n"
+     "LITERAL `1`\n"
+     "LITERAL `2`\n"
+     "LITERAL `[1, 2]`\n"
+     "LITERAL `0`\n"
+     "INDEX `[1, 2][0]`\n"
+     "UNARY `-[1, 2][0]`"},
     {"WITH 1 AS x WHERE x <--1 RETURN x",
-     "     1 | WITH 1 AS x WHERE x <--1 RETURN x\n"
-     "       |                     ^^^\n"
-     "-------* syntax error, unexpected TIP_TAIL_TAIL"},
+     "SINGLE_PART_QUERY\n"
+     "LITERAL `1 AS x`\n"
+     "SYMBOL `x`\n"
+     "LITERAL `1`\n"
+     "LITERAL `-1`\n"
+     "LITERAL `--1`\n"
+     "BINARY `x <--1`\n"
+     "SYMBOL `x`"},
     {"WITH 1 AS x WHERE (x) < - -2 RETURN x",
-     "     1 | WITH 1 AS x WHERE (x) < - -2 RETURN x\n"
-     "       |                            ^\n"
-     "-------* syntax error, unexpected DIGIT"},
+     "SINGLE_PART_QUERY\n"
+     "LITERAL `1 AS x`\n"
+     "SYMBOL `x`\n"
+     "LITERAL `2`\n"
+     "LITERAL `-2`\n"
+     "LITERAL `- -2`\n"
+     "BINARY `(x) < - -2`\n"
+     "SYMBOL `x`"},
     {"RETURN (1) - [1, 2][1]",
-     "     1 | RETURN (1) - [1, 2][1]\n"
-     "       |               ^\n"
-     "-------* syntax error, unexpected DIGIT"},
+     "SINGLE_PART_QUERY\n"
+     "LITERAL `1`\n"
+     "LITERAL `1`\n"
+     "LITERAL `2`\n"
+     "LITERAL `[1, 2]`\n"
+     "LITERAL `1`\n"
+     "INDEX `[1, 2][1]`\n"
+     "BINARY `(1) - [1, 2][1]`"},
     {"MATCH (a {x: -[1][0]}) RETURN a",
-     "     1 | MATCH (a {x: -[1][0]}) RETURN a\n"
-     "       |              ^^\n"
-     "-------* syntax error, unexpected TAIL_BRACKET"},
+     "SINGLE_PART_QUERY\n"
+     "LITERAL `1`\n"
+     "LITERAL `[1]`\n"
+     "LITERAL `0`\n"
+     "INDEX `[1][0]`\n"
+     "UNARY `-[1][0]`\n"
+     "SYMBOL `a`\n"
+     "node `(a {x: -[1][0]})`"},
     {"MATCH ()-[e WHERE e.d > -[1][0]]->() RETURN e",
-     "     1 | MATCH ()-[e WHERE e.d > -[1][0]]->() RETURN e\n"
-     "       |                         ^^\n"
-     "-------* syntax error, unexpected TAIL_BRACKET"},
+     "SINGLE_PART_QUERY\n"
+     "PROPERTY `e.d`\n"
+     "LITERAL `1`\n"
+     "LITERAL `[1]`\n"
+     "LITERAL `0`\n"
+     "INDEX `[1][0]`\n"
+     "UNARY `-[1][0]`\n"
+     "BINARY `e.d > -[1][0]`\n"
+     "SYMBOL `e`\n"
+     "node `()`\n"
+     "edge `-[e WHERE e.d > -[1][0]]->`\n"
+     "node `()`"},
     {"MATCH (a)-\n->(b) RETURN a",
      "SINGLE_PART_QUERY\n"
      "SYMBOL `a`\n"
@@ -906,11 +950,11 @@ const ParseCase RELATIONSHIPS[] = {
     {"MATCH (a)-(b) RETURN a",
      "     1 | MATCH (a)-(b) RETURN a\n"
      "       |           ^\n"
-     "-------* syntax error, unexpected OPAREN, expecting SUB"},
+     "-------* syntax error, unexpected OPAREN, expecting OBRACK or SUB"},
     {"MATCH (a)<(b) RETURN a",
      "     1 | MATCH (a)<(b) RETURN a\n"
-     "       |          ^\n"
-     "-------* syntax error, unexpected LT"},
+     "       |           ^\n"
+     "-------* syntax error, unexpected OPAREN, expecting SUB"},
     {"MATCH (a)<-- RETURN a",
      "     1 | MATCH (a)<-- RETURN a\n"
      "       |              ^^^^^^\n"
@@ -922,7 +966,7 @@ const ParseCase RELATIONSHIPS[] = {
     {"MATCH (a)-",
      "     1 | MATCH (a)-\n"
      "       |          ^\n"
-     "-------* syntax error, unexpected PROG_END, expecting SUB"},
+     "-------* syntax error, unexpected PROG_END, expecting OBRACK or SUB"},
     {"MATCH (a)-[e]-",
      "     1 | MATCH (a)-[e]-\n"
      "       |              ^\n"

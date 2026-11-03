@@ -391,6 +391,11 @@ private:
     bool startsPatternElemChain();
     bool startsExprPatternElemChain();
     bool startsQuantifiedPath();
+    size_t skipExprEdgePattern(size_t offset);
+    size_t skipQuantifiedPath(size_t offset);
+    size_t skipEntityDetail(size_t offset, CypherTokenKind closer);
+    size_t skipEdgeRange(size_t offset);
+    size_t skipToCloser(size_t offset, CypherTokenKind closer);
 
     Expr* parseExpr(ExprFollower follower);
     void parseOperand(size_t operatorBase);
@@ -472,9 +477,9 @@ private:
     bool distinctOpensArgument(bool closeKeepsKeyword);
     bool whenOpensBranch();
     bool whereOpensPredicate(size_t offset);
-    bool whereOpensDetailPredicate();
+    bool whereOpensDetailPredicate(size_t offset);
     bool isOpensPredicateLabels(size_t offset);
-    bool isOpensDetailLabels();
+    bool isOpensDetailLabels(size_t offset);
     ParenthesizedAtom classifyParenthesis();
     bool startsComparison();
     size_t skipBalanced(size_t offset);

@@ -169,8 +169,13 @@ std::pair<EdgePattern*, NodePattern*> CypherGrammar::parsePatternElemChain() {
 EdgePattern* CypherGrammar::parseEdgePattern() {
     const SourcePosition start = currentPosition();
 
-    if (accept(CypherTokenKind::SUB)) {
-        expect(CypherTokenKind::SUB);
+    const bool undirected = check(CypherTokenKind::SUB)
+                            && peek(1)._kind == CypherTokenKind::SUB
+                            && peek(2)._kind != CypherTokenKind::GT;
+    if (undirected) {
+        consume();
+        addPending(CypherTokenKind::GT);
+        consume();
 
         EdgePattern* edge = EdgePattern::create(_ast, nullptr, EdgePattern::Direction::Undirected);
         locate(edge, start);
@@ -184,26 +189,25 @@ EdgePattern* CypherGrammar::parseEdgePattern() {
 EdgePattern* CypherGrammar::parseExprEdgePattern() {
     const SourcePosition start = currentPosition();
 
-    if (accept(CypherTokenKind::TIP_TAIL_TAIL)) {
-        const bool bothTips = accept(CypherTokenKind::GT);
-        const EdgePattern::Direction direction = bothTips ? EdgePattern::Direction::Undirected : EdgePattern::Direction::Backward;
+    const bool tipFirst = accept(CypherTokenKind::LT);
+    expect(CypherTokenKind::SUB);
+
+    if (accept(CypherTokenKind::SUB)) {
+        EdgePattern::Direction direction = EdgePattern::Direction::Backward;
+        if (!tipFirst) {
+            expect(CypherTokenKind::GT);
+            direction = EdgePattern::Direction::Forward;
+        } else if (accept(CypherTokenKind::GT)) {
+            direction = EdgePattern::Direction::Undirected;
+        }
 
         EdgePattern* edge = EdgePattern::create(_ast, nullptr, direction);
         locate(edge, start);
 
         return edge;
-    } else if (accept(CypherTokenKind::TAIL_TAIL_TIP)) {
-        EdgePattern* edge = EdgePattern::create(_ast, nullptr, EdgePattern::Direction::Forward);
-        locate(edge, start);
-
-        return edge;
     }
 
-    const bool tipFirst = accept(CypherTokenKind::TIP_TAIL_BRACKET);
-    if (!tipFirst) {
-        expect(CypherTokenKind::TAIL_BRACKET);
-    }
-
+    expect(CypherTokenKind::OBRACK);
     EdgePattern* edge = parseEdgeDetail();
     expect(CypherTokenKind::CBRACK);
     expect(CypherTokenKind::SUB);
@@ -240,9 +244,9 @@ EdgePattern* CypherGrammar::parseEdgeDetail() {
     MapLiteral* properties = nullptr;
     WhereClause* where = nullptr;
 
-    if (first == CypherTokenKind::WHERE && whereOpensDetailPredicate()) {
+    if (first == CypherTokenKind::WHERE && whereOpensDetailPredicate(0)) {
         where = parseWhereClause(ExprFollower::NONE);
-    } else if (check(CypherTokenKind::COLON) || (first == CypherTokenKind::IS && isOpensDetailLabels())) {
+    } else if (check(CypherTokenKind::COLON) || (first == CypherTokenKind::IS && isOpensDetailLabels(0))) {
         labels = parseLabelExpression();
         range = parseOptionalEdgeRange();
         properties = parseOptionalProperties();
@@ -338,11 +342,11 @@ NodePattern* CypherGrammar::parseNodeDetail() {
 
     const CypherTokenKind first = examineKind();
 
-    if (first == CypherTokenKind::WHERE && whereOpensDetailPredicate()) {
+    if (first == CypherTokenKind::WHERE && whereOpensDetailPredicate(0)) {
         WhereClause* where = parseWhereClause(ExprFollower::NONE);
 
         return ParserUtils::createNodePattern(_ast, nullptr, nullptr, nullptr, where);
-    } else if (check(CypherTokenKind::COLON) || (first == CypherTokenKind::IS && isOpensDetailLabels())) {
+    } else if (check(CypherTokenKind::COLON) || (first == CypherTokenKind::IS && isOpensDetailLabels(0))) {
         LabelExpr* labels = parseLabelExpression();
         MapLiteral* properties = parseOptionalProperties();
         WhereClause* where = parseOptionalWhereClause();
@@ -678,18 +682,193 @@ NodePattern* CypherGrammar::parsePredicateRoot() {
 bool CypherGrammar::startsPatternElemChain() {
     return check(CypherTokenKind::OPAREN)
            || check(CypherTokenKind::SUB)
-           || startsExprPatternElemChain();
+           || check(CypherTokenKind::LT);
 }
 
+// A relationship in an expression can be mistaken for arithmetic: `(x) - [y] - (z)` reads one,
+// `(x) - [y + 1] - (z)` subtracts. This peeks at the shape of exprPatternElemChain.
 bool CypherGrammar::startsExprPatternElemChain() {
-    return check(CypherTokenKind::TIP_TAIL_TAIL)
-           || check(CypherTokenKind::TAIL_TAIL_TIP)
-           || check(CypherTokenKind::TIP_TAIL_BRACKET)
-           || check(CypherTokenKind::TAIL_BRACKET);
+    if (!check(CypherTokenKind::LT) && !check(CypherTokenKind::SUB)) {
+        return false;
+    }
+
+    const size_t afterEdge = skipExprEdgePattern(0);
+    if (afterEdge == 0) {
+        return false;
+    }
+
+    const size_t afterQuantifier = skipQuantifiedPath(afterEdge);
+    if (afterQuantifier == 0 || peek(afterQuantifier)._kind != CypherTokenKind::OPAREN) {
+        return false;
+    }
+
+    return skipEntityDetail(afterQuantifier + 1, CypherTokenKind::CPAREN) != 0;
 }
 
 bool CypherGrammar::startsQuantifiedPath() {
     return check(CypherTokenKind::PLUS)
            || check(CypherTokenKind::MULT)
            || check(CypherTokenKind::OBRACE);
+}
+
+size_t CypherGrammar::skipExprEdgePattern(size_t offset) {
+    size_t position = offset;
+
+    const bool tipFirst = peek(position)._kind == CypherTokenKind::LT;
+    if (tipFirst) {
+        position++;
+    }
+
+    if (peek(position)._kind != CypherTokenKind::SUB) {
+        return 0;
+    }
+
+    position++;
+
+    const CypherTokenKind second = peek(position)._kind;
+    if (second == CypherTokenKind::SUB) {
+        position++;
+
+        if (peek(position)._kind == CypherTokenKind::GT) {
+            return position + 1;
+        }
+
+        return tipFirst ? position : 0;
+    } else if (second != CypherTokenKind::OBRACK) {
+        return 0;
+    }
+
+    position = skipEntityDetail(position + 1, CypherTokenKind::CBRACK);
+    if (position == 0 || peek(position)._kind != CypherTokenKind::SUB) {
+        return 0;
+    }
+
+    position++;
+
+    if (peek(position)._kind == CypherTokenKind::GT) {
+        position++;
+    }
+
+    return position;
+}
+
+size_t CypherGrammar::skipQuantifiedPath(size_t offset) {
+    const CypherTokenKind first = peek(offset)._kind;
+
+    if (first == CypherTokenKind::PLUS || first == CypherTokenKind::MULT) {
+        return offset + 1;
+    } else if (first != CypherTokenKind::OBRACE) {
+        return offset;
+    }
+
+    size_t position = offset + 1;
+
+    const bool lower = peek(position)._kind == CypherTokenKind::DIGIT;
+    if (lower) {
+        position++;
+    }
+
+    const bool comma = peek(position)._kind == CypherTokenKind::COMMA;
+    if (comma) {
+        position++;
+    }
+
+    if (comma && peek(position)._kind == CypherTokenKind::DIGIT) {
+        position++;
+    }
+
+    if ((!lower && !comma) || peek(position)._kind != CypherTokenKind::CBRACE) {
+        return 0;
+    }
+
+    return position + 1;
+}
+
+size_t CypherGrammar::skipEntityDetail(size_t offset, CypherTokenKind closer) {
+    size_t position = offset;
+    CypherTokenKind kind = peek(position)._kind;
+
+    if (kind == CypherTokenKind::WHERE && whereOpensDetailPredicate(position)) {
+        return skipToCloser(position + 1, closer);
+    }
+
+    const bool opensLabels = kind == CypherTokenKind::COLON
+                             || (kind == CypherTokenKind::IS && isOpensDetailLabels(position));
+    if (!opensLabels && CypherToken::isName(kind)) {
+        position++;
+        kind = peek(position)._kind;
+    }
+
+    if (kind == CypherTokenKind::COLON || kind == CypherTokenKind::IS) {
+        position = skipLabelExpression(position);
+        if (position == 0) {
+            return 0;
+        }
+
+        kind = peek(position)._kind;
+    }
+
+    if (closer == CypherTokenKind::CBRACK && kind == CypherTokenKind::MULT) {
+        position = skipEdgeRange(position);
+        kind = peek(position)._kind;
+    }
+
+    if (kind == CypherTokenKind::OBRACE) {
+        position = skipBalanced(position);
+        if (position == 0) {
+            return 0;
+        }
+
+        kind = peek(position)._kind;
+    }
+
+    if (kind == CypherTokenKind::WHERE) {
+        return skipToCloser(position + 1, closer);
+    }
+
+    return kind == closer ? position + 1 : 0;
+}
+
+size_t CypherGrammar::skipEdgeRange(size_t offset) {
+    size_t position = offset + 1;
+
+    if (peek(position)._kind == CypherTokenKind::DIGIT) {
+        position++;
+    }
+
+    if (peek(position)._kind == CypherTokenKind::RANGE) {
+        position++;
+
+        if (peek(position)._kind == CypherTokenKind::DIGIT) {
+            position++;
+        }
+    }
+
+    return position;
+}
+
+size_t CypherGrammar::skipToCloser(size_t offset, CypherTokenKind closer) {
+    std::vector<CypherTokenKind> closers;
+
+    for (size_t position = offset;; position++) {
+        const CypherTokenKind kind = peek(position)._kind;
+
+        if (closers.empty() && kind == closer) {
+            return position + 1;
+        } else if (kind == CypherTokenKind::OPAREN) {
+            closers.push_back(CypherTokenKind::CPAREN);
+        } else if (kind == CypherTokenKind::OBRACK) {
+            closers.push_back(CypherTokenKind::CBRACK);
+        } else if (kind == CypherTokenKind::OBRACE) {
+            closers.push_back(CypherTokenKind::CBRACE);
+        } else if (kind == CypherTokenKind::CPAREN || kind == CypherTokenKind::CBRACK || kind == CypherTokenKind::CBRACE) {
+            if (closers.empty() || closers.back() != kind) {
+                return 0;
+            }
+
+            closers.pop_back();
+        } else if (kind == CypherTokenKind::PROG_END || kind == CypherTokenKind::LEXER_ERROR) {
+            return 0;
+        }
+    }
 }

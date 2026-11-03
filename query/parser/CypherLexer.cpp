@@ -320,13 +320,6 @@ void CypherLexer::lexOperator(CypherToken& token) {
     const char character = _query[_offset];
     const char next = at(_offset + 1);
 
-    CypherTokenKind arrow {CypherTokenKind::PROG_END};
-    const size_t arrowLength = matchArrow(arrow);
-    if (arrowLength > 0) {
-        emit(token, arrow, arrowLength);
-        return;
-    }
-
     switch (character) {
         case '<':
             if (next == '>') {
@@ -585,78 +578,6 @@ void CypherLexer::emit(CypherToken& token, CypherTokenKind kind, size_t length) 
 
 void CypherLexer::emitError(CypherToken& token, const SourceLocation& location, std::string_view message) {
     token = CypherToken {._kind = CypherTokenKind::LEXER_ERROR, ._text = message, ._location = location};
-}
-
-size_t CypherLexer::matchArrow(CypherTokenKind& kind) const {
-    const size_t start = _offset;
-    const char first = _query[start];
-
-    if (first == '<') {
-        const size_t tail = skipGap(start + 1);
-        if (at(tail) != '-') {
-            return 0;
-        }
-
-        const size_t afterTail = skipGap(tail + 1);
-        const char last = at(afterTail);
-        if (last == '-') {
-            kind = CypherTokenKind::TIP_TAIL_TAIL;
-            return afterTail + 1 - start;
-        } else if (last == '[') {
-            kind = CypherTokenKind::TIP_TAIL_BRACKET;
-            return afterTail + 1 - start;
-        }
-
-        return 0;
-    } else if (first != '-') {
-        return 0;
-    }
-
-    const size_t afterTail = skipGap(start + 1);
-    const char second = at(afterTail);
-    if (second == '[') {
-        kind = CypherTokenKind::TAIL_BRACKET;
-        return afterTail + 1 - start;
-    } else if (second != '-') {
-        return 0;
-    }
-
-    const size_t tip = skipGap(afterTail + 1);
-    if (at(tip) != '>') {
-        return 0;
-    }
-
-    kind = CypherTokenKind::TAIL_TAIL_TIP;
-    return tip + 1 - start;
-}
-
-size_t CypherLexer::skipGap(size_t position) const {
-    while (position < _query.size()) {
-        const char character = _query[position];
-        const char next = at(position + 1);
-
-        if (isBreak(character)) {
-            position++;
-        } else if (character == '/' && next == '/') {
-            const size_t lineBreak = _query.find('\n', position + 2);
-            if (lineBreak == std::string_view::npos) {
-                return position;
-            }
-
-            position = lineBreak + 1;
-        } else if (character == '/' && next == '*') {
-            const size_t close = _query.find("*/", position + 2);
-            if (close == std::string_view::npos) {
-                return position;
-            }
-
-            position = close + 2;
-        } else {
-            return position;
-        }
-    }
-
-    return position;
 }
 
 size_t CypherLexer::skipDigits(size_t position) const {

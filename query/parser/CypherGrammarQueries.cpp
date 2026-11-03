@@ -1078,7 +1078,8 @@ void CypherGrammar::parseNodeConstraintPattern() {
 void CypherGrammar::parseEdgeConstraintPattern() {
     expect(CypherTokenKind::OPAREN);
     expect(CypherTokenKind::CPAREN);
-    expect(CypherTokenKind::TAIL_BRACKET);
+    expect(CypherTokenKind::SUB);
+    expect(CypherTokenKind::OBRACK);
 
     parseSymbol();
     parseLabelExpression();

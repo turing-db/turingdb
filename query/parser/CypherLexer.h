@@ -43,8 +43,6 @@ private:
     void emit(CypherToken& token, CypherTokenKind kind, size_t length);
     void emitError(CypherToken& token, const SourceLocation& location, std::string_view message);
 
-    size_t matchArrow(CypherTokenKind& kind) const;
-    size_t skipGap(size_t position) const;
     size_t skipDigits(size_t position) const;
     size_t skipExponent(size_t position) const;
     size_t skipFloatSuffix(size_t position) const;
