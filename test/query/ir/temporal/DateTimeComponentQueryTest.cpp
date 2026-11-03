@@ -208,8 +208,7 @@ TEST_F(DateTimeComponentQueryTest, rejectsAnUnknownFieldName) {
 }
 
 TEST_F(DateTimeComponentQueryTest, rejectsAFieldOfAPropertyThatIsNoInstant) {
-    expectError("MATCH (n:Person) RETURN n.name.year",
-                "Property 'name' is 'String', only a datetime or a map has components");
+    expectError("MATCH (n:Person) RETURN n.name.year", "A value of type 'String' has no property 'year'");
 }
 
 TEST_F(DateTimeComponentQueryTest, rejectsAFieldOfAVariableThatIsNoInstant) {
@@ -217,8 +216,7 @@ TEST_F(DateTimeComponentQueryTest, rejectsAFieldOfAVariableThatIsNoInstant) {
 }
 
 TEST_F(DateTimeComponentQueryTest, rejectsAFieldOfAField) {
-    expectError("WITH datetime() AS d RETURN d.year.month",
-                "Variable 'd' is 'DateTime' it must be a node or edge");
+    expectError("WITH datetime() AS d RETURN d.year.month", "A value of type 'Integer' has no property 'month'");
 }
 
 // A field is computed from an instant rather than stored beside it, so nothing can be

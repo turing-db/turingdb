@@ -97,37 +97,18 @@ protected:
         EXPECT_EQ(actual, sortedExpected) << "query: " << query << "\ngot:\n" << actualText;
     }
 
-    void expectError(std::string_view query, std::string_view expectedError) {
-        RowSink sink;
-        QueryStatus status;
-        _interpreter->execute(status,
-                              query,
-                              _graphName,
-                              CommitHash::head(),
-                              ChangeID::head(),
-                              &sink);
-
-        ASSERT_FALSE(status.isOk()) << "query: " << query << "\nexpected it to fail";
-        EXPECT_NE(status.getError().find(expectedError), std::string::npos)
-            << "query: " << query << "\nerror: " << status.getError();
-    }
-
     const std::string _graphName = "simpledb";
     std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<QueryInterpreterV3> _interpreter;
     QueryConfig _queryConfig;
 };
 
-TEST_F(MapKeyAbsentPropertyTest, rejectsAKeyOfAPropertyTheGraphDoesNotCarry) {
-    expectError("MATCH (n:Person {name: 'Remy'}) RETURN n.nosuchmap.x",
-                "'x' does not exist for type 'Null'");
+TEST_F(MapKeyAbsentPropertyTest, readsNullForAKeyOfAPropertyTheGraphDoesNotCarry) {
+    expectRows("MATCH (n:Person {name: 'Remy'}) RETURN n.nosuchmap.x", {{"null"}});
 }
 
-// The property has to exist somewhere in the graph for the key to name anything, so the
-// same read is turned away before any node carries attrs and answers null once one does.
-TEST_F(MapKeyAbsentPropertyTest, readsNullOnceAnotherNodeCarriesTheProperty) {
-    expectError("MATCH (n:Person {name: 'Remy'}) RETURN n.attrs.x",
-                "'x' does not exist for type 'Null'");
+TEST_F(MapKeyAbsentPropertyTest, readsNullBeforeAndAfterAnotherNodeCarriesTheProperty) {
+    expectRows("MATCH (n:Person {name: 'Remy'}) RETURN n.attrs.x", {{"null"}});
 
     write("CREATE (t:Tagged {name: 'a', attrs: {x: 1}})");
 

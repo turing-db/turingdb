@@ -97,8 +97,7 @@ TEST_F(NestedMapKeyTest, raisesOnANameNoComponentOfANestedDatetimeHas) {
 }
 
 TEST_F(NestedMapKeyTest, rejectsAPropertyChainThroughAStringProperty) {
-    expectError("MATCH (n:Person) RETURN n.name.year.x",
-                "Property 'name' is 'String', only a datetime or a map has components");
+    expectError("MATCH (n:Person) RETURN n.name.year.x", "A value of type 'String' has no property 'year'");
 }
 
 TEST_F(NestedMapKeyTest, rejectsWritingANestedKey) {

@@ -1393,7 +1393,6 @@ private:
     mlir::Value translateLiteralExpr(const Literal* literal);
     mlir::Type propertyValueType(ValueType valueType);
     mlir::Value translatePropertyExpr(const PropertyExpr* propExpr);
-    mlir::Value emitComponentOf(const PropertyExpr* propExpr, mlir::Value value);
 
     // The instant a dotted access reads, before any component is taken off it: a field of
     // a loaded row, a property of an entity, or the column a value variable was bound to

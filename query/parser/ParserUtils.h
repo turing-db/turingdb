@@ -131,8 +131,8 @@ public:
     // `(n).name` is `n.name`: a variable keeps its PropertyExpr, any other value is looked up
     static Expr* createPropertyLookup(CypherAST* ast, Expr* base, Symbol* propertyName);
 
-    // `m.a.b.c` is `(m.a.b).c`: a PropertyExpr reads a name off a variable and one component
-    // off that value, and each further name looks up the value the names before it read
+    // `m.a.b.c` is `((m.a).b).c`, as Neo4j parses it: a PropertyExpr reads the first name off
+    // the variable, and each further name is looked up in the value before it
     static Expr* createPropertyChain(CypherAST* ast, QualifiedName* chain, const SourceLocation& location);
 
     static EntityTypeExpr* createLabelTest(CypherAST* ast, Expr* operand, LabelExpr* labelExpr);

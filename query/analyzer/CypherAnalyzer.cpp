@@ -1513,13 +1513,6 @@ bool CypherAnalyzer::isGroupWise(const Expr* expr,
         const PropertyExpr* property = static_cast<const PropertyExpr*>(expr);
         const VarDecl* const entityDecl = property->getEntityVarDecl();
 
-        const bool readsAComponentOfAReturnedProperty = property->readsAComponent()
-                                                     && projection->hasItemReadingThePropertyOfComponent(property);
-
-        if (readsAComponentOfAReturnedProperty) {
-            return true;
-        }
-
         return elements.contains(entityDecl) || projection->hasItemDecl(entityDecl);
     } else if (kind == Expr::Kind::ENTITY_TYPES) {
         const EntityTypeExpr* entityType = static_cast<const EntityTypeExpr*>(expr);

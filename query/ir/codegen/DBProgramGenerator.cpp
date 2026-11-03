@@ -9802,17 +9802,9 @@ mlir::Type DBProgramGenerator::propertyValueType(ValueType valueType) {
 }
 
 mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propExpr) {
-    return emitComponentOf(propExpr, translatePropertyRead(propExpr));
-}
+    const mlir::Value value = translatePropertyRead(propExpr);
 
-mlir::Value DBProgramGenerator::emitComponentOf(const PropertyExpr* propExpr, mlir::Value value) {
-    // A component of a name no property in the graph carries is the null that read is,
-    // with no value for the component op to read off
-    const bool readsNull = propExpr->getType() == EvaluatedType::Null;
-
-    if (readsNull) {
-        return value;
-    } else if (propExpr->readsAMapKey()) {
+    if (propExpr->readsAMapKey()) {
         return emitStaticMapKey(value, propExpr->getMapKey());
     } else if (propExpr->readsADateTimeComponent()) {
         return emitDateTimeComponent(propExpr->getDateTimePart(), value);
@@ -10011,8 +10003,7 @@ mlir::Value DBProgramGenerator::translatePropertyRead(const PropertyExpr* propEx
     const std::string_view propName = propExpr->getPropName();
 
     // d.year, d.hours and m.key name no property: the value the component or the key is
-    // read off is the column the variable itself was bound to, or for m.a.key the value its
-    // map holds under a
+    // read off is the column the variable itself was bound to
     const EvaluatedType entityType = entityDecl->getType();
 
     const bool readsOffTheVariableItself = entityType == EvaluatedType::DateTime
@@ -10028,11 +10019,7 @@ mlir::Value DBProgramGenerator::translatePropertyRead(const PropertyExpr* propEx
 
         bioassert(boundColumn, "Dotted read on unknown variable: {}", varName);
 
-        if (propName.empty()) {
-            return boundColumn;
-        }
-
-        return emitStaticMapKey(boundColumn, propName);
+        return boundColumn;
     }
 
     // A header access reads a field of a loaded record rather than a property of an
@@ -11283,17 +11270,6 @@ void DBProgramGenerator::bindGroupedKeyColumn(const Expr* expr, const GroupedCol
         if (StructuralExpressionComparator::equal(keyExpr, expr)) {
             _part._exprMap[expr] = keyColumn;
             return;
-        }
-    }
-
-    if (expr->getKind() == Expr::Kind::PROPERTY) {
-        const PropertyExpr* property = static_cast<const PropertyExpr*>(expr);
-
-        for (const auto& [keyExpr, keyColumn] : groupedColumns) {
-            if (StructuralExpressionComparator::readsThePropertyOfComponent(keyExpr, property)) {
-                _part._exprMap[expr] = emitComponentOf(property, keyColumn);
-                return;
-            }
         }
     }
 

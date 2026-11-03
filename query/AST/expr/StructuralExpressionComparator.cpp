@@ -117,7 +117,7 @@ bool StructuralExpressionComparator::equal(const Expr* lhs, const Expr* rhs) {
             const bool sameProperty = lhsProperty->getPropName() == rhsProperty->getPropName();
 
             // Two components of one value are two values, so the component is part of
-            // what the access reads: n.at.year and n.at.day name the same property
+            // what the access reads: d.year and d.day read the same variable
             const bool lhsReadsADateTime = lhsProperty->readsADateTimeComponent();
             const bool rhsReadsADateTime = rhsProperty->readsADateTimeComponent();
             const bool lhsReadsADuration = lhsProperty->readsADurationComponent();
@@ -324,33 +324,6 @@ bool StructuralExpressionComparator::equalLabelExprs(const LabelExpr* lhs, const
     }
 
     return true;
-}
-
-bool StructuralExpressionComparator::readsThePropertyOfComponent(const Expr* candidate, const PropertyExpr* component) {
-    candidate = comparedForm(candidate);
-
-    if (candidate->getKind() != Expr::Kind::PROPERTY) {
-        return false;
-    } 
-
-    if (!component->readsAComponent()) {
-        return false;
-    }
-
-    const PropertyExpr* property = static_cast<const PropertyExpr*>(candidate);
-
-    const bool candidateReadsAComponent = property->readsAComponent();
-    const bool sameEntity = property->getEntityVarDecl() == component->getEntityVarDecl();
-    const bool sameProperty = property->getPropName() == component->getPropName();
-
-    // m.a reads the value m.a.key reads its key off, as n.attrs does for n.attrs.key
-    const bool readsTheKeyOfTheVariable = property->readsAMapKey()
-                                       && property->getPropName().empty()
-                                       && property->getMapKey() == component->getPropName();
-
-    const bool readsTheProperty = !candidateReadsAComponent && sameProperty;
-
-    return sameEntity && (readsTheProperty || readsTheKeyOfTheVariable);
 }
 
 bool StructuralExpressionComparator::equalLiterals(const Literal* lhs, const Literal* rhs) {

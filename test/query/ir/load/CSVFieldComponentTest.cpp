@@ -21,8 +21,8 @@
 using namespace db;
 using namespace turing::test;
 
-// A field of a loaded row is text, so a component read off one is turned away with the
-// type the component name belongs to.
+// A field of a loaded row is text, so a component read off one is turned away as a key
+// read on a String.
 class CSVFieldComponentTest : public TuringTest {
 protected:
     void initialize() override {
@@ -56,10 +56,10 @@ protected:
 
 TEST_F(CSVFieldComponentTest, rejectsADurationComponentOfAField) {
     expectError("LOAD CSV 'tasks.csv' WITH HEADERS AS row RETURN row.took.hours",
-                "Field 'took' of 'row' is 'String', only a duration has components");
+                "A value of type 'String' has no property 'hours'");
 }
 
 TEST_F(CSVFieldComponentTest, rejectsADateTimeComponentOfAField) {
     expectError("LOAD CSV 'tasks.csv' WITH HEADERS AS row RETURN row.at.year",
-                "Field 'at' of 'row' is 'String', only a datetime has components");
+                "A value of type 'String' has no property 'year'");
 }

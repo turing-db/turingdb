@@ -508,30 +508,26 @@ Expr* ParserUtils::createPropertyChain(CypherAST* ast, QualifiedName* chain, con
     SourceManager* sourceManager = ast->getSourceManager();
     const QualifiedName::Symbols& names = chain->names();
 
-    if (names.size() <= PropertyExpr::MAX_NAME_COUNT) {
-        PropertyExpr* property = PropertyExpr::create(ast, chain);
-        sourceManager->setLocation(property, location);
+    const auto locateUpTo = [sourceManager, &location](Expr* read, const Symbol* lastName) {
+        const SourceLocation* lastNameLocation = sourceManager->getLocation(reinterpret_cast<uintptr_t>(lastName));
+        sourceManager->setLocation(read, SourceLocation::join(location, *lastNameLocation));
+    };
 
-        return property;
+    QualifiedName* variableProperty = chain;
+    if (names.size() > 2) {
+        variableProperty = QualifiedName::create(ast);
+        variableProperty->addName(names[0]);
+        variableProperty->addName(names[1]);
     }
 
-    QualifiedName* fullName = QualifiedName::create(ast);
-    for (size_t index = 0; index < PropertyExpr::MAX_NAME_COUNT; index++) {
-        fullName->addName(names[index]);
-    }
+    Expr* value = PropertyExpr::create(ast, variableProperty);
+    locateUpTo(value, names[1]);
 
-    const Symbol* lastName = fullName->back();
-    const SourceLocation* lastNameLocation = sourceManager->getLocation(reinterpret_cast<uintptr_t>(lastName));
-
-    Expr* value = PropertyExpr::create(ast, fullName);
-    sourceManager->setLocation(value, SourceLocation::join(location, *lastNameLocation));
-
-    for (size_t index = PropertyExpr::MAX_NAME_COUNT; index < names.size(); index++) {
+    for (size_t index = 2; index < names.size(); index++) {
         const Symbol* name = names[index];
-        const SourceLocation* nameLocation = sourceManager->getLocation(reinterpret_cast<uintptr_t>(name));
 
         value = PropertyLookupExpr::create(ast, value, name->getName());
-        sourceManager->setLocation(value, SourceLocation::join(location, *nameLocation));
+        locateUpTo(value, name);
     }
 
     return value;

@@ -1,7 +1,5 @@
 #pragma once
 
-#include <stddef.h>
-
 #include "Expr.h"
 
 #include "metadata/PropertyType.h"
@@ -14,8 +12,6 @@ class VarDecl;
 
 class PropertyExpr : public Expr {
 public:
-    static constexpr size_t MAX_NAME_COUNT = 3;
-
     const QualifiedName* getFullName() const { return _fullName; }
 
     static PropertyExpr* create(CypherAST* ast, QualifiedName* name);
@@ -39,19 +35,17 @@ public:
         _stringTableHeaderAccess = csvHeaderAccess;
     }
 
-    // A calendar field read off an instant - d.year, or n.createdAt.year, whose property
-    // name is still createdAt. The part is meaningless unless this says so.
+    // A calendar field read off a variable bound to an instant, d.year. The part is
+    // meaningless unless this says so.
     bool readsADateTimeComponent() const { return _readsADateTimeComponent; }
     DateTimePart getDateTimePart() const { return _dateTimePart; }
     void setDateTimePart(DateTimePart part);
 
     bool readsADurationComponent() const { return _readsADurationComponent; }
-    bool readsAComponent() const { return _readsADateTimeComponent || _readsADurationComponent || _readsAMapKey; }
     DurationPart getDurationPart() const { return _durationPart; }
     void setDurationPart(DurationPart part);
 
-    // The key a map value is read under - m.key, or n.attrs.key and m.a.key, whose property
-    // names are still attrs and a. The key is meaningless unless this says so.
+    // The key a map variable is read under, m.key. The key is meaningless unless this says so.
     bool readsAMapKey() const { return _readsAMapKey; }
     std::string_view getMapKey() const { return _mapKey; }
     void setMapKey(std::string_view key);

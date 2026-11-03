@@ -208,8 +208,7 @@ TEST_F(DurationComponentQueryTest, rejectsTheComponentsOfAnInstant) {
 }
 
 TEST_F(DurationComponentQueryTest, rejectsAUnitOfAPropertyThatIsNoDuration) {
-    expectError("MATCH (n:Person) RETURN n.name.hours",
-                "Property 'name' is 'String', only a duration or a map has components");
+    expectError("MATCH (n:Person) RETURN n.name.hours", "A value of type 'String' has no property 'hours'");
 }
 
 TEST_F(DurationComponentQueryTest, rejectsAWriteToAUnit) {

@@ -203,6 +203,8 @@ private:
 
     Expr* createDottedForm(const IndexExpr* expr);
 
+    [[noreturn]] void throwTargetInsideAProperty(const PropertyExpr* expr, const VarDecl* varDecl);
+
     LoadCSVStmt* findCSVSource(const VarDecl* alias) const;
 
     // The declaration the load publishes field @param slot under, created by the first

@@ -70,9 +70,11 @@ or a duration, where `m.key` reads the component.
 
 # Reading through a nested value
 
-`m.a.b` reads `b` out of the value `m.a` holds, as `n.attrs.b` reads it out of a stored map. A
-`PropertyExpr` holds at most three names, and the parser looks each further name up in the value
-before it, so `m.a.b.c` is `(m.a.b).c`. `WITH {d: {e: 1}} AS m RETURN m.d.e` is 1.
+`m.a.b` reads `b` out of the value `m.a` holds, as `n.attrs.b` reads it out of a stored map. The
+parser reads a dotted chain as Neo4j does: a `PropertyExpr` holds a variable and one name, and each
+further name is a `PropertyLookupExpr` over the value before it, so `m.a.b.c` is `((m.a).b).c`, the
+tree its parenthesised spelling builds. `WITH {d: {e: 1}} AS m RETURN m.d.e` is 1, and
+`MATCH (n:Person) RETURN n.nosuch.x` is null on every row, as a key of null is.
 
 A map value is a tagged cell, so a read through one asks the row's tag rather than the column's
 type. `m[k].b` reads `b` out of the map `m[k]` holds, and `m.l[0]` reads the first element of

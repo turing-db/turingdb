@@ -88,6 +88,23 @@ protected:
             << "query: " << query << "\nerror: " << status.getError();
     }
 
+    void expectRows(std::string_view query, const Rows& expected) {
+        RowSink sink;
+        QueryStatus status;
+        _interpreter->execute(status,
+                              query,
+                              _graphName,
+                              CommitHash::head(),
+                              ChangeID::head(),
+                              &sink);
+        ASSERT_TRUE(status.isOk()) << "query: " << query << "\nerror: " << status.getError();
+
+        Rows actual;
+        sink.sortedRows(actual);
+
+        EXPECT_EQ(actual, expected) << "query: " << query;
+    }
+
     void writeTasks() {
         write("CREATE (n:Task {name: 'a', took: duration(2000000)})");
         write("CREATE (n:Task {name: 'b', took: duration(90061000000)})");
@@ -111,19 +128,17 @@ TEST_F(ComponentNameResolutionTest, rejectsAnUnknownNameOnAVariableThatIsNoEntit
     expectError("WITH 1 AS x RETURN x.a.fortnight", "Variable 'x' is 'Integer' it must be a node or edge");
 }
 
-TEST_F(ComponentNameResolutionTest, rejectsAnUnknownNameOnAPropertyTheGraphDoesNotCarry) {
+TEST_F(ComponentNameResolutionTest, readsNullForAnyNameOnAPropertyTheGraphDoesNotCarry) {
     writeTasks();
 
-    expectError("MATCH (n:Task) RETURN n.unheardOf.fortnight",
-                "'fortnight' does not exist for type 'Null'");
+    expectRows("MATCH (n:Task) RETURN n.unheardOf.fortnight", {{"null"}, {"null"}, {"null"}, {"null"}});
 }
 
 TEST_F(ComponentNameResolutionTest, rejectsAnUnknownNameOnAPropertyThatHasNoComponents) {
-    expectError("MATCH (n:Person) RETURN n.name.fortnight",
-                "Property 'name' is 'String', only a datetime or a duration or a map has components");
+    expectError("MATCH (n:Person) RETURN n.name.fortnight", "A value of type 'String' has no property 'fortnight'");
 }
 
 TEST_F(ComponentNameResolutionTest, rejectsAnUnknownNameOnAField) {
     expectError("LOAD CSV 'tasks.csv' WITH HEADERS AS row RETURN row.took.fortnight",
-                "Field 'took' of 'row' is 'String', only a datetime or a duration has components");
+                "A value of type 'String' has no property 'fortnight'");
 }

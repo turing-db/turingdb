@@ -2919,7 +2919,7 @@ TEST_F(ParseEdgeCaseTest, parsesLabelExpressionsAndComprehensions) {
 
     expectParse("RETURN n.x.y[1..2][..3][4..][..]",
                 {query({},
-                       returning({slice(slice(slice(slice(property({"n", "x", "y"}), integer(1), integer(2)),
+                       returning({slice(slice(slice(slice(lookup(property({"n", "x"}), "y"), integer(1), integer(2)),
                                                     nullptr,
                                                     integer(3)),
                                               integer(4),
@@ -2927,7 +2927,7 @@ TEST_F(ParseEdgeCaseTest, parsesLabelExpressionsAndComprehensions) {
                                         nullptr,
                                         nullptr)}))});
 
-    expectParse("RETURN n.address.city", {query({}, returning({property({"n", "address", "city"})}))});
+    expectParse("RETURN n.address.city", {query({}, returning({lookup(property({"n", "address"}), "city")}))});
 
     expectParse("RETURN apoc.coll.sum(xs)", {query({}, returning({invocation({"apoc", "coll", "sum"}, {symbol("xs")})}))});
 
