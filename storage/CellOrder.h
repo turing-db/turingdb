@@ -1,10 +1,12 @@
 #pragma once
 
+#include <algorithm>
 #include <compare>
 #include <optional>
 
 #include "ID.h"
 #include "GraphPath.h"
+#include "NumberOrder.h"
 #include "PathView.h"
 #include "CellView.h"
 #include "list/ListView.h"
@@ -61,20 +63,92 @@ std::optional<bool> equalOrUnknown(MapView lhs, MapView rhs);
  * it is tagged as, a nested list element-wise against a list, a map entry-wise against a
  * map, and an element of any other type - a null included - equals neither.
  */
-bool operator==(CellView element, types::Int64::Primitive value);
-bool operator==(CellView element, types::UInt64::Primitive value);
-bool operator==(CellView element, types::Double::Primitive value);
-bool operator==(CellView element, types::String::Primitive value);
-bool operator==(CellView element, types::Bool::Primitive value);
-bool operator==(CellView element, types::DateTime::Primitive value);
-bool operator==(CellView element, types::Duration::Primitive value);
-bool operator==(CellView element, types::Embedding::Primitive value);
-bool operator==(CellView element, NodeID value);
-bool operator==(CellView element, EdgeID value);
-bool operator==(CellView element, ListView value);
-bool operator==(CellView element, MapView value);
-bool operator==(CellView element, PathView value);
-bool operator==(CellView element, const GraphPath& value);
+template <Number Value>
+inline bool elementEqualsNumber(const CellView element, const Value value) {
+    switch (element.getTag()) {
+        case CellTag::Int:
+            return numbersEqual(element.getAs<types::Int64::Primitive>(), value);
+        break;
+
+        case CellTag::UInt:
+            return numbersEqual(element.getAs<types::UInt64::Primitive>(), value);
+        break;
+
+        case CellTag::Double:
+            return numbersEqual(element.getAs<types::Double::Primitive>(), value);
+        break;
+
+        default:
+            return false;
+        break;
+    }
+}
+
+inline bool operator==(const CellView element, const types::Int64::Primitive value) {
+    return elementEqualsNumber(element, value);
+}
+
+inline bool operator==(const CellView element, const types::UInt64::Primitive value) {
+    return elementEqualsNumber(element, value);
+}
+
+inline bool operator==(const CellView element, const types::Double::Primitive value) {
+    return elementEqualsNumber(element, value);
+}
+
+inline bool operator==(const CellView element, const types::String::Primitive value) {
+    return element.getTag() == CellTag::String
+        && element.getAs<types::String::Primitive>() == value;
+}
+
+inline bool operator==(const CellView element, const types::Bool::Primitive value) {
+    return element.getTag() == CellTag::Bool
+        && static_cast<bool>(element.getAs<types::Bool::Primitive>()) == static_cast<bool>(value);
+}
+
+inline bool operator==(const CellView element, const types::DateTime::Primitive value) {
+    return element.getTag() == CellTag::DateTime
+        && element.getAs<types::DateTime::Primitive>() == value;
+}
+
+inline bool operator==(const CellView element, const types::Duration::Primitive value) {
+    return element.getTag() == CellTag::Duration
+        && element.getAs<types::Duration::Primitive>() == value;
+}
+
+inline bool operator==(const CellView element, const types::Embedding::Primitive value) {
+    return element.getTag() == CellTag::Embedding
+        && EmbeddingEqual {}(element.getAs<types::Embedding::Primitive>(), value);
+}
+
+inline bool operator==(const CellView element, const NodeID value) {
+    return element.getTag() == CellTag::NodeID
+        && element.getAs<NodeID>() == value;
+}
+
+inline bool operator==(const CellView element, const EdgeID value) {
+    return element.getTag() == CellTag::EdgeID
+        && element.getAs<EdgeID>() == value;
+}
+
+inline bool operator==(const CellView element, const ListView value) {
+    return element.getTag() == CellTag::ListView
+        && element.getAs<ListView>() == value;
+}
+
+inline bool operator==(const CellView element, const MapView value) {
+    return element.getTag() == CellTag::MapView
+        && element.getAs<MapView>() == value;
+}
+
+inline bool operator==(const CellView element, const PathView value) {
+    return element.getTag() == CellTag::Path
+        && std::ranges::equal(element.getAs<PathView>().getIDs(), value.getIDs());
+}
+
+inline bool operator==(const CellView element, const GraphPath& value) {
+    return element == PathView {value.getIDs()};
+}
 
 /**
  * @brief Orders an element of a @ref ListByteBuffer against a value of a known type.
