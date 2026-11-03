@@ -11,6 +11,8 @@ add_flex_bison_dependency(cypher_lexer cypher_parser)
 
 set(parser_sources
     YCypherScanner.cpp
+    CypherToken.cpp
+    CypherLexer.cpp
     CypherParser.cpp
     ParserException.cpp
     ParserUtils.cpp
