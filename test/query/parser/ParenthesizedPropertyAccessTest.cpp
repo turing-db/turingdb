@@ -138,7 +138,7 @@ TEST_F(ParenthesizedPropertyAccessTest, anyDepthOfParenthesesReachesTheSameAcces
 // A pair of parentheses builds no expression of its own, so nesting costs nothing against
 // the limit the parser puts on how deep an expression may nest
 TEST_F(ParenthesizedPropertyAccessTest, deepNestingDoesNotReachTheExpressionDepthLimit) {
-    const size_t depth = CypherParser::MAX_EXPRESSION_DEPTH * 2;
+    const size_t depth = CypherParser::MAX_NESTING_DEPTH;
 
     std::string query = "MATCH (n) RETURN ";
     query.append(depth, '(');
