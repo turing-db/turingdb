@@ -711,6 +711,102 @@ TEST_F(ParseEdgeCaseTest, parsesMultiPartQueries) {
                        returning({symbol("z")}))});
 }
 
+TEST_F(ParseEdgeCaseTest, parsesMatchSegmentsChainedByNext) {
+    expectParse("MATCH (a:Person) RETURN a NEXT MATCH (a)-->(b) RETURN a, b",
+                {query({match({._pattern = pattern({path({node({._symbol = "a", ._labels = labels({"Person"})})})})}),
+                        with({._projection = projection({._items = {symbol("a")}}), ._segmentReturn = true}),
+                        match({._pattern = pattern({path({node({._symbol = "a"}),
+                                                          edge({._direction = EdgePattern::Direction::Forward}),
+                                                          node({._symbol = "b"})})})})},
+                       returning({symbol("a"), symbol("b")}))});
+
+    expectParse("MATCH (a) RETURN a NEXT MATCH (a)-->(b) RETURN b NEXT MATCH (b)-->(c) RETURN c",
+                {query({match({._pattern = pattern({path({node({._symbol = "a"})})})}),
+                        with({._projection = projection({._items = {symbol("a")}}), ._segmentReturn = true}),
+                        match({._pattern = pattern({path({node({._symbol = "a"}),
+                                                          edge({._direction = EdgePattern::Direction::Forward}),
+                                                          node({._symbol = "b"})})})}),
+                        with({._projection = projection({._items = {symbol("b")}}), ._segmentReturn = true}),
+                        match({._pattern = pattern({path({node({._symbol = "b"}),
+                                                          edge({._direction = EdgePattern::Direction::Forward}),
+                                                          node({._symbol = "c"})})})})},
+                       returning({symbol("c")}))});
+
+    expectParse("MATCH (a) RETURN a.name AS name NEXT MATCH (b {name: name}) RETURN b",
+                {query({match({._pattern = pattern({path({node({._symbol = "a"})})})}),
+                        with({._projection = projection({._items = {named(property({"a", "name"}), "name")}}),
+                              ._segmentReturn = true}),
+                        match({._pattern = pattern({path({node({._symbol = "b",
+                                                                ._properties = properties({{"name", symbol("name")}})})})})})},
+                       returning({symbol("b")}))});
+
+    expectParse("MATCH (a) RETURN a NEXT OPTIONAL MATCH (a)-->(b) RETURN a, b",
+                {query({match({._pattern = pattern({path({node({._symbol = "a"})})})}),
+                        with({._projection = projection({._items = {symbol("a")}}), ._segmentReturn = true}),
+                        match({._pattern = pattern({path({node({._symbol = "a"}),
+                                                          edge({._direction = EdgePattern::Direction::Forward}),
+                                                          node({._symbol = "b"})})}),
+                               ._optional = true})},
+                       returning({symbol("a"), symbol("b")}))});
+
+    expectParse("MATCH (a) RETURN a NEXT MATCH (a)-->(b) WHERE b.x > 1 RETURN count(b) AS n",
+                {query({match({._pattern = pattern({path({node({._symbol = "a"})})})}),
+                        with({._projection = projection({._items = {symbol("a")}}), ._segmentReturn = true}),
+                        match({._pattern = pattern({path({node({._symbol = "a"}),
+                                                          edge({._direction = EdgePattern::Direction::Forward}),
+                                                          node({._symbol = "b"})})},
+                                                   where(binary(BinaryOperator::GreaterThan,
+                                                                property({"b", "x"}),
+                                                                integer(1))))})},
+                       returning({named(invocation({"count"}, {symbol("b")}), "n")}))});
+
+    expectParse("MATCH (a) WITH a MATCH (a)-->(b) RETURN b NEXT MATCH (b)-->(c) WITH c RETURN c",
+                {query({match({._pattern = pattern({path({node({._symbol = "a"})})})}),
+                        with({._projection = projection({._items = {symbol("a")}})}),
+                        match({._pattern = pattern({path({node({._symbol = "a"}),
+                                                          edge({._direction = EdgePattern::Direction::Forward}),
+                                                          node({._symbol = "b"})})})}),
+                        with({._projection = projection({._items = {symbol("b")}}), ._segmentReturn = true}),
+                        match({._pattern = pattern({path({node({._symbol = "b"}),
+                                                          edge({._direction = EdgePattern::Direction::Forward}),
+                                                          node({._symbol = "c"})})})}),
+                        with({._projection = projection({._items = {symbol("c")}})})},
+                       returning({symbol("c")}))});
+
+    expectParse("MATCH (a) CREATE (a)-[:R]->(b) RETURN b NEXT MATCH (b)-->(c) RETURN c",
+                {query({match({._pattern = pattern({path({node({._symbol = "a"})})})}),
+                        createStmt(pattern({path({node({._symbol = "a"}),
+                                                  edge({._direction = EdgePattern::Direction::Forward,
+                                                        ._labels = labels({"R"})}),
+                                                  node({._symbol = "b"})})})),
+                        with({._projection = projection({._items = {symbol("b")}}), ._segmentReturn = true}),
+                        match({._pattern = pattern({path({node({._symbol = "b"}),
+                                                          edge({._direction = EdgePattern::Direction::Forward}),
+                                                          node({._symbol = "c"})})})})},
+                       returning({symbol("c")}))});
+
+    expectParse("MATCH (a) SET a.x = 1 NEXT MATCH (b) RETURN b",
+                {query({nextSegment(callSubquery({._body = query({match({._pattern = pattern({path({node({._symbol = "a"})})})}),
+                                                                  set({setProperty(property({"a", "x"}), integer(1))})})})),
+                        match({._pattern = pattern({path({node({._symbol = "b"})})})})},
+                       returning({symbol("b")}))});
+
+    expectParse("MATCH (a) RETURN a NEXT MATCH (b) RETURN b UNION MATCH (c) RETURN c AS b",
+                {query({match({._pattern = pattern({path({node({._symbol = "a"})})})}),
+                        with({._projection = projection({._items = {symbol("a")}}), ._segmentReturn = true}),
+                        nextSegment(callSubquery({._body = unionQuery(query({match({._pattern = pattern({path({node({._symbol = "b"})})})})},
+                                                                            returning({symbol("b")})),
+                                                                      {{._query = query({match({._pattern = pattern({path({node({._symbol = "c"})})})})},
+                                                                                        returning({named(symbol("c"),
+                                                                                                         "b")}))}})}))},
+                       returning({symbol("b")}))});
+
+    expectError("MATCH (a) RETURN a.x NEXT MATCH (b) RETURN b",
+                "     1 | MATCH (a) RETURN a.x NEXT MATCH (b) RETURN b\n"
+                "       | ^^^^^^^^^^^^^^^^^^^^\n"
+                "-------* Expression in a RETURN followed by NEXT must be aliased (use AS)");
+}
+
 TEST_F(ParseEdgeCaseTest, parsesTheJourneyPlannerQueries) {
     expectParse("MATCH (o:STATION {crs: 'OXF'}), (d:STATION {crs: 'PAD'}) "
                 "WITH o, d, ['DID', 'RDG', 'PAD'] AS interchanges, 470 AS depart_from, 500 AS depart_before "
