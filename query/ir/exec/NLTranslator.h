@@ -1073,6 +1073,10 @@ private:
     void translateNot(mlir::nl::Not notOp, NLStmtContainer* body);
     void translateToNullable(mlir::nl::ToNullable toNullable, NLStmtContainer* body);
     void translateCheckedCast(mlir::nl::CheckedCast checkedCast, NLStmtContainer* body);
+
+    // Binds @param result to one null per row of @param nullLiteral, the untyped null
+    // literal's chunk, in the type @param result names
+    void translateNullLiteral(mlir::Value result, const Column* nullLiteral, NLStmtContainer* body);
     void translateToAny(mlir::nl::ToAny toAny, NLStmtContainer* body);
 
     // The selection of an nl.case or an nl.case_merge, run by @param run: the two are read

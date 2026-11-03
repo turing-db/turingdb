@@ -389,12 +389,13 @@ private:
     // One query part: the statements between two WITH barriers
     void generatePart(std::span<Stmt* const> stmts);
 
-    // The variables the patterns of @param stmts bind through a db.checked_cast
+    // The variables the patterns of @param stmts bind through a db.checked_cast, added to
+    // @param casts when it does not hold them yet
     static void collectCheckedCasts(std::span<Stmt* const> stmts, llvm::SmallVectorImpl<const VarDecl*>& casts);
 
-    // Binds each of those casts whose value is already bound to the db.checked_cast of its
-    // column, the way its value is bound: as a variable a barrier published, or as a column
-    // a statement of the part yielded. A cast already bound is left as it is.
+    // Binds each of those casts to the db.checked_cast of its value's column, once, as a part
+    // opens on @param stmts. A part opens on the statement that first casts a value, so the
+    // value is bound by then; a cast an earlier part bound is left as it is.
     void bindCheckedCasts(std::span<Stmt* const> stmts);
     mlir::Value checkedCastColumn(const VarDecl* cast, mlir::Value value);
 
@@ -1474,6 +1475,10 @@ private:
     void filterConstantScope(mlir::Value predicate);
 
     void applyConstraints(const VariableDependency* var);
+
+    // Drops the rows where a bound node a pattern names is null, unless a check of the
+    // pattern already does: a null is no node, so the pattern matches nothing from it
+    void filterNullNode(const VariableDependency* var);
 
     void addMergeFilter(const VariableDependency* var,
                         std::vector<const VariableDependency*>& carriedSet);

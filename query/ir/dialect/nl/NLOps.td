@@ -3018,7 +3018,7 @@ def ToNullable : NLOp<"to_nullable", [Pure, ConstantThroughOperands, RowAlignedT
   let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
 }
 
-def CheckedCast : NLOp<"checked_cast", [Pure, RowAlignedThroughOperands]> {
+def CheckedCast : NLOp<"checked_cast", [NoMemoryEffect, RowAlignedThroughOperands]> {
   let summary = "Read the node or the relationship each tagged cell of a chunk holds";
   let description = [{
       db.checked_cast lowers to this. A null cell, and every row of a null literal, reads

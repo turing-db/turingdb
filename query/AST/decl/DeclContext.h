@@ -66,6 +66,10 @@ public:
     // query, so nothing after the comprehension - a wildcard projection included - sees it
     void dropVariable(std::string_view name);
 
+    // Undeclares the variable a pattern cast out of @param source, so @param name reads
+    // @param source again. A pattern comprehension binds its casts for its body alone
+    void dropCastVariable(std::string_view name, VarDecl* source);
+
     void declareAlias(std::string_view name, VarDecl* decl);
 
     // Declares @param decl, a variable of an enclosing scope, in this one too, where a

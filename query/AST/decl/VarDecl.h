@@ -38,6 +38,7 @@ public:
     // relationship out of; null for a variable holding its entity from the start
     void setCastSource(const VarDecl* source) { _castSource = source; }
     const VarDecl* getCastSource() const { return _castSource; }
+    const VarDecl* getCastSourceOrSelf() const { return _castSource ? _castSource : this; }
 
     void setIsCastToAnEntity(bool isCast) { _isCastToAnEntity = isCast; }
     bool isCastToAnEntity() const { return _isCastToAnEntity; }

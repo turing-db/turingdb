@@ -11,7 +11,10 @@ UnwindStmt::~UnwindStmt() {
 }
 
 bool UnwindStmt::unwindsLiteral() const {
-    if (_arg->getKind() != Expr::Kind::LITERAL || _decl->isCastToAnEntity()) {
+    const bool unwindsALiteral = _arg->getKind() == Expr::Kind::LITERAL;
+    const bool isCastToAnEntity = _decl->isCastToAnEntity();
+
+    if (!unwindsALiteral || isCastToAnEntity) {
         return false;
     }
 

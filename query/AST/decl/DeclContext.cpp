@@ -117,6 +117,11 @@ void DeclContext::dropVariable(std::string_view name) {
     _declMap.erase(findIt);
 }
 
+void DeclContext::dropCastVariable(std::string_view name, VarDecl* source) {
+    std::ranges::replace(_decls, getDecl(name), source);
+    _declMap[name] = source;
+}
+
 VarDecl* DeclContext::createUnnamedVariable(CypherAST* ast, EvaluatedType type) {
     std::string* name = ast->createString();
 

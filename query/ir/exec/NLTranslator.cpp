@@ -3529,13 +3529,7 @@ void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContaine
     // UNION branch spelling a column's value null hands the sink. An entity or a tagged
     // cell column holds its own null, in the invalid ID or in the tag.
     if (isUntypedNullChunk(operandValue.getType())) {
-        Column* const nulls = allocColumnForChunkType(resultChunk);
-        _valueSlots[toNullable.getResult()] = nulls;
-
-        NLFillNullData* fillData = _program->allocFunctionData<NLFillNullData>(operand,
-                                                                               nulls,
-                                                                               selectFillNullForChunkType(resultChunk));
-        body->emplaceStmt(&NLExecutor::runFillNull, fillData);
+        translateNullLiteral(toNullable.getResult(), operand, body);
         return;
     }
 
@@ -3564,20 +3558,26 @@ void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContaine
     body->emplaceStmt(&NLExecutor::runUnary, data);
 }
 
+void NLTranslator::translateNullLiteral(mlir::Value result, const Column* nullLiteral, NLStmtContainer* body) {
+    const mlir::Type resultChunk = result.getType();
+
+    Column* const nulls = allocColumnForChunkType(resultChunk);
+    _valueSlots[result] = nulls;
+
+    NLFillNullData* fillData = _program->allocFunctionData<NLFillNullData>(nullLiteral,
+                                                                           nulls,
+                                                                           selectFillNullForChunkType(resultChunk));
+    body->emplaceStmt(&NLExecutor::runFillNull, fillData);
+}
+
 void NLTranslator::translateCheckedCast(nl::CheckedCast checkedCast, NLStmtContainer* body) {
     const mlir::Value operandValue = checkedCast.getOperand();
     const Column* operand = getColumn(operandValue);
 
-    const auto resultChunk = mlir::cast<nl::ChunkType>(checkedCast.getResult().getType());
+    const nl::ChunkType resultChunk = mlir::cast<nl::ChunkType>(checkedCast.getResult().getType());
 
     if (isUntypedNullChunk(operandValue.getType())) {
-        Column* const nulls = allocColumnForChunkType(resultChunk);
-        _valueSlots[checkedCast.getResult()] = nulls;
-
-        NLFillNullData* fillData = _program->allocFunctionData<NLFillNullData>(operand,
-                                                                               nulls,
-                                                                               selectFillNullForChunkType(resultChunk));
-        body->emplaceStmt(&NLExecutor::runFillNull, fillData);
+        translateNullLiteral(checkedCast.getResult(), operand, body);
         return;
     }
 
@@ -4266,16 +4266,13 @@ void NLTranslator::translateToAny(nl::ToAny toAny, NLStmtContainer* body) {
         return;
     }
 
-    Column* const result = allocColumnForChunkType(resultValue.getType());
-    _valueSlots[resultValue] = result;
-
     if (isUntypedNullChunk(operandValue.getType())) {
-        NLFillNullData* fillData = _program->allocFunctionData<NLFillNullData>(operand,
-                                                                               result,
-                                                                               NLExecutor::selectCellFillNull());
-        body->emplaceStmt(&NLExecutor::runFillNull, fillData);
+        translateNullLiteral(resultValue, operand, body);
         return;
     }
+
+    Column* const result = allocColumnForChunkType(resultValue.getType());
+    _valueSlots[resultValue] = result;
 
     NLToAnyData* data = _program->allocFunctionData<NLToAnyData>(operand,
                                                                  result,
