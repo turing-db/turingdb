@@ -480,6 +480,7 @@ private:
     bool whereOpensDetailPredicate(size_t offset);
     bool isOpensPredicateLabels(size_t offset);
     bool isOpensDetailLabels(size_t offset);
+    bool pipeDisjoinsLabels();
     ParenthesizedAtom classifyParenthesis();
     bool startsPredicate();
     bool startsComparison();

@@ -481,7 +481,7 @@ LabelExpr* CypherGrammar::parseLabelExpression() {
 LabelExpr* CypherGrammar::parseLabelDisjunction() {
     LabelExpr* disjunction = parseLabelConjunction();
 
-    while (!isFollowedBy(ExprFollower::PIPE) && accept(CypherTokenKind::PIPE)) {
+    while (pipeDisjoinsLabels() && accept(CypherTokenKind::PIPE)) {
         accept(CypherTokenKind::COLON);
 
         LabelExpr* operand = parseLabelConjunction();
