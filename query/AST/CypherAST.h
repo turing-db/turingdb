@@ -94,7 +94,6 @@ class ParameterDecl;
 class NodePatternData;
 class EdgePatternData;
 class CypherParserState;
-class YCypherParser;
 class ListGraphQuery;
 class ListAvailableGraphsQuery;
 class CreateGraphQuery;
@@ -227,7 +226,6 @@ public:
     friend InstallExtensionQuery;
     friend ShowExtensionsQuery;
     friend VectorSearchStmt;
-    friend YCypherParser;
     friend CreateNodePropertyIndexQuery;
     friend CreateEdgePropertyIndexQuery;
     friend DropIndexQuery;

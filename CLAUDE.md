@@ -61,7 +61,7 @@ Regression tests are Python-based and located in `regress/`. Each test has a `ru
 ## Architecture
 
 ### Query Processing Pipeline
-1. **Parser** (`query/parser/`) - Cypher parser based on ANTLR g4 grammar
+1. **Parser** (`query/parser/`) - Hand-written lexer (`CypherLexer`) and recursive-descent parser (`CypherGrammar`)
 2. **AST** (`query/AST/`) - Abstract syntax tree representation
 3. **Analyzer** (`query/analyzer/`) - Semantic analysis and validation
 4. **Plan** (`query/plan/`) - Query plan generation

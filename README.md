@@ -314,7 +314,7 @@ cd turingdb
 ./pull.sh
 
 # 2. Install dependencies (run once)
-#    Builds/installs: Curl, OpenSSL, GNU Bison and Flex, Boost,
+#    Builds/installs: Curl, OpenSSL, Boost,
 #    OpenBLAS, AWS SDK for C++, and the Faiss vector-search library
 ./dependencies.sh
 
