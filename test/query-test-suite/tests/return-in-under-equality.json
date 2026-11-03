@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN false = true IN [true, false]",
+  "expect": {
+    "result": "\"false = true IN [true, false]\"\nfalse"
+  },
+  "tags": [
+    "operators",
+    "lists",
+    "return"
+  ],
+  "write-required": false
+}

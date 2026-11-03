@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN 'a' || 'b' ENDS WITH 'ab'",
+  "expect": {
+    "result": "'a' || 'b' ENDS WITH 'ab'\ntrue"
+  },
+  "tags": [
+    "operators",
+    "string",
+    "return"
+  ],
+  "write-required": false
+}

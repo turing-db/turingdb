@@ -167,10 +167,10 @@ private:
         AND,
         NOT,
         COMPARISON,
+        PREDICATE,
         ADD_SUB,
         MULT_DIV,
         POWER,
-        STRING,
         SIGN,
     };
 
@@ -481,6 +481,7 @@ private:
     bool isOpensPredicateLabels(size_t offset);
     bool isOpensDetailLabels(size_t offset);
     ParenthesizedAtom classifyParenthesis();
+    bool startsPredicate();
     bool startsComparison();
     size_t skipBalanced(size_t offset);
     size_t skipLabelExpression(size_t offset);
