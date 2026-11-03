@@ -4,3 +4,10 @@ add_turing_test(test_query_parser_parse_error_message ParseErrorMessageTest.cpp)
 add_turing_test(test_query_parser_cypher_lexer CypherLexerTest.cpp)
 add_turing_test(test_query_parser_keyword_name_decision KeywordNameDecisionTest.cpp)
 add_turing_test(test_query_parser_nesting ParserNestingTest.cpp)
+
+add_turing_test(test_query_parser_edge_case ParseEdgeCaseTest.cpp)
+target_sources(test_query_parser_edge_case PRIVATE ParseOutcome.cpp QueryMutants.cpp)
+
+add_turing_test(test_query_parser_mutant ParseMutantTest.cpp)
+target_sources(test_query_parser_mutant PRIVATE ParseOutcome.cpp QueryMutants.cpp)
+target_compile_definitions(test_query_parser_mutant PRIVATE CYPHER_CORPUS_DIR="${CMAKE_SOURCE_DIR}/fuzz/corpus/cypher")
