@@ -1681,6 +1681,21 @@ LogicalResult ToNullable::verify() {
     return success();
 }
 
+LogicalResult CheckedCast::verify() {
+    const Type resultElement = cast<ColumnType>(getResult().getType()).getType();
+    if (!isa<storage::NodeIDType, storage::EdgeIDType>(resultElement)) {
+        return emitOpError("must produce a node or an edge column");
+    }
+
+    const Type operandElement = columnElement(getOperand());
+    if (!isa<storage::AnyType, NoneType>(operandElement) && operandElement != resultElement) {
+        return emitOpError("reads tagged cells, a column whose type lowering resolves, the null literal, "
+                           "or the entities it produces");
+    }
+
+    return success();
+}
+
 // db.limit passes its columns straight through, so the results must be exactly
 // the input columns - same count, same types and in the same order.
 LogicalResult Limit::verify() {
@@ -2550,6 +2565,10 @@ LogicalResult CallSubquery::verify() {
     }
 
     return success();
+}
+
+Speculation::Speculatability CheckedCast::getSpeculatability() {
+    return speculatableOverKnownTypes(getOperation()->getOperands());
 }
 
 Speculation::Speculatability Range::getSpeculatability() {

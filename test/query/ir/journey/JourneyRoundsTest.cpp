@@ -95,9 +95,7 @@ TEST_F(JourneyRoundsTest, ranksTheJourneysThatReachTheDestination) {
 
 // The customer's leg map holds the destination and the path, so the next round boards at
 // the path's last node and searches toward the destination it carries.
-// Disabled: collect() takes no map (TUR-100), and a node read out of a map cannot start a
-// MATCH.
-TEST_F(JourneyRoundsTest, DISABLED_boardsTheNextRoundAtTheEndOfTheLegsPath) {
+TEST_F(JourneyRoundsTest, boardsTheNextRoundAtTheEndOfTheLegsPath) {
     std::string query;
     findLegsFromOxford(query, "['DID', 'RDG', 'PAD']", 470, 500);
     query += "WITH ";

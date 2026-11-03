@@ -444,9 +444,9 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
                        edgePattern);
         }
 
-        decl = _ctxt->getOrCreateNamedVariable(_ast,
-                                               EvaluatedType::EdgePattern,
-                                               symbol->getName());
+        decl = _ctxt->getOrCreateEntityPatternVariable(_ast,
+                                                       EvaluatedType::EdgePattern,
+                                                       symbol->getName());
         edgePattern->setDecl(decl);
     } else {
         decl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::EdgePattern);
@@ -765,6 +765,10 @@ VarDecl* ReadStmtAnalyzer::resolveShortestPathEndpoint(const Symbol* endpoint, c
     VarDecl* decl = _ctxt->getDecl(name);
     if (!decl) {
         throwError(fmt::format("Variable '{}' not found", name), spSt);
+    }
+
+    if (holdsAnEntityPerRow(decl->getType())) {
+        decl = _ctxt->getOrCreateEntityPatternVariable(_ast, EvaluatedType::NodePattern, name);
     }
 
     const EvaluatedType type = decl->getType();

@@ -238,6 +238,12 @@ inline bool namesATaggedCell(EvaluatedType e) {
     return e == EvaluatedType::Any;
 }
 
+// The types of a variable holding a node or a relationship on some rows only: a tagged
+// cell, whose type is the row's, and the null
+inline bool holdsAnEntityPerRow(EvaluatedType e) {
+    return e == EvaluatedType::Any || e == EvaluatedType::Null;
+}
+
 // The types a WHERE, a WHEN, NOT, AND, OR and XOR read as a truth value. A value of type
 // any holds the row's own type, which is checked as each row is read.
 inline bool namesATruthValue(EvaluatedType e) {

@@ -397,6 +397,10 @@ public:
 
     static NLUnaryFn selectToNullable(ValueType valueType, const Column* operand, LocalMemory* memory, Column*& result);
 
+    // Read the entity of @param kind each tagged cell holds (nl.checked_cast), a null cell
+    // reading as the invalid ID; a cell holding another value raises
+    static NLUnaryFn selectCheckedCast(NLChunkKind kind, const Column* operand, LocalMemory* memory, Column*& result);
+
     // Write each row of a CASE (nl.case): the value of the first branch whose condition
     // holds, the default when none does, and an absent value when there is no default.
     static void runCase(NLExecutionContext* context, NLFunctionData* data);

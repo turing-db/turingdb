@@ -3018,6 +3018,21 @@ def ToNullable : NLOp<"to_nullable", [Pure, ConstantThroughOperands, RowAlignedT
   let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
 }
 
+def CheckedCast : NLOp<"checked_cast", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Read the node or the relationship each tagged cell of a chunk holds";
+  let description = [{
+      db.checked_cast lowers to this. A null cell, and every row of a null literal, reads
+      as the invalid ID; a cell holding another value raises.
+
+      %p = nl.checked_cast %v : (!nl.chunk<!storage.any>) -> !nl.chunk<!storage.node_id>
+  }];
+
+  let arguments = (ins NLChunk:$operand);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
+}
+
 def ToAny : NLOp<"to_any", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Read a chunk as values of type any";
   let description = [{

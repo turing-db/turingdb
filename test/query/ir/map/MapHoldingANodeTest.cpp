@@ -49,15 +49,13 @@ TEST_F(MapHoldingANodeTest, DISABLED_readsAPropertyOfTheNodeAnUnwoundMapHolds) {
     expectRows("MATCH (n:Person {name: 'Remy'}) UNWIND [{person: n}] AS m RETURN m.person.name", {{"Remy"}});
 }
 
-// Disabled: a node read out of a map has type Any, and the analyzer rejects a pattern
-// variable already declared with another type than a node.
-TEST_F(MapHoldingANodeTest, DISABLED_startsAMatchFromTheNodeTheMapHolds) {
+TEST_F(MapHoldingANodeTest, startsAMatchFromTheNodeTheMapHolds) {
     expectRows("MATCH (n:Person {name: 'Remy'}) WITH {person: n} AS m WITH m.person AS p "
                "MATCH (p)-[:KNOWS_WELL]->(f) RETURN f.name",
                {{"Adam"}});
 }
 
-TEST_F(MapHoldingANodeTest, DISABLED_startsAMatchFromTheNodeAListedMapHolds) {
+TEST_F(MapHoldingANodeTest, startsAMatchFromTheNodeAListedMapHolds) {
     expectRows("MATCH (n:Person {name: 'Remy'}) WITH [{person: n}] AS l WITH l[0].person AS p "
                "MATCH (p)-[:KNOWS_WELL]->(f) RETURN f.name",
                {{"Adam"}});

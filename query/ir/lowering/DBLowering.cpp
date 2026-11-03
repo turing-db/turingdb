@@ -1599,6 +1599,8 @@ void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
         lowerRowConstant(rowConstant);
     } else if (mlir::db::ToNullable toNullable = mlir::dyn_cast<mlir::db::ToNullable>(operation)) {
         lowerToNullable(toNullable);
+    } else if (mlir::db::CheckedCast checkedCast = mlir::dyn_cast<mlir::db::CheckedCast>(operation)) {
+        lowerCheckedCast(checkedCast);
     } else if (mlir::isa<mlir::db::AddOp>(operation)) {
         lowerBinaryOp<nl::Add>(operation, BinaryResultKind::Numeric);
     } else if (mlir::isa<mlir::db::ConcatOp>(operation)) {
@@ -6176,6 +6178,25 @@ void DBLowering::lowerToNullable(mlir::db::ToNullable toNullable) {
     const mlir::Type element = mlir::cast<nl::ChunkType>(chunk.getType()).getElementType();
 
     _valueMap[toNullable.getResult()] = toNullableChunk(chunk, element);
+}
+
+void DBLowering::lowerCheckedCast(mlir::db::CheckedCast checkedCast) {
+    const mlir::Value chunk = mapValue(checkedCast.getOperand());
+    const mlir::Type operandElement = mlir::cast<nl::ChunkType>(chunk.getType()).getElementType();
+    const mlir::Type entityElement = mlir::cast<mlir::db::ColumnType>(checkedCast.getResult().getType()).getType();
+
+    // A column whose type lowering resolved to the entity holds no row to check
+    if (operandElement == entityElement) {
+        _valueMap[checkedCast.getResult()] = chunk;
+        return;
+    }
+
+    const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), entityElement);
+
+    setInsertionForUnaryOp(chunk);
+
+    nl::CheckedCast entities = _builder.create<nl::CheckedCast>(_builder.getUnknownLoc(), resultType, chunk);
+    _valueMap[checkedCast.getResult()] = entities.getResult();
 }
 
 mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,

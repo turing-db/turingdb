@@ -2103,6 +2103,8 @@ void DBProgramGenerator::generateQueryParts(const SinglePartQuery* query) {
 // so the whole traversal is generated before the first write. The analyzer has already
 // rejected a part that reads again after writing, so the split is a single cut
 void DBProgramGenerator::generatePartStatements(std::span<Stmt* const> stmts) {
+    bindCheckedCasts(stmts);
+
     const auto isUpdating = [](const Stmt* stmt) {
         return Stmt::isUpdating(stmt);
     };
@@ -2185,7 +2187,93 @@ bool DBProgramGenerator::closesPartOnItsCut(const Stmt* stmt, std::span<Stmt* co
     return false;
 }
 
+void DBProgramGenerator::collectCheckedCasts(std::span<Stmt* const> stmts, llvm::SmallVectorImpl<const VarDecl*>& casts) {
+    const auto collect = [&casts](const VarDecl* decl) {
+        const bool isACast = decl && decl->getCastSource();
+        if (isACast && !llvm::is_contained(casts, decl)) {
+            casts.push_back(decl);
+        }
+    };
+
+    for (const Stmt* stmt : stmts) {
+        const Stmt::Kind kind = stmt->getKind();
+        const Pattern* pattern = nullptr;
+
+        if (kind == Stmt::Kind::MATCH) {
+            pattern = static_cast<const MatchStmt*>(stmt)->getPattern();
+        } else if (kind == Stmt::Kind::CREATE) {
+            pattern = static_cast<const CreateStmt*>(stmt)->getPattern();
+        } else if (kind == Stmt::Kind::MERGE) {
+            pattern = static_cast<const MergeStmt*>(stmt)->getPattern();
+        } else if (kind == Stmt::Kind::SHORTESTPATH) {
+            const ShortestPathStmt* shortestPath = static_cast<const ShortestPathStmt*>(stmt);
+            collect(shortestPath->getSourceDecl());
+            collect(shortestPath->getTargetDecl());
+        }
+
+        if (!pattern) {
+            continue;
+        }
+
+        for (const PatternElement* element : pattern->elements()) {
+            for (const EntityPattern* entity : element->getEntities()) {
+                collect(entity->getDecl());
+            }
+        }
+    }
+}
+
+void DBProgramGenerator::bindCheckedCasts(std::span<Stmt* const> stmts) {
+    llvm::SmallVector<const VarDecl*> casts;
+    collectCheckedCasts(stmts, casts);
+
+    for (const VarDecl* cast : casts) {
+        const VariableDependencyGraph::BoundVars& boundVars = _vdg.boundVars();
+
+        const auto bindsTheCast = [cast](const VariableDependency* var) {
+            return var->getDecl() == cast;
+        };
+
+        const bool alreadyBound = llvm::any_of(boundVars, bindsTheCast) || findYieldedColumn(cast);
+        if (alreadyBound) {
+            continue;
+        }
+
+        const VarDecl* source = cast->getCastSource();
+        const auto bindsTheSource = [source](const VariableDependency* var) {
+            return var->getDecl() == source;
+        };
+
+        const auto boundSourceIt = llvm::find_if(boundVars, bindsTheSource);
+
+        if (boundSourceIt != boundVars.end()) {
+            const mlir::Value column = checkedCastColumn(cast, _part._varMap.at(*boundSourceIt).back());
+            const VariableDependency* var = _vdg.registerBoundVariable(cast->getName(), cast);
+            registerValue(var, column);
+        } else if (const mlir::Value yielded = findYieldedColumn(source)) {
+            _part._yieldedColumns.push_back({cast, cast->getName(), checkedCastColumn(cast, yielded)});
+        }
+    }
+}
+
+mlir::Value DBProgramGenerator::checkedCastColumn(const VarDecl* cast, mlir::Value value) {
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+
+    mlir::Value perRow = value;
+    if (yieldsConstantColumn(value, _constantColumns)) {
+        perRow = _opBuilder.create<mlir::db::BroadcastConstant>(loc, value, resolveRowCarryingColumn()).getResult();
+    }
+
+    const bool castsANode = cast->getType() == EvaluatedType::NodePattern;
+    const mlir::Type entityType = castsANode ? mlir::Type(mlir::storage::NodeIDType::get(_mlirCtxt))
+                                             : mlir::Type(mlir::storage::EdgeIDType::get(_mlirCtxt));
+
+    return _opBuilder.create<mlir::db::CheckedCast>(loc, allocColumnType(entityType), perRow).getResult();
+}
+
 void DBProgramGenerator::generatePart(std::span<Stmt* const> stmts) {
+    bindCheckedCasts(stmts);
+
     _vdg.build(stmts);
     collectQuantifiedEdges(stmts);
 
@@ -3547,12 +3635,16 @@ void DBProgramGenerator::generateLeadingYields(std::span<Stmt* const> stmts) {
         collectStatementVariables(stmt, yieldedVariables);
     }
 
+    const auto bindingDecl = [](const VarDecl* decl) {
+        return decl && decl->getCastSource() ? decl->getCastSource() : decl;
+    };
+
     // Any variable they bound can open the component, not only the one the graph lists
     // first: a pattern that reaches the yielded variable from its other end is walked
     // backwards from it, which is the traversal a reversed edge already emits.
     const VariableDependency* drivenRoot = nullptr;
     for (const VariableDependency& var : _vdg.vars()) {
-        const bool bound = llvm::is_contained(yieldedVariables, var.getDecl());
+        const bool bound = llvm::is_contained(yieldedVariables, bindingDecl(var.getDecl()));
         const bool canDrive = bound && isValidRoot(var);
 
         if (canDrive) {
@@ -3570,7 +3662,7 @@ void DBProgramGenerator::generateLeadingYields(std::span<Stmt* const> stmts) {
     // only the root coming out of them alone makes the island safe to cross.
     const bool hasIslands = componentRoots.size() > 1;
     const bool yieldsTheRootAlone = yieldedVariables.size() == 1
-                                    && yieldedVariables.front() == drivenRoot->getDecl();
+                                    && yieldedVariables.front() == bindingDecl(drivenRoot->getDecl());
 
     if (hasIslands && !yieldsTheRootAlone) {
         return;
@@ -3587,6 +3679,8 @@ void DBProgramGenerator::generateLeadingYields(std::span<Stmt* const> stmts) {
             generateUnwind(static_cast<const UnwindStmt*>(stmt));
         }
     }
+
+    bindCheckedCasts(stmts);
 
     _part._drivenRoot = drivenRoot;
 }
@@ -3615,8 +3709,10 @@ void DBProgramGenerator::generateStatementOperations(std::span<Stmt* const> stmt
             }
         } else if (kind == Stmt::Kind::CALL && !drivesTheTraversal) {
             generateCall(static_cast<const CallStmt*>(stmt));
+            bindCheckedCasts(stmts);
         } else if (kind == Stmt::Kind::VECTOR_SEARCH && !drivesTheTraversal) {
             generateVectorSearch(static_cast<const VectorSearchStmt*>(stmt));
+            bindCheckedCasts(stmts);
         } else if (kind == Stmt::Kind::UNWIND && !drivesTheTraversal) {
             const UnwindStmt* unwindStmt = static_cast<const UnwindStmt*>(stmt);
 
@@ -3624,6 +3720,7 @@ void DBProgramGenerator::generateStatementOperations(std::span<Stmt* const> stmt
             // the cross product has already paired with the rows beside it.
             if (!unwindStmt->unwindsLiteral()) {
                 generateUnwind(unwindStmt);
+                bindCheckedCasts(stmts);
             }
         }
     }
@@ -4470,6 +4567,8 @@ void DBProgramGenerator::rebindGroupedWrittenEntity(const VarDecl* decl,
 }
 
 void DBProgramGenerator::generateUpdates(std::span<Stmt* const> stmts) {
+    bindCheckedCasts(stmts);
+
     for (const Stmt* stmt : stmts) {
         switch (stmt->getKind()) {
             case Stmt::Kind::MERGE:
@@ -7283,8 +7382,13 @@ void DBProgramGenerator::collectPublishedColumns(llvm::SmallVectorImpl<Published
 
         const auto foundIt = std::ranges::find_if(published, sameName);
         if (foundIt != published.end()) {
-            foundIt->_decl = decl;
-            foundIt->_column = column;
+            // A pattern casting a variable binds its name to the cast, in place of the value
+            const bool castsTheVariable = foundIt->_decl && foundIt->_decl->getCastSource() == decl;
+            if (!castsTheVariable) {
+                foundIt->_decl = decl;
+                foundIt->_column = column;
+            }
+
             return;
         }
 
@@ -8887,8 +8991,10 @@ mlir::Value DBProgramGenerator::generateSubqueryExpression(const RegularQuery* b
         const DeclContext* bodyContext = query->getDeclContext();
         llvm::SmallVector<PublishedColumn>& scope = scopes[query]._columns;
 
+        // A pattern of the body casting an import binds the import's name to the cast
         const auto importedDecl = [bodyContext](std::string_view name) -> const VarDecl* {
-            const VarDecl* decl = bodyContext->getDecl(name);
+            const VarDecl* named = bodyContext->getDecl(name);
+            const VarDecl* decl = named && named->getCastSource() ? named->getCastSource() : named;
 
             return decl && decl->getImportSource() ? decl : nullptr;
         };

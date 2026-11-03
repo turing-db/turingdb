@@ -2031,6 +2031,51 @@ void entityToNullableColumn(Column* result, const Column* operand) {
     }
 }
 
+template <typename ID>
+ID checkedEntity(const CellView cell) {
+    const CellTag tag = cell.getTag();
+
+    if (tag == TypeToCellTag<ID>::Tag) {
+        return cell.getAs<ID>();
+    } else if (tag == CellTag::Null) {
+        return ID {};
+    }
+
+    constexpr std::string_view entity = std::is_same_v<ID, NodeID> ? "a node" : "a relationship";
+    throw IRException(fmt::format("A pattern reads {}, and this row holds a value that is not one", entity));
+}
+
+template <typename ID>
+ID checkedEntity(const std::optional<CellView>& cell) {
+    return cell ? checkedEntity<ID>(*cell) : ID {};
+}
+
+template <typename ID, typename Cell>
+void checkedCastColumn(Column* result, const Column* operand) {
+    const std::vector<Cell>& cells = static_cast<const ColumnVector<Cell>*>(operand)->getRaw();
+    std::vector<ID>& ids = static_cast<ColumnVector<ID>*>(result)->getRaw();
+
+    ids.resize(cells.size());
+    std::transform(cells.begin(), cells.end(), ids.begin(), [](const Cell& cell) {
+        return checkedEntity<ID>(cell);
+    });
+}
+
+template <typename ID>
+NLUnaryFn selectCheckedCastOf(const Column* operand, LocalMemory* memory, Column*& result) {
+    const ColumnKind::Code kind = operand->getKind();
+
+    if (kind == ColumnVector<CellView>::staticKind()) {
+        result = memory->alloc<ColumnVector<ID>>();
+        return &checkedCastColumn<ID, CellView>;
+    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
+        result = memory->alloc<ColumnVector<ID>>();
+        return &checkedCastColumn<ID, std::optional<CellView>>;
+    }
+
+    throw IRException("A pattern reads its node or relationship out of a column of tagged cells laid out over its rows");
+}
+
 template <typename Primitive>
 void toNullableConst(Column* result, const Column* operand) {
     const auto* constant = static_cast<const ColumnConst<Primitive>*>(operand);
@@ -9986,6 +10031,16 @@ NLUnaryFn NLExecutor::selectEntityToNullable(NLChunkKind kind, LocalMemory* memo
     }
 
     return &entityToNullableColumn<EdgeID>;
+}
+
+NLUnaryFn NLExecutor::selectCheckedCast(NLChunkKind kind, const Column* operand, LocalMemory* memory, Column*& result) {
+    if (kind == NLChunkKind::NodeID) {
+        return selectCheckedCastOf<NodeID>(operand, memory, result);
+    } else if (kind == NLChunkKind::EdgeID) {
+        return selectCheckedCastOf<EdgeID>(operand, memory, result);
+    }
+
+    throw IRException("A tagged cell is checked to hold a node or an edge only");
 }
 
 NLUnaryFn NLExecutor::selectToNullable(ValueType valueType, const Column* operand, LocalMemory* memory, Column*& result) {

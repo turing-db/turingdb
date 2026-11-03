@@ -1,5 +1,7 @@
 #include "DeclContext.h"
 
+#include <algorithm>
+
 #include <spdlog/fmt/bundled/format.h>
 
 #include "CompilerException.h"
@@ -82,7 +84,17 @@ VarDecl* DeclContext::getOrCreateNodePatternVariable(CypherAST* ast, std::string
         return declared;
     }
 
-    return getOrCreateNamedVariable(ast, EvaluatedType::NodePattern, name);
+    return getOrCreateEntityPatternVariable(ast, EvaluatedType::NodePattern, name);
+}
+
+VarDecl* DeclContext::getOrCreateEntityPatternVariable(CypherAST* ast, EvaluatedType type, std::string_view name) {
+    VarDecl* declared = getDecl(name);
+
+    if (declared && holdsAnEntityPerRow(declared->getType())) {
+        return declareCastVariable(ast, declared, type, name);
+    }
+
+    return getOrCreateNamedVariable(ast, type, name);
 }
 
 // The item computes a column of its own, so an alias spelling a name already in scope
@@ -134,5 +146,20 @@ void DeclContext::redeclare(VarDecl* decl) {
 
 void DeclContext::addDecl(VarDecl* decl) {
     _decls.push_back(decl);
+}
+
+// The cast takes the place of its source, in the scope's names and in the order a wildcard
+// returns its variables, so whatever follows the pattern reads the entity
+VarDecl* DeclContext::declareCastVariable(CypherAST* ast, VarDecl* source, EvaluatedType type, std::string_view name) {
+    VarDecl* decl = VarDecl::create(ast, this, name, type);
+    decl->setIsUnnamed(false);
+    decl->setCastSource(source);
+    source->setIsCastToAnEntity(true);
+
+    _decls.pop_back();
+    std::ranges::replace(_decls, source, decl);
+    _declMap[name] = decl;
+
+    return decl;
 }
 

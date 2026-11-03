@@ -215,6 +215,10 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
     if (Symbol* symbol = nodePattern->getSymbol()) {
         decl = _ctxt->getDecl(symbol->getName());
         if (decl) {
+            if (holdsAnEntityPerRow(decl->getType())) {
+                decl = _ctxt->getOrCreateEntityPatternVariable(_ast, EvaluatedType::NodePattern, symbol->getName());
+            }
+
             // Node already defined. It is either created in the query, or an input to the write query
             if (decl->getType() != EvaluatedType::NodePattern) {
                 throwError(fmt::format("Type mismatch. Expected NodePattern but is {} instead ",

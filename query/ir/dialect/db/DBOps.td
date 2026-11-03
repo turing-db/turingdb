@@ -3306,6 +3306,32 @@ def ToNullable : TuringOp<"to_nullable", [Pure, ConstantThroughOperands]> {
   let hasVerifier = 1;
 }
 
+def CheckedCast : TuringOp<"checked_cast", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+  let summary = "Read the node or the relationship each row's value holds";
+  let description = [{
+    A pattern naming a variable whose type is known per row - a value read out of a map, a
+    mixed list or a CASE - reads the entity each row holds as a column of IDs:
+
+      %p = db.checked_cast %v : (!db.column<!storage.any>) -> !db.column<!storage.node_id>
+
+    Row r of the result is the node, or the relationship for an edge_id result, that row r's
+    tagged cell holds. A null cell reads as the invalid ID an entity column spells its null
+    with, from which a pattern matches nothing, and a cell holding any other value is the
+    type error the row raises. The null literal reads as that invalid ID on every row, and
+    a column already holding the entities reads as itself.
+
+    It may raise, so it is computed over the rows reaching it: a constant operand is laid
+    out over them first.
+  }];
+
+  let arguments = (ins Column:$operand);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
+
+  let hasVerifier = 1;
+}
+
 class PredicateOp<string mnemonic, list<Trait> traits = []>
     : TuringOp<mnemonic, !listconcat(traits, [ConstantThroughOperands])>,
       Arguments<(ins Column:$lhs, Column:$rhs)> {
