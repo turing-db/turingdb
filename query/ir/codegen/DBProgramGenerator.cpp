@@ -1282,10 +1282,12 @@ mlir::Value DBProgramGenerator::translateMapLiteral(const MapLiteral* map) {
 }
 
 mlir::Value DBProgramGenerator::translateMapOfColumns(const MapLiteral* map) {
-    llvm::SmallVector<std::pair<std::string_view, const Expr*>> entries;
-    entries.reserve(map->size());
+    const std::span<const MapLiteral::Entry> heldEntries = map->getHeldEntries();
 
-    for (const auto& [key, valueExpr] : *map) {
+    llvm::SmallVector<std::pair<std::string_view, const Expr*>> entries;
+    entries.reserve(heldEntries.size());
+
+    for (const auto& [key, valueExpr] : heldEntries) {
         entries.emplace_back(key->getName(), valueExpr);
     }
 
@@ -1302,7 +1304,7 @@ mlir::Value DBProgramGenerator::emitMakeMap(std::span<const std::pair<std::strin
     // Sorted on key name, as the DictionaryAttr of a constant map is
     std::map<std::string_view, mlir::Value> columnsByKey;
     for (const auto& [keyName, valueExpr] : entries) {
-        columnsByKey.insert_or_assign(keyName, getOrTranslateExprColumn(valueExpr));
+        columnsByKey.emplace(keyName, getOrTranslateExprColumn(valueExpr));
     }
 
     llvm::SmallVector<mlir::Attribute> keys;
@@ -1323,9 +1325,10 @@ mlir::Value DBProgramGenerator::emitMakeMap(std::span<const std::pair<std::strin
 }
 
 void DBProgramGenerator::translateMapEntries(const MapLiteral* map, mlir::NamedAttrList& entries) {
-    entries.reserve(map->size());
+    const std::span<const MapLiteral::Entry> heldEntries = map->getHeldEntries();
+    entries.reserve(heldEntries.size());
 
-    for (const auto& [key, valueExpr] : *map) {
+    for (const auto& [key, valueExpr] : heldEntries) {
         const LiteralExpr* literalExpr = dynamic_cast<const LiteralExpr*>(valueExpr);
 
         if (!literalExpr) {
@@ -1342,7 +1345,7 @@ void DBProgramGenerator::translateMapEntries(const MapLiteral* map, mlir::NamedA
         }
 
         const std::string_view keyName = key->getName();
-        entries.set(_opBuilder.getStringAttr(llvm::StringRef(keyName.data(), keyName.size())), value);
+        entries.append(_opBuilder.getStringAttr(llvm::StringRef(keyName.data(), keyName.size())), value);
     }
 }
 
@@ -8489,10 +8492,9 @@ mlir::Value DBProgramGenerator::projectedMap(const MapProjectionExpr* projection
     for (const MapProjectionExpr::Item& item : projection->getItems()) {
         if (item._kind == MapProjectionExpr::ItemKind::AllProperties) {
             readsEveryProperty = true;
-            continue;
+        } else if (!item._shadowed) {
+            entries.emplace_back(item._key->getName(), item._value);
         }
-
-        entries.emplace_back(item._key->getName(), item._value);
     }
 
     if (!readsEveryProperty) {

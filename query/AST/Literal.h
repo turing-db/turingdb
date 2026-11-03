@@ -190,7 +190,8 @@ private:
 
 class MapLiteral : public Literal {
 public:
-    using Entries = std::vector<std::pair<Symbol*, Expr*>>;
+    using Entry = std::pair<Symbol*, Expr*>;
+    using Entries = std::vector<Entry>;
     using EntryConstIterator = Entries::const_iterator;
 
     constexpr Kind getKind() const override { return Kind::MAP; }
@@ -199,14 +200,15 @@ public:
 
     static MapLiteral* create(CypherAST* ast);
 
-    // A key may repeat. Every value is evaluated, and the map holds the last one under a key.
+    // A key may repeat. Every entry is analyzed, and a MATCH pattern reads each as an
+    // equality, but the map holds the last entry under a key and computes no earlier one.
     void addEntry(Symbol* key, Expr* value);
 
-    void dropShadowedEntries();
+    std::span<const Entry> getHeldEntries() const { return _heldEntries; }
 
-    /// Whether every value is a literal, at any depth - what makes the whole map a value
-    /// known without reading a row, rather than one built per row out of what its values
-    /// read.
+    /// Whether every value the map holds is a literal, at any depth - what makes the whole
+    /// map a value known without reading a row, rather than one built per row out of what
+    /// its values read.
     bool isLiteralTree() const;
 
     bool empty() const { return _entries.empty(); }
@@ -217,6 +219,7 @@ public:
 
 private:
     Entries _entries;
+    Entries _heldEntries;
 
     MapLiteral();
     ~MapLiteral() override;

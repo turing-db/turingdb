@@ -215,33 +215,25 @@ MapLiteral* MapLiteral::create(CypherAST* ast) {
 
 void MapLiteral::addEntry(Symbol* key, Expr* value) {
     _entries.emplace_back(key, value);
-}
 
-void MapLiteral::dropShadowedEntries() {
-    Entries kept;
+    const std::string_view name = key->getName();
+    const auto heldIt = std::ranges::find_if(_heldEntries, [name](const Entry& held) {
+        return held.first->getName() == name;
+    });
 
-    for (const std::pair<Symbol*, Expr*>& entry : _entries) {
-        const std::string_view name = entry.first->getName();
-        const auto keptIt = std::ranges::find_if(kept, [name](const std::pair<Symbol*, Expr*>& keptEntry) {
-            return keptEntry.first->getName() == name;
-        });
-
-        if (keptIt != kept.end()) {
-            keptIt->second = entry.second;
-        } else {
-            kept.push_back(entry);
-        }
+    if (heldIt != _heldEntries.end()) {
+        *heldIt = Entry {key, value};
+    } else {
+        _heldEntries.emplace_back(key, value);
     }
-
-    _entries.swap(kept);
 }
 
 bool MapLiteral::isLiteralTree() const {
-    const auto isLiteralEntry = [](const std::pair<Symbol*, Expr*>& entry) {
+    const auto isLiteralEntry = [](const Entry& entry) {
         return isLiteralTreeExpr(entry.second);
     };
 
-    return std::ranges::all_of(_entries, isLiteralEntry);
+    return std::ranges::all_of(_heldEntries, isLiteralEntry);
 }
 
 EmbeddingLiteral::EmbeddingLiteral()

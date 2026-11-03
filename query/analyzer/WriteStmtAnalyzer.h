@@ -23,9 +23,11 @@ class RemoveStmt;
 class DeleteStmt;
 class Pattern;
 class PatternElement;
+class EntityPattern;
 class NodePattern;
 class EdgePattern;
 class Expr;
+class MapLiteral;
 
 class WriteStmtAnalyzer {
 public:
@@ -66,6 +68,7 @@ private:
     void analyzeNamedPath(PatternElement* element);
     void analyze(NodePattern* node);
     void analyze(EdgePattern* edge);
+    void analyzePropertyValues(const MapLiteral* properties, const EntityPattern* pattern);
     void analyze(SetItem* item);
     void analyzePropertiesAssign(SetItem::EntityPropertiesAssign& assign, const SetItem* item);
     void analyzeMapLiteralProperties(const Expr* value, std::vector<EntityPropertyConstraint>& created);

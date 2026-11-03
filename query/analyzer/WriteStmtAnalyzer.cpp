@@ -150,7 +150,7 @@ void WriteStmtAnalyzer::throwOnNullProperty(const Pattern* pattern) const {
                 continue;
             }
 
-            for (const auto& [propertyName, expr] : *properties) {
+            for (const auto& [propertyName, expr] : properties->getHeldEntries()) {
                 if (expr->getType() == EvaluatedType::Null) {
                     throwError(fmt::format("MERGE cannot match on property '{}', which is null",
                                            propertyName->getName()),
@@ -259,15 +259,11 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
 
     const MapLiteral* properties = nodePattern->getProperties();
     if (properties) {
+        analyzePropertyValues(properties, nodePattern);
+
         const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
 
-        for (const auto& [propName, expr] : *properties) {
-            _exprAnalyzer->analyzeRootExpr(expr);
-
-            if (expr->isAggregate()) {
-                throwError("Invalid use of aggregate expression in this context", nodePattern);
-            }
-
+        for (const auto& [propName, expr] : properties->getHeldEntries()) {
             const EvaluatedType exprType = expr->getType();
             if (exprType == EvaluatedType::Null) {
                 continue;
@@ -345,15 +341,11 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
 
     const MapLiteral* properties = edgePattern->getProperties();
     if (properties) {
+        analyzePropertyValues(properties, edgePattern);
+
         const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
 
-        for (const auto& [propName, expr] : *properties) {
-            _exprAnalyzer->analyzeRootExpr(expr);
-
-            if (expr->isAggregate()) {
-                throwError("Invalid use of aggregate expression in this context", edgePattern);
-            }
-
+        for (const auto& [propName, expr] : properties->getHeldEntries()) {
             const EvaluatedType exprType = expr->getType();
             if (exprType == EvaluatedType::Null) {
                 continue;
@@ -387,6 +379,16 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
                 data->addExprConstraint(propName->getName(), valueType, expr);
                 _exprAnalyzer->addToBeCreatedType(propName->getName(), valueType, expr);
             }
+        }
+    }
+}
+
+void WriteStmtAnalyzer::analyzePropertyValues(const MapLiteral* properties, const EntityPattern* pattern) {
+    for (const auto& [propName, expr] : *properties) {
+        _exprAnalyzer->analyzeRootExpr(expr);
+
+        if (expr->isAggregate()) {
+            throwError("Invalid use of aggregate expression in this context", pattern);
         }
     }
 }
@@ -517,7 +519,7 @@ void WriteStmtAnalyzer::analyzeMapLiteralProperties(const Expr* value, std::vect
         return;
     }
 
-    for (const auto& [key, expr] : *static_cast<const MapLiteral*>(literal)) {
+    for (const auto& [key, expr] : static_cast<const MapLiteral*>(literal)->getHeldEntries()) {
         const std::string_view propertyName = key->getName();
         const EvaluatedType exprType = expr->getType();
 

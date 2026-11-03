@@ -116,11 +116,12 @@ property of `v`. On a datetime or a duration `.key` holds the component `v.key` 
 `WITH duration({hours: 1}) AS d RETURN d {.hours, x: 1}` is `{hours: 1, x: 1}`. A temporal has
 no properties, so `.*` and a name that is no component are rejected by the analyzer where `v` is
 typed a datetime or a duration, and raise on the row where a tagged cell holds one.
-`key: expr` holds the expression, and `x` the variable `x` under the key `x`. Every entry is
-computed, and a later one replaces an earlier one under the same key, as in a map literal:
-`v {x: 1 / 0, x: 2}` raises. An entry wins over the property `.*` reads under its key wherever
-the `.*` stands, as in Neo4j: `p {name: 'x', .*}` and `p {.*, name: 'x'}` both hold the name
-'x'. A null `v` projects to null and computes none of its items.
+`key: expr` holds the expression, and `x` the variable `x` under the key `x`. A later entry
+shadows an earlier one under the same key, as in a map literal: `v {x: 1 / 0, x: 2}` is
+`{x: 2}`, and `v {.name, name: 1 / 0}` raises. An entry wins over the property `.*` reads under
+its key wherever the `.*` stands, as in Neo4j: `p {name: 'x', .*}` and `p {.*, name: 'x'}` both
+hold the name 'x'. `.*` shadows no entry, so `p {name: 1 / 0, .*}` raises. A null `v` projects
+to null and computes none of its items.
 
 The AST keeps the projection as a `MapProjectionExpr`; the analyzer reads each `.key` as the
 `v.key` property read. Codegen emits a `db.make_map` of the entries and, where the projection
@@ -137,6 +138,23 @@ properties. Any other item makes it no node pattern.
 
 `collect()` gathers maps as it gathers lists. A null map is dropped, and `collect(DISTINCT m)`
 compares maps entry by entry.
+
+# A repeated key
+
+A map written with a repeated key holds the last entry under it and never computes an earlier
+one, as Neo4j does: `RETURN {x: 1 / 0, x: 2}` is `{x: 2}`. The earlier entry is still analyzed.
+`RETURN {x: y, x: 2}` is an analysis error where `y` is not defined, and
+`UNWIND [1, 2] AS i RETURN {x: count(i), x: 2}` aggregates to one row. `MapLiteral` keeps every
+entry it was written with, and `getHeldEntries()` the last one under each key, which is all
+codegen translates. A map projection marks its shadowed items (`MapProjectionExpr::Item`'s
+`_shadowed`).
+
+A pattern's property map is read by its clause. MATCH and OPTIONAL MATCH read every entry as an
+equality, and so do the patterns of EXISTS, COUNT and COLLECT subqueries, pattern predicates and
+pattern comprehensions: `MATCH (n {name: 'Adam', name: 'Remy'})` matches nothing, and
+`MATCH (n:Person {age: 1 / 0, age: 32})` raises. CREATE and MERGE write the held entries alone:
+`CREATE (n:P {a: 1 / 0, a: 2})` writes 2, and `MERGE (n:P {a: 1, a: 2})` matches and creates on
+`a = 2`.
 
 # keys() and properties()
 
