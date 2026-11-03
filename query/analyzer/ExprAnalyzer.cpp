@@ -2168,6 +2168,7 @@ void ExprAnalyzer::analyzePatternComprehensionExpr(PatternComprehensionExpr* exp
     std::vector<std::string_view> ownVariables;
     std::vector<const EntityPattern*> ownEntities;
     std::vector<std::string_view> enclosingVariables;
+    std::vector<std::pair<std::string_view, VarDecl*>> castSources;
 
     for (const PatternElement* element : pattern->elements()) {
         if (const Symbol* pathSymbol = element->getPathSymbol()) {
@@ -2176,8 +2177,25 @@ void ExprAnalyzer::analyzePatternComprehensionExpr(PatternComprehensionExpr* exp
 
         for (const EntityPattern* entity : element->getEntities()) {
             const Symbol* symbol = entity->getSymbol();
+            if (!symbol) {
+                continue;
+            }
 
-            if (!symbol || _ctxt->hasDecl(symbol->getName())) {
+            const std::string_view name = symbol->getName();
+            VarDecl* declared = _ctxt->getDecl(name);
+
+            // A value of the scope known per row only is cast for the body alone: after the
+            // comprehension the scope reads the value again
+            if (declared && holdsAnEntityPerRow(declared->getType())) {
+                castSources.emplace_back(name, declared);
+
+                VarDecl* bound = entity->getDecl();
+                if (bound && bound->getCastSource() == declared) {
+                    _ctxt->declareAlias(name, bound);
+                }
+            }
+
+            if (declared) {
                 continue;
             }
 
@@ -2226,6 +2244,10 @@ void ExprAnalyzer::analyzePatternComprehensionExpr(PatternComprehensionExpr* exp
 
     for (const std::string_view name : enclosingVariables) {
         _ctxt->dropVariable(name);
+    }
+
+    for (const auto& [name, source] : castSources) {
+        _ctxt->dropCastVariable(name, source);
     }
 
     if (projection->isAggregate()) {

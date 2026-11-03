@@ -58,6 +58,10 @@ public:
 
     bool isIsolated() const { return edges().empty(); }
 
+    // Whether a pattern of the part names the variable, rather than the variable riding
+    // along with the rows a barrier bound
+    bool isNamedByAPattern() const { return _isNamedByAPattern; }
+
     void setName(std::string_view name) { _name = name; }
 
     bool isSink() const { return _outgoing.empty(); }
@@ -83,6 +87,7 @@ private:
 
     std::string _name;
     const VarDecl* _decl {nullptr};
+    bool _isNamedByAPattern {false};
 };
 
 }

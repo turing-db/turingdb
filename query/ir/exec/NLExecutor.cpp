@@ -2041,8 +2041,8 @@ ID checkedEntity(const CellView cell) {
         return ID {};
     }
 
-    constexpr std::string_view entity = std::is_same_v<ID, NodeID> ? "a node" : "a relationship";
-    throw IRException(fmt::format("A pattern reads {}, and this row holds a value that is not one", entity));
+    constexpr std::string_view ENTITY = std::is_same_v<ID, NodeID> ? "a node" : "a relationship";
+    throw IRException(fmt::format("A pattern reads {}, and this row holds a value that is not one", ENTITY));
 }
 
 template <typename ID>

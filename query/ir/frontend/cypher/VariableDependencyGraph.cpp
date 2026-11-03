@@ -307,6 +307,8 @@ VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPat
         var = decl->isUnnamed() ? newAnonymousVariable(decl) : newVariable(decl);
     }
 
+    var->_isNamedByAPattern = true;
+
     const NodePattern* node = dynamic_cast<const NodePattern*>(entity);
     if (node) {
         const NodePatternData* data = node->getData();
