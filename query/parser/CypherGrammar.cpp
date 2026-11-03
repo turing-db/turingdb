@@ -18,9 +18,7 @@ constexpr size_t MAX_EXPECTED_ENTRIES = 4;
 bool opensBracket(CypherTokenKind kind) {
     return kind == CypherTokenKind::OPAREN
            || kind == CypherTokenKind::OBRACK
-           || kind == CypherTokenKind::OBRACE
-           || kind == CypherTokenKind::TIP_TAIL_BRACKET
-           || kind == CypherTokenKind::TAIL_BRACKET;
+           || kind == CypherTokenKind::OBRACE;
 }
 
 bool closesBracket(CypherTokenKind kind) {

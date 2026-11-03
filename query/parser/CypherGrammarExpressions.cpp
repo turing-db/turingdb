@@ -1551,8 +1551,8 @@ bool CypherGrammar::whereOpensPredicate(size_t offset) {
     return startsExpr(next) && !continuesAName;
 }
 
-bool CypherGrammar::whereOpensDetailPredicate() {
-    const CypherTokenKind next = peek(1)._kind;
+bool CypherGrammar::whereOpensDetailPredicate(size_t offset) {
+    const CypherTokenKind next = peek(offset + 1)._kind;
     const bool continuesAName = next == CypherTokenKind::OBRACE
                                 || next == CypherTokenKind::WHERE
                                 || next == CypherTokenKind::IS;
@@ -1566,8 +1566,8 @@ bool CypherGrammar::isOpensPredicateLabels(size_t offset) {
     return startsLabelAtom(next) && !isInfixWord(next);
 }
 
-bool CypherGrammar::isOpensDetailLabels() {
-    const CypherTokenKind next = peek(1)._kind;
+bool CypherGrammar::isOpensDetailLabels(size_t offset) {
+    const CypherTokenKind next = peek(offset + 1)._kind;
 
     return startsLabelAtom(next) && next != CypherTokenKind::IS;
 }
@@ -1643,9 +1643,7 @@ size_t CypherGrammar::skipBalanced(size_t offset) {
 
         if (kind == CypherTokenKind::OPAREN) {
             closers.push_back(CypherTokenKind::CPAREN);
-        } else if (kind == CypherTokenKind::OBRACK
-                   || kind == CypherTokenKind::TIP_TAIL_BRACKET
-                   || kind == CypherTokenKind::TAIL_BRACKET) {
+        } else if (kind == CypherTokenKind::OBRACK) {
             closers.push_back(CypherTokenKind::CBRACK);
         } else if (kind == CypherTokenKind::OBRACE) {
             closers.push_back(CypherTokenKind::CBRACE);

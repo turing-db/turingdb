@@ -10,10 +10,6 @@ namespace db {
 
 enum class CypherTokenKind : uint8_t {
     PROG_END,
-    TIP_TAIL_TAIL,
-    TAIL_TAIL_TIP,
-    TIP_TAIL_BRACKET,
-    TAIL_BRACKET,
     SEMI_COLON,
     ADD_ASSIGN,
     NOT_EQUAL,

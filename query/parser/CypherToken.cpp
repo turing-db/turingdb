@@ -8,10 +8,6 @@ namespace {
 
 constexpr std::array<std::string_view, CypherToken::KIND_COUNT> TOKEN_NAMES {
     "PROG_END",
-    "TIP_TAIL_TAIL",
-    "TAIL_TAIL_TIP",
-    "TIP_TAIL_BRACKET",
-    "TAIL_BRACKET",
     "SEMI_COLON",
     "ADD_ASSIGN",
     "NOT_EQUAL",
