@@ -1199,7 +1199,8 @@ void ExprAnalyzer::analyzeTypeTestOfAnExpr(EntityTypeExpr* expr, Expr* operand) 
 
 void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, const FunctionResolver* resolver) {
     const FunctionInvocation* invoc = expr->getFunctionInvocation();
-    const std::vector<Symbol*>& names = invoc->getName()->names();
+    const QualifiedName* qualifiedName = invoc->getName();
+    const std::vector<Symbol*>& names = qualifiedName->names();
 
     std::string name;
 
@@ -1212,7 +1213,7 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, const Func
         }
     }
 
-    const auto signatures = resolver->lookup(name);
+    const auto signatures = resolver->lookup(qualifiedName);
 
     // Check if there is at least one overload matching the function name
     if (signatures.empty()) {

@@ -38,6 +38,7 @@ enum ColumnOperator : uint8_t {
     OP_PROJECT,
     OP_IN,
     OP_INDEX,
+    OP_INDEX_OF,
 
     // Unary operators
     OP_MINUS,
@@ -96,6 +97,7 @@ constexpr ColumnOperatorType getOperatorType(ColumnOperator op) {
         case OP_PROJECT:
         case OP_IN:
         case OP_INDEX:
+        case OP_INDEX_OF:
             return ColumnOperatorType::OPTYPE_BINARY;
         break;
 
@@ -158,6 +160,7 @@ using ColumnOperatorDescription = EnumToString<ColumnOperator>::Create<
     EnumStringPair<ColumnOperator::OP_PROJECT, "PROJECT">,
     EnumStringPair<ColumnOperator::OP_IN, "IN">,
     EnumStringPair<ColumnOperator::OP_INDEX, "INDEX">,
+    EnumStringPair<ColumnOperator::OP_INDEX_OF, "INDEX_OF">,
 
     EnumStringPair<ColumnOperator::OP_MINUS, "MINUS">,
     EnumStringPair<ColumnOperator::OP_PLUS, "PLUS">,

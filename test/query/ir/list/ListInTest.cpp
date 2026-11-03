@@ -87,6 +87,14 @@ TEST_F(ListInTest, elementTypes) {
     expectRows("RETURN 2 IN [1, 2.0]", {{"true"}});
 }
 
+TEST_F(ListInTest, temporalMembership) {
+    expectRows("RETURN datetime('2020-01-01T00:00:00Z') IN [datetime('2020-01-01T00:00:00Z')], "
+               "datetime('2020-01-01T00:00:00Z') IN [1, 'a']",
+               {{"true", "false"}});
+    expectRows("RETURN duration(5) IN [duration(4), duration(5)], duration(5) IN [duration(4)]",
+               {{"true", "false"}});
+}
+
 TEST_F(ListInTest, constantMembershipOverRows) {
     std::vector<StringRowSink::Row> expected(18, {"true"});
     expectRows("MATCH (n) RETURN 3 IN [1, 2, 3]", expected);

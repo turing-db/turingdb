@@ -76,16 +76,42 @@ struct TextKindPairs {
         typename OptionalKindPairs<types::String::OwningPrimitive, T>::Pairs>::Type;
 };
 
+// A value tested against a list, or against the list a type-erased cell holds, which is what
+// an index of a nested list answers: `x IN list`
 template <typename T>
-struct ListMembershipKindPairs {
-    using Pairs = typename OptionalKindPairs<T, ListView>::Pairs;
+struct MembershipKindPairs {
+    using Pairs = TupleFlatten<
+        typename OptionalKindPairs<T, ListView>::Pairs,
+        typename OptionalKindPairs<T, CellView>::Pairs>::Type;
 };
 
-// The same test against the list a type-erased cell holds, which is what an index of a
-// nested list answers
+// The same pairs the other way round: `coll.indexOf(list, x)`
 template <typename T>
-struct TaggedMembershipKindPairs {
-    using Pairs = typename OptionalKindPairs<T, CellView>::Pairs;
+struct ListSearchKindPairs {
+    using Pairs = TupleFlatten<
+        typename OptionalKindPairs<ListView, T>::Pairs,
+        typename OptionalKindPairs<CellView, T>::Pairs>::Type;
+};
+
+// Every kind of value a list is searched for, laid beside the list as @param SearchPairs
+// lays it, so IN and coll.indexOf find the same values
+template <template <typename> class SearchPairs>
+struct SearchedValueKindPairs {
+    using Pairs = TupleFlatten<
+        typename SearchPairs<types::Int64::Primitive>::Pairs,
+        typename SearchPairs<types::UInt64::Primitive>::Pairs,
+        typename SearchPairs<types::Double::Primitive>::Pairs,
+        typename SearchPairs<types::String::Primitive>::Pairs,
+        typename SearchPairs<types::String::OwningPrimitive>::Pairs,
+        typename SearchPairs<types::Bool::Primitive>::Pairs,
+        typename SearchPairs<types::DateTime::Primitive>::Pairs,
+        typename SearchPairs<types::Duration::Primitive>::Pairs,
+        typename SearchPairs<types::Embedding::Primitive>::Pairs,
+        typename SearchPairs<NodeID>::Pairs,
+        typename SearchPairs<EdgeID>::Pairs,
+        typename SearchPairs<CellView>::Pairs,
+        typename SearchPairs<ListView>::Pairs,
+        typename SearchPairs<MapView>::Pairs>::Type;
 };
 
 template <typename T>
@@ -499,32 +525,7 @@ template <ColumnOperator Op>
     requires (Op == OP_IN)
 struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
-        ListMembershipKindPairs<types::Int64::Primitive>::Pairs,
-        ListMembershipKindPairs<types::UInt64::Primitive>::Pairs,
-        ListMembershipKindPairs<types::Double::Primitive>::Pairs,
-        ListMembershipKindPairs<types::String::Primitive>::Pairs,
-        ListMembershipKindPairs<types::String::OwningPrimitive>::Pairs,
-        ListMembershipKindPairs<types::Bool::Primitive>::Pairs,
-        ListMembershipKindPairs<types::Embedding::Primitive>::Pairs,
-        ListMembershipKindPairs<NodeID>::Pairs,
-        ListMembershipKindPairs<EdgeID>::Pairs,
-
-        ListMembershipKindPairs<CellView>::Pairs,
-        ListMembershipKindPairs<ListView>::Pairs,
-        ListMembershipKindPairs<MapView>::Pairs,
-
-        TaggedMembershipKindPairs<types::Int64::Primitive>::Pairs,
-        TaggedMembershipKindPairs<types::UInt64::Primitive>::Pairs,
-        TaggedMembershipKindPairs<types::Double::Primitive>::Pairs,
-        TaggedMembershipKindPairs<types::String::Primitive>::Pairs,
-        TaggedMembershipKindPairs<types::String::OwningPrimitive>::Pairs,
-        TaggedMembershipKindPairs<types::Bool::Primitive>::Pairs,
-        TaggedMembershipKindPairs<types::Embedding::Primitive>::Pairs,
-        TaggedMembershipKindPairs<NodeID>::Pairs,
-        TaggedMembershipKindPairs<EdgeID>::Pairs,
-        TaggedMembershipKindPairs<CellView>::Pairs,
-        TaggedMembershipKindPairs<ListView>::Pairs,
-        TaggedMembershipKindPairs<MapView>::Pairs,
+        SearchedValueKindPairs<MembershipKindPairs>::Pairs,
 
         // A path column holds its null in the path, so it has no optional sibling
         std::tuple<
@@ -539,6 +540,35 @@ struct PairRestrictions<Op> {
             KindPair<PropertyNull, std::optional<ListView>>,
             KindPair<PropertyNull, CellView>,
             KindPair<PropertyNull, std::optional<CellView>>
+        >
+    >;
+
+    using AllowedMixed = AllowedMixedList<>;
+
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>()
+    >;
+};
+
+template <ColumnOperator Op>
+    requires (Op == OP_INDEX_OF)
+struct PairRestrictions<Op> {
+    using Allowed = GenerateKindPairList<
+        SearchedValueKindPairs<ListSearchKindPairs>::Pairs,
+
+        std::tuple<
+            KindPair<ListView, GraphPath>,
+            KindPair<std::optional<ListView>, GraphPath>,
+            KindPair<CellView, GraphPath>,
+            KindPair<std::optional<CellView>, GraphPath>
+        >,
+
+        std::tuple<
+            KindPair<ListView, PropertyNull>,
+            KindPair<std::optional<ListView>, PropertyNull>,
+            KindPair<CellView, PropertyNull>,
+            KindPair<std::optional<CellView>, PropertyNull>
         >
     >;
 

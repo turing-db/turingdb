@@ -1,26 +1,14 @@
 #include "FunctionDecls.h"
 
-#include <ctype.h>
-#include <algorithm>
-#include <utility>
+#include "QualifiedName.h"
+#include "Symbol.h"
 
 using namespace db;
-
-namespace {
-
-// Cypher matches a function name whatever its case: stdev is stDev and COUNT is count
-void foldCase(std::string_view name, std::string& folded) {
-    folded.resize(name.size());
-    std::ranges::transform(name, folded.begin(), [](unsigned char letter) {
-        return static_cast<char>(tolower(letter));
-    });
-}
-
-}
 
 FunctionDecls::FunctionDecls()
 {
     initDefault();
+    initCollectionFunctions();
 }
 
 FunctionDecls::~FunctionDecls() {
@@ -876,61 +864,65 @@ void FunctionDecls::initDefault() {
     euclidDist->setReturnTypes({{EvaluatedType::Double}});
 }
 
-FunctionSignature* FunctionDecls::createFunction(std::string_view fullName) {
-    auto func = std::make_unique<FunctionSignature>(fullName);
-    FunctionSignature* ptr = func.get();
-    _owned.push_back(std::move(func));
+void FunctionDecls::initCollectionFunctions() {
+    FunctionNamespace* coll = _root.createNamespace("coll");
 
-    std::string foldedName;
-    foldCase(fullName, foldedName);
-    _nameMap[foldedName].push_back(ptr);
+    // A list is searched for any value IN can search one for
+    const PossibleArgTypes searchedList {EvaluatedType::List, EvaluatedType::Any};
+    const PossibleArgTypes searchedValue {
+        EvaluatedType::Integer,
+        EvaluatedType::Double,
+        EvaluatedType::String,
+        EvaluatedType::Bool,
+        EvaluatedType::DateTime,
+        EvaluatedType::Duration,
+        EvaluatedType::Embedding,
+        EvaluatedType::NodePattern,
+        EvaluatedType::EdgePattern,
+        EvaluatedType::GraphPath,
+        EvaluatedType::List,
+        EvaluatedType::Map,
+        EvaluatedType::Any,
+    };
 
-    return ptr;
+    std::vector<FunctionSignature*> indexOfs;
+    coll->createOverloads("indexOf", {searchedList, searchedValue}, indexOfs);
+
+    for (FunctionSignature* indexOf : indexOfs) {
+        indexOf->setReturnTypes({{EvaluatedType::Integer}});
+    }
 }
 
-void FunctionDecls::addAlias(std::string_view alias, std::string_view fullName) {
-    std::string foldedAlias;
-    foldCase(alias, foldedAlias);
-
-    std::string foldedName;
-    foldCase(fullName, foldedName);
-
-    const FunctionSignatures& signatures = _nameMap.at(foldedName);
-    _nameMap[foldedAlias] = signatures;
+FunctionSignature* FunctionDecls::createFunction(std::string_view name) {
+    return _root.createFunction(name);
 }
 
-void FunctionDecls::createOverloads(std::string_view fullName,
-                                    const std::vector<std::vector<FunctionArgumentType>>& positionTypes,
+void FunctionDecls::addAlias(std::string_view alias, std::string_view name) {
+    _root.addAlias(alias, name);
+}
+
+void FunctionDecls::createOverloads(std::string_view name,
+                                    const std::vector<PossibleArgTypes>& positionTypes,
                                     std::vector<FunctionSignature*>& overloads) {
-    size_t overloadCount = 1;
-    for (const std::vector<FunctionArgumentType>& types : positionTypes) {
-        overloadCount *= types.size();
-    }
-
-    for (size_t overloadIndex = 0; overloadIndex < overloadCount; overloadIndex++) {
-        FunctionSignature::ArgumentTypes arguments;
-
-        size_t remaining = overloadIndex;
-        for (const std::vector<FunctionArgumentType>& types : positionTypes) {
-            arguments.push_back(types[remaining % types.size()]);
-            remaining /= types.size();
-        }
-
-        FunctionSignature* overload = createFunction(fullName);
-        overload->setArguments(std::move(arguments));
-        overloads.push_back(overload);
-    }
+    _root.createOverloads(name, positionTypes, overloads);
 }
 
-FunctionResolver::FunctionSignatureRange FunctionDecls::lookup(std::string_view fullName) const {
-    std::string foldedName;
-    foldCase(fullName, foldedName);
+FunctionResolver::FunctionSignatureRange FunctionDecls::lookup(const QualifiedName* name) const {
+    const FunctionNamespace* scope = &_root;
+    const size_t namespaceCount = name->size() - 1;
 
-    const auto it = _nameMap.find(foldedName);
-    if (it == _nameMap.end()) {
+    for (size_t index = 0; index < namespaceCount && scope; index++) {
+        scope = scope->getNamespace(name->get(index)->getName());
+    }
+
+    if (!scope) {
         return FunctionSignatureRange();
     }
 
-    const FunctionSignatures& sigs = it->second;
-    return FunctionSignatureRange(sigs.data(), sigs.data() + sigs.size());
+    const FunctionNamespace::FunctionSignatures* signatures = scope->getFunction(name->back()->getName());
+    if (!signatures) {
+        return FunctionSignatureRange();
+    }
+
+    return FunctionSignatureRange(signatures->data(), signatures->data() + signatures->size());
 }

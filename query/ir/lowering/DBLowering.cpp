@@ -1637,6 +1637,8 @@ void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
         lowerBinaryOp<nl::Contains>(operation, BinaryResultKind::Boolean);
     } else if (mlir::isa<mlir::db::InOp>(operation)) {
         lowerBinaryOp<nl::In>(operation, BinaryResultKind::Membership);
+    } else if (mlir::isa<mlir::db::IndexOf>(operation)) {
+        lowerBinaryOp<nl::IndexOf>(operation, BinaryResultKind::Position);
     } else if (mlir::isa<mlir::db::AndOp>(operation)) {
         lowerBinaryOp<nl::And>(operation, BinaryResultKind::Boolean);
     } else if (mlir::isa<mlir::db::OrOp>(operation)) {
@@ -6358,6 +6360,15 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
             return storage::NullableType::get(ctx, _builder.getI1Type());
         }
         break;
+
+        case BinaryResultKind::Position: {
+            if (!isListChunk(lhsType) && !holdsTaggedCells(lhsType)) {
+                throw IRException("db.index_of requires a list as its searched operand");
+            }
+
+            return storage::NullableType::get(ctx, _builder.getI64Type());
+        }
+        break;
     }
 
     bioassert(false, "Unhandled binary result kind");
@@ -6372,7 +6383,8 @@ void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
     const mlir::Type rhsChunkType = rhsChunk.getType();
 
     const bool readsScalarOperands = kind != BinaryResultKind::Index
-                                  && kind != BinaryResultKind::Membership;
+                                  && kind != BinaryResultKind::Membership
+                                  && kind != BinaryResultKind::Position;
 
     const bool lhsReadsItsOwnNull = mayHoldANull(lhsChunkType);
     const bool rhsReadsItsOwnNull = mayHoldANull(rhsChunkType);

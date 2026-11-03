@@ -1,10 +1,9 @@
 #pragma once
 
-#include <string_view>
-
 namespace db {
 
 class FunctionSignature;
+class QualifiedName;
 
 class FunctionResolver {
 public:
@@ -31,7 +30,7 @@ public:
 
     virtual ~FunctionResolver() = default;
 
-    virtual FunctionSignatureRange lookup(std::string_view fullName) const = 0;
+    virtual FunctionSignatureRange lookup(const QualifiedName* name) const = 0;
 };
 
 }

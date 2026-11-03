@@ -1007,6 +1007,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateBinaryOp<OP_CONTAINS>(containsOp, body);
         } else if (nl::In inOp = mlir::dyn_cast<nl::In>(operation)) {
             translateBinaryOp<OP_IN>(inOp, body);
+        } else if (nl::IndexOf indexOf = mlir::dyn_cast<nl::IndexOf>(operation)) {
+            translateBinaryOp<OP_INDEX_OF>(indexOf, body);
         } else if (nl::And andOp = mlir::dyn_cast<nl::And>(operation)) {
             translateBinaryOp<OP_AND>(andOp, body);
         } else if (nl::Or orOp = mlir::dyn_cast<nl::Or>(operation)) {
@@ -3450,18 +3452,10 @@ void NLTranslator::translateBinaryOp(OpType op, NLStmtContainer* body) {
     const Column* lhs = getColumn(op.getLhs());
     const Column* rhs = getColumn(op.getRhs());
 
-    // An i1 chunk is a mask where a comparison produced it, and membership only has
-    // kernels over a boolean value column
     if constexpr (Op == OP_IN) {
-        if (lhs->getKind() == ColumnMask::staticKind()) {
-            Column* nullableLhs = nullptr;
-            const NLUnaryFn toNullable = NLExecutor::selectMaskToNullable(_memory, nullableLhs);
-
-            NLUnaryData* toNullableData = _program->allocFunctionData<NLUnaryData>(lhs, nullableLhs, toNullable);
-            body->emplaceStmt(&NLExecutor::runUnary, toNullableData);
-
-            lhs = nullableLhs;
-        }
+        lhs = searchedValueColumn(lhs, body);
+    } else if constexpr (Op == OP_INDEX_OF) {
+        rhs = searchedValueColumn(rhs, body);
     }
 
     Column* result = nullptr;
@@ -3470,6 +3464,20 @@ void NLTranslator::translateBinaryOp(OpType op, NLStmtContainer* body) {
 
     NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn, _program->allocStepBuffers());
     body->emplaceStmt(&NLExecutor::runBinary, data);
+}
+
+const Column* NLTranslator::searchedValueColumn(const Column* column, NLStmtContainer* body) {
+    if (column->getKind() != ColumnMask::staticKind()) {
+        return column;
+    }
+
+    Column* nullableBools = nullptr;
+    const NLUnaryFn toNullable = NLExecutor::selectMaskToNullable(_memory, nullableBools);
+
+    NLUnaryData* toNullableData = _program->allocFunctionData<NLUnaryData>(column, nullableBools, toNullable);
+    body->emplaceStmt(&NLExecutor::runUnary, toNullableData);
+
+    return nullableBools;
 }
 
 void NLTranslator::translateListIndex(nl::ListIndex index, NLStmtContainer* body) {
