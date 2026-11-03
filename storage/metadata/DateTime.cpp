@@ -1,13 +1,20 @@
 #include "DateTime.h"
 
+#include <algorithm>
+#include <array>
 #include <charconv>
 #include <chrono>
+#include <limits>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 
 #include <spdlog/fmt/fmt.h>
 
 #include "TuringException.h"
+#include "map/MapView.h"
+
+#include "BioAssert.h"
 
 using namespace db;
 
@@ -175,6 +182,240 @@ bool readOffset(std::string_view text, size_t& offset, int64_t& seconds) {
     return offset == text.size();
 }
 
+enum class MapComponent : uint8_t {
+    Year = 0,
+    Month,
+    Day,
+    Hour,
+    Minute,
+    Second,
+    Millisecond,
+    Microsecond,
+    Nanosecond,
+    EpochSeconds,
+    EpochMillis,
+    Timezone,
+    _SIZE,
+};
+
+constexpr size_t MAP_COMPONENT_COUNT = static_cast<size_t>(MapComponent::_SIZE);
+
+constexpr std::array<std::string_view, MAP_COMPONENT_COUNT> MAP_COMPONENT_NAMES = {
+    "year",
+    "month",
+    "day",
+    "hour",
+    "minute",
+    "second",
+    "millisecond",
+    "microsecond",
+    "nanosecond",
+    "epochSeconds",
+    "epochMillis",
+    "timezone",
+};
+
+// Each unit of a calendar map needs the next larger one, so units are only left out from
+// the least significant end
+constexpr std::array<std::pair<MapComponent, MapComponent>, 8> LARGER_UNITS = {{
+    {MapComponent::Month, MapComponent::Year},
+    {MapComponent::Day, MapComponent::Month},
+    {MapComponent::Hour, MapComponent::Day},
+    {MapComponent::Minute, MapComponent::Hour},
+    {MapComponent::Second, MapComponent::Minute},
+    {MapComponent::Millisecond, MapComponent::Second},
+    {MapComponent::Microsecond, MapComponent::Second},
+    {MapComponent::Nanosecond, MapComponent::Second},
+}};
+
+constexpr int64_t NANOSECONDS_PER_MICROSECOND = 1000;
+
+struct MapComponents {
+    std::array<bool, MAP_COMPONENT_COUNT> _present {};
+    std::array<bool, MAP_COMPONENT_COUNT> _null {};
+    std::array<int64_t, MAP_COMPONENT_COUNT> _values {};
+    std::string_view _timezone;
+
+    bool has(MapComponent component) const { return _present[static_cast<size_t>(component)]; }
+    bool isNull(MapComponent component) const { return _null[static_cast<size_t>(component)]; }
+};
+
+std::string_view componentName(MapComponent component) {
+    return MAP_COMPONENT_NAMES[static_cast<size_t>(component)];
+}
+
+bool componentNamed(std::string_view name, MapComponent& component) {
+    const auto it = std::ranges::find(MAP_COMPONENT_NAMES, name);
+    if (it == MAP_COMPONENT_NAMES.end()) {
+        return false;
+    }
+
+    component = static_cast<MapComponent>(std::distance(MAP_COMPONENT_NAMES.begin(), it));
+
+    return true;
+}
+
+void readComponents(const MapView& map, MapComponents& components) {
+    for (const MapEntryView entry : map) {
+        const std::string_view key = entry.getKey();
+
+        MapComponent component {MapComponent::Year};
+        if (!componentNamed(key, component)) {
+            throw TuringException(fmt::format("Unknown datetime component: {}", key));
+        }
+
+        const CellView value = entry.getValue();
+        const CellTag tag = value.getTag();
+        const size_t index = static_cast<size_t>(component);
+
+        const bool hasAFirstValue = component != MapComponent::EpochSeconds
+                                 && component != MapComponent::EpochMillis
+                                 && component != MapComponent::Timezone;
+
+        if (tag == CellTag::Null && hasAFirstValue) {
+            components._null[index] = true;
+        } else if (component == MapComponent::Timezone) {
+            if (tag != CellTag::String) {
+                throw TuringException("The datetime component timezone must be a string");
+            }
+
+            components._timezone = value.getAs<std::string_view>();
+        } else if (tag == CellTag::Int) {
+            components._values[index] = value.getAs<int64_t>();
+        } else if (tag == CellTag::UInt) {
+            const uint64_t count = value.getAs<uint64_t>();
+            if (count > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+                throw TuringException(fmt::format("The datetime component {} is too large: {}", key, count));
+            }
+
+            components._values[index] = static_cast<int64_t>(count);
+        } else {
+            throw TuringException(fmt::format("The datetime component {} must be an integer", key));
+        }
+
+        components._present[index] = true;
+    }
+}
+
+int64_t componentIn(const MapComponents& components, MapComponent component, int64_t first, int64_t last, int64_t absent) {
+    if (!components.has(component) || components.isNull(component)) {
+        return absent;
+    }
+
+    const int64_t value = components._values[static_cast<size_t>(component)];
+    if (value < first || value > last) {
+        throw TuringException(fmt::format("The datetime component {} must be between {} and {}, not {}",
+                                          componentName(component),
+                                          first,
+                                          last,
+                                          value));
+    }
+
+    return value;
+}
+
+int64_t timezoneOffset(std::string_view timezone) {
+    size_t offset = 0;
+    int64_t seconds = 0;
+
+    if (timezone.empty() || !readOffset(timezone, offset, seconds)) {
+        throw TuringException(fmt::format("The timezone '{}' is not an offset such as '+01:00' or 'Z'", timezone));
+    }
+
+    return seconds;
+}
+
+int64_t epochMicroseconds(const MapComponents& components) {
+    const MapComponent epoch = components.has(MapComponent::EpochMillis) ? MapComponent::EpochMillis
+                                                                         : MapComponent::EpochSeconds;
+
+    for (size_t index = 0; index < MAP_COMPONENT_COUNT; index++) {
+        const MapComponent component = static_cast<MapComponent>(index);
+        const bool goesWithTheEpoch = component == epoch
+                                   || component == MapComponent::Nanosecond
+                                   || component == MapComponent::Timezone;
+
+        if (components.has(component) && !goesWithTheEpoch) {
+            throw TuringException(fmt::format("A datetime of an epoch takes no component but nanosecond and timezone, not {}",
+                                              componentName(component)));
+        }
+    }
+
+    if (epoch == MapComponent::EpochMillis) {
+        const int64_t milliseconds = componentIn(components,
+                                                 epoch,
+                                                 FIRST_RENDERABLE / MICROSECONDS_PER_MILLISECOND,
+                                                 LAST_RENDERABLE / MICROSECONDS_PER_MILLISECOND,
+                                                 0);
+        const int64_t nanoseconds = componentIn(components, MapComponent::Nanosecond, 0, 999999, 0);
+
+        return milliseconds * MICROSECONDS_PER_MILLISECOND + nanoseconds / NANOSECONDS_PER_MICROSECOND;
+    }
+
+    const int64_t seconds = componentIn(components,
+                                        epoch,
+                                        DateTime::FIRST_EPOCH_SECOND,
+                                        DateTime::LAST_EPOCH_SECOND,
+                                        0);
+    const int64_t nanoseconds = componentIn(components, MapComponent::Nanosecond, 0, 999999999, 0);
+
+    return seconds * MICROSECONDS_PER_SECOND + nanoseconds / NANOSECONDS_PER_MICROSECOND;
+}
+
+int64_t calendarMicroseconds(const MapComponents& components) {
+    const bool hasEpoch = components.has(MapComponent::EpochMillis) ||  components.has(MapComponent::EpochSeconds);
+    bioassert(!hasEpoch, "A calendar datetime map must not contain an Epoch component");
+
+    for (const auto& [unit, larger] : LARGER_UNITS) {
+        if (components.has(unit) && !components.has(larger)) {
+            throw TuringException(fmt::format("The datetime component {} needs the component {}",
+                                              componentName(unit),
+                                              componentName(larger)));
+        }
+    }
+
+    if (!components.has(MapComponent::Year)) {
+        throw TuringException("A datetime of a map needs the component year or an epoch");
+    }
+
+    const int64_t year = componentIn(components, MapComponent::Year, 0, 9999, 0);
+    const int64_t month = componentIn(components, MapComponent::Month, 1, 12, 1);
+
+    const std::chrono::year_month_day_last lastOfMonth {std::chrono::year {static_cast<int>(year)},
+                                                        std::chrono::month_day_last {std::chrono::month {static_cast<unsigned>(month)}}};
+    const int64_t lastDay = static_cast<unsigned>(lastOfMonth.day());
+    const int64_t day = componentIn(components, MapComponent::Day, 1, lastDay, 1);
+
+    const int64_t hour = componentIn(components, MapComponent::Hour, 0, 23, 0);
+    const int64_t minute = componentIn(components, MapComponent::Minute, 0, 59, 0);
+    const int64_t second = componentIn(components, MapComponent::Second, 0, 59, 0);
+
+    const bool hasMilliseconds = components.has(MapComponent::Millisecond);
+    const bool hasMicroseconds = components.has(MapComponent::Microsecond);
+
+    const int64_t lastMicrosecond = hasMilliseconds ? 999 : 999999;
+    const int64_t lastNanosecond = hasMicroseconds ? 999 : (hasMilliseconds ? 999999 : 999999999);
+
+    const int64_t milliseconds = componentIn(components, MapComponent::Millisecond, 0, 999, 0);
+    const int64_t microseconds = componentIn(components, MapComponent::Microsecond, 0, lastMicrosecond, 0);
+    const int64_t nanoseconds = componentIn(components, MapComponent::Nanosecond, 0, lastNanosecond, 0);
+
+    const std::chrono::year_month_day date {std::chrono::year {static_cast<int>(year)},
+                                            std::chrono::month {static_cast<unsigned>(month)},
+                                            std::chrono::day {static_cast<unsigned>(day)}};
+    const int64_t epochDay = std::chrono::sys_days {date}.time_since_epoch().count();
+
+    const int64_t seconds = epochDay * SECONDS_PER_DAY
+                          + hour * SECONDS_PER_HOUR
+                          + minute * SECONDS_PER_MINUTE
+                          + second;
+
+    return seconds * MICROSECONDS_PER_SECOND
+         + milliseconds * MICROSECONDS_PER_MILLISECOND
+         + microseconds
+         + nanoseconds / NANOSECONDS_PER_MICROSECOND;
+}
+
 }
 
 std::optional<DateTime> DateTime::parse(std::string_view text) {
@@ -300,16 +541,40 @@ DateTime DateTime::now() {
 }
 
 bool DateTime::fromEpochSeconds(int64_t seconds, DateTime& value) {
-    constexpr int64_t firstSecond = FIRST_RENDERABLE / MICROSECONDS_PER_SECOND;
-    constexpr int64_t lastSecond = LAST_RENDERABLE / MICROSECONDS_PER_SECOND;
-
-    if (seconds < firstSecond || seconds > lastSecond) {
+    if (seconds < FIRST_EPOCH_SECOND || seconds > LAST_EPOCH_SECOND) {
         return false;
     }
 
     value = DateTime {seconds * MICROSECONDS_PER_SECOND};
 
     return true;
+}
+
+void DateTime::fromMap(const MapView& map, DateTime& value) {
+    MapComponents components;
+    readComponents(map, components);
+
+    const bool readsAnEpoch = components.has(MapComponent::EpochSeconds) || components.has(MapComponent::EpochMillis);
+    int64_t microseconds = 0;
+
+    if (readsAnEpoch) {
+        microseconds = epochMicroseconds(components);
+    } else {
+        microseconds = calendarMicroseconds(components);
+    }
+
+    if (components.has(MapComponent::Timezone)) {
+        const int64_t offsetSeconds = timezoneOffset(components._timezone);
+        if (!readsAnEpoch) {
+            microseconds -= offsetSeconds * MICROSECONDS_PER_SECOND;
+        }
+    }
+
+    if (!isRenderable(DateTime {microseconds})) {
+        throw TuringException("The datetime of the map is outside the years 0000 to 9999");
+    }
+
+    value = DateTime {microseconds};
 }
 
 bool DateTime::partNamed(std::string_view name, DateTimePart& part) {

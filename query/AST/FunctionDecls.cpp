@@ -692,17 +692,21 @@ void FunctionDecls::initDefault() {
         }
     }
 
-    // An argument is required on the two overloads that take one, so that datetime() picks
-    // the nullary overload rather than matching these with nothing to convert.
     FunctionSignature* dateTimeOfString = createFunction("datetime");
     dateTimeOfString->setArguments({EvaluatedType::String});
     dateTimeOfString->setReturnTypes({{EvaluatedType::DateTime}});
-    dateTimeOfString->setRequiredArgCount(1);
 
     FunctionSignature* dateTimeOfEpochSeconds = createFunction("datetime");
     dateTimeOfEpochSeconds->setArguments({EvaluatedType::Integer});
     dateTimeOfEpochSeconds->setReturnTypes({{EvaluatedType::DateTime}});
-    dateTimeOfEpochSeconds->setRequiredArgCount(1);
+
+    FunctionSignature* dateTimeOfMap = createFunction("datetime");
+    dateTimeOfMap->setArguments({EvaluatedType::Map});
+    dateTimeOfMap->setReturnTypes({{EvaluatedType::DateTime}});
+
+    FunctionSignature* dateTimeOfCell = createFunction("datetime");
+    dateTimeOfCell->setArguments({EvaluatedType::Any});
+    dateTimeOfCell->setReturnTypes({{EvaluatedType::DateTime}});
 
     FunctionSignature* currentDateTime = createFunction("datetime");
     currentDateTime->setArguments({});

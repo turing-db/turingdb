@@ -12,6 +12,8 @@
 
 namespace db {
 
+class MapView;
+
 // A calendar field of an instant. Millisecond and Microsecond name the sub-second part
 // truncated to that precision, so an instant .123456 of a second in has a Millisecond of
 // 123 and a Microsecond of 123456.
@@ -29,6 +31,9 @@ enum class DateTimePart : uint8_t {
 // An instant on the UTC timeline, counted in microseconds from the Unix epoch.
 class DateTime {
 public:
+    static constexpr int64_t FIRST_EPOCH_SECOND = -62167219200;
+    static constexpr int64_t LAST_EPOCH_SECOND = 253402300799;
+
     DateTime() = default;
 
     constexpr explicit DateTime(int64_t microseconds)
@@ -63,6 +68,10 @@ public:
     // where the count names an instant format cannot spell, which is also what keeps the
     // scaling to microseconds from overflowing.
     static bool fromEpochSeconds(int64_t seconds, DateTime& value);
+
+    // datetime() of a map: a calendar date and time, or an epoch, at an optional offset.
+    // False where a component is null; a component outside its range raises.
+    static void fromMap(const MapView& map, DateTime& value);
 
     static bool partNamed(std::string_view name, DateTimePart& part);
 
