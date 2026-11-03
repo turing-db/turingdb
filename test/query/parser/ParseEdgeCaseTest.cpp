@@ -1645,6 +1645,18 @@ TEST_F(ParseEdgeCaseTest, parsesLabelExpressionsAndComprehensions) {
                                                                                               edge({._direction = EdgePattern::Direction::Forward}),
                                                                                               node({._symbol = "b"})})})}),
                                                        symbol("p"))}))});
+
+    expectParse("MATCH (n:A&B&!C) RETURN n",
+                {query({match({._pattern = pattern({path({node({._symbol = "n",
+                                                                ._labels = labelAnd({labels({"A", "B"}),
+                                                                                     labelNot(labels({"C"}))})})})})})},
+                       returning({symbol("n")}))});
+
+    expectParse("MATCH (n:!(A|B)) RETURN n",
+                {query({match({._pattern = pattern({path({node({._symbol = "n",
+                                                                ._labels = labelNot(labelOr({labels({"A"}),
+                                                                                             labels({"B"})}))})})})})},
+                       returning({symbol("n")}))});
 }
 
 TEST_F(ParseEdgeCaseTest, parsesKeywordsUsedAsNames) {
@@ -1856,6 +1868,48 @@ TEST_F(ParseEdgeCaseTest, parsesEntityDetailsAndReadingClauses) {
                 "     1 | MATCH (n IS NULL) RETURN n\n"
                 "       |          ^^\n"
                 "-------* syntax error, unexpected IS_VALUE_TEST");
+
+    expectParse("MATCH (n) RETURN n SKIP $s LIMIT $l",
+                {query({match({._pattern = pattern({path({node({._symbol = "n"})})})})},
+                       returning(projection({._items = {symbol("n")},
+                                             ._skip = skip(parameter("s")),
+                                             ._limit = limit(parameter("l"))})))});
+
+    expectParse("MATCH (n) RETURN n ORDER BY n.x DESC, n.y SKIP 1 LIMIT 2",
+                {query({match({._pattern = pattern({path({node({._symbol = "n"})})})})},
+                       returning(projection({._items = {symbol("n")},
+                                             ._orderBy = orderBy({{property({"n", "x"}), OrderByType::DESC},
+                                                                  {property({"n", "y"}), OrderByType::ASC}}),
+                                             ._skip = skip(integer(1)),
+                                             ._limit = limit(integer(2))})))});
+
+    expectParse("MATCH (n) RETURN n ORDER BY n.x DESCENDING, n.y ASCENDING",
+                {query({match({._pattern = pattern({path({node({._symbol = "n"})})})})},
+                       returning(projection({._items = {symbol("n")},
+                                             ._orderBy = orderBy({{property({"n", "x"}), OrderByType::DESC},
+                                                                  {property({"n", "y"}), OrderByType::ASC}})})))});
+
+    expectParse("MATCH (n) RETURN DISTINCT n.x AS x ORDER BY x ASC",
+                {query({match({._pattern = pattern({path({node({._symbol = "n"})})})})},
+                       returning(projection({._items = {named(property({"n", "x"}), "x")},
+                                             ._distinct = true,
+                                             ._orderBy = orderBy({{symbol("x"), OrderByType::ASC}})})))});
+
+    expectParse("MATCH (n) WITH DISTINCT n ORDER BY n.x SKIP 1 LIMIT 2 WHERE n.x > 0 RETURN n",
+                {query({match({._pattern = pattern({path({node({._symbol = "n"})})})}),
+                        with({._projection = projection({._items = {symbol("n")},
+                                                         ._distinct = true,
+                                                         ._orderBy = orderBy({{property({"n", "x"}), OrderByType::ASC}}),
+                                                         ._skip = skip(integer(1)),
+                                                         ._limit = limit(integer(2))}),
+                              ._where = where(binary(BinaryOperator::GreaterThan, property({"n", "x"}), integer(0)))})},
+                       returning({symbol("n")}))});
+
+    expectParse("MATCH (n) ORDER BY n.x LIMIT 3 RETURN n",
+                {query({match({._pattern = pattern({path({node({._symbol = "n"})})}),
+                               ._orderBy = orderBy({{property({"n", "x"}), OrderByType::ASC}}),
+                               ._limit = limit(integer(3))})},
+                       returning({symbol("n")}))});
 }
 
 TEST_F(ParseEdgeCaseTest, parsesLiteralsAndOperators) {
@@ -2023,4 +2077,33 @@ TEST_F(ParseEdgeCaseTest, parsesLiteralsAndOperators) {
                 "     1 | MATCH (n) RETURN n.x STARTS 5\n"
                 "       |                             ^\n"
                 "-------* syntax error, unexpected DIGIT, expecting WITH");
+
+    expectParse("RETURN 1.5, .5, 1e3, -2.5", {query({}, returning({real(1.5), real(0.5), real(1000.0), real(-2.5)}))});
+
+    expectParse("MATCH (n) WHERE n.x = $x RETURN n, $0",
+                {query({match({._pattern = pattern({path({node({._symbol = "n"})})},
+                                                   where(binary(BinaryOperator::Equal,
+                                                                property({"n", "x"}),
+                                                                parameter("x"))))})},
+                       returning({symbol("n"), parameter("0")}))});
+
+    expectParse("RETURN true XOR false",
+                {query({}, returning({logical(LogicalOperator::Xor, {boolean(true), boolean(false)})}))});
+
+    expectParse("RETURN true OR false XOR true AND false",
+                {query({},
+                       returning({logical(LogicalOperator::Or,
+                                          {boolean(true),
+                                           logical(LogicalOperator::Xor,
+                                                   {boolean(false),
+                                                    logical(LogicalOperator::And, {boolean(true), boolean(false)})})})}))});
+
+    expectParse("RETURN 1 >= 2",
+                {query({}, returning({binary(BinaryOperator::GreaterThanOrEqual, integer(1), integer(2))}))});
+
+    expectParse("RETURN 1 <= 2 >= 0",
+                {query({},
+                       returning({comparisonChain(integer(1),
+                                                  {{BinaryOperator::LessThanOrEqual, integer(2)},
+                                                   {BinaryOperator::GreaterThanOrEqual, integer(0)}})}))});
 }
