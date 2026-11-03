@@ -3804,6 +3804,9 @@ public:
     const ColumnMask* getRows() const { return _rows; }
     void setRows(const ColumnMask* rows) { _rows = rows; }
 
+    bool writesNull() const { return _writesNull; }
+    void setWritesNull(bool writesNull) { _writesNull = writesNull; }
+
     std::vector<WrittenMap>& getMaps() { return _maps; }
     CommitWriteBuffer::UntypedProperties& getMapProperties() { return _mapProperties; }
     std::vector<StagedRange>& getMapRanges() { return _mapRanges; }
@@ -3819,6 +3822,7 @@ private:
     const ColumnMask* _rows {nullptr};
     bool _allPending {false};
     bool _replaces {false};
+    bool _writesNull {false};
     std::vector<WrittenMap> _maps;
     CommitWriteBuffer::UntypedProperties _mapProperties;
     std::vector<StagedRange> _mapRanges;

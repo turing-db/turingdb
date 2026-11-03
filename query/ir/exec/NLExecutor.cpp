@@ -6067,7 +6067,11 @@ void runSetProperties(NLExecutionContext* context, NLFunctionData* data) {
     const size_t rowCount = entities->size();
 
     std::vector<WrittenMap>& maps = setData->getMaps();
-    extractWrittenMaps(setData->getValue(), rowCount, maps);
+    if (setData->writesNull()) {
+        maps.assign(rowCount, WrittenMap {std::nullopt, CellTag::Null});
+    } else {
+        extractWrittenMaps(setData->getValue(), rowCount, maps);
+    }
 
     const GraphView* view = context->getView();
     const MetadataBuilder* metadataBuilder = context->getMetadataBuilder();

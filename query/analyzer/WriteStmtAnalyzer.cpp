@@ -487,12 +487,10 @@ void WriteStmtAnalyzer::analyzePropertiesAssign(SetItem::EntityPropertiesAssign&
 
     if (valueType == EvaluatedType::Map) {
         analyzeMapLiteralProperties(value, assign._createdProperties);
-    } else if (valueType == EvaluatedType::Any) {
+    } else if (valueType == EvaluatedType::Any || valueType == EvaluatedType::Null) {
         return;
     } else if (valueType == EvaluatedType::NodePattern || valueType == EvaluatedType::EdgePattern) {
         throwError(fmt::format("SET {} {} <node or relationship> is not supported yet", entityName, assignOperator), item);
-    } else if (valueType == EvaluatedType::Null) {
-        throwError(fmt::format("SET {} {} null is not supported yet", entityName, assignOperator), item);
     } else if (valueType == EvaluatedType::Parameter) {
         throwError(fmt::format("SET {} {} <parameter> is not supported yet", entityName, assignOperator), item);
     } else {

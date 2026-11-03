@@ -69,6 +69,12 @@ bool holdsAMapPerRow(Type chunkType) {
     return isa<storage::MapType, storage::AnyType>(read);
 }
 
+bool writesAMapPerRow(Type chunkType) {
+    const auto chunk = dyn_cast<ChunkType>(chunkType);
+
+    return holdsAMapPerRow(chunkType) || (chunk && isNullLiteralType(chunk.getElementType()));
+}
+
 // The value type an aggregate reduces: the T in a !nl.chunk<!storage.nullable<T>>.
 // Aggregates fold property values, so an update's input and a result's output are
 // always such chunks. Returns a null Type for anything else (an ID chunk, say), so
@@ -1480,8 +1486,8 @@ LogicalResult SetEdgeProperty::verify() {
 }
 
 LogicalResult SetNodeProperties::verify() {
-    if (!holdsAMapPerRow(getValue().getType())) {
-        return emitOpError("writes a chunk of maps or of tagged cells, optionally nullable");
+    if (!writesAMapPerRow(getValue().getType())) {
+        return emitOpError("writes a chunk of maps or of tagged cells, optionally nullable, or the null literal");
     } else if (!::db::namesPropertyElementTypes(getCreatedTypesAttr())) {
         return emitOpError("creates each property with the element type of a stored value");
     }
@@ -1490,8 +1496,8 @@ LogicalResult SetNodeProperties::verify() {
 }
 
 LogicalResult SetEdgeProperties::verify() {
-    if (!holdsAMapPerRow(getValue().getType())) {
-        return emitOpError("writes a chunk of maps or of tagged cells, optionally nullable");
+    if (!writesAMapPerRow(getValue().getType())) {
+        return emitOpError("writes a chunk of maps or of tagged cells, optionally nullable, or the null literal");
     } else if (!::db::namesPropertyElementTypes(getCreatedTypesAttr())) {
         return emitOpError("creates each property with the element type of a stored value");
     }
