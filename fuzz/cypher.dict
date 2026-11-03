@@ -1,9 +1,9 @@
 # ============================================================
 # TuringDB Cypher dictionary for AFL++
-# Extracted from CypherLexer.l, CypherParser.y, FunctionDecls.cpp
+# Extracted from CypherLexer.cpp, CypherGrammarPatterns.cpp, FunctionDecls.cpp
 # ============================================================
 
-# --- Cypher keywords (all from CypherLexer.l) ---
+# --- Cypher keywords (all from CypherLexer.cpp) ---
 "MATCH"
 "RETURN"
 "CREATE"
@@ -165,7 +165,7 @@
 "gnn.neighbourhoodSample"
 "gnn.graphSAGE"
 
-# --- Multi-char operators (from CypherParser.y) ---
+# --- Multi-char operators (from CypherLexer.cpp and CypherGrammarPatterns.cpp) ---
 "--"
 "<--"
 "-->"

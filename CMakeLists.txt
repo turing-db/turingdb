@@ -234,10 +234,6 @@ find_package(Threads REQUIRED)
 # Curl
 find_package(CURL REQUIRED)
 
-# Bison and Flex
-find_package(BISON REQUIRED)
-find_package(FLEX REQUIRED)
-
 # Nlohmann json
 find_package(nlohmann_json REQUIRED)
 
@@ -283,18 +279,6 @@ if(NOT NIX_BUILD AND EXISTS "${LIBOMP_PREFIX}/lib/libomp.a")
 endif()
 find_package(OpenMP REQUIRED)
 
-
-# Use bison and flex built from source in external/dependencies
-if(NOT NIX_BUILD)
-    set(DEPS_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/external/dependencies")
-    set(FLEX_INCLUDE_DIRS "${DEPS_PREFIX}/include")
-    set(FLEX_EXECUTABLE "${DEPS_PREFIX}/bin/flex")
-    set(FLEX_LIBRARIES "${DEPS_PREFIX}/lib/libfl.a")
-    set(BISON_EXECUTABLE "${DEPS_PREFIX}/bin/bison")
-    set(BISON_LIBRARIES "${DEPS_PREFIX}/lib/liby.a")
-    message(STATUS "Using flex from: ${FLEX_EXECUTABLE}")
-    message(STATUS "Using bison from: ${BISON_EXECUTABLE}")
-endif()
 
 # zlib
 find_package(ZLIB REQUIRED)

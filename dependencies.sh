@@ -358,58 +358,6 @@ cmake --build $BUILD_DIR/arrow -j $NUM_JOBS
 cmake --install $BUILD_DIR/arrow
 
 # ============================================================
-# Build bison from source
-# ============================================================
-BISON_VERSION="3.8.2"
-BISON_TARBALL="bison-${BISON_VERSION}.tar.xz"
-BISON_SRC_DIR=$BUILD_DIR/bison-${BISON_VERSION}
-
-if [[ ! -d "$BISON_SRC_DIR" ]]; then
-    echo "Extracting bison ${BISON_VERSION}..."
-    cd $BUILD_DIR
-    tar xf "$SOURCE_DIR/external/$BISON_TARBALL"
-fi
-
-echo "Building bison..."
-cd $BISON_SRC_DIR
-
-if [[ $USE_CLANG -eq 1 ]]; then
-    CC="${LLVM_PREFIX}/bin/clang" CXX="${LLVM_PREFIX}/bin/clang++" \
-        ./configure --prefix=$DEPENDENCIES_DIR
-else
-    ./configure --prefix=$DEPENDENCIES_DIR
-fi
-
-make -j $NUM_JOBS
-make install
-
-# ============================================================
-# Build flex from source
-# ============================================================
-FLEX_VERSION="2.6.4"
-FLEX_TARBALL="flex-${FLEX_VERSION}.tar.gz"
-FLEX_SRC_DIR=$BUILD_DIR/flex-${FLEX_VERSION}
-
-if [[ ! -d "$FLEX_SRC_DIR" ]]; then
-    echo "Extracting flex ${FLEX_VERSION}..."
-    cd $BUILD_DIR
-    tar xf "$SOURCE_DIR/external/$FLEX_TARBALL"
-fi
-
-echo "Building flex..."
-cd $FLEX_SRC_DIR
-
-if [[ $USE_CLANG -eq 1 ]]; then
-    CC="${LLVM_PREFIX}/bin/clang" \
-        ./configure --prefix=$DEPENDENCIES_DIR
-else
-    ./configure --prefix=$DEPENDENCIES_DIR
-fi
-
-make -j $NUM_JOBS
-make install
-
-# ============================================================
 # Build curl from source
 # ============================================================
 echo "Building curl..."

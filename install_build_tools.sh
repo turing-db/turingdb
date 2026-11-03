@@ -46,8 +46,6 @@ else
         # build-essential provides gcc/g++/make. The GitHub-hosted ubuntu ARM
         # images ship a C compiler but no g++, which the C++ dependencies
         # (Arrow, faiss, LLVM/MLIR) need; the Linux dep build uses gcc by default.
-        # m4 is required by bison's and flex's configure (and at runtime when
-        # they generate the parser/lexer during the main build).
         # lsb-release provides lsb_release, used by the Kitware and LLVM apt
         # repo setup below to resolve the distro codename.
         # patchelf is required by auditwheel repair (build.sh) to rewrite the
@@ -61,7 +59,7 @@ else
         # re-syncs it.
         sudo apt-get update
         sudo apt-get purge -y cmake cmake-data 2>/dev/null || true
-        sudo apt-get install -y build-essential m4 lsb-release patchelf ninja-build mold
+        sudo apt-get install -y build-essential lsb-release patchelf ninja-build mold
 
         # Apache Arrow requires CMake >= 3.25 and the shared test library
         # (test/testutils/CMakeLists.txt) >= 3.27, but Ubuntu 22.04 (jammy) ships

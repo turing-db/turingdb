@@ -1,16 +1,4 @@
-flex_target(cypher_lexer ${CMAKE_CURRENT_SOURCE_DIR}/CypherLexer.l
-            ${CMAKE_CURRENT_BINARY_DIR}/GeneratedCypherLexer.cpp
-            DEFINES_FILE ${CMAKE_CURRENT_BINARY_DIR}/GeneratedCypherLexer.h)
-
-bison_target(cypher_parser ${CMAKE_CURRENT_SOURCE_DIR}/CypherParser.y
-             ${CMAKE_CURRENT_BINARY_DIR}/GeneratedCypherParser.cpp
-             DEFINES_FILE ${CMAKE_CURRENT_BINARY_DIR}/GeneratedCypherParser.h
-             COMPILE_FLAGS "-d -v -Wcounterexamples")
-
-add_flex_bison_dependency(cypher_lexer cypher_parser)
-
 set(parser_sources
-    YCypherScanner.cpp
     CypherToken.cpp
     CypherLexer.cpp
     CypherGrammar.cpp
@@ -20,20 +8,12 @@ set(parser_sources
     CypherGrammarExpressions.cpp
     CypherParser.cpp
     ParserException.cpp
-    ParserUtils.cpp
-    ${BISON_cypher_parser_OUTPUTS}
-    ${FLEX_cypher_lexer_OUTPUTS})
-
-set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/GeneratedCypherParser.cpp 
-    PROPERTIES
-    COMPILE_FLAGS -Wno-unused-but-set-variable)
+    ParserUtils.cpp)
 
 add_library(turing_db_parser_s STATIC ${parser_sources})
 
 target_include_directories(turing_db_parser_s
-  PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
-  PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
-  PRIVATE ${FLEX_INCLUDE_DIRS})
+  PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(turing_db_parser_s
     PRIVATE turing_common_s
@@ -42,4 +22,3 @@ target_link_libraries(turing_db_parser_s
             turing_vector_s
             range-v3
     PUBLIC  turing_db_ast_s)
-
