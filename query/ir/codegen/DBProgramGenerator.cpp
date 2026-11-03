@@ -9603,22 +9603,26 @@ void DBProgramGenerator::translateIndexExpr(const Expr* expr, const IndexExpr* i
     bioassert(_part._exprMap.contains(base), "Index read with unknown base.");
     bioassert(_part._exprMap.contains(index), "Index read with unknown index.");
 
-    //translate map indexing
-    if (indexExpr->readsAMapKey()) {
-        _part._exprMap[expr] = emitDynamicMapKey(_part._exprMap.at(base), _part._exprMap.at(index));
+    const mlir::Value baseColumn = _part._exprMap.at(base);
+    const mlir::Value indexColumn = _part._exprMap.at(index);
+    const IndexExpr::ReadKind readKind = indexExpr->getReadKind();
+
+    if (readKind == IndexExpr::ReadKind::MapKey) {
+        _part._exprMap[expr] = emitDynamicMapKey(baseColumn, indexColumn);
         return;
     }
 
     //translate list or path indexing
-    const mlir::Value list = readWalkEntities(base, _part._exprMap.at(base));
+    const mlir::Value container = readWalkEntities(base, baseColumn);
 
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
     const mlir::Location loc = _opBuilder.getUnknownLoc();
 
-    _part._exprMap[expr] = _opBuilder.create<mlir::db::ListIndex>(loc,
-                                                                  noneType,
-                                                                  list,
-                                                                  _part._exprMap.at(index)).getResult();
+    if (readKind == IndexExpr::ReadKind::ContainerElement) {
+        _part._exprMap[expr] = _opBuilder.create<mlir::db::ContainerIndex>(loc, noneType, container, indexColumn).getResult();
+    } else {
+        _part._exprMap[expr] = _opBuilder.create<mlir::db::ListIndex>(loc, noneType, container, indexColumn).getResult();
+    }
 }
 
 void DBProgramGenerator::translateStringExpr(const Expr* expr) {

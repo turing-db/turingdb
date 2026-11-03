@@ -1059,6 +1059,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateStaticMapKey(mapKey, body);
         } else if (nl::DynamicMapKey dynamicMapKey = mlir::dyn_cast<nl::DynamicMapKey>(operation)) {
             translateDynamicMapKey(dynamicMapKey, body);
+        } else if (nl::ContainerIndex containerIndex = mlir::dyn_cast<nl::ContainerIndex>(operation)) {
+            translateContainerIndex(containerIndex, body);
         } else if (nl::Range range = mlir::dyn_cast<nl::Range>(operation)) {
             translateRange(range, body);
         } else if (nl::Substring substring = mlir::dyn_cast<nl::Substring>(operation)) {
@@ -3780,6 +3782,40 @@ void NLTranslator::translateDynamicMapKey(nl::DynamicMapKey mapKey, NLStmtContai
                                                                                  _program->allocStepBuffers());
 
     body->emplaceStmt(&NLExecutor::runDynamicMapKey, data);
+}
+
+void NLTranslator::translateContainerIndex(nl::ContainerIndex index, NLStmtContainer* body) {
+    const mlir::Value resultValue = index.getResult();
+    const mlir::Type resultChunk = resultValue.getType();
+    const mlir::Type resultElement = mlir::cast<nl::ChunkType>(resultChunk).getElementType();
+
+    const Column* base = getColumn(index.getBase());
+    const Column* subscripts = getColumn(index.getIndex());
+
+    Column* const result = allocColumnForChunkType(resultChunk);
+    bindKernelResult(resultValue, result);
+
+    NLHandlerFunction run = nullptr;
+
+    if (mlir::isa<storage::AnyType>(resultElement)) {
+        run = NLExecutor::selectCellContainerIndex(/*nullable=*/false);
+    } else if (isNullableAny(resultElement)) {
+        run = NLExecutor::selectCellContainerIndex(/*nullable=*/true);
+    } else if (isIDElement(resultElement)) {
+        run = NLExecutor::selectEntityContainerIndex(chunkKindFromElementType(resultElement));
+    } else {
+        const auto nullableType = mlir::cast<storage::NullableType>(resultElement);
+        run = NLExecutor::selectValueContainerIndex(valueTypeFromElementType(nullableType.getValueType()));
+    }
+
+    NLContainerIndexData* data = _program->allocFunctionData<NLContainerIndexData>(base,
+                                                                                   NLExecutor::selectContainerRead(base),
+                                                                                   subscripts,
+                                                                                   NLExecutor::selectSubscriptRead(subscripts),
+                                                                                   result,
+                                                                                   _program->allocStepBuffers());
+
+    body->emplaceStmt(run, data);
 }
 
 NLRangeBoundReadFunction NLTranslator::selectRangeBoundRead(mlir::Type chunkType) {

@@ -33,3 +33,12 @@ add_call_v3_test(test_query_ir_any_concatenation_over_no_row AnyConcatenationOve
 add_call_v3_test(test_query_ir_any_cell_addition_type_error AnyCellAdditionTypeErrorTest.cpp)
 
 add_turing_test(test_query_ir_any_property_read AnyPropertyReadTest.cpp)
+
+add_turing_test(test_query_ir_container_index ContainerIndexTest.cpp)
+
+add_ir_tests(test_query_ir_container_index_codegen ContainerIndexCodegenTest.cpp)
+target_sources(test_query_ir_container_index_codegen PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+
+add_turing_test(test_query_ir_index_over_an_emptied_chunk IndexOverAnEmptiedChunkTest.cpp)
+
+add_ir_tests(test_query_ir_container_index_verifier ContainerIndexVerifierTest.cpp)

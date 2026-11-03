@@ -885,10 +885,11 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     const bool indexesByKey = indexType == EvaluatedType::String;
     const bool indexesByPosition = indexType == EvaluatedType::Integer;
     const bool indexesByNull = indexType == EvaluatedType::Null;
+    const bool indexesByATaggedCell = indexType == EvaluatedType::Any;
 
     // What an index can be at all, which no base changes. Which of the two a base takes is
     // its own question, below.
-    if (!indexesByKey && !indexesByPosition && !indexesByNull) {
+    if (!indexesByKey && !indexesByPosition && !indexesByNull && !indexesByATaggedCell) {
         throwError(fmt::format("An index is an integer position or a string key, not '{}'",
                                EvaluatedTypeName::value(indexType)), expr);
     }
@@ -902,22 +903,25 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     }
 
     // A tagged cell takes either kind, since only its row says which it holds
-    if (indexesAMap && !indexesByKey) {
+    if (indexesAMap && !indexesByKey && !indexesByATaggedCell) {
         throwError(fmt::format("A map is indexed by a string key, not by '{}'",
                                EvaluatedTypeName::value(indexType)), expr);
-    } else if (indexesAList && !indexesByPosition) {
+    } else if (indexesAList && !indexesByPosition && !indexesByATaggedCell) {
         throwError(fmt::format("A list index expression must be an integer, not '{}'",
                                EvaluatedTypeName::value(indexType)), expr);
     }
 
-    if (indexesByKey) {
-        if (base->getKind() == Expr::Kind::LITERAL) {
-            throwError("Reading a key of a map literal is not supported yet.", expr);
-        }
+    if (indexesByATaggedCell) {
+        expr->setReadKind(IndexExpr::ReadKind::ContainerElement);
+    } else if (indexesByKey) {
+        expr->setReadKind(IndexExpr::ReadKind::MapKey);
+    } else {
+        expr->setReadKind(IndexExpr::ReadKind::ListElement);
+    }
 
-        expr->setReadsAMapKey();
+    const bool readsAListElement = indexesAList || indexesByPosition;
+    if (!readsAListElement) {
         expr->setType(EvaluatedType::Any);
-
         expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::Any));
 
         return;

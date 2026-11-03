@@ -708,6 +708,24 @@ void NLMakeMapData::addEntry(const Entry& entry) {
     _entries.push_back(entry);
 }
 
+NLContainerIndexData::NLContainerIndexData(const Column* base,
+                                           NLContainerReadFunction baseRead,
+                                           const Column* index,
+                                           NLSubscriptReadFunction indexRead,
+                                           Column* result,
+                                           NLStepBuffers* stepBuffers)
+    : _base(base),
+    _baseRead(baseRead),
+    _index(index),
+    _indexRead(indexRead),
+    _result(result),
+    _stepBuffers(stepBuffers)
+{
+}
+
+NLContainerIndexData::~NLContainerIndexData() {
+}
+
 NLMergeMapsData::NLMergeMapsData(Column* result, NLStepBuffers* stepBuffers)
     : _result(result),
     _stepBuffers(stepBuffers)

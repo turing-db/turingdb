@@ -19,6 +19,6 @@ IndexExpr* IndexExpr::create(CypherAST* ast, Expr* base, Expr* indexExpr) {
     return expr;
 }
 
-void IndexExpr::setReadsAMapKey() {
-    _readsAMapKey = true;
+void IndexExpr::setReadKind(ReadKind kind) {
+    _readKind = kind;
 }

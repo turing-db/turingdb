@@ -962,6 +962,28 @@ LogicalResult DynamicMapKey::verify() {
     return success();
 }
 
+LogicalResult ContainerIndex::verify() {
+    const Type base = valueElementOf(getBase().getType());
+    if (!isa<storage::ListType, storage::MapType, storage::AnyType>(base)) {
+        return emitOpError("reads a chunk of lists, of maps or of tagged cells, optionally nullable");
+    }
+
+    if (!isa<storage::AnyType>(valueElementOf(getIndex().getType()))) {
+        return emitOpError("reads its index out of a chunk of tagged cells, optionally nullable");
+    }
+
+    const Type result = cast<ChunkType>(getResult().getType()).getElementType();
+    const bool answersCells = isa<storage::AnyType>(result);
+    const bool answersListElements = isa<storage::ListType>(base)
+                                  && isa<storage::NullableType, storage::NodeIDType, storage::EdgeIDType>(result);
+
+    if (!answersCells && !answersListElements) {
+        return emitOpError("answers tagged cells, or for a list base the nullable value, the node or the edge it holds");
+    }
+
+    return success();
+}
+
 LogicalResult MakeMap::verify() {
     const size_t valueCount = getValues().size();
     if (valueCount == 0) {

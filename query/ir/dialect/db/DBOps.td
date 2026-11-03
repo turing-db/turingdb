@@ -3489,6 +3489,30 @@ def DynamicMapKey : BinaryOp<"dynamic_map_key", [MayRaise, DeclareOpInterfaceMet
   let assemblyFormat = "$map`,` $key attr-dict `:` functional-type(operands, results)";
 }
 
+def ContainerIndex : BinaryOp<"container_index", [MayRaise]> {
+  let summary = "Row-wise read of an element of a list or a value of a map, by an index whose kind each row decides";
+
+  let description = [{
+    `c[i]` where `i` is a type-erased cell, so only the row says whether it is a position or
+    a key. Neo4j's ContainerIndex expression dispatches the same way at run time.
+
+      %e = db.container_index %c, %i : (!db.column<none>, !db.column<!storage.any>) -> !db.column<none>
+
+    Row r reads what db.list_index reads where row r's base holds a list and its index an
+    integer, and what db.dynamic_map_key reads where the base holds a map, a node or an edge
+    and the index a string. A null base or a null index reads null. Any other pair raises,
+    so the op is never speculatable.
+
+    A list hands its elements out as db.list_index does, and any other base a tagged cell.
+    Lowering resolves the result type.
+  }];
+
+  let arguments = (ins Column:$base, Column:$index);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = "$base `,` $index attr-dict `:` functional-type(operands, results)";
+}
+
 def SubOp : BinaryOp<"sub", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Row-wise subtraction of two value columns";
 

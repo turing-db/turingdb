@@ -94,3 +94,5 @@ add_turing_test(test_query_ir_dotted_property_chain DottedPropertyChainQueryTest
 add_turing_test(test_query_ir_temporal_map_projection TemporalMapProjectionTest.cpp)
 
 add_turing_test(test_query_ir_pattern_repeated_key PatternRepeatedKeyTest.cpp)
+
+add_turing_test(test_query_ir_map_literal_runtime_key MapLiteralRuntimeKeyTest.cpp)

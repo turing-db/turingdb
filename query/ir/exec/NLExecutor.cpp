@@ -5550,6 +5550,133 @@ std::optional<ListView> optConstTaggedListRead(const Column* input, size_t) {
     return cellListRead(*cell);
 }
 
+template <typename ColumnT>
+NLContainer listContainer(const Column* input, size_t row) {
+    const std::optional<ListView> list = (*static_cast<const ColumnT*>(input))[row];
+    if (!list) {
+        return NLContainer {};
+    }
+
+    return NLContainer {._list = list, ._keyed = NLKeylessValue {}};
+}
+
+template <typename ColumnT>
+NLContainer mapContainer(const Column* input, size_t row) {
+    return NLContainer {._keyed = mapRead<ColumnT>(input, row)};
+}
+
+template <typename ColumnT>
+NLContainer cellContainer(const Column* input, size_t row) {
+    const std::optional<CellView> cell = (*static_cast<const ColumnT*>(input))[row];
+    if (!holdsAList(cell)) {
+        return NLContainer {._keyed = readKeyedCell(cell)};
+    }
+
+    return NLContainer {._list = operandList(cell), ._keyed = NLKeylessValue {}};
+}
+
+NLSubscript subscriptOf(const CellView cell) {
+    switch (cell.getTag()) {
+        case CellTag::Int:
+            return cell.getAs<types::Int64::Primitive>();
+        break;
+        case CellTag::UInt:
+            return cell.getAs<types::UInt64::Primitive>();
+        break;
+        case CellTag::String:
+            return cell.getAs<types::String::Primitive>();
+        break;
+        case CellTag::Null:
+            return std::monostate {};
+        break;
+        case CellTag::Double:
+        case CellTag::Bool:
+        case CellTag::Embedding:
+        case CellTag::ListView:
+        case CellTag::NodeID:
+        case CellTag::EdgeID:
+        case CellTag::DateTime:
+        case CellTag::MapView:
+        case CellTag::Duration:
+        case CellTag::Path:
+            return NLNeitherPositionNorKey {};
+        break;
+        case CellTag::INVALID:
+            throw IRException("an index reads an untagged cell");
+        break;
+    }
+
+    throw IRException("Unknown CellTag");
+}
+
+template <typename ColumnT>
+NLSubscript readSubscript(const Column* input, size_t row) {
+    const std::optional<CellView> cell = (*static_cast<const ColumnT*>(input))[row];
+    if (!cell) {
+        return std::monostate {};
+    }
+
+    return subscriptOf(*cell);
+}
+
+// A constant stands for every row of the other operand, which a WHERE may have left empty
+size_t pairedRowCount(const Column* lhs, const Column* rhs) {
+    const bool lhsIsConstant = lhs->getContainerKind() == ContainerKind::code<ColumnConst>();
+    const bool rhsIsConstant = rhs->getContainerKind() == ContainerKind::code<ColumnConst>();
+
+    if (lhsIsConstant && rhsIsConstant) {
+        return 1;
+    } else if (lhsIsConstant) {
+        return rhs->size();
+    } else if (rhsIsConstant) {
+        return lhs->size();
+    }
+
+    bioassert(lhs->size() == rhs->size(), "The two operands of a row-wise read are not row-aligned.");
+
+    return lhs->size();
+}
+
+std::optional<CellView> readContainerElement(const NLContainer& container,
+                                             const NLSubscript& subscript,
+                                             NLEntityProperties& properties,
+                                             MapBuffer<>& mapBuffer) {
+    const bool readsANull = std::holds_alternative<std::monostate>(subscript)
+                         || std::holds_alternative<std::monostate>(container._keyed);
+
+    if (readsANull) {
+        return std::nullopt;
+    } else if (const types::String::Primitive* key = std::get_if<types::String::Primitive>(&subscript)) {
+        MapEntryView entry;
+        if (!findKeyedEntry(container._keyed, *key, properties, mapBuffer, entry)) {
+            return std::nullopt;
+        }
+
+        return entry.getValue();
+    } else if (std::holds_alternative<NLNeitherPositionNorKey>(subscript)) {
+        throw IRException("An index is an integer position or a string key, and this row holds a value that is neither");
+    } else if (!container._list) {
+        ListIndexImpl::throwNotAList();
+    } else if (const types::Int64::Primitive* position = std::get_if<types::Int64::Primitive>(&subscript)) {
+        return ListIndexImpl {}(*container._list, *position);
+    }
+
+    return ListIndexImpl {}(*container._list, std::get<types::UInt64::Primitive>(subscript));
+}
+
+template <typename Element>
+Element containerIndexResult(const std::optional<CellView>& element) {
+    if constexpr (std::is_same_v<Element, CellView>) {
+        return element.value_or(CellView::nullElement());
+    } else if constexpr (std::is_same_v<Element, std::optional<CellView>>) {
+        return element;
+    } else if constexpr (TypeUtils::is_optional_v<Element>) {
+        return ValueListIndexImpl<typename Element::value_type>::elementValue(element);
+    } else {
+        return ValueListIndexImpl<Element>::elementValue(element).value_or(Element {});
+    }
+}
+
 template <typename Primitive>
 std::optional<types::Int64::Primitive> rangeBound(const Column* input, size_t row) {
     const std::optional<Primitive>& cell = (*static_cast<const ColumnOptVector<Primitive>*>(input))[row];
@@ -9801,14 +9928,7 @@ void NLExecutor::runDynamicMapKey(NLExecutionContext* context, NLFunctionData* d
         return;
     }
 
-    const size_t mapRows = input->size();
-    const size_t keyRows = keyColumn->size();
-    const size_t rowCount = std::max(mapRows, keyRows);
-
-    bioassert(mapRows == rowCount || mapRows == 1,
-              "Map column of a dynamic map key is not row-aligned with its key column.");
-    bioassert(keyRows == rowCount || keyRows == 1,
-              "Key column of a dynamic map key is not row-aligned with its map column.");
+    const size_t rowCount = pairedRowCount(input, keyColumn);
 
     std::vector<CellView>& outputRaw = static_cast<ColumnVector<CellView>*>(result)->getRaw();
 
@@ -9817,6 +9937,111 @@ void NLExecutor::runDynamicMapKey(NLExecutionContext* context, NLFunctionData* d
     for (size_t row = 0; row < rowCount; row++) {
         outputRaw[row] = valueAt(row);
     }
+}
+
+template <typename Element>
+void NLExecutor::runContainerIndex(NLExecutionContext* context, NLFunctionData* data) {
+    const NLContainerIndexData* containerIndex = static_cast<NLContainerIndexData*>(data);
+
+    const Column* base = containerIndex->getBase();
+    const Column* index = containerIndex->getIndex();
+
+    const NLContainerReadFunction readBase = containerIndex->getBaseRead();
+    const NLSubscriptReadFunction readIndex = containerIndex->getIndexRead();
+
+    NLStepBuffers* const stepBuffers = containerIndex->getStepBuffers();
+    stepBuffers->clear();
+
+    MapBuffer<>& mapBuffer = stepBuffers->mapBuffer();
+    NLEntityProperties properties(context, &stepBuffers->valueStore());
+
+    const size_t rowCount = pairedRowCount(base, index);
+
+    std::vector<Element>& outputRaw = static_cast<ColumnVector<Element>*>(containerIndex->getResult())->getRaw();
+
+    outputRaw.resize(rowCount);
+
+    for (size_t row = 0; row < rowCount; row++) {
+        const std::optional<CellView> element = readContainerElement(readBase(base, row),
+                                                                     readIndex(index, row),
+                                                                     properties,
+                                                                     mapBuffer);
+
+        outputRaw[row] = containerIndexResult<Element>(element);
+    }
+}
+
+NLHandlerFunction NLExecutor::selectCellContainerIndex(bool nullable) {
+    return nullable ? &runContainerIndex<std::optional<CellView>> : &runContainerIndex<CellView>;
+}
+
+NLHandlerFunction NLExecutor::selectEntityContainerIndex(NLChunkKind kind) {
+    if (kind == NLChunkKind::NodeID) {
+        return &runContainerIndex<NodeID>;
+    } else if (kind == NLChunkKind::EdgeID) {
+        return &runContainerIndex<EdgeID>;
+    }
+
+    throw IRException("a container index reads its entities out of a list of nodes or of edges");
+}
+
+NLHandlerFunction NLExecutor::selectValueContainerIndex(ValueType valueType) {
+    NLHandlerFunction selected = nullptr;
+
+    const auto select = [&]<SupportedType T>() {
+        selected = &runContainerIndex<std::optional<typename T::Primitive>>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
+
+    return selected;
+}
+
+NLContainerReadFunction NLExecutor::selectContainerRead(const Column* input) {
+    const ColumnKind::Code kind = input->getKind();
+
+    if (kind == ColumnVector<ListView>::staticKind()) {
+        return &listContainer<ColumnVector<ListView>>;
+    } else if (kind == ColumnOptVector<ListView>::staticKind()) {
+        return &listContainer<ColumnOptVector<ListView>>;
+    } else if (kind == ColumnConst<ListView>::staticKind()) {
+        return &listContainer<ColumnConst<ListView>>;
+    } else if (kind == ColumnConst<std::optional<ListView>>::staticKind()) {
+        return &listContainer<ColumnConst<std::optional<ListView>>>;
+    } else if (kind == ColumnVector<MapView>::staticKind()) {
+        return &mapContainer<ColumnVector<MapView>>;
+    } else if (kind == ColumnOptVector<MapView>::staticKind()) {
+        return &mapContainer<ColumnOptVector<MapView>>;
+    } else if (kind == ColumnConst<MapView>::staticKind()) {
+        return &mapContainer<ColumnConst<MapView>>;
+    } else if (kind == ColumnConst<std::optional<MapView>>::staticKind()) {
+        return &mapContainer<ColumnConst<std::optional<MapView>>>;
+    } else if (kind == ColumnVector<CellView>::staticKind()) {
+        return &cellContainer<ColumnVector<CellView>>;
+    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
+        return &cellContainer<ColumnOptVector<CellView>>;
+    } else if (kind == ColumnConst<CellView>::staticKind()) {
+        return &cellContainer<ColumnConst<CellView>>;
+    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
+        return &cellContainer<ColumnConst<std::optional<CellView>>>;
+    }
+
+    throw IRException("a container index reads a list column, a map column or a column of tagged cells");
+}
+
+NLSubscriptReadFunction NLExecutor::selectSubscriptRead(const Column* input) {
+    const ColumnKind::Code kind = input->getKind();
+
+    if (kind == ColumnVector<CellView>::staticKind()) {
+        return &readSubscript<ColumnVector<CellView>>;
+    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
+        return &readSubscript<ColumnOptVector<CellView>>;
+    } else if (kind == ColumnConst<CellView>::staticKind()) {
+        return &readSubscript<ColumnConst<CellView>>;
+    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
+        return &readSubscript<ColumnConst<std::optional<CellView>>>;
+    }
+
+    throw IRException("a container index reads its index out of a column of tagged cells");
 }
 
 NLListReadFunction NLExecutor::selectListRead(const Column* input) {

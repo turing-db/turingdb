@@ -9647,7 +9647,7 @@ struct FuseFetchNodes : public impl::FuseFetchNodesBase<FuseFetchNodes> {
 
 // A row-wise op a re-rooted pattern recomputes over its new rows rather than carrying
 bool computesPerRow(Operation* op) {
-    return isRowWiseOp(op) || isa<ListIndex, ToNullable, GetEdgeTypes>(op);
+    return isRowWiseOp(op) || isa<ListIndex, ContainerIndex, ToNullable, GetEdgeTypes>(op);
 }
 
 bool isHop(Operation* op) {

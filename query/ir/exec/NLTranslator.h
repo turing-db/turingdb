@@ -1111,6 +1111,7 @@ private:
     void translateMergeMaps(mlir::nl::MergeMaps merge, NLStmtContainer* body);
     void translateStaticMapKey(mlir::nl::StaticMapKey mapKey, NLStmtContainer* body);
     void translateDynamicMapKey(mlir::nl::DynamicMapKey mapKey, NLStmtContainer* body);
+    void translateContainerIndex(mlir::nl::ContainerIndex index, NLStmtContainer* body);
 
     // Translate an nl.list_comprehension: allocate the element chunk, one chunk per
     // carried column and the list column the step fills, pick the handlers that read the

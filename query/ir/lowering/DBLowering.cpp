@@ -1466,6 +1466,8 @@ void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
         lowerStaticMapKey(mapKey);
     } else if (mlir::db::DynamicMapKey dynamicMapKey = mlir::dyn_cast<mlir::db::DynamicMapKey>(operation)) {
         lowerDynamicMapKey(dynamicMapKey);
+    } else if (mlir::db::ContainerIndex containerIndex = mlir::dyn_cast<mlir::db::ContainerIndex>(operation)) {
+        lowerContainerIndex(containerIndex);
     } else if (mlir::db::Range range = mlir::dyn_cast<mlir::db::Range>(operation)) {
         lowerRange(range);
     } else if (mlir::db::Substring substring = mlir::dyn_cast<mlir::db::Substring>(operation)) {
@@ -2510,6 +2512,29 @@ void DBLowering::lowerDynamicMapKey(mlir::db::DynamicMapKey mapKey) {
                                                                  keyChunk);
 
     _valueMap[mapKey.getResult()] = value.getResult();
+}
+
+void DBLowering::lowerContainerIndex(mlir::db::ContainerIndex index) {
+    const mlir::Value baseChunk = mapValue(index.getBase());
+    const mlir::Value indexChunk = mapValue(index.getIndex());
+
+    const mlir::Type baseType = baseChunk.getType();
+    mlir::MLIRContext* const context = _builder.getContext();
+
+    const mlir::Type resultElement = isListChunk(baseType)
+                                         ? binaryResultElement(BinaryResultKind::Index, baseType, indexChunk.getType())
+                                         : storage::AnyType::get(context);
+
+    const nl::ChunkType resultType = nl::ChunkType::get(context, resultElement);
+
+    setInsertionForBinaryOp(baseChunk, indexChunk);
+
+    nl::ContainerIndex element = _builder.create<nl::ContainerIndex>(_builder.getUnknownLoc(),
+                                                                     resultType,
+                                                                     baseChunk,
+                                                                     indexChunk);
+
+    _valueMap[index.getResult()] = element.getResult();
 }
 
 void DBLowering::lowerStaticMapKey(mlir::db::StaticMapKey mapKey) {

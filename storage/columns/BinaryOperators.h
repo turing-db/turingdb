@@ -887,10 +887,14 @@ struct ListIndexImpl {
 
     static ListView indexedList(CellView cell) {
         if (!holdsAList(cell)) {
-            throw TuringException("A list index reads a list, and this row holds a value that is not one");
+            throwNotAList();
         }
 
         return operandList(cell);
+    }
+
+    [[noreturn]] static void throwNotAList() {
+        throw TuringException("A list index reads a list, and this row holds a value that is not one");
     }
 };
 
@@ -904,8 +908,10 @@ struct ValueListIndexImpl {
     template <typename Base, typename Index>
         requires std::is_invocable_v<ListIndexImpl, Base, Index>
     inline std::optional<T> operator()(const Base& base, const Index& index) const {
-        const std::optional<CellView> cell = ListIndexImpl {}(base, index);
+        return elementValue(ListIndexImpl {}(base, index));
+    }
 
+    static std::optional<T> elementValue(const std::optional<CellView>& cell) {
         if (!cell.has_value() || cell->getTag() != TypeToCellTag<T>::Tag) {
             return std::nullopt;
         }

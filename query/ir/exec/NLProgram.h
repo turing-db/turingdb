@@ -4445,6 +4445,52 @@ private:
     NLStepBuffers* _stepBuffers {nullptr};
 };
 
+// What one row of an nl.container_index's base holds, as each of its two reads sees it: the
+// list a position reads, and what a key reads into, which is nothing where the row is null
+struct NLContainer {
+    std::optional<ListView> _list;
+    NLKeyedValue _keyed;
+};
+
+using NLContainerReadFunction = NLContainer (*)(const Column* base, size_t row);
+
+struct NLNeitherPositionNorKey {
+};
+
+using NLSubscript = std::variant<std::monostate,
+                                 types::Int64::Primitive,
+                                 types::UInt64::Primitive,
+                                 types::String::Primitive,
+                                 NLNeitherPositionNorKey>;
+
+using NLSubscriptReadFunction = NLSubscript (*)(const Column* index, size_t row);
+
+class NLContainerIndexData : public NLFunctionData {
+public:
+    NLContainerIndexData(const Column* base,
+                         NLContainerReadFunction baseRead,
+                         const Column* index,
+                         NLSubscriptReadFunction indexRead,
+                         Column* result,
+                         NLStepBuffers* stepBuffers);
+    ~NLContainerIndexData() override;
+
+    const Column* getBase() const { return _base; }
+    NLContainerReadFunction getBaseRead() const { return _baseRead; }
+    const Column* getIndex() const { return _index; }
+    NLSubscriptReadFunction getIndexRead() const { return _indexRead; }
+    Column* getResult() const { return _result; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
+
+private:
+    const Column* _base {nullptr};
+    NLContainerReadFunction _baseRead {nullptr};
+    const Column* _index {nullptr};
+    NLSubscriptReadFunction _indexRead {nullptr};
+    Column* _result {nullptr};
+    NLStepBuffers* _stepBuffers {nullptr};
+};
+
 // Row-wise map merge (nl.merge_maps): row r of the result holds every key the operands' maps
 // hold at row r, under the value of the last operand holding it.
 class NLMergeMapsData : public NLFunctionData {

@@ -66,7 +66,17 @@ The bracket form reads a key too. Where `m` is a map, a node, a relationship or 
 ordering match the two as one expression: `WITH {a: 1} AS m RETURN m['a']` is 1, and `p['age']` is
 the integer `p.age` is. On a tagged cell, `m['key']` is emitted as a `db.dynamic_map_key` over the
 key as a constant, the op `m[k]` emits for a key computed per row. That read raises on a datetime
-or a duration, where `m.key` reads the component.
+or a duration, where `m.key` reads the component. A map literal is read by a key computed per row
+the same way: `UNWIND ['a', 'b', 'c'] AS k RETURN {a: 1, b: 'x'}[k]` is 1, x and null.
+
+An index held in a tagged cell can be a position on one row and a key on the next, so `c[i]` with
+such an `i` emits `db.container_index` where `c` is a list, a map or a tagged cell. Neo4j's
+ContainerIndex expression reads it the same way. A row whose base holds a list and whose index
+holds an integer reads the element, as `db.list_index` does. A row whose base holds a map, a node
+or an edge and whose index holds a string reads the value under that key, as `db.dynamic_map_key`
+does. A null base or a null index reads null, and any other pair raises: `UNWIND [1, 'a'] AS b
+RETURN [1, 2, 3][b]` raises on the row holding `'a'`. An integer, a string or a null index keeps
+the op it emitted before.
 
 # Reading through a nested value
 

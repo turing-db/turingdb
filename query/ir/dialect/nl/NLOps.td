@@ -2726,6 +2726,32 @@ def DynamicMapKey : NLOp<"dynamic_map_key", [Pure, ConstantThroughOperands, RowA
   let assemblyFormat = "$map `,` $key attr-dict `:` functional-type(operands, results)";
 }
 
+def ContainerIndex : NLOp<"container_index", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Row-wise read of an element of a list or a value of a map, by an index read per row";
+  let description = [{
+    Imperative counterpart of db.container_index. Row r reads the element row r's list holds
+    at row r's position, as nl.list_index does, or the value row r's map, node or edge holds
+    under row r's key, as nl.dynamic_map_key does:
+
+      %e = nl.container_index %xs, %i
+             : (!nl.chunk<!storage.list<i64>>, !nl.chunk<!storage.any>) -> !nl.chunk<!storage.nullable<i64>>
+
+      %v = nl.container_index %c, %i
+             : (!nl.chunk<!storage.any>, !nl.chunk<!storage.any>) -> !nl.chunk<!storage.any>
+
+    The base is a chunk of lists, of maps or of tagged cells, and the index a chunk of tagged
+    cells, each optionally nullable. A null base or a null index reads null. A position on a
+    value that is no list, a key on a value that is no map, node or edge, and an index that is
+    neither a position nor a key raise.
+  }];
+
+  let arguments = (ins NLChunk:$base, NLChunk:$index);
+  let results   = (outs NLChunk:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = "$base `,` $index attr-dict `:` functional-type(operands, results)";
+}
+
 def Sub : NLOp<"sub", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise subtraction of two value chunks";
   let description = [{

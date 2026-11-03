@@ -439,6 +439,16 @@ public:
     static void runStaticMapKey(NLExecutionContext* context, NLFunctionData* data);
     static void runDynamicMapKey(NLExecutionContext* context, NLFunctionData* data);
 
+    template <typename Element>
+    static void runContainerIndex(NLExecutionContext* context, NLFunctionData* data);
+
+    static NLHandlerFunction selectCellContainerIndex(bool nullable);
+    static NLHandlerFunction selectEntityContainerIndex(NLChunkKind kind);
+    static NLHandlerFunction selectValueContainerIndex(ValueType valueType);
+
+    static NLContainerReadFunction selectContainerRead(const Column* input);
+    static NLSubscriptReadFunction selectSubscriptRead(const Column* input);
+
     // Build one list per row (nl.range): row r counts from its start bound to its end
     // bound by its step, as one contiguous run of the query's list buffer.
     static void runRange(NLExecutionContext* context, NLFunctionData* data);
