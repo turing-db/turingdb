@@ -240,27 +240,6 @@ std::strong_ordering compareValues(const Lhs lhs, const Rhs rhs) {
     throw FatalException("Unknown list element order class.");
 }
 
-template <typename View, typename Value>
-bool elementEqualsNumber(const View view, const Value value) {
-    switch (tagOf(view)) {
-        case CellTag::Int:
-            return numbersEqual(valueOf<types::Int64::Primitive>(view), value);
-        break;
-
-        case CellTag::UInt:
-            return numbersEqual(valueOf<types::UInt64::Primitive>(view), value);
-        break;
-
-        case CellTag::Double:
-            return numbersEqual(valueOf<types::Double::Primitive>(view), value);
-        break;
-
-        default:
-            return false;
-        break;
-    }
-}
-
 // Orders an element against a value of a known type: the element's class against the
 // value's when the two differ, and the two values themselves when they agree.
 template <typename Value>
@@ -539,72 +518,6 @@ std::optional<bool> db::equalOrUnknown(const MapView lhs, const MapView rhs) {
     }
 
     return true;
-}
-
-bool db::operator==(const CellView element, const types::Int64::Primitive value) {
-    return elementEqualsNumber(element, value);
-}
-
-bool db::operator==(const CellView element, const types::UInt64::Primitive value) {
-    return elementEqualsNumber(element, value);
-}
-
-bool db::operator==(const CellView element, const types::Double::Primitive value) {
-    return elementEqualsNumber(element, value);
-}
-
-bool db::operator==(const CellView element, const types::String::Primitive value) {
-    return element.getTag() == CellTag::String
-        && element.getAs<types::String::Primitive>() == value;
-}
-
-bool db::operator==(const CellView element, const types::Bool::Primitive value) {
-    return element.getTag() == CellTag::Bool
-        && static_cast<bool>(element.getAs<types::Bool::Primitive>()) == static_cast<bool>(value);
-}
-
-bool db::operator==(const CellView element, const types::DateTime::Primitive value) {
-    return element.getTag() == CellTag::DateTime
-        && element.getAs<types::DateTime::Primitive>() == value;
-}
-
-bool db::operator==(const CellView element, const types::Duration::Primitive value) {
-    return element.getTag() == CellTag::Duration
-        && element.getAs<types::Duration::Primitive>() == value;
-}
-
-bool db::operator==(const CellView element, const types::Embedding::Primitive value) {
-    return element.getTag() == CellTag::Embedding
-        && EmbeddingEqual {}(element.getAs<types::Embedding::Primitive>(), value);
-}
-
-bool db::operator==(const CellView element, const NodeID value) {
-    return element.getTag() == CellTag::NodeID
-        && element.getAs<NodeID>() == value;
-}
-
-bool db::operator==(const CellView element, const EdgeID value) {
-    return element.getTag() == CellTag::EdgeID
-        && element.getAs<EdgeID>() == value;
-}
-
-bool db::operator==(const CellView element, const ListView value) {
-    return element.getTag() == CellTag::ListView
-        && element.getAs<ListView>() == value;
-}
-
-bool db::operator==(const CellView element, const MapView value) {
-    return element.getTag() == CellTag::MapView
-        && element.getAs<MapView>() == value;
-}
-
-bool db::operator==(const CellView element, const PathView value) {
-    return element.getTag() == CellTag::Path
-        && std::ranges::equal(element.getAs<PathView>().getIDs(), value.getIDs());
-}
-
-bool db::operator==(const CellView element, const GraphPath& value) {
-    return element == PathView {value.getIDs()};
 }
 
 std::strong_ordering db::operator<=>(const CellView element, const types::Int64::Primitive value) {
