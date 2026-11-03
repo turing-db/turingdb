@@ -3259,11 +3259,13 @@ void NLTranslator::translateSetProperties(SetPropertiesOp setProperties, mlir::V
     const NLHandlerFunction run = WRITES_NODES ? &NLExecutor::runSetNodeProperties : &NLExecutor::runSetEdgeProperties;
 
     const IDColumn* inputColumn = static_cast<const IDColumn*>(getColumn(input));
+    const mlir::Value value = setProperties.getValue();
 
     SetPropertiesData* data = _program->allocFunctionData<SetPropertiesData>(inputColumn,
-                                                                             getColumn(setProperties.getValue()),
+                                                                             getColumn(value),
                                                                              setProperties.getReplaces());
 
+    data->setWritesNull(isUntypedNullChunk(value.getType()));
     data->setPending(getMaskColumn(setProperties.getPending()));
     data->setAllPending(setProperties.getAllPending() || isPendingValue(input, WRITES_NODES));
     data->setRows(getMaskColumn(setProperties.getRows()));

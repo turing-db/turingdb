@@ -82,8 +82,10 @@ bool mayHoldAnyType(Value operand) {
     return unresolved || isa<storage::AnyType>(element);
 }
 
-bool holdsAMapPerRow(Value column) {
-    return mayHoldAnyType(column) || isa<storage::MapType>(columnElement(column));
+bool writesAMapPerRow(Value column) {
+    const Type declared = cast<ColumnType>(column.getType()).getType();
+
+    return mayHoldAnyType(column) || isa<storage::MapType>(columnElement(column)) || isNullLiteralType(declared);
 }
 
 template <typename IDType>
@@ -1379,8 +1381,8 @@ LogicalResult SetEdgeProperty::verify() {
 LogicalResult SetNodeProperties::verify() {
     if (!holdsIDsOf<storage::NodeIDType>(getInputNodes())) {
         return emitOpError("writes the properties of a column of node IDs");
-    } else if (!holdsAMapPerRow(getValue())) {
-        return emitOpError("writes a column of maps or of tagged cells, optionally nullable");
+    } else if (!writesAMapPerRow(getValue())) {
+        return emitOpError("writes a column of maps or of tagged cells, optionally nullable, or the null literal");
     } else if (!::db::namesPropertyElementTypes(getCreatedTypesAttr())) {
         return emitOpError("creates each property with the element type of a stored value");
     }
@@ -1391,8 +1393,8 @@ LogicalResult SetNodeProperties::verify() {
 LogicalResult SetEdgeProperties::verify() {
     if (!holdsIDsOf<storage::EdgeIDType>(getInputEdges())) {
         return emitOpError("writes the properties of a column of edge IDs");
-    } else if (!holdsAMapPerRow(getValue())) {
-        return emitOpError("writes a column of maps or of tagged cells, optionally nullable");
+    } else if (!writesAMapPerRow(getValue())) {
+        return emitOpError("writes a column of maps or of tagged cells, optionally nullable, or the null literal");
     } else if (!::db::namesPropertyElementTypes(getCreatedTypesAttr())) {
         return emitOpError("creates each property with the element type of a stored value");
     }
