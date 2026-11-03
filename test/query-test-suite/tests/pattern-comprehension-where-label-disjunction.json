@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (a:Person) RETURN a.name, [(a)-[:INTERESTED_IN]->(b) WHERE b:Exotic|Supernatural | b.name]",
+  "expect": {
+    "result": "a.name,[(a)-[:INTERESTED_IN]->(b) WHERE b:Exotic|Supernatural | b.name]\nRemy,\"[Ghosts, Eighties]\"\nAdam,[]\nMaxime,[]\nLuc,[]\nMartina,[]\nSuhas,[]\nCyrus,[]\nDoruk,[]"
+  },
+  "tags": [
+    "comprehension",
+    "labels",
+    "return"
+  ],
+  "write-required": false
+}

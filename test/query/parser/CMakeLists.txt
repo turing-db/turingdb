@@ -21,6 +21,9 @@ target_sources(test_query_parser_ldbc_query PRIVATE ${PARSER_EXPECTED_AST_SOURCE
 add_turing_test(test_query_parser_predicate_precedence PredicatePrecedenceTest.cpp)
 target_sources(test_query_parser_predicate_precedence PRIVATE ${PARSER_EXPECTED_AST_SOURCES})
 
+add_turing_test(test_query_parser_label_disjunction_or_bar LabelDisjunctionOrBarTest.cpp)
+target_sources(test_query_parser_label_disjunction_or_bar PRIVATE ${PARSER_EXPECTED_AST_SOURCES})
+
 add_turing_test(test_query_parser_mutant ParseMutantTest.cpp)
 target_sources(test_query_parser_mutant PRIVATE CypherCorpus.cpp ParseOutcome.cpp QueryMutants.cpp)
 target_compile_definitions(test_query_parser_mutant PRIVATE CYPHER_CORPUS_DIR="${CMAKE_SOURCE_DIR}/fuzz/corpus/cypher")

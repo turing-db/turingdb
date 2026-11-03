@@ -1572,6 +1572,38 @@ bool CypherGrammar::isOpensDetailLabels(size_t offset) {
     return startsLabelAtom(next) && next != CypherTokenKind::IS;
 }
 
+// Both readings of [x IN l WHERE x:A|B] parse. Neo4j's grammar reads the bar there, so a
+// `|` disjoins labels only when another `|` at its depth can still close the expression
+bool CypherGrammar::pipeDisjoinsLabels() {
+    if (!isFollowedBy(ExprFollower::PIPE)) {
+        return true;
+    } else if (peek(0)._kind != CypherTokenKind::PIPE) {
+        return false;
+    }
+
+    size_t position = 1;
+    while (true) {
+        const CypherTokenKind kind = peek(position)._kind;
+
+        if (kind == CypherTokenKind::PIPE) {
+            return true;
+        } else if (kind == CypherTokenKind::OPAREN || kind == CypherTokenKind::OBRACK || kind == CypherTokenKind::OBRACE) {
+            position = skipBalanced(position);
+            if (position == 0) {
+                return false;
+            }
+        } else if (kind == CypherTokenKind::CPAREN
+                   || kind == CypherTokenKind::CBRACK
+                   || kind == CypherTokenKind::CBRACE
+                   || kind == CypherTokenKind::PROG_END
+                   || kind == CypherTokenKind::LEXER_ERROR) {
+            return false;
+        } else {
+            position++;
+        }
+    }
+}
+
 CypherGrammar::ParenthesizedAtom CypherGrammar::classifyParenthesis() {
     const CypherTokenKind first = peek(1)._kind;
 

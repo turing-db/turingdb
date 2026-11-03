@@ -2305,11 +2305,6 @@ TEST_F(ParseEdgeCaseTest, parsesUpdatingClauses) {
                 "       |               ^^^\n"
                 "-------* Invalid property access. Only a variable can be parenthesized on the left of '.'");
 
-    expectError("FOREACH (x IN n:A|B | SET x.y = 1)",
-                "     1 | FOREACH (x IN n:A|B | SET x.y = 1)\n"
-                "       |                   ^\n"
-                "-------* syntax error, unexpected ID");
-
     expectParse("MERGE (a) ON CREATE SET a.x = 1 ON MATCH SET a.y = 2 ON CREATE SET a.z = 3",
                 {query({merge(pattern({path({node({._symbol = "a"})})}),
                               set({setProperty(property({"a", "x"}), integer(1)),
@@ -2936,11 +2931,6 @@ TEST_F(ParseEdgeCaseTest, parsesLabelExpressionsAndComprehensions) {
     expectParse("RETURN [1, n:A|B]",
                 {query({}, returning({list({integer(1), entityType("n", labelOr({labels({"A"}), labels({"B"})}))})}))});
 
-    expectError("RETURN [x IN xs WHERE x:A|B | x]",
-                "     1 | RETURN [x IN xs WHERE x:A|B | x]\n"
-                "       |                             ^\n"
-                "-------* syntax error, unexpected PIPE");
-
     expectParse("RETURN [(a:A|B)-->(b) | b]",
                 {query({},
                        returning({patternComprehension(match({._pattern = pattern({path({node({._symbol = "a",
@@ -2949,11 +2939,6 @@ TEST_F(ParseEdgeCaseTest, parsesLabelExpressionsAndComprehensions) {
                                                                                          edge({._direction = EdgePattern::Direction::Forward}),
                                                                                          node({._symbol = "b"})})})}),
                                                        symbol("b"))}))});
-
-    expectError("RETURN reduce(a = 0, x IN n:A|B | a)",
-                "     1 | RETURN reduce(a = 0, x IN n:A|B | a)\n"
-                "       |                                 ^\n"
-                "-------* syntax error, unexpected PIPE");
 
     expectParse("MATCH (n:A|B) RETURN n",
                 {query({match({._pattern = pattern({path({node({._symbol = "n",

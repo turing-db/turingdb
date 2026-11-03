@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n:Person) RETURN n.name, [x IN [n] WHERE x:Founder|Sales | x.name]",
+  "expect": {
+    "result": "n.name,[x IN [n] WHERE x:Founder|Sales | x.name]\nRemy,[Remy]\nAdam,[Adam]\nMaxime,[]\nLuc,[]\nMartina,[]\nSuhas,[]\nCyrus,[]\nDoruk,[Doruk]"
+  },
+  "tags": [
+    "comprehension",
+    "labels",
+    "return"
+  ],
+  "write-required": false
+}
