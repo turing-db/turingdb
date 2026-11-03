@@ -472,6 +472,7 @@ private:
     Symbol* parseReservedWord();
 
     bool opensConstruct(size_t offset, bool aliasMayFollow);
+    bool braceOpensMapProjection(size_t offset);
     bool notOpensNegation(size_t offset, bool aliasMayFollow);
     bool distinctOpensProjection();
     bool distinctOpensArgument(bool closeKeepsKeyword);

@@ -2047,10 +2047,7 @@ TEST_F(ParseEdgeCaseTest, parsesCallsAndSubqueries) {
                 "       |      ^^^^^^^^^^^^^^^^^^^^\n"
                 "-------* Decimal literal exceeded int64 range.");
 
-    expectError("RETURN EXISTS { }",
-                "     1 | RETURN EXISTS { }\n"
-                "       |                 ^\n"
-                "-------* syntax error, unexpected CBRACE, expecting OPAREN or OBRACE or a name");
+    expectParse("RETURN EXISTS { }", {query({}, returning({mapProjection("EXISTS", {})}))});
 
     expectError("RETURN EXISTS { 1 }",
                 "     1 | RETURN EXISTS { 1 }\n"
@@ -2062,10 +2059,17 @@ TEST_F(ParseEdgeCaseTest, parsesCallsAndSubqueries) {
                 "       |                ^\n"
                 "-------* syntax error, unexpected DOLLAR, expecting OPAREN or OBRACE or a name");
 
-    expectError("RETURN EXISTS { MATCH }",
-                "     1 | RETURN EXISTS { MATCH }\n"
+    expectParse("RETURN EXISTS { MATCH }",
+                {query({},
+                       returning({mapProjection("EXISTS",
+                                                {{._kind = MapProjectionExpr::ItemKind::Variable,
+                                                  ._key = name("MATCH"),
+                                                  ._value = symbol("MATCH")}})}))});
+
+    expectError("RETURN EXISTS { MATCH 5 }",
+                "     1 | RETURN EXISTS { MATCH 5 }\n"
                 "       |                       ^\n"
-                "-------* syntax error, unexpected CBRACE, expecting OPAREN or ASSIGN or a name");
+                "-------* syntax error, unexpected DIGIT, expecting OPAREN or ASSIGN or a name");
 
     expectError("RETURN EXISTS { OPTIONAL 5 }",
                 "     1 | RETURN EXISTS { OPTIONAL 5 }\n"
@@ -2077,10 +2081,17 @@ TEST_F(ParseEdgeCaseTest, parsesCallsAndSubqueries) {
                 "       |                      ^\n"
                 "-------* syntax error, unexpected DIGIT, expecting OPAREN or OBRACE or ASSIGN or a name");
 
-    expectError("RETURN EXISTS { foo }",
-                "     1 | RETURN EXISTS { foo }\n"
+    expectParse("RETURN EXISTS { foo }",
+                {query({},
+                       returning({mapProjection("EXISTS",
+                                                {{._kind = MapProjectionExpr::ItemKind::Variable,
+                                                  ._key = name("foo"),
+                                                  ._value = symbol("foo")}})}))});
+
+    expectError("RETURN EXISTS { foo (a) }",
+                "     1 | RETURN EXISTS { foo (a) }\n"
                 "       |                     ^\n"
-                "-------* syntax error, unexpected CBRACE, expecting ASSIGN");
+                "-------* syntax error, unexpected OPAREN, expecting ASSIGN");
 
     expectParse("RETURN EXISTS { foo = (a) }",
                 {query({},
