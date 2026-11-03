@@ -184,5 +184,5 @@ TEST_F(MapProjectionTest, readsANodePatternWithPropertiesAsAPattern) {
 }
 
 TEST_F(MapProjectionTest, rejectsABaseThatIsNoEntityOrMap) {
-    expectError("WITH 1 AS x RETURN x {.a} AS m", "A map projection reads a node, a relationship or a map");
+    expectError("WITH 1 AS x RETURN x {.a} AS m", "A map projection reads a node, a relationship, a map, a datetime or a duration");
 }

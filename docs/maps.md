@@ -110,8 +110,12 @@ as `[u64 length][EncodedMap bytes]`.
 
 # Map projection
 
-`v {.name, .*, rank: v.age + 1, x}` builds a map out of `v`, a node, a relationship or a map.
-`.key` holds `v.key`, null where `v` has no such property, and `.*` every property of `v`.
+`v {.name, .*, rank: v.age + 1, x}` builds a map out of `v`, a node, a relationship, a map, a
+datetime or a duration. `.key` holds `v.key`, null where `v` has no such property, and `.*` every
+property of `v`. On a datetime or a duration `.key` holds the component `v.key` reads:
+`WITH duration({hours: 1}) AS d RETURN d {.hours, x: 1}` is `{hours: 1, x: 1}`. A temporal has
+no properties, so `.*` and a name that is no component are rejected by the analyzer where `v` is
+typed a datetime or a duration, and raise on the row where a tagged cell holds one.
 `key: expr` holds the expression, and `x` the variable `x` under the key `x`. Every entry is
 computed, and a later one replaces an earlier one under the same key, as in a map literal:
 `v {x: 1 / 0, x: 2}` raises. An entry wins over the property `.*` reads under its key wherever

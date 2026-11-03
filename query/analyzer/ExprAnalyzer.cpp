@@ -2045,10 +2045,13 @@ void ExprAnalyzer::analyzeMapProjectionExpr(MapProjectionExpr* expr) {
                                || baseType == EvaluatedType::EdgePattern;
     const bool projectsAMap = baseType == EvaluatedType::Map
                            || baseType == EvaluatedType::Any;
+    const bool projectsATemporal = baseType == EvaluatedType::DateTime
+                                || baseType == EvaluatedType::Duration;
     const bool projectsNull = baseType == EvaluatedType::Null;
 
-    if (!projectsAnEntity && !projectsAMap && !projectsNull) {
-        throwError(fmt::format("A map projection reads a node, a relationship or a map, and '{}' is '{}'",
+    if (!projectsAnEntity && !projectsAMap && !projectsATemporal && !projectsNull) {
+        throwError(fmt::format("A map projection reads a node, a relationship, a map, a datetime or a duration, "
+                               "and '{}' is '{}'",
                                baseSymbol->getName(),
                                EvaluatedTypeName::value(baseType)),
                    base);
@@ -2058,6 +2061,14 @@ void ExprAnalyzer::analyzeMapProjectionExpr(MapProjectionExpr* expr) {
 
     for (MapProjectionExpr::Item& item : expr->getItems()) {
         const bool readsAProperty = item._kind == MapProjectionExpr::ItemKind::Property;
+        const bool readsEveryProperty = item._kind == MapProjectionExpr::ItemKind::AllProperties;
+
+        if (readsEveryProperty && projectsATemporal) {
+            throwError(fmt::format("A map projection reads .* off a node, a relationship or a map, and '{}' is '{}'",
+                                   baseSymbol->getName(),
+                                   EvaluatedTypeName::value(baseType)),
+                       base);
+        }
 
         // `.key` reads what `v.key` reads, so it is analyzed as that read
         if (readsAProperty && !item._value) {

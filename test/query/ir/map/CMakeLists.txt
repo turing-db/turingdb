@@ -90,3 +90,5 @@ add_turing_test(test_query_ir_nested_map_key NestedMapKeyTest.cpp)
 add_turing_test(test_query_ir_literal_map_key LiteralMapKeyTest.cpp)
 
 add_turing_test(test_query_ir_dotted_property_chain DottedPropertyChainQueryTest.cpp)
+
+add_turing_test(test_query_ir_temporal_map_projection TemporalMapProjectionTest.cpp)
