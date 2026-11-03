@@ -13,6 +13,11 @@ set(parser_sources
     YCypherScanner.cpp
     CypherToken.cpp
     CypherLexer.cpp
+    CypherGrammar.cpp
+    CypherGrammarQueries.cpp
+    CypherGrammarClauses.cpp
+    CypherGrammarPatterns.cpp
+    CypherGrammarExpressions.cpp
     CypherParser.cpp
     ParserException.cpp
     ParserUtils.cpp

@@ -13,6 +13,10 @@ public:
     // stack each, so this many levels must fit the 512 KB a macOS thread starts with
     static constexpr size_t MAX_EXPRESSION_DEPTH = 256;
 
+    // The parser recurses once per level of (, [, { or CASE, so a query nested deeper is
+    // turned away before it can exhaust the stack
+    static constexpr size_t MAX_NESTING_DEPTH = 256;
+
     explicit CypherParser(CypherAST* ast);
     ~CypherParser() = default;
 
