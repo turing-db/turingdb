@@ -1,345 +1,287 @@
 #include <gtest/gtest.h>
 
-#include <memory>
-#include <string>
-#include <string_view>
-
-#include "CypherAST.h"
-#include "CypherParser.h"
-#include "FunctionInvocation.h"
-#include "LabelExpr.h"
-#include "NodePattern.h"
-#include "ParserException.h"
-#include "Pattern.h"
-#include "PatternElement.h"
-#include "Projection.h"
-#include "QualifiedName.h"
-#include "SinglePartQuery.h"
-#include "Symbol.h"
-#include "SymbolChain.h"
-#include "WhereClause.h"
-#include "expr/All.h"
-#include "stmt/MatchStmt.h"
-#include "stmt/ReturnStmt.h"
-#include "stmt/StmtContainer.h"
+#include "ExpectedASTTest.h"
 
 using namespace db;
+using namespace turing::test;
 
 // A keyword that opens a construct is also a name. These queries sit on either side of each
 // place the parser tells the two apart, and pin what the keyword became.
-class KeywordNameDecisionTest : public ::testing::Test {
-protected:
-    void parseQuery(std::string_view query) {
-        _query = query;
-        _ast = std::make_unique<CypherAST>(nullptr, _query);
-
-        CypherParser parser(_ast.get());
-        parser.parse(_query);
-    }
-
-    const SinglePartQuery* parseSingleQuery(std::string_view query) {
-        parseQuery(query);
-        return static_cast<const SinglePartQuery*>(_ast->queries().front());
-    }
-
-    const Projection* returnedProjection(std::string_view query) {
-        return parseSingleQuery(query)->getReturnStmt()->getProjection();
-    }
-
-    const Expr* returnedItem(std::string_view query) {
-        return std::get<Expr*>(returnedProjection(query)->items().front());
-    }
-
-    const MatchStmt* firstMatch(std::string_view query) {
-        const SinglePartQuery* single = parseSingleQuery(query);
-        return static_cast<const MatchStmt*>(single->getStmts()->stmts().front());
-    }
-
-    const NodePattern* matchedNode(std::string_view query) {
-        const Pattern* pattern = firstMatch(query)->getPattern();
-        return static_cast<const NodePattern*>(pattern->elements().front()->getEntities().front());
-    }
-
-    const Expr* matchFilter(std::string_view query) {
-        return firstMatch(query)->getPattern()->getWhere()->getExpr();
-    }
-
-    static const NodePattern* predicateRoot(const Expr* expr) {
-        const Pattern* pattern = static_cast<const ExistsExpr*>(expr)->getPredicatePattern();
-        return static_cast<const NodePattern*>(pattern->elements().front()->getEntities().front());
-    }
-
-    static void expectSymbol(const Expr* expr, std::string_view name) {
-        ASSERT_EQ(expr->getKind(), Expr::Kind::SYMBOL);
-        EXPECT_EQ(static_cast<const SymbolExpr*>(expr)->getSymbol()->getName(), name);
-    }
-
-    static const FunctionInvocation* invocation(const Expr* expr) {
-        EXPECT_EQ(expr->getKind(), Expr::Kind::FUNCTION_INVOCATION);
-        return static_cast<const FunctionInvocationExpr*>(expr)->getFunctionInvocation();
-    }
-
-    static const Expr* firstArgument(const FunctionInvocation* invocation) {
-        return invocation->getArguments()->getExprs().front();
-    }
-
-    static std::string_view labelOf(const LabelExpr* labels) {
-        return labels->getLabels()->front()->getName();
-    }
-
-    void expectParseError(std::string_view query, std::string_view message) {
-        try {
-            parseQuery(query);
-        } catch (const ParserException& error) {
-            EXPECT_NE(std::string_view {error.what()}.find(message), std::string_view::npos) << error.what();
-            return;
-        }
-
-        ADD_FAILURE() << "parsed: " << query;
-    }
-
-    std::string _query;
-    std::unique_ptr<CypherAST> _ast;
+class KeywordNameDecisionTest : public ExpectedASTTest {
 };
 
 TEST_F(KeywordNameDecisionTest, collectBeforeABraceOpensASubquery) {
-    EXPECT_EQ(returnedItem("RETURN COLLECT { MATCH (n) RETURN n }")->getKind(), Expr::Kind::COLLECT_SUBQUERY);
+    expectParse("RETURN COLLECT { MATCH (n) RETURN n }",
+                {query({},
+                       returning({collectSubquery(query({match({._pattern = pattern({path({node({._symbol = "n"})})})})},
+                                                        returning({symbol("n")})))}))});
 }
 
 TEST_F(KeywordNameDecisionTest, collectBeforeAParenthesisCallsTheAggregate) {
-    const FunctionInvocation* collect = invocation(returnedItem("RETURN COLLECT(1)"));
-    EXPECT_EQ(collect->getName()->names().front()->getName(), "collect");
+    expectParse("RETURN COLLECT(1)", {query({}, returning({invocation({"collect"}, {integer(1)})}))});
 }
 
 TEST_F(KeywordNameDecisionTest, collectBeforeAnythingElseIsAVariable) {
-    expectSymbol(returnedItem("RETURN collect"), "collect");
+    expectParse("RETURN collect", {query({}, returning({symbol("collect")}))});
 }
 
 TEST_F(KeywordNameDecisionTest, existsBeforeABraceOpensASubquery) {
-    EXPECT_EQ(returnedItem("RETURN EXISTS { MATCH (n) }")->getKind(), Expr::Kind::EXISTS);
+    expectParse("RETURN EXISTS { MATCH (n) }",
+                {query({}, returning({exists(query({match({._pattern = pattern({path({node({._symbol = "n"})})})})}))}))});
 }
 
 TEST_F(KeywordNameDecisionTest, existsBeforeAnythingElseIsAVariable) {
-    expectSymbol(returnedItem("RETURN exists"), "exists");
+    expectParse("RETURN exists", {query({}, returning({symbol("exists")}))});
 }
 
 TEST_F(KeywordNameDecisionTest, countBeforeABraceOpensASubquery) {
-    EXPECT_EQ(returnedItem("RETURN COUNT { MATCH (n) }")->getKind(), Expr::Kind::COUNT_SUBQUERY);
+    expectParse("RETURN COUNT { MATCH (n) }",
+                {query({},
+                       returning({countSubquery(query({match({._pattern = pattern({path({node({._symbol = "n"})})})})}))}))});
 }
 
 TEST_F(KeywordNameDecisionTest, countBeforeAParenthesisCallsTheAggregate) {
-    const FunctionInvocation* count = invocation(returnedItem("RETURN COUNT(*)"));
-    EXPECT_EQ(count->getName()->names().front()->getName(), "count");
+    expectParse("RETURN COUNT(*)", {query({}, returning({invocation({"count"}, {wildcard()})}))});
 }
 
 TEST_F(KeywordNameDecisionTest, countBeforeADotIsAVariable) {
-    EXPECT_EQ(returnedItem("RETURN count.x")->getKind(), Expr::Kind::PROPERTY);
+    expectParse("RETURN count.x", {query({}, returning({property({"count", "x"})}))});
 }
 
 TEST_F(KeywordNameDecisionTest, singleBeforeAParenthesisOpensAPredicate) {
-    EXPECT_EQ(returnedItem("RETURN single(x IN [1] WHERE x = 1)")->getKind(), Expr::Kind::LIST_PREDICATE);
+    expectParse("RETURN single(x IN [1] WHERE x = 1)",
+                {query({},
+                       returning({listPredicate(ListPredicateExpr::Quantifier::Single,
+                                                listComprehension("x",
+                                                                  list({integer(1)}),
+                                                                  binary(BinaryOperator::Equal,
+                                                                         symbol("x"),
+                                                                         integer(1))))}))});
 }
 
 TEST_F(KeywordNameDecisionTest, singleBeforeAnythingElseIsAVariable) {
-    expectSymbol(returnedItem("RETURN single"), "single");
+    expectParse("RETURN single", {query({}, returning({symbol("single")}))});
 }
 
 TEST_F(KeywordNameDecisionTest, reduceBeforeAParenthesisOpensAFold) {
-    EXPECT_EQ(returnedItem("RETURN reduce(a = 0, x IN [1] | a + x)")->getKind(), Expr::Kind::REDUCE);
+    expectParse("RETURN reduce(a = 0, x IN [1] | a + x)",
+                {query({},
+                       returning({reduce("a",
+                                         integer(0),
+                                         "x",
+                                         list({integer(1)}),
+                                         binary(BinaryOperator::Add, symbol("a"), symbol("x")))}))});
 }
 
 TEST_F(KeywordNameDecisionTest, reduceBeforeABracketIsAVariable) {
-    const Expr* index = returnedItem("RETURN reduce[0]");
-    ASSERT_EQ(index->getKind(), Expr::Kind::INDEX);
-    expectSymbol(static_cast<const IndexExpr*>(index)->getBase(), "reduce");
+    expectParse("RETURN reduce[0]", {query({}, returning({index(symbol("reduce"), integer(0))}))});
 }
 
 TEST_F(KeywordNameDecisionTest, allReduceBeforeAParenthesisOpensAFold) {
-    EXPECT_EQ(returnedItem("RETURN allReduce(a = 0, x IN [1] | a + x, a > 0)")->getKind(), Expr::Kind::ALL_REDUCE);
+    expectParse("RETURN allReduce(a = 0, x IN [1] | a + x, a > 0)",
+                {query({},
+                       returning({allReduce("a",
+                                            integer(0),
+                                            "x",
+                                            list({integer(1)}),
+                                            binary(BinaryOperator::Add, symbol("a"), symbol("x")),
+                                            binary(BinaryOperator::GreaterThan, symbol("a"), integer(0)))}))});
 }
 
 TEST_F(KeywordNameDecisionTest, allReduceBeforeAnythingElseIsAVariable) {
-    expectSymbol(returnedItem("RETURN allReduce"), "allReduce");
+    expectParse("RETURN allReduce", {query({}, returning({symbol("allReduce")}))});
 }
 
 TEST_F(KeywordNameDecisionTest, normalizeBeforeAParenthesisCallsTheFunction) {
-    const FunctionInvocation* normalize = invocation(returnedItem("RETURN NORMALIZE('a')"));
-    EXPECT_EQ(normalize->getName()->names().front()->getName(), "normalize");
+    expectParse("RETURN NORMALIZE('a')",
+                {query({}, returning({invocation({"normalize"}, {string("a"), normalForm(UnicodeNormalForm::NFC)})}))});
 }
 
 TEST_F(KeywordNameDecisionTest, normalizeBeforeAnythingElseIsAVariable) {
-    expectSymbol(returnedItem("RETURN normalize"), "normalize");
+    expectParse("RETURN normalize", {query({}, returning({symbol("normalize")}))});
 }
 
 TEST_F(KeywordNameDecisionTest, noneBeforeAParenthesisOpensAPredicate) {
-    EXPECT_EQ(returnedItem("RETURN none(x IN [1] WHERE x = 1)")->getKind(), Expr::Kind::LIST_PREDICATE);
+    expectParse("RETURN none(x IN [1] WHERE x = 1)",
+                {query({},
+                       returning({listPredicate(ListPredicateExpr::Quantifier::None,
+                                                listComprehension("x",
+                                                                  list({integer(1)}),
+                                                                  binary(BinaryOperator::Equal,
+                                                                         symbol("x"),
+                                                                         integer(1))))}))});
 }
 
 TEST_F(KeywordNameDecisionTest, anyBeforeAnOperatorIsAVariable) {
-    const Expr* sum = returnedItem("RETURN any + 1");
-    ASSERT_EQ(sum->getKind(), Expr::Kind::BINARY);
-    expectSymbol(static_cast<const BinaryExpr*>(sum)->getLHS(), "any");
+    expectParse("RETURN any + 1", {query({}, returning({binary(BinaryOperator::Add, symbol("any"), integer(1))}))});
 }
 
 TEST_F(KeywordNameDecisionTest, allBeforeAParenthesisOpensAPredicate) {
-    EXPECT_EQ(returnedItem("RETURN all(x IN [1] WHERE x = 1)")->getKind(), Expr::Kind::LIST_PREDICATE);
+    expectParse("RETURN all(x IN [1] WHERE x = 1)",
+                {query({},
+                       returning({listPredicate(ListPredicateExpr::Quantifier::All,
+                                                listComprehension("x",
+                                                                  list({integer(1)}),
+                                                                  binary(BinaryOperator::Equal,
+                                                                         symbol("x"),
+                                                                         integer(1))))}))});
 }
 
 TEST_F(KeywordNameDecisionTest, caseBeforeWhenOpensACase) {
-    const Expr* caseExpr = returnedItem("RETURN CASE WHEN true THEN 1 END");
-    ASSERT_EQ(caseExpr->getKind(), Expr::Kind::CASE);
-    EXPECT_EQ(static_cast<const CaseExpr*>(caseExpr)->getSubject(), nullptr);
+    expectParse("RETURN CASE WHEN true THEN 1 END",
+                {query({},
+                       returning({caseExpr(nullptr, {{._tests = {{._value = boolean(true)}}, ._then = integer(1)}})}))});
 }
 
 TEST_F(KeywordNameDecisionTest, caseBeforeANameOpensACaseOnThatSubject) {
-    const Expr* caseExpr = returnedItem("RETURN CASE where WHEN 1 THEN 2 END");
-    ASSERT_EQ(caseExpr->getKind(), Expr::Kind::CASE);
-    expectSymbol(static_cast<const CaseExpr*>(caseExpr)->getSubject(), "where");
+    expectParse("RETURN CASE where WHEN 1 THEN 2 END",
+                {query({},
+                       returning({caseExpr(symbol("where"),
+                                           {{._tests = {{._value = integer(1)}}, ._then = integer(2)}})}))});
 }
 
 TEST_F(KeywordNameDecisionTest, caseBeforeAnAliasIsAVariable) {
-    const Expr* item = returnedItem("RETURN case AS x");
-    expectSymbol(item, "case");
-    EXPECT_EQ(item->getName(), "x");
+    expectParse("RETURN case AS x", {query({}, returning({named(symbol("case"), "x")}))});
 }
 
 TEST_F(KeywordNameDecisionTest, caseBeforeAnInfixWordIsAVariable) {
-    EXPECT_EQ(returnedItem("RETURN case AND true")->getKind(), Expr::Kind::LOGICAL);
+    expectParse("RETURN case AND true",
+                {query({}, returning({logical(LogicalOperator::And, {symbol("case"), boolean(true)})}))});
 }
 
 TEST_F(KeywordNameDecisionTest, caseBeforeAsWhereNoAliasFollowsOpensACase) {
-    const Expr* caseExpr = matchFilter("MATCH (n) WHERE CASE as WHEN 1 THEN true END RETURN n");
-    ASSERT_EQ(caseExpr->getKind(), Expr::Kind::CASE);
-    expectSymbol(static_cast<const CaseExpr*>(caseExpr)->getSubject(), "as");
+    expectParse("MATCH (n) WHERE CASE as WHEN 1 THEN true END RETURN n",
+                {query({match({._pattern = pattern({path({node({._symbol = "n"})})},
+                                                   where(caseExpr(symbol("as"),
+                                                                  {{._tests = {{._value = integer(1)}},
+                                                                    ._then = boolean(true)}})))})},
+                       returning({symbol("n")}))});
 }
 
 TEST_F(KeywordNameDecisionTest, notBeforeANameNegatesIt) {
-    const Expr* negation = returnedItem("RETURN NOT match.x");
-    ASSERT_EQ(negation->getKind(), Expr::Kind::UNARY);
-    EXPECT_EQ(static_cast<const UnaryExpr*>(negation)->getOperator(), UnaryOperator::Not);
+    expectParse("RETURN NOT match.x", {query({}, returning({unary(UnaryOperator::Not, property({"match", "x"}))}))});
 }
 
 TEST_F(KeywordNameDecisionTest, notBeforeAnAliasIsAVariable) {
-    const Expr* item = returnedItem("RETURN not AS x");
-    expectSymbol(item, "not");
-    EXPECT_EQ(item->getName(), "x");
+    expectParse("RETURN not AS x", {query({}, returning({named(symbol("not"), "x")}))});
 }
 
 TEST_F(KeywordNameDecisionTest, notBeforeAnInfixWordIsAVariable) {
-    EXPECT_EQ(returnedItem("RETURN not OR true")->getKind(), Expr::Kind::LOGICAL);
+    expectParse("RETURN not OR true",
+                {query({}, returning({logical(LogicalOperator::Or, {symbol("not"), boolean(true)})}))});
 }
 
 TEST_F(KeywordNameDecisionTest, distinctBeforeAnItemProjectsDistinctRows) {
-    const Projection* projection = returnedProjection("RETURN DISTINCT 1");
-    EXPECT_TRUE(projection->isDistinct());
+    expectParse("RETURN DISTINCT 1", {query({}, returning(projection({._items = {integer(1)}, ._distinct = true})))});
 }
 
 TEST_F(KeywordNameDecisionTest, distinctBeforeAnAliasIsAVariable) {
-    const Projection* projection = returnedProjection("RETURN distinct AS x");
-    EXPECT_FALSE(projection->isDistinct());
-
-    const Expr* item = std::get<Expr*>(projection->items().front());
-    expectSymbol(item, "distinct");
-    EXPECT_EQ(item->getName(), "x");
+    expectParse("RETURN distinct AS x", {query({}, returning({named(symbol("distinct"), "x")}))});
 }
 
 TEST_F(KeywordNameDecisionTest, distinctBeforeAnArgumentOfCollectAggregatesDistinctValues) {
-    EXPECT_TRUE(invocation(returnedItem("RETURN collect(DISTINCT 1)"))->isDistinct());
+    expectParse("RETURN collect(DISTINCT 1)", {query({}, returning({distinct(invocation({"collect"}, {integer(1)}))}))});
 }
 
 TEST_F(KeywordNameDecisionTest, distinctBeforeTheCloseOfCollectIsAVariable) {
-    const FunctionInvocation* collect = invocation(returnedItem("RETURN collect(DISTINCT)"));
-    EXPECT_FALSE(collect->isDistinct());
-    expectSymbol(firstArgument(collect), "DISTINCT");
+    expectParse("RETURN collect(DISTINCT)", {query({}, returning({invocation({"collect"}, {symbol("DISTINCT")})}))});
 }
 
 TEST_F(KeywordNameDecisionTest, distinctBeforeAsInCollectAggregatesTheVariableAs) {
-    const FunctionInvocation* collect = invocation(returnedItem("RETURN collect(DISTINCT as)"));
-    EXPECT_TRUE(collect->isDistinct());
-    expectSymbol(firstArgument(collect), "as");
+    expectParse("RETURN collect(DISTINCT as)", {query({}, returning({distinct(invocation({"collect"}, {symbol("as")}))}))});
 }
 
 TEST_F(KeywordNameDecisionTest, distinctBeforeAnArgumentOfCountCountsDistinctValues) {
-    EXPECT_TRUE(invocation(returnedItem("RETURN count(DISTINCT 1)"))->isDistinct());
+    expectParse("RETURN count(DISTINCT 1)", {query({}, returning({distinct(invocation({"count"}, {integer(1)}))}))});
 }
 
 TEST_F(KeywordNameDecisionTest, distinctBeforeAnInfixWordInCountIsAVariable) {
-    const FunctionInvocation* count = invocation(returnedItem("RETURN count(distinct AND true)"));
-    EXPECT_FALSE(count->isDistinct());
-    EXPECT_EQ(firstArgument(count)->getKind(), Expr::Kind::LOGICAL);
+    expectParse("RETURN count(distinct AND true)",
+                {query({},
+                       returning({invocation({"count"},
+                                             {logical(LogicalOperator::And, {symbol("distinct"), boolean(true)})})}))});
 }
 
 TEST_F(KeywordNameDecisionTest, distinctBeforeTheCloseOfCountStaysTheKeyword) {
-    expectParseError("RETURN count(DISTINCT)", "Not implemented: count(DISTINCT)");
+    expectError("RETURN count(DISTINCT)",
+                "     1 | RETURN count(DISTINCT)\n"
+                "       |        ^^^^^^^^^^^^^^^\n"
+                "-------* Not implemented: count(DISTINCT)");
 }
 
 TEST_F(KeywordNameDecisionTest, distinctBeforeTheCloseOfAFunctionStaysTheKeyword) {
-    expectParseError("RETURN toUpper(DISTINCT)", "DISTINCT requires an argument");
+    expectError("RETURN toUpper(DISTINCT)",
+                "     1 | RETURN toUpper(DISTINCT)\n"
+                "       |        ^^^^^^^^^^^^^^^^^\n"
+                "-------* DISTINCT requires an argument");
 }
 
 TEST_F(KeywordNameDecisionTest, distinctBeforeAnArgumentOfAFunctionAppliesItToDistinctValues) {
-    EXPECT_TRUE(invocation(returnedItem("RETURN toUpper(DISTINCT 'a')"))->isDistinct());
+    expectParse("RETURN toUpper(DISTINCT 'a')", {query({}, returning({distinct(invocation({"toUpper"}, {string("a")}))}))});
 }
 
 TEST_F(KeywordNameDecisionTest, whenAfterCaseBeforeATestOpensABranch) {
-    const Expr* caseExpr = returnedItem("RETURN CASE WHEN 1 THEN 2 END");
-    ASSERT_EQ(caseExpr->getKind(), Expr::Kind::CASE);
-    EXPECT_EQ(static_cast<const CaseExpr*>(caseExpr)->getSubject(), nullptr);
+    expectParse("RETURN CASE WHEN 1 THEN 2 END",
+                {query({}, returning({caseExpr(nullptr, {{._tests = {{._value = integer(1)}}, ._then = integer(2)}})}))});
 }
 
 TEST_F(KeywordNameDecisionTest, whenAfterCaseBeforeADotIsTheSubject) {
-    const Expr* caseExpr = returnedItem("RETURN CASE when.x WHEN 1 THEN 2 END");
-    ASSERT_EQ(caseExpr->getKind(), Expr::Kind::CASE);
-    EXPECT_EQ(static_cast<const CaseExpr*>(caseExpr)->getSubject()->getKind(), Expr::Kind::PROPERTY);
+    expectParse("RETURN CASE when.x WHEN 1 THEN 2 END",
+                {query({},
+                       returning({caseExpr(property({"when", "x"}),
+                                           {{._tests = {{._value = integer(1)}}, ._then = integer(2)}})}))});
 }
 
 TEST_F(KeywordNameDecisionTest, whereAfterAParenthesisBeforeAnOperandOpensAPredicate) {
-    const Expr* predicate = returnedItem("RETURN (WHERE true)");
-    ASSERT_EQ(predicate->getKind(), Expr::Kind::EXISTS);
-    EXPECT_NE(predicateRoot(predicate)->getWhere(), nullptr);
+    LiteralExpr* filter = boolean(true);
+
+    expectParse("RETURN (WHERE true)",
+                {query({},
+                       returning({patternPredicate(pattern({path({node({._where = where(filter)})})},
+                                                           where(filter)))}))});
 }
 
 TEST_F(KeywordNameDecisionTest, whereAfterAParenthesisBeforeAParenthesisCallsAFunction) {
-    const FunctionInvocation* where = invocation(returnedItem("RETURN (where(1))"));
-    EXPECT_EQ(where->getName()->names().front()->getName(), "where");
+    expectParse("RETURN (where(1))", {query({}, returning({parenthesized(invocation({"where"}, {integer(1)}))}))});
 }
 
 TEST_F(KeywordNameDecisionTest, whereAfterAParenthesisBeforeTheCloseIsAVariable) {
-    expectSymbol(returnedItem("RETURN (where)"), "where");
+    expectParse("RETURN (where)", {query({}, returning({parenthesized(symbol("where"))}))});
 }
 
 TEST_F(KeywordNameDecisionTest, whereFirstInANodeBeforeAnOperandOpensAPredicate) {
-    const NodePattern* node = matchedNode("MATCH (WHERE true) RETURN 1");
-    EXPECT_EQ(node->getSymbol(), nullptr);
-    EXPECT_NE(node->getWhere(), nullptr);
+    LiteralExpr* filter = boolean(true);
+
+    expectParse("MATCH (WHERE true) RETURN 1",
+                {query({match({._pattern = pattern({path({node({._where = where(filter)})})}, where(filter))})},
+                       returning({integer(1)}))});
 }
 
 TEST_F(KeywordNameDecisionTest, whereFirstInANodeBeforeABraceNamesTheNode) {
-    const NodePattern* node = matchedNode("MATCH (where {a: 1}) RETURN where");
-    ASSERT_NE(node->getSymbol(), nullptr);
-    EXPECT_EQ(node->getSymbol()->getName(), "where");
-    EXPECT_NE(node->getProperties(), nullptr);
+    expectParse("MATCH (where {a: 1}) RETURN where",
+                {query({match({._pattern = pattern({path({node({._symbol = "where",
+                                                                ._properties = properties({{"a", integer(1)}})})})})})},
+                       returning({symbol("where")}))});
 }
 
 TEST_F(KeywordNameDecisionTest, isAfterAParenthesisBeforeALabelOpensAPredicate) {
-    const Expr* predicate = returnedItem("RETURN (IS Person)");
-    ASSERT_EQ(predicate->getKind(), Expr::Kind::EXISTS);
-    EXPECT_EQ(labelOf(predicateRoot(predicate)->getLabelExpr()), "Person");
+    expectParse("RETURN (IS Person)",
+                {query({}, returning({patternPredicate(pattern({path({node({._labels = labels({"Person"})})})}))}))});
 }
 
 TEST_F(KeywordNameDecisionTest, isAfterAParenthesisBeforeAnInfixWordIsAVariable) {
-    EXPECT_EQ(returnedItem("RETURN (is AND true)")->getKind(), Expr::Kind::LOGICAL);
+    expectParse("RETURN (is AND true)",
+                {query({}, returning({parenthesized(logical(LogicalOperator::And, {symbol("is"), boolean(true)}))}))});
 }
 
 TEST_F(KeywordNameDecisionTest, isFirstInANodeBeforeANameOpensItsLabels) {
-    const NodePattern* node = matchedNode("MATCH (IS AND) RETURN 1");
-    EXPECT_EQ(node->getSymbol(), nullptr);
-    EXPECT_EQ(labelOf(node->getLabelExpr()), "AND");
+    expectParse("MATCH (IS AND) RETURN 1",
+                {query({match({._pattern = pattern({path({node({._labels = labels({"AND"})})})})})},
+                       returning({integer(1)}))});
 }
 
 TEST_F(KeywordNameDecisionTest, isFirstInANodeBeforeAColonNamesTheNode) {
-    const NodePattern* node = matchedNode("MATCH (is:Person) RETURN is");
-    ASSERT_NE(node->getSymbol(), nullptr);
-    EXPECT_EQ(node->getSymbol()->getName(), "is");
-    EXPECT_EQ(labelOf(node->getLabelExpr()), "Person");
+    expectParse("MATCH (is:Person) RETURN is",
+                {query({match({._pattern = pattern({path({node({._symbol = "is", ._labels = labels({"Person"})})})})})},
+                       returning({symbol("is")}))});
 }
