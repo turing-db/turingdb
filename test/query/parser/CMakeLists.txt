@@ -27,6 +27,9 @@ target_sources(test_query_parser_label_disjunction_or_bar PRIVATE ${PARSER_EXPEC
 add_turing_test(test_query_parser_pattern_or_expression PatternOrExpressionTest.cpp)
 target_sources(test_query_parser_pattern_or_expression PRIVATE ${PARSER_EXPECTED_AST_SOURCES})
 
+add_turing_test(test_query_parser_nested_subquery NestedSubqueryTest.cpp)
+target_sources(test_query_parser_nested_subquery PRIVATE ${PARSER_EXPECTED_AST_SOURCES})
+
 add_turing_test(test_query_parser_mutant ParseMutantTest.cpp)
 target_sources(test_query_parser_mutant PRIVATE CypherCorpus.cpp ParseOutcome.cpp QueryMutants.cpp)
 target_compile_definitions(test_query_parser_mutant PRIVATE CYPHER_CORPUS_DIR="${CMAKE_SOURCE_DIR}/fuzz/corpus/cypher")
