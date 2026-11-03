@@ -416,6 +416,54 @@ void db::throwCellTypeError(std::string_view functionName, std::string_view expe
     throw TuringException(fmt::format("{}() reads {}, and this row holds a value that is not one", functionName, expected));
 }
 
+void db::throwEpochSecondsOutOfRange(int64_t seconds) {
+    throw TuringException(fmt::format("datetime() reads a count of seconds between {} and {}, not {}",
+                                      DateTime::FIRST_EPOCH_SECOND,
+                                      DateTime::LAST_EPOCH_SECOND,
+                                      seconds));
+}
+
+void db::throwEpochSecondsOutOfRange(uint64_t seconds) {
+    throw TuringException(fmt::format("datetime() reads a count of seconds between {} and {}, not {}",
+                                      DateTime::FIRST_EPOCH_SECOND,
+                                      DateTime::LAST_EPOCH_SECOND,
+                                      seconds));
+}
+
+TaggedDateTimeFunction::ResultType TaggedDateTimeFunction::operator()(const ArgType cell) const {
+    const CellTag tag = cell.getTag();
+
+    if (tag == CellTag::String) {
+        return DateTime::parse(cell.getAs<types::String::Primitive>());
+    } else if (tag == CellTag::Int) {
+        return EpochSecondsToDateTimeFunction<types::Int64::Primitive> {}(cell.getAs<types::Int64::Primitive>());
+    } else if (tag == CellTag::UInt) {
+        return EpochSecondsToDateTimeFunction<types::UInt64::Primitive> {}(cell.getAs<types::UInt64::Primitive>());
+    } else if (tag == CellTag::MapView) {
+        return MapToDateTimeFunction {}(cell.getAs<MapView>());
+    } else if (tag == CellTag::Null) {
+        return std::nullopt;
+    }
+
+    throwCellTypeError("datetime", "a string, an integer or a map");
+}
+
+TaggedDurationFunction::ResultType TaggedDurationFunction::operator()(const ArgType cell) const {
+    const CellTag tag = cell.getTag();
+
+    if (tag == CellTag::Int) {
+        return MicrosecondsToDurationFunction<types::Int64::Primitive> {}(cell.getAs<types::Int64::Primitive>());
+    } else if (tag == CellTag::UInt) {
+        return MicrosecondsToDurationFunction<types::UInt64::Primitive> {}(cell.getAs<types::UInt64::Primitive>());
+    } else if (tag == CellTag::MapView) {
+        return MapToDurationFunction {}(cell.getAs<MapView>());
+    } else if (tag == CellTag::Null) {
+        return std::nullopt;
+    }
+
+    throwCellTypeError("duration", "an integer or a map");
+}
+
 std::optional<types::String::Primitive> db::cellString(const CellView cell, std::string_view functionName) {
     const CellTag tag = cell.getTag();
 

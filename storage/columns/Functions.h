@@ -340,8 +340,14 @@ private:
     StringBuffer* _stringBuffer {nullptr};
 };
 
-// datetime() over a count of seconds since the Unix epoch rather than over text. A count
-// naming an instant outside the renderable range reads as null, as unparsable text does.
+// A function over a type-erased cell finds out per row what the cell holds. A null answers
+// null; any other type the function does not read is the row's type error.
+[[noreturn]] void throwCellTypeError(std::string_view functionName, std::string_view expected);
+
+[[noreturn]] void throwEpochSecondsOutOfRange(int64_t seconds);
+[[noreturn]] void throwEpochSecondsOutOfRange(uint64_t seconds);
+
+// datetime() over a count of seconds since the Unix epoch rather than over text
 template <typename Number>
 class EpochSecondsToDateTimeFunction {
 public:
@@ -350,14 +356,14 @@ public:
 
     ResultType operator()(const Number seconds) {
         if constexpr (std::is_unsigned_v<Number>) {
-            if (seconds > static_cast<Number>(std::numeric_limits<types::Int64::Primitive>::max())) {
-                return std::nullopt;
+            if (seconds > static_cast<Number>(DateTime::LAST_EPOCH_SECOND)) {
+                throwEpochSecondsOutOfRange(seconds);
             }
         }
 
         types::DateTime::Primitive value;
         if (!DateTime::fromEpochSeconds(static_cast<types::Int64::Primitive>(seconds), value)) {
-            return std::nullopt;
+            throwEpochSecondsOutOfRange(seconds);
         }
 
         return value;
@@ -398,6 +404,19 @@ public:
     }
 };
 
+class MapToDateTimeFunction {
+public:
+    using ArgType = MapView;
+    using ResultType = std::optional<types::DateTime::Primitive>;
+
+    ResultType operator()(const MapView map) const {
+        types::DateTime::Primitive value;
+        DateTime::fromMap(map, value);
+
+        return value;
+    }
+};
+
 class MapPropertiesFunction {
 public:
     using ArgType = MapView;
@@ -420,26 +439,24 @@ private:
     std::vector<QueryListBuffer::ListItemVariant> _elements;
 };
 
+class TaggedDateTimeFunction {
+public:
+    using ArgType = CellView;
+    using ResultType = std::optional<types::DateTime::Primitive>;
+
+    ResultType operator()(const ArgType cell) const;
+
+    ResultType operator()(const std::optional<ArgType>& cell) const {
+        return cell.has_value() ? (*this)(*cell) : std::nullopt;
+    }
+};
+
 class TaggedDurationFunction {
 public:
     using ArgType = CellView;
     using ResultType = std::optional<types::Duration::Primitive>;
 
-    ResultType operator()(const ArgType cell) const {
-        const CellTag tag = cell.getTag();
-
-        if (tag == CellTag::Int) {
-            return MicrosecondsToDurationFunction<types::Int64::Primitive> {}(cell.getAs<types::Int64::Primitive>());
-        } else if (tag == CellTag::UInt) {
-            return MicrosecondsToDurationFunction<types::UInt64::Primitive> {}(cell.getAs<types::UInt64::Primitive>());
-        } else if (tag == CellTag::MapView) {
-            return MapToDurationFunction {}(cell.getAs<MapView>());
-        } else if (tag == CellTag::Null) {
-            return std::nullopt;
-        }
-
-        throw FatalException("duration() reads an integer or a map, and this row holds a value that is neither");
-    }
+    ResultType operator()(const ArgType cell) const;
 
     ResultType operator()(const std::optional<ArgType>& cell) const {
         return cell.has_value() ? (*this)(*cell) : std::nullopt;
@@ -675,9 +692,6 @@ struct ConversionFunctorFor<ToBoolFunction, Argument> {
     using Type = ToBoolFromValueFunction<Argument>;
 };
 
-// A function over a type-erased cell finds out per row what the cell holds. A null answers
-// null; any other type the function does not read is the row's type error.
-[[noreturn]] void throwCellTypeError(std::string_view functionName, std::string_view expected);
 
 template <typename Result, typename Visit>
 Result visitNumberCell(const CellView cell, std::string_view functionName, Visit&& visit) {

@@ -10293,6 +10293,10 @@ NLUnaryFunctionKernel NLExecutor::selectDateTimeConversion(const Column* input, 
         return selectFunction<EpochSecondsToDateTimeFunction<types::Int64::Primitive>>(input, inputNullable, memory, result);
     } else if (columnHoldsElement<types::UInt64::Primitive>(input)) {
         return selectFunction<EpochSecondsToDateTimeFunction<types::UInt64::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<MapView>(input)) {
+        return selectFunction<MapToDateTimeFunction>(input, inputNullable, memory, result);
+    } else if (readsTaggedCells(input)) {
+        return selectTaggedCellFunction<TaggedDateTimeFunction>(input, inputNullable, memory, result);
     }
 
     return selectFunction<ToDateTimeFunction>(input, inputNullable, memory, result);

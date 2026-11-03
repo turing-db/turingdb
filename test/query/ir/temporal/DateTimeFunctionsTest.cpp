@@ -116,13 +116,6 @@ TEST_F(DateTimeFunctionsTest, readsAnInstantBeforeTheEpochFromANegativeCount) {
     expectRows("RETURN datetime(-1)", {{"1969-12-31T23:59:59Z"}});
 }
 
-// A count of seconds naming an instant format cannot spell reads as no datetime, the way
-// text naming no instant does
-TEST_F(DateTimeFunctionsTest, readsNullFromACountNoInstantCanSpell) {
-    expectRows("RETURN datetime(253402300800)", {{"null"}});
-    expectRows("RETURN datetime(9223372036854775807)", {{"null"}});
-}
-
 TEST_F(DateTimeFunctionsTest, keepsReadingAnInstantFromText) {
     expectRows("RETURN datetime('2026-09-23T14:05:00Z')", {{"2026-09-23T14:05:00Z"}});
 }
@@ -176,19 +169,7 @@ TEST_F(DateTimeFunctionsTest, readsUnwoundText) {
                {{"2026-01-15T00:00:00Z"}});
 }
 
-// A list mixing types hands its elements on with no one type, and no datetime overload
-// reads that, so the call is turned away rather than meeting the wrong cell at runtime
-TEST_F(DateTimeFunctionsTest, rejectsACountOfSecondsUnwoundFromAMixedList) {
-    RowSink sink;
-    QueryStatus status;
-    _interpreter->execute(status,
-                          "UNWIND [1700000000, 'a'] AS x RETURN datetime(x)",
-                          _graphName,
-                          CommitHash::head(),
-                          ChangeID::head(),
-                          &sink);
-
-    ASSERT_FALSE(status.isOk());
-    EXPECT_NE(status.getError().find("Invalid arguments for function 'datetime'"), std::string::npos)
-        << status.getError();
+TEST_F(DateTimeFunctionsTest, readsEachCellUnwoundFromAMixedList) {
+    expectRows("UNWIND [1700000000, 'a'] AS x RETURN datetime(x)",
+               {{"2023-11-14T22:13:20Z"}, {"null"}});
 }

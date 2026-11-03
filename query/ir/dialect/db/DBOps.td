@@ -2998,7 +2998,7 @@ def EndNode : TypedUnaryFunctionOp<"end_node", "::mlir::storage::EdgeIDType">;
 def ToInteger : ConversionFunctionOp<"to_integer">;
 def ToFloat : ConversionFunctionOp<"to_float">;
 def ToBoolean : ConversionFunctionOp<"to_boolean">;
-def ToDateTime : UnaryFunctionOp<"to_datetime", [Pure]>;
+def ToDateTime : TypedUnaryFunctionOp<"to_datetime", "::mlir::storage::StringType">;
 def ToDuration : TypedUnaryFunctionOp<"to_duration", "::mlir::IntegerType">;
 def ToString : ConversionFunctionOp<"to_string">;
 
