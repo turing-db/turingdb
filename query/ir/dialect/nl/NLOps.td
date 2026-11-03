@@ -3307,6 +3307,31 @@ def CaseMerge : NLOp<"case_merge", [Pure, RowAlignedWithFirstOperand, AttrSizedO
   }];
 }
 
+def FillNulls : NLOp<"fill_nulls", [Pure, RowAlignedWithFirstOperand]> {
+  let summary = "Row-wise fill of the null rows of a chunk, in order, from the rows of another";
+  let description = [{
+      The merge of a lowered db.coalesce. `null_rows` is the mask of the rows of `value`
+      its argument left null, before the value was converted to the coalesce's chunk, and
+      `fill` holds one row per row it marks, in their order. The result holds the row of
+      `value` where the mask does not hold and the next row of `fill` where it does.
+      `value`, `fill` and the result are of one type. The arguments of a coalesce are
+      merged back to front: each one's null rows take the merge of the arguments behind
+      it, which was computed over those rows alone.
+
+      %r = nl.fill_nulls %v, %nulls, %f : (!nl.chunk<!storage.nullable<i64>>,
+                                           !nl.chunk<!storage.bool>,
+                                           !nl.chunk<!storage.nullable<i64>>)
+                                           -> !nl.chunk<!storage.nullable<i64>>
+  }];
+
+  let arguments = (ins NLChunk:$value, NLChunk:$null_rows, NLChunk:$fill);
+  let results   = (outs NLChunk:$result);
+
+  let hasVerifier = 1;
+
+  let assemblyFormat = "$value `,` $null_rows `,` $fill attr-dict `:` functional-type(operands, results)";
+}
+
 def IsNotTrue : NLOp<"is_not_true", [Pure, RowAlignedThroughOperands]> {
   let summary = "Row-wise test of whether a condition is false or null";
   let description = [{

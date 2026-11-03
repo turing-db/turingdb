@@ -8482,7 +8482,7 @@ void DBProgramGenerator::translateMapProjectionExpr(const Expr* expr, const MapP
         return projectedMap(projection);
     });
 
-    _part._exprMap[expr] = lazyCaseResult(caseOp);
+    _part._exprMap[expr] = selectionResult(caseOp);
 }
 
 mlir::Value DBProgramGenerator::projectedMap(const MapProjectionExpr* projection) {
@@ -9204,7 +9204,7 @@ void DBProgramGenerator::translateCaseExpr(const Expr* expr, const CaseExpr* cas
         });
     }
 
-    _part._exprMap[expr] = lazyCaseResult(caseOp);
+    _part._exprMap[expr] = selectionResult(caseOp);
 }
 
 void DBProgramGenerator::generateCaseRegion(mlir::Region& region,
@@ -9239,13 +9239,14 @@ void DBProgramGenerator::generateCaseRegion(mlir::Region& region,
     _part = outerPart;
 }
 
-mlir::Value DBProgramGenerator::lazyCaseResult(mlir::db::LazyCase caseOp) {
-    dropUnreadCarriedColumns(caseOp, caseOp.getColumnsToFilter());
+template <typename SelectionOp>
+mlir::Value DBProgramGenerator::selectionResult(SelectionOp selection) {
+    dropUnreadCarriedColumns(selection, selection.getColumnsToFilter());
 
     llvm::SmallVector<mlir::Value> selected;
-    caseOp.collectSelectedValues(selected);
+    selection.collectSelectedValues(selected);
 
-    mlir::Value result = caseOp.getResult();
+    mlir::Value result = selection.getResult();
     result.setType(allocColumnType(selectedColumnElement(_mlirCtxt, selected)));
 
     return result;
@@ -10560,49 +10561,28 @@ void DBProgramGenerator::translateCoalesce(const Expr* expr, const ExprChain* ar
     bioassert(args && !args->empty(), "coalesce() with no arguments.");
 
     const ExprChain::ExprVector& argExprs = args->getExprs();
-
-    const mlir::Location loc = _opBuilder.getUnknownLoc();
-    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
-    const Expr* const firstExpr = argExprs.front();
-    mlir::Value coalesced = translateArg(firstExpr);
-    bool nullOnEveryRow = firstExpr->getType() == EvaluatedType::Null;
+    CarrySet carrySet;
+    collectElementCarrySet(carrySet);
 
-    for (const Expr* argExpr : llvm::drop_begin(argExprs)) {
-        CarrySet carrySet;
-        collectElementCarrySet(carrySet);
+    const llvm::SmallVector<mlir::Value> carried(carrySet._columns.begin(), carrySet._columns.end());
 
-        llvm::SmallVector<mlir::Value> carried(carrySet._columns.begin(), carrySet._columns.end());
-        if (!yieldsConstantColumn(coalesced, _constantColumns)) {
-            carried.push_back(coalesced);
-        }
+    auto coalesce = _opBuilder.create<mlir::db::Coalesce>(_opBuilder.getUnknownLoc(),
+                                                          noneType,
+                                                          carried,
+                                                          static_cast<unsigned>(argExprs.size()));
+    const mlir::MutableArrayRef<mlir::Region> regions = coalesce.getArguments();
 
-        auto caseOp = _opBuilder.create<mlir::db::LazyCase>(loc, noneType, carried, 3u);
-        const mlir::MutableArrayRef<mlir::Region> regions = caseOp.getBranches();
+    for (size_t argumentIndex = 0; argumentIndex < argExprs.size(); argumentIndex++) {
+        const Expr* const argumentExpr = argExprs[argumentIndex];
 
-        generateCaseRegion(regions[0], carried, carrySet, coalesced, [&](mlir::Value earlier) -> mlir::Value {
-            // The null literal is absent on every row, so the branch it guards is never taken
-            if (nullOnEveryRow) {
-                return constantBool(false);
-            }
-
-            return _opBuilder.create<mlir::db::IsNotNullOp>(loc, boolType, earlier).getResult();
+        generateCaseRegion(regions[argumentIndex], carried, carrySet, mlir::Value {}, [&](mlir::Value) {
+            return translateArg(argumentExpr);
         });
-
-        generateCaseRegion(regions[1], carried, carrySet, coalesced, [](mlir::Value earlier) {
-            return earlier;
-        });
-
-        generateCaseRegion(regions[2], carried, carrySet, coalesced, [&](mlir::Value) {
-            return translateArg(argExpr);
-        });
-
-        coalesced = lazyCaseResult(caseOp);
-        nullOnEveryRow = nullOnEveryRow && argExpr->getType() == EvaluatedType::Null;
     }
 
-    _part._exprMap[expr] = coalesced;
+    _part._exprMap[expr] = selectionResult(coalesce);
 }
 
 mlir::db::Collect DBProgramGenerator::createCollect(llvm::ArrayRef<mlir::Value> keyColumns,

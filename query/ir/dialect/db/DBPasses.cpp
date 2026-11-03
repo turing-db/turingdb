@@ -87,6 +87,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_COUNTPATHROWS
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
 #define GEN_PASS_DEF_COUNTFROMMETADATA
+#define GEN_PASS_DEF_CANONICALIZECOALESCE
 #include "DBPasses.h.inc"
 
 namespace {
@@ -7073,13 +7074,14 @@ void trimHashJoin(HashJoin join, mlir::OpBuilder& builder) {
     joinOp->erase();
 }
 
-// A lazy case hands its carried columns to every region as block arguments, so a column no
-// region reads leaves the operands and the arguments of every region together. A column
-// carried twice - the subject of `CASE t WHEN ...` beside the variable t - is read through
-// its first argument. One row-carrying column stays for the lowering to size the CASE by.
-void trimLazyCase(LazyCase caseOp) {
-    const OperandRange carried = caseOp.getColumnsToFilter();
-    const MutableArrayRef<Region> regions = caseOp.getBranches();
+// A lazy case or a coalesce hands its carried columns to every region as block arguments,
+// so a column no region reads leaves the operands and the arguments of every region
+// together. A column carried twice - the subject of `CASE t WHEN ...` beside the variable
+// t - is read through its first argument. One row-carrying column stays for the lowering to
+// size the selection by.
+void trimSelectionCarrySet(Operation* selection) {
+    const OperandRange carried = selection->getOperands();
+    const MutableArrayRef<Region> regions = selection->getRegions();
 
     for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
         const auto firstIt = llvm::find(carried, carried[carriedIndex]);
@@ -7123,7 +7125,7 @@ void trimLazyCase(LazyCase caseOp) {
         region.front().eraseArguments(erased);
     }
 
-    caseOp->eraseOperands(erased);
+    selection->eraseOperands(erased);
 }
 
 // The ops over the elements of a list repeat every carried column once per element, so a
@@ -7177,7 +7179,7 @@ void trimElementCarrySet(Operation* op, Value source, OperandRange carried) {
 }
 
 bool readsCarriedColumnsInItsRegions(Operation* op) {
-    return isa<LazyCase, ListComprehension, ListPredicate, Reduce, AllReduce>(op);
+    return isa<LazyCase, Coalesce, ListComprehension, ListPredicate, Reduce, AllReduce>(op);
 }
 
 struct TrimVisit {
@@ -7325,8 +7327,8 @@ void trimOptionalMatch(OptionalMatch optional, mlir::OpBuilder& builder, llvm::S
 }
 
 void trimUnreadColumnsOf(Operation* op, mlir::OpBuilder& builder, llvm::SmallPtrSetImpl<Operation*>& erased) {
-    if (LazyCase caseOp = dyn_cast<LazyCase>(op)) {
-        trimLazyCase(caseOp);
+    if (isa<LazyCase, Coalesce>(op)) {
+        trimSelectionCarrySet(op);
     } else if (ListComprehension comprehension = dyn_cast<ListComprehension>(op)) {
         trimElementCarrySet(op, comprehension.getSource(), comprehension.getColumnsToFilter());
     } else if (ListPredicate predicate = dyn_cast<ListPredicate>(op)) {
@@ -7378,6 +7380,34 @@ struct TrimUnreadColumns : public impl::TrimUnreadColumnsBase<TrimUnreadColumns>
             }
 
             erasedRowValues = eraseUnreadRowValues(getOperation());
+        }
+    }
+};
+
+struct CanonicalizeCoalesce : public impl::CanonicalizeCoalesceBase<CanonicalizeCoalesce> {
+    void runOnOperation() override {
+        MLIRContext* const context = &getContext();
+
+        llvm::SmallVector<Operation*> coalesces;
+        getOperation()->walk([&coalesces](Coalesce coalesce) {
+            coalesces.push_back(coalesce.getOperation());
+        });
+
+        mlir::RewritePatternSet patterns(context);
+        Coalesce::getCanonicalizationPatterns(patterns, context);
+        const mlir::FrozenRewritePatternSet frozenPatterns(std::move(patterns));
+
+        // Kept to the coalesces: the driver's folding and region simplification would
+        // otherwise rewrite the rest of the program as well, and its dead-op removal would
+        // erase an op an inlined argument held, a Pure CASE holding a division included
+        mlir::GreedyRewriteConfig config;
+        config.setStrictness(mlir::GreedyRewriteStrictness::ExistingOps);
+        config.enableFolding(false);
+        config.enableConstantCSE(false);
+        config.setRegionSimplificationLevel(mlir::GreedySimplifyRegionLevel::Disabled);
+
+        if (failed(mlir::applyOpPatternsGreedily(coalesces, frozenPatterns, config))) {
+            signalPassFailure();
         }
     }
 };

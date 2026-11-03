@@ -409,6 +409,9 @@ public:
     // condition and value through a cursor over the rows that reached it
     static void runCaseMerge(NLExecutionContext* context, NLFunctionData* data);
 
+    // Write each row of a value, its null rows filled in order from another (nl.fill_nulls)
+    static void runFillNulls(NLExecutionContext* context, NLFunctionData* data);
+
     // Build one list per row (nl.make_list): row r takes the cell each element column
     // holds at r, in operand order, as one contiguous run of the query's list buffer.
     static void runMakeList(NLExecutionContext* context, NLFunctionData* data);
@@ -507,6 +510,12 @@ public:
     static NLCaseResetFn selectOwnNullCaseReset(NLChunkKind kind);
 
     static NLCaseWriteFn selectOwnNullCaseWrite(NLChunkKind kind, bool untypedNull);
+
+    // Fill the null rows of a nullable value column, of a node, an edge or a path column,
+    // which holds its null in a value of its own, and of a column of tagged cells
+    static NLFillNullRowsFn selectFillNullRows(ValueType valueType);
+    static NLFillNullRowsFn selectOwnNullFillNullRows(NLChunkKind kind);
+    static NLFillNullRowsFn selectTaggedCellFillNullRows();
 
     // Lay a constant chunk's single value out over the driving relation's rows
     // (nl.broadcast_constant), so a fold that walks rows is handed the step's rows

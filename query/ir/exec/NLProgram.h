@@ -4108,6 +4108,32 @@ private:
     NLCellWrite _writeDefault;
 };
 
+// Each row @param nullRows marks takes the next row of @param fill, every other row its own
+using NLFillNullRowsFn = void (*)(Column* result, const Column* value, const ColumnMask* nullRows, const Column* fill);
+
+class NLFillNullsData : public NLFunctionData {
+public:
+    NLFillNullsData(const Column* value,
+                    const ColumnMask* nullRows,
+                    const Column* fill,
+                    Column* result,
+                    NLFillNullRowsFn fillNullRows);
+    ~NLFillNullsData();
+
+    const Column* getValue() const { return _value; }
+    const ColumnMask* getNullRows() const { return _nullRows; }
+    const Column* getFill() const { return _fill; }
+    Column* getResult() const { return _result; }
+    NLFillNullRowsFn getFillNullRows() const { return _fillNullRows; }
+
+private:
+    const Column* _value {nullptr};
+    const ColumnMask* _nullRows {nullptr};
+    const Column* _fill {nullptr};
+    Column* _result {nullptr};
+    NLFillNullRowsFn _fillNullRows {nullptr};
+};
+
 // Row-wise list build (nl.make_list): row r of the result is the list of row r of every
 // element column, written into the query's list buffer as one contiguous run. Every
 // element column carries rows and they are row-aligned, so the first of them gives the

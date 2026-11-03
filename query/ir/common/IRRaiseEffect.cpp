@@ -1,6 +1,9 @@
 #include "IRRaiseEffect.h"
 
+#include <optional>
+
 #include "mlir/IR/Operation.h"
+#include "llvm/ADT/STLExtras.h"
 
 using namespace db;
 
@@ -19,5 +22,12 @@ void db::addRaiseEffect(mlir::Operation* operation, llvm::SmallVectorImpl<mlir::
 }
 
 bool db::hasNoEffectButRaising(mlir::Operation* operation) {
-    return operation->hasTrait<mlir::OpTrait::MayRaise>() || mlir::isMemoryEffectFree(operation);
+    const std::optional<llvm::SmallVector<mlir::MemoryEffects::EffectInstance>> effects = mlir::getEffectsRecursively(operation);
+    if (!effects) {
+        return false;
+    }
+
+    return llvm::all_of(*effects, [](const mlir::MemoryEffects::EffectInstance& effect) {
+        return mlir::isa<RaiseResource>(effect.getResource());
+    });
 }

@@ -49,3 +49,13 @@ add_turing_test(test_query_ir_coalesce_over_an_id_equality CoalesceOverAnIdEqual
 add_ir_tests(test_query_ir_lazy_case_yield LazyCaseYieldTest.cpp)
 
 add_turing_test(test_query_ir_coalesce_lazy_argument CoalesceLazyArgumentTest.cpp)
+
+add_ir_tests(test_query_ir_coalesce_codegen CoalesceCodegenTest.cpp)
+
+add_ir_tests(test_query_ir_coalesce_rows_still_null CoalesceRowsStillNullTest.cpp)
+
+add_ir_tests(test_query_ir_coalesce_context CoalesceContextTest.cpp)
+
+add_ir_tests(test_query_ir_coalesce_nested_raise CoalesceNestedRaiseTest.cpp)
+
+add_ir_tests(test_query_ir_coalesce_nesting_depth CoalesceNestingDepthTest.cpp)

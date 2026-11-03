@@ -684,8 +684,19 @@ private:
     // nl.case_merge writes the values back in the order of the rows
     void lowerLazyCase(mlir::db::LazyCase caseOp);
 
-    // Lowers one region of a db.lazy_case over @param chunks, whose rows @param cardinality
-    // counts, and returns what it yields laid out over them
+    // Lower a db.coalesce: each argument is computed over the rows every earlier one left
+    // null, cut by nl.filter down to the columns a later argument reads
+    void lowerCoalesce(mlir::db::Coalesce coalesce);
+
+    // The values of a coalesce's arguments merged back to front, each into the null rows of
+    // the one before it, which @param nullRows marks for every value but the last and the
+    // null literal: the rows the later one was computed over. The values are converted as
+    // a CASE's are, then to the one chunk a CASE over them lands in.
+    mlir::Value mergeCoalescedValues(llvm::ArrayRef<mlir::Value> values, llvm::ArrayRef<mlir::Value> nullRows);
+
+    // Lowers one region of a db.lazy_case or a db.coalesce over @param chunks, whose rows
+    // @param cardinality counts, and returns what it yields laid out over them. A null chunk
+    // stands for a carried column the region does not read.
     mlir::Value lowerCaseRegion(mlir::Region& region, llvm::ArrayRef<mlir::Value> chunks, mlir::Value cardinality);
 
     // Lowers @param block over the rows @param cardinality counts, a computation over

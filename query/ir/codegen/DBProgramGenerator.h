@@ -1346,18 +1346,19 @@ private:
     void translatePatternComprehensionExpr(const Expr* expr,
                                            const PatternComprehensionExpr* comprehension);
 
-    // Generates one region of a db.lazy_case: its block takes @param carried, the carry set
-    // and the subject when it is carried, and yields what @param generateValue computes
-    // over them, handed the subject as the region sees it
+    // Generates one region of a db.lazy_case or a db.coalesce: its block takes @param carried,
+    // the carry set and the subject when it is carried, and yields what @param generateValue
+    // computes over them, handed the subject as the region sees it
     void generateCaseRegion(mlir::Region& region,
                             llvm::ArrayRef<mlir::Value> carried,
                             const CarrySet& carrySet,
                             mlir::Value subject,
                             CaseRegionGenerator generateValue);
 
-    // The result of a db.lazy_case whose regions are generated, typed as the values it
-    // selects, once the carried columns no region reads are dropped
-    mlir::Value lazyCaseResult(mlir::db::LazyCase caseOp);
+    // The result of a db.lazy_case or a db.coalesce whose regions are generated, typed as
+    // the values it selects, once the carried columns no region reads are dropped
+    template <typename SelectionOp>
+    mlir::Value selectionResult(SelectionOp selection);
 
     // The condition one WHEN value puts on a row: the value itself in the generic form,
     // and the comparison of @param subject against it in the simple one
@@ -1373,9 +1374,6 @@ private:
 
     void translateFunctionExpr(const Expr* expr, const FunctionInvocation* invocation);
 
-    // coalesce over @param args, folded from the left: each argument after the first is a
-    // db.lazy_case over the coalesce of the ones before it, computing the argument only
-    // over the rows they all left null
     void translateCoalesce(const Expr* expr, const ExprChain* args);
 
     void translateRange(const Expr* expr, const ExprChain* args);

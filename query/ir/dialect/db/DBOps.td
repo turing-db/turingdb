@@ -3578,8 +3578,8 @@ def Case : TuringOp<"case", [Pure, ConstantThroughOperands, AttrSizedOperandSegm
              : (!db.column<!storage.bool>, !db.column<!storage.bool>,
                 !db.column<i64>, !db.column<i64>, !db.column<i64>) -> !db.column<none>
 
-    A Cypher CASE and a coalesce() are a db.lazy_case instead, which computes a branch only
-    over the rows that reach it.
+    A Cypher CASE is a db.lazy_case instead, and a coalesce() a db.coalesce, which compute
+    a branch or an argument only over the rows that reach it.
 
     The result is the one element every value holds, nullable unless it holds its own
     null, the null literal holding whatever the others do. Nodes, edges and paths are
@@ -3663,8 +3663,61 @@ def LazyCase : TuringOp<"lazy_case", [Pure, ConstantThroughOperands]> {
   }];
 }
 
-def CaseYield : TuringOp<"case_yield", [Pure, Terminator, HasParent<"LazyCase">]> {
-  let summary = "Name the condition or the value a region of a db.lazy_case computes";
+def Coalesce : TuringOp<"coalesce", [RecursiveMemoryEffects, MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>, ConstantThroughOperands]> {
+  let summary = "A coalesce(), whose arguments are computed only over the rows every earlier one left null";
+
+  let description = [{
+    The arguments are regions rather than operands, one per argument in their order, so
+    that what a row does not reach is never computed for it:
+    `coalesce(CASE WHEN t = 0 THEN 0 END, 10 / t)` divides by no zero.
+
+      %r = db.coalesce({%t}) {
+        ^bb0(%tIn: !db.column<i64>):
+          %z = db.lazy_case({%tIn}) { ... } : (!db.column<i64>) -> !db.column<!storage.nullable<i64>>
+          db.case_yield %z : !db.column<!storage.nullable<i64>>
+      }, {
+        ^bb0(%tIn: !db.column<i64>):
+          %q = db.div %ten, %tIn : (!db.column<i64>, !db.column<i64>) -> !db.column<none>
+          db.case_yield %q : !db.column<none>
+      } : (!db.column<i64>) -> !db.column<none>
+
+    Every region takes one argument per carried column, as db.lazy_case's regions do. The
+    first region sees every row, and each later one the rows every earlier region yielded
+    null for. A row takes the first value that is not null, and null when every region
+    yields null.
+
+    The result is typed as db.case's is, over the values the regions yield. The op has the
+    effects of its regions, and raises where any op nested in them may, however deep: a
+    Pure db.lazy_case reports no raise of the ops it holds. So one nothing reads stays
+    where a row may raise on an argument it reaches.
+
+    The canonical form holds no region yielding the null literal, but for one holding an
+    op that may raise, and, where the result names its element, none behind a region
+    yielding a literal that is not null. A coalesce left with one region is the value that
+    region yields, where the value has the coalesce's type.
+  }];
+
+  let arguments = (ins Variadic<Column>:$columns_to_filter);
+  let results   = (outs Column:$result);
+
+  let regions = (region VariadicRegion<SizedRegion<1>>:$arguments);
+
+  let extraClassDeclaration = [{
+    // The value each region yields, in the order of the regions
+    void collectSelectedValues(::llvm::SmallVectorImpl<::mlir::Value>& values);
+  }];
+
+  let hasVerifier = 1;
+  let hasRegionVerifier = 1;
+  let hasCanonicalizer = 1;
+
+  let assemblyFormat = [{
+    `(` `{` $columns_to_filter `}` `)` $arguments attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+def CaseYield : TuringOp<"case_yield", [Pure, Terminator, ParentOneOf<["LazyCase", "Coalesce"]>]> {
+  let summary = "Name the condition or the value a region of a db.lazy_case or a db.coalesce computes";
 
   let arguments = (ins Column:$value);
 

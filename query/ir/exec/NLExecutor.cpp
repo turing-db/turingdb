@@ -2530,6 +2530,42 @@ void writeCell(Column* result,
     static_cast<ColumnVector<CellView>*>(result)->getRaw()[resultRow] = values.ownCell(item);
 }
 
+template <typename Element>
+void fillNullRows(Column* result, const Column* value, const ColumnMask* nullRows, const Column* fill) {
+    const std::vector<Element>& values = static_cast<const ColumnVector<Element>*>(value)->getRaw();
+    const std::vector<ColumnMask::Bool_t>& nulls = nullRows->getRaw();
+    const std::vector<Element>& fills = static_cast<const ColumnVector<Element>*>(fill)->getRaw();
+    std::vector<Element>& results = static_cast<ColumnVector<Element>*>(result)->getRaw();
+
+    bioassert(nulls.size() == values.size(), "A value's null rows are marked over other rows than its own.");
+
+    results.resize(values.size());
+
+    const auto isNull = [](ColumnMask::Bool_t row) {
+        return static_cast<bool>(row);
+    };
+
+    size_t row = 0;
+    auto fillIt = fills.begin();
+    auto resultIt = results.begin();
+
+    while (row < values.size()) {
+        const size_t nullStart = static_cast<size_t>(std::find_if(nulls.begin() + row, nulls.end(), isNull) - nulls.begin());
+        resultIt = std::copy(values.begin() + row, values.begin() + nullStart, resultIt);
+
+        const size_t nullEnd = static_cast<size_t>(std::find_if_not(nulls.begin() + nullStart, nulls.end(), isNull) - nulls.begin());
+        const size_t nullCount = nullEnd - nullStart;
+        const size_t fillsLeft = static_cast<size_t>(fills.end() - fillIt);
+        bioassert(nullCount <= fillsLeft, "A value has more null rows than the rows filling them.");
+
+        resultIt = std::copy_n(fillIt, nullCount, resultIt);
+        fillIt += nullCount;
+        row = nullEnd;
+    }
+
+    bioassert(fillIt == fills.end(), "A value has fewer null rows than the rows filling them.");
+}
+
 // Folds each row's list into the accumulator, the body running once per element position
 // over the rows whose list reaches it. @param testStep runs after each chunk of rows a step
 // folded has its accumulators written, and hands back the rows whose fold ends there.
@@ -8886,6 +8922,15 @@ void NLExecutor::runCaseMerge(NLExecutionContext*, NLFunctionData* data) {
     }
 }
 
+void NLExecutor::runFillNulls(NLExecutionContext*, NLFunctionData* data) {
+    const NLFillNullsData* fillNulls = static_cast<NLFillNullsData*>(data);
+
+    fillNulls->getFillNullRows()(fillNulls->getResult(),
+                                 fillNulls->getValue(),
+                                 fillNulls->getNullRows(),
+                                 fillNulls->getFill());
+}
+
 void NLExecutor::runMakeList(NLExecutionContext*, NLFunctionData* data) {
     const NLMakeListData* makeList = static_cast<NLMakeListData*>(data);
 
@@ -10039,6 +10084,32 @@ NLCaseWriteFn NLExecutor::selectOwnNullCaseWrite(NLChunkKind kind, bool untypedN
     }
 
     throw IRException("Only a node, an edge or a path column holds its own null");
+}
+
+NLFillNullRowsFn NLExecutor::selectFillNullRows(ValueType valueType) {
+    NLFillNullRowsFn selected = nullptr;
+    const auto select = [&]<SupportedType T>() {
+        selected = &fillNullRows<std::optional<typename T::Primitive>>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
+
+    return selected;
+}
+
+NLFillNullRowsFn NLExecutor::selectOwnNullFillNullRows(NLChunkKind kind) {
+    if (kind == NLChunkKind::NodeID) {
+        return &fillNullRows<NodeID>;
+    } else if (kind == NLChunkKind::EdgeID) {
+        return &fillNullRows<EdgeID>;
+    } else if (kind == NLChunkKind::Path) {
+        return &fillNullRows<GraphPath>;
+    }
+
+    throw IRException("Only a node, an edge or a path column holds its own null");
+}
+
+NLFillNullRowsFn NLExecutor::selectTaggedCellFillNullRows() {
+    return &fillNullRows<CellView>;
 }
 
 NLCaseWriteFn NLExecutor::selectCaseWrite(ValueType valueType,

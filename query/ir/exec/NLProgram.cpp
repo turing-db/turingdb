@@ -720,3 +720,19 @@ NLMergeMapsData::~NLMergeMapsData() {
 void NLMergeMapsData::addOperand(const Operand& operand) {
     _operands.push_back(operand);
 }
+
+NLFillNullsData::NLFillNullsData(const Column* value,
+                                 const ColumnMask* nullRows,
+                                 const Column* fill,
+                                 Column* result,
+                                 NLFillNullRowsFn fillNullRows)
+    : _value(value),
+    _nullRows(nullRows),
+    _fill(fill),
+    _result(result),
+    _fillNullRows(fillNullRows)
+{
+}
+
+NLFillNullsData::~NLFillNullsData() {
+}

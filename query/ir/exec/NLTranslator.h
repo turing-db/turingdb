@@ -976,6 +976,10 @@ private:
                                                    const Column* value,
                                                    mlir::Type valueChunkType);
 
+    // The fill of the null rows of a chunk, which turns on where it holds its null as the
+    // reset of a selection does. Used by nl.fill_nulls.
+    static NLFillNullRowsFn selectFillNullRowsForChunkType(mlir::Type chunkType);
+
     // Translate an nl.get_node_properties / nl.get_edge_properties: resolve the
     // property name (carried by the nl.get_property_type that produced the
     // handle) to a PropertyTypeID and value type, allocate the nullable value
@@ -1088,6 +1092,8 @@ private:
     void translateCase(CaseOp caseOp, NLHandlerFunction run, NLStmtContainer* body);
 
     void translateIsNotTrue(mlir::nl::IsNotTrue isNotTrue, NLStmtContainer* body);
+
+    void translateFillNulls(mlir::nl::FillNulls fillNulls, NLStmtContainer* body);
 
     template <typename NullTestOp>
     void translateNullTest(NullTestOp nullTest, NLStmtContainer* body);

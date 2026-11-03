@@ -63,3 +63,9 @@ add_ir_tests(test_query_ir_null_test_dialect NullTestDialectTest.cpp)
 add_ir_tests(test_query_ir_null_operand_over_rows NullOperandOverRowsTest.cpp)
 
 add_ir_tests(test_query_ir_laid_out_null_operand LaidOutNullOperandTest.cpp)
+
+add_ir_tests(test_query_ir_coalesce_argument_kinds CoalesceArgumentKindsTest.cpp)
+
+add_ir_tests(test_query_ir_coalesce_unsigned_argument CoalesceUnsignedArgumentTest.cpp)
+
+add_ir_tests(test_query_ir_coalesce_non_nullable_scalar CoalesceNonNullableScalarTest.cpp)

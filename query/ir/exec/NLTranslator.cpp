@@ -1037,6 +1037,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateCase(caseOp, &NLExecutor::runCase, body);
         } else if (nl::CaseMerge caseMerge = mlir::dyn_cast<nl::CaseMerge>(operation)) {
             translateCase(caseMerge, &NLExecutor::runCaseMerge, body);
+        } else if (nl::FillNulls fillNulls = mlir::dyn_cast<nl::FillNulls>(operation)) {
+            translateFillNulls(fillNulls, body);
         } else if (nl::IsNotTrue isNotTrue = mlir::dyn_cast<nl::IsNotTrue>(operation)) {
             translateIsNotTrue(isNotTrue, body);
         } else if (nl::IsNull isNull = mlir::dyn_cast<nl::IsNull>(operation)) {
@@ -4261,6 +4263,30 @@ void NLTranslator::translateCase(CaseOp caseOp, NLHandlerFunction run, NLStmtCon
     body->emplaceStmt(run, data);
 }
 
+void NLTranslator::translateFillNulls(nl::FillNulls fillNulls, NLStmtContainer* body) {
+    const mlir::Value resultValue = fillNulls.getResult();
+    const mlir::Type resultChunkType = resultValue.getType();
+
+    Column* const result = allocColumnForChunkType(resultChunkType);
+    _valueSlots[resultValue] = result;
+
+    const Column* const value = getColumn(fillNulls.getValue());
+    const Column* const nullRows = getColumn(fillNulls.getNullRows());
+    const Column* const fill = getColumn(fillNulls.getFill());
+
+    const ColumnKind::Code resultKind = result->getKind();
+    bioassert(value->getKind() == resultKind && fill->getKind() == resultKind,
+              "nl.fill_nulls reads columns of another kind than the column it writes.");
+    bioassert(nullRows->getKind() == ColumnMask::staticKind(), "nl.fill_nulls reads its null rows off a mask.");
+
+    NLFillNullsData* data = _program->allocFunctionData<NLFillNullsData>(value,
+                                                                         static_cast<const ColumnMask*>(nullRows),
+                                                                         fill,
+                                                                         result,
+                                                                         selectFillNullRowsForChunkType(resultChunkType));
+    body->emplaceStmt(&NLExecutor::runFillNulls, data);
+}
+
 void NLTranslator::translateIsNotTrue(nl::IsNotTrue isNotTrue, NLStmtContainer* body) {
     const mlir::Value operandValue = isNotTrue.getOperand();
     const Column* operand = getColumn(operandValue);
@@ -4327,6 +4353,19 @@ NLCaseResetFn NLTranslator::selectCaseResetForChunkType(mlir::Type chunkType) {
     }
 
     return NLExecutor::selectCaseReset(nullableChunkValueType(chunkType));
+}
+
+NLFillNullRowsFn NLTranslator::selectFillNullRowsForChunkType(mlir::Type chunkType) {
+    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+    const mlir::Type elementType = chunk.getElementType();
+
+    if (mlir::isa<storage::AnyType>(elementType)) {
+        return NLExecutor::selectTaggedCellFillNullRows();
+    } else if (holdsItsOwnNull(elementType)) {
+        return NLExecutor::selectOwnNullFillNullRows(chunkKindFromElementType(elementType));
+    }
+
+    return NLExecutor::selectFillNullRows(nullableChunkValueType(chunkType));
 }
 
 NLCellWrite NLTranslator::selectCellWriteForChunkType(mlir::Type resultChunkType,

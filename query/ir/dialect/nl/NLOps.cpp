@@ -767,6 +767,22 @@ LogicalResult SortCollect::verify() {
     return success();
 }
 
+LogicalResult FillNulls::verify() {
+    const Type resultType = getResult().getType();
+    const Type nullRowsElement = cast<ChunkType>(getNullRows().getType()).getElementType();
+
+    const bool valueHasTheResultType = getValue().getType() == resultType;
+    const bool fillHasTheResultType = getFill().getType() == resultType;
+
+    if (!valueHasTheResultType || !fillHasTheResultType) {
+        return emitOpError("fills a chunk out of a chunk of its own type, into a chunk of that type");
+    } else if (!isa<storage::BoolType>(nullRowsElement)) {
+        return emitOpError("marks the null rows it fills with a mask");
+    }
+
+    return success();
+}
+
 // An nl.to_any answers tagged cells, or out of lists the lists their elements join into,
 // nullable when the lists it reads are
 LogicalResult ToAny::verify() {

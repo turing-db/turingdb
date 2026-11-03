@@ -202,6 +202,11 @@ def CountPathRows : Pass<"count_path_rows"> {
     let summary = "Count the rows a path was built over, or the handles a walk's list was expanded from, instead of building the path or the list";
 }
 
+def CanonicalizeCoalesce : Pass<"canonicalize_coalesce"> {
+    let summary = "Drop the arguments of a coalesce no row takes its value out of or no row reaches, and replace a coalesce left with one argument by the value of that argument";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def TrimUnreadColumns : Pass<"trim_unread_columns"> {
     let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products, grouping ops, calls, CASEs, optional matches and the ops over the elements of a list, and the values computed per row that nothing reads";
     let dependentDialects = ["mlir::db::DB"];

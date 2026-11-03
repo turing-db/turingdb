@@ -1666,6 +1666,8 @@ void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
         lowerCase(caseOp);
     } else if (mlir::db::LazyCase lazyCase = mlir::dyn_cast<mlir::db::LazyCase>(operation)) {
         lowerLazyCase(lazyCase);
+    } else if (mlir::db::Coalesce coalesce = mlir::dyn_cast<mlir::db::Coalesce>(operation)) {
+        lowerCoalesce(coalesce);
     } else if (mlir::db::FilterOp filter = mlir::dyn_cast<mlir::db::FilterOp>(operation)) {
         lowerFilter(filter);
     } else if (mlir::db::FetchNodes fetch = mlir::dyn_cast<mlir::db::FetchNodes>(operation)) {
@@ -6685,13 +6687,108 @@ void DBLowering::lowerLazyCase(mlir::db::LazyCase caseOp) {
     _valueMap[caseOp.getResult()] = merge.getResult();
 }
 
+void DBLowering::lowerCoalesce(mlir::db::Coalesce coalesce) {
+    mlir::MLIRContext* const context = _builder.getContext();
+    const nl::ChunkType maskType = nl::ChunkType::get(context, storage::BoolType::get(context));
+
+    const mlir::MutableArrayRef<mlir::Region> arguments = coalesce.getArguments();
+    const mlir::OperandRange carried = coalesce.getColumnsToFilter();
+
+    llvm::SmallVector<size_t, 8> lastReaders(carried.size(), 0);
+    for (size_t argumentIndex = 0; argumentIndex < arguments.size(); argumentIndex++) {
+        const mlir::Block::BlockArgListType columns = arguments[argumentIndex].front().getArguments();
+
+        for (size_t carriedIndex = 0; carriedIndex < columns.size(); carriedIndex++) {
+            if (!columns[carriedIndex].use_empty()) {
+                lastReaders[carriedIndex] = argumentIndex;
+            }
+        }
+    }
+
+    llvm::SmallVector<mlir::Value, 8> reaching;
+    for (const mlir::Value column : carried) {
+        reaching.push_back(mapValue(column));
+    }
+
+    mlir::Value reachingCardinality = cardinalityDriver(reaching);
+
+    llvm::SmallVector<mlir::Value, 4> values;
+    llvm::SmallVector<mlir::Value, 4> nullRows;
+    for (size_t argumentIndex = 0; argumentIndex < arguments.size(); argumentIndex++) {
+        const mlir::Value value = lowerCaseRegion(arguments[argumentIndex], reaching, reachingCardinality);
+        values.push_back(value);
+        nullRows.emplace_back();
+
+        const bool isLast = argumentIndex + 1 == arguments.size();
+        const bool leavesEveryRowNull = isUntypedNullChunk(value.getType());
+        if (isLast || leavesEveryRowNull) {
+            continue;
+        }
+
+        llvm::SmallVector<size_t, 8> readLater;
+        llvm::SmallVector<mlir::Value, 8> chunksReadLater;
+        for (size_t carriedIndex = 0; carriedIndex < reaching.size(); carriedIndex++) {
+            if (lastReaders[carriedIndex] > argumentIndex) {
+                readLater.push_back(carriedIndex);
+                chunksReadLater.push_back(reaching[carriedIndex]);
+            }
+
+            reaching[carriedIndex] = mlir::Value();
+        }
+
+        setInsertionForUnaryOp(value);
+        const mlir::Value stillNull = _builder.create<nl::IsNull>(_builder.getUnknownLoc(), maskType, value).getResult();
+        nullRows.back() = stillNull;
+
+        llvm::SmallVector<mlir::Value, 8> rest;
+        filterCaseRows(stillNull, chunksReadLater, rest);
+
+        reachingCardinality = rest.front();
+        for (size_t laterIndex = 0; laterIndex < readLater.size(); laterIndex++) {
+            reaching[readLater[laterIndex]] = rest[laterIndex + 1];
+        }
+    }
+
+    _valueMap[coalesce.getResult()] = mergeCoalescedValues(values, nullRows);
+}
+
+mlir::Value DBLowering::mergeCoalescedValues(llvm::ArrayRef<mlir::Value> values, llvm::ArrayRef<mlir::Value> nullRows) {
+    const mlir::Type resultElement = caseResultElement(values);
+    const nl::ChunkType resultType = caseResultChunkType(resultElement);
+
+    mlir::Value merged;
+    for (size_t valueIndex = values.size(); valueIndex > 0; valueIndex--) {
+        const mlir::Value value = values[valueIndex - 1];
+        if (isUntypedNullChunk(value.getType())) {
+            continue;
+        }
+
+        const mlir::Value converted = branchChunkAs(chunkAsElement(value, resultElement), resultType);
+
+        if (merged) {
+            const mlir::Value valueNullRows = nullRows[valueIndex - 1];
+            const std::array<mlir::Value, 3> operands {converted, valueNullRows, merged};
+            setInsertionForNaryOp(operands);
+
+            merged = _builder.create<nl::FillNulls>(_builder.getUnknownLoc(), resultType, converted, valueNullRows, merged).getResult();
+        } else {
+            merged = converted;
+        }
+    }
+
+    return merged ? merged : values.front();
+}
+
 mlir::Value DBLowering::lowerCaseRegion(mlir::Region& region,
                                         llvm::ArrayRef<mlir::Value> chunks,
                                         mlir::Value cardinality) {
     mlir::Block& block = region.front();
 
     for (size_t argumentIndex = 0; argumentIndex < chunks.size(); argumentIndex++) {
-        _valueMap[block.getArgument(static_cast<unsigned>(argumentIndex))] = chunks[argumentIndex];
+        const mlir::Value chunk = chunks[argumentIndex];
+        if (chunk) {
+            _valueMap[block.getArgument(static_cast<unsigned>(argumentIndex))] = chunk;
+        }
     }
 
     return lowerBlockOverRows(block, cardinality);

@@ -3,6 +3,7 @@
 
 #include <optional>
 
+#include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
@@ -181,12 +182,12 @@ bool holdsOnlyKeyedValues(Value column) {
         }
 
         if (const BlockArgument argument = dyn_cast<BlockArgument>(value)) {
-            LazyCase selection = dyn_cast_or_null<LazyCase>(argument.getOwner()->getParentOp());
-            if (!selection) {
+            Operation* const selection = argument.getOwner()->getParentOp();
+            if (!isa_and_nonnull<LazyCase, Coalesce>(selection)) {
                 return false;
             }
 
-            worklist.push_back(selection.getColumnsToFilter()[argument.getArgNumber()]);
+            worklist.push_back(selection->getOperand(argument.getArgNumber()));
             continue;
         }
 
@@ -202,6 +203,8 @@ bool holdsOnlyKeyedValues(Value column) {
         } else if (Case selection = dyn_cast<Case>(definingOp)) {
             selection.collectSelectedValues(worklist);
         } else if (LazyCase selection = dyn_cast<LazyCase>(definingOp)) {
+            selection.collectSelectedValues(worklist);
+        } else if (Coalesce selection = dyn_cast<Coalesce>(definingOp)) {
             selection.collectSelectedValues(worklist);
         } else if (FilterOp filter = dyn_cast<FilterOp>(definingOp)) {
             worklist.push_back(filter.getColumnsToFilter()[resultNumber]);
@@ -717,6 +720,122 @@ bool runsItsBodyPerRow(Operation* op) {
 
     return false;
 }
+
+Value regionYield(Region& region) {
+    return region.front().getTerminator()->getOperand(0);
+}
+
+LogicalResult verifyCarriedRegions(Operation* op, MutableArrayRef<Region> regions, OperandRange carried) {
+    for (size_t regionIndex = 0; regionIndex < regions.size(); regionIndex++) {
+        Block& block = regions[regionIndex].front();
+
+        if (!dyn_cast_or_null<CaseYield>(block.empty() ? nullptr : &block.back())) {
+            return op->emitOpError("region ") << regionIndex << " must end with a db.case_yield";
+        } else if (block.getNumArguments() != carried.size()) {
+            return op->emitOpError("region ") << regionIndex << " takes one argument per carried column, expected "
+                                              << carried.size() << " but has " << block.getNumArguments();
+        }
+
+        for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
+            if (block.getArgument(carriedIndex).getType() != carried[carriedIndex].getType()) {
+                return op->emitOpError("region ") << regionIndex << " argument " << carriedIndex
+                                                  << " must have the type of carried column " << carriedIndex;
+            }
+        }
+    }
+
+    return success();
+}
+
+bool givesNoRowAValue(Region& argument) {
+    const Type element = cast<ColumnType>(regionYield(argument).getType()).getType();
+    if (!isNullLiteralType(element)) {
+        return false;
+    }
+
+    return llvm::all_of(argument.front().without_terminator(), [](Operation& op) {
+        return ::db::runsWithoutRaising(&op);
+    });
+}
+
+bool givesEveryRowAValue(Region& argument) {
+    ConstantOp literal = regionYield(argument).getDefiningOp<ConstantOp>();
+    if (!literal) {
+        return false;
+    }
+
+    const Type element = cast<ColumnType>(literal.getResult().getType()).getType();
+
+    return !isa<storage::NullableType, NoneType>(element) && !holdsItsOwnNull(element);
+}
+
+// Drops the regions no row takes its value out of and, where the result names its element,
+// the regions behind one every row takes its value out of: lowering picks an unnamed element
+// out of every region. A coalesce left with one region is that region's value where the
+// value has its type.
+struct SimplifyCoalesceArguments : public OpRewritePattern<Coalesce> {
+    using OpRewritePattern<Coalesce>::OpRewritePattern;
+
+    LogicalResult matchAndRewrite(Coalesce coalesce, PatternRewriter& rewriter) const override {
+        const MutableArrayRef<Region> arguments = coalesce.getArguments();
+        const Value result = coalesce.getResult();
+        const bool namesItsElement = !isa<NoneType>(cast<ColumnType>(result.getType()).getType());
+
+        llvm::SmallVector<size_t, 4> kept;
+        for (size_t argumentIndex = 0; argumentIndex < arguments.size(); argumentIndex++) {
+            Region& argument = arguments[argumentIndex];
+
+            if (givesNoRowAValue(argument)) {
+                continue;
+            }
+
+            kept.push_back(argumentIndex);
+
+            if (namesItsElement && givesEveryRowAValue(argument)) {
+                break;
+            }
+        }
+
+        if (kept.empty()) {
+            kept.push_back(0);
+        }
+
+        const OperandRange carried = coalesce.getColumnsToFilter();
+        Region& firstKept = arguments[kept.front()];
+        const bool givesWayToItsValue = kept.size() == 1 && regionYield(firstKept).getType() == result.getType();
+
+        if (givesWayToItsValue) {
+            Block& body = firstKept.front();
+            Operation* const yield = body.getTerminator();
+
+            rewriter.inlineBlockBefore(&body, coalesce, carried);
+
+            const Value value = yield->getOperand(0);
+            rewriter.eraseOp(yield);
+            rewriter.replaceOp(coalesce, value);
+
+            return success();
+        } else if (kept.size() == arguments.size()) {
+            return failure();
+        }
+
+        rewriter.setInsertionPoint(coalesce);
+        Coalesce trimmed = rewriter.create<Coalesce>(coalesce.getLoc(),
+                                                     result.getType(),
+                                                     carried,
+                                                     static_cast<unsigned>(kept.size()));
+
+        const MutableArrayRef<Region> trimmedArguments = trimmed.getArguments();
+        for (size_t keptIndex = 0; keptIndex < kept.size(); keptIndex++) {
+            Region& trimmedArgument = trimmedArguments[keptIndex];
+            rewriter.inlineRegionBefore(arguments[kept[keptIndex]], trimmedArgument, trimmedArgument.end());
+        }
+
+        rewriter.replaceOp(coalesce, trimmed.getResult());
+
+        return success();
+    }
+};
 
 }
 
@@ -1670,50 +1789,24 @@ LogicalResult Case::verify() {
 void LazyCase::collectSelectedValues(llvm::SmallVectorImpl<Value>& values) {
     const MutableArrayRef<Region> branches = getBranches();
 
-    const auto yieldedValue = [](Region& branch) {
-        Block& body = branch.front();
-        Operation* const yield = body.getTerminator();
-
-        return yield->getOperand(0);
-    };
-
     for (size_t branchIndex = 1; branchIndex < branches.size(); branchIndex += 2) {
-        values.push_back(yieldedValue(branches[branchIndex]));
+        values.push_back(regionYield(branches[branchIndex]));
     }
 
     const bool hasElse = branches.size() % 2 == 1;
     if (hasElse) {
-        values.push_back(yieldedValue(branches.back()));
+        values.push_back(regionYield(branches.back()));
     }
 }
 
 LogicalResult LazyCase::verify() {
     const MutableArrayRef<Region> branches = getBranches();
-    const OperandRange carried = getColumnsToFilter();
 
     if (branches.size() < 2) {
         return emitOpError("requires at least one condition and its value");
     }
 
-    for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
-        Block& block = branches[branchIndex].front();
-
-        if (!dyn_cast_or_null<CaseYield>(block.empty() ? nullptr : &block.back())) {
-            return emitOpError("region ") << branchIndex << " must end with a db.case_yield";
-        } else if (block.getNumArguments() != carried.size()) {
-            return emitOpError("region ") << branchIndex << " takes one argument per carried column, expected "
-                                          << carried.size() << " but has " << block.getNumArguments();
-        }
-
-        for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
-            if (block.getArgument(carriedIndex).getType() != carried[carriedIndex].getType()) {
-                return emitOpError("region ") << branchIndex << " argument " << carriedIndex
-                                              << " must have the type of carried column " << carriedIndex;
-            }
-        }
-    }
-
-    return success();
+    return verifyCarriedRegions(getOperation(), branches, getColumnsToFilter());
 }
 
 LogicalResult LazyCase::verifyRegions() {
@@ -1721,6 +1814,44 @@ LogicalResult LazyCase::verifyRegions() {
     collectSelectedValues(selected);
 
     return verifySelectedResult(getOperation(), getResult(), selected);
+}
+
+void Coalesce::collectSelectedValues(llvm::SmallVectorImpl<Value>& values) {
+    for (Region& argument : getArguments()) {
+        values.push_back(regionYield(argument));
+    }
+}
+
+LogicalResult Coalesce::verify() {
+    const MutableArrayRef<Region> arguments = getArguments();
+
+    if (arguments.empty()) {
+        return emitOpError("requires at least one argument");
+    }
+
+    return verifyCarriedRegions(getOperation(), arguments, getColumnsToFilter());
+}
+
+LogicalResult Coalesce::verifyRegions() {
+    llvm::SmallVector<Value> selected;
+    collectSelectedValues(selected);
+
+    return verifySelectedResult(getOperation(), getResult(), selected);
+}
+
+// A nested coalesce is not asked: its answer is its own ops', which this walk reaches
+// anyway, and asking it would walk them again at every level of the nesting
+Speculation::Speculatability Coalesce::getSpeculatability() {
+    const WalkResult walked = getOperation()->walk([](Operation* nested) {
+        const bool runsWithoutRaising = isa<Coalesce>(nested) || isSpeculatable(nested);
+        return runsWithoutRaising ? WalkResult::advance() : WalkResult::interrupt();
+    });
+
+    return speculatableWhen(!walked.wasInterrupted());
+}
+
+void Coalesce::getCanonicalizationPatterns(RewritePatternSet& patterns, MLIRContext* context) {
+    patterns.add<SimplifyCoalesceArguments>(context);
 }
 
 LogicalResult EqOp::verify() {
