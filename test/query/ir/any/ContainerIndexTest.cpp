@@ -12,16 +12,17 @@ using namespace turing::test;
 
 class ContainerIndexTest : public WriteQueryTest {
 protected:
-    void expectPositionError(std::string_view query) {
-        expectError(query, "A list index reads a list, and this row holds a value that is not one");
+    void expectKeyedError(std::string_view query, std::string_view base, std::string_view index) {
+        expectError(query, "A " + std::string(base) + " is indexed by a string key, not by '" + std::string(index) + "'");
     }
 
-    void expectKeyError(std::string_view query, std::string_view key) {
-        expectError(query, "Type mismatch: key '" + std::string(key) + "' is read off a map, a node or a relationship");
+    void expectListError(std::string_view query, std::string_view index) {
+        expectError(query, "A list index expression must be an integer, not '" + std::string(index) + "'");
     }
 
-    void expectIndexError(std::string_view query) {
-        expectError(query, "An index is an integer position or a string key, and this row holds a value that is neither");
+    void expectNotIndexableError(std::string_view query, std::string_view base) {
+        expectError(query,
+                    "Index operator [] can only be applied to a list, a map, a node or a relationship, not '" + std::string(base) + "'");
     }
 };
 
@@ -42,12 +43,12 @@ TEST_F(ContainerIndexTest, readsAMapByAKeyACellHolds) {
 }
 
 TEST_F(ContainerIndexTest, raisesOnAMapReadByAPosition) {
-    expectPositionError("UNWIND ['a', 0] AS k WITH k, {a: 1} AS m RETURN m[k]");
-    expectPositionError("WITH {a: 1} AS m, [1, 'a'][0] AS k RETURN m[k]");
+    expectKeyedError("UNWIND ['a', 0] AS k WITH k, {a: 1} AS m RETURN m[k]", "map", "Integer");
+    expectKeyedError("WITH {a: 1} AS m, [1, 'a'][0] AS k RETURN m[k]", "map", "Integer");
 }
 
 TEST_F(ContainerIndexTest, raisesOnAListReadByAKey) {
-    expectKeyError("UNWIND [1, 'a'] AS b RETURN [1, 2, 3][b]", "a");
+    expectListError("UNWIND [1, 'a'] AS b RETURN [1, 2, 3][b]", "String");
 }
 
 TEST_F(ContainerIndexTest, readsACellByACell) {
@@ -59,15 +60,17 @@ TEST_F(ContainerIndexTest, readsAPropertyOfANodeACellHolds) {
     expectRows("MATCH (p:Person {name: 'Remy'}) WITH [p, 'name'] AS l RETURN l[0][l[1]]", {{"Remy"}});
     expectRows("MATCH (p:Person {name: 'Remy'}) WITH [p, 'age'] AS l RETURN l[0][l[1]]", {{"32"}});
     expectRows("MATCH (p:Person {name: 'Remy'}) WITH [p, 'nope'] AS l RETURN l[0][l[1]]", {{"null"}});
-    expectPositionError("MATCH (p:Person {name: 'Remy'}) WITH [p, 0] AS l RETURN l[0][l[1]]");
+    expectKeyedError("MATCH (p:Person {name: 'Remy'}) WITH [p, 0] AS l RETURN l[0][l[1]]", "node", "Integer");
 }
 
 TEST_F(ContainerIndexTest, readsAPropertyOfAnEdgeACellHolds) {
     expectRows("MATCH (:Person {name: 'Remy'})-[e:KNOWS_WELL]->(:Person {name: 'Adam'}) "
                "WITH [e, 'name', 'duration', 'nope'] AS l RETURN l[0][l[1]], l[0][l[2]], l[0][l[3]]",
                {{"Remy -> Adam", "20", "null"}});
-    expectPositionError("MATCH (:Person {name: 'Remy'})-[e:KNOWS_WELL]->(:Person {name: 'Adam'}) "
-                        "WITH [e, 0] AS l RETURN l[0][l[1]]");
+    expectKeyedError("MATCH (:Person {name: 'Remy'})-[e:KNOWS_WELL]->(:Person {name: 'Adam'}) "
+                     "WITH [e, 0] AS l RETURN l[0][l[1]]",
+                     "relationship",
+                     "Integer");
 }
 
 TEST_F(ContainerIndexTest, readsAnEntityOutOfAListOfEntities) {
@@ -104,31 +107,31 @@ TEST_F(ContainerIndexTest, readsNullPastEitherEnd) {
 }
 
 TEST_F(ContainerIndexTest, raisesOnAnIndexThatIsNeitherAPositionNorAKey) {
-    expectIndexError("RETURN [10, 20][[1.0, 'a'][0]]");
-    expectIndexError("WITH [true, 'a'][0] AS k RETURN [10, 20][k]");
-    expectIndexError("WITH [true, 'a'][0] AS k RETURN {a: 1}[k]");
-    expectIndexError("WITH [[0], 'a'][0] AS k RETURN [10, 20][k]");
-    expectIndexError("WITH [{a: 0}, 'a'][0] AS k RETURN [10, 20][k]");
-    expectIndexError("WITH [[0], 'a'][0] AS k RETURN {a: 1}[k]");
-    expectIndexError("WITH [[1], 'a'][0] AS b, [true, 1][0] AS k RETURN b[k]");
-    expectIndexError("WITH [{a: 1}, 'a'][0] AS b, [1.0, 1][0] AS k RETURN b[k]");
+    expectListError("RETURN [10, 20][[1.0, 'a'][0]]", "Double");
+    expectListError("WITH [true, 'a'][0] AS k RETURN [10, 20][k]", "Bool");
+    expectKeyedError("WITH [true, 'a'][0] AS k RETURN {a: 1}[k]", "map", "Bool");
+    expectListError("WITH [[0], 'a'][0] AS k RETURN [10, 20][k]", "List");
+    expectListError("WITH [{a: 0}, 'a'][0] AS k RETURN [10, 20][k]", "Map");
+    expectKeyedError("WITH [[0], 'a'][0] AS k RETURN {a: 1}[k]", "map", "List");
+    expectListError("WITH [[1], 'a'][0] AS b, [true, 1][0] AS k RETURN b[k]", "Bool");
+    expectKeyedError("WITH [{a: 1}, 'a'][0] AS b, [1.0, 1][0] AS k RETURN b[k]", "map", "Double");
 }
 
 TEST_F(ContainerIndexTest, raisesOnACellHoldingNoContainer) {
-    expectKeyError("WITH [1, 'a'][0] AS b, ['a', 0][0] AS k RETURN b[k]", "a");
-    expectPositionError("WITH [1, 'a'][0] AS b, [0, 'a'][0] AS k RETURN b[k]");
-    expectPositionError("WITH ['xyz', 1][0] AS b, [0, 'a'][0] AS k RETURN b[k]");
-    expectIndexError("WITH [1, 'a'][0] AS b, [true, 1][0] AS k RETURN b[k]");
+    expectNotIndexableError("WITH [1, 'a'][0] AS b, ['a', 0][0] AS k RETURN b[k]", "Integer");
+    expectNotIndexableError("WITH [1, 'a'][0] AS b, [0, 'a'][0] AS k RETURN b[k]", "Integer");
+    expectNotIndexableError("WITH ['xyz', 1][0] AS b, [0, 'a'][0] AS k RETURN b[k]", "String");
+    expectNotIndexableError("WITH [1, 'a'][0] AS b, [true, 1][0] AS k RETURN b[k]", "Integer");
 }
 
 TEST_F(ContainerIndexTest, raisesOnAKeyOfATemporalCell) {
-    expectKeyError("WITH [datetime('2020-01-01T00:00:00Z'), 1][0] AS b, ['year', 0][0] AS k RETURN b[k]", "year");
-    expectKeyError("WITH [duration({hours: 1}), 1][0] AS b, ['hours', 0][0] AS k RETURN b[k]", "hours");
+    expectNotIndexableError("WITH [datetime('2020-01-01T00:00:00Z'), 1][0] AS b, ['year', 0][0] AS k RETURN b[k]", "DateTime");
+    expectNotIndexableError("WITH [duration({hours: 1}), 1][0] AS b, ['hours', 0][0] AS k RETURN b[k]", "Duration");
 }
 
 TEST_F(ContainerIndexTest, raisesOnAListCellReadByAKeyAndAMapCellReadByAPosition) {
-    expectKeyError("WITH [[1, 2], 1][0] AS b, ['a', 0][0] AS k RETURN b[k]", "a");
-    expectPositionError("WITH [{a: 1}, 1][0] AS b, [0, 'a'][0] AS k RETURN b[k]");
+    expectListError("WITH [[1, 2], 1][0] AS b, ['a', 0][0] AS k RETURN b[k]", "String");
+    expectKeyedError("WITH [{a: 1}, 1][0] AS b, [0, 'a'][0] AS k RETURN b[k]", "map", "Integer");
     expectRows("WITH [{a: 1}, 1][0] AS b, ['b', 0][0] AS k RETURN b[k]", {{"null"}});
 }
 
@@ -150,9 +153,9 @@ TEST_F(ContainerIndexTest, readsEveryRowAcrossChunks) {
 TEST_F(ContainerIndexTest, raisesOnARowPastTheFirstChunk) {
     _interpreter->setChunkSize(4);
 
-    expectKeyError("UNWIND range(0, 13) AS r WITH CASE WHEN r = 9 THEN 'x' ELSE r % 2 END AS i "
-                   "RETURN [10, 20][i]",
-                   "x");
+    expectListError("UNWIND range(0, 13) AS r WITH CASE WHEN r = 9 THEN 'x' ELSE r % 2 END AS i "
+                    "RETURN [10, 20][i]",
+                    "String");
 }
 
 // One in seven rows reads a null index, and every other row reads the value it was built
@@ -165,9 +168,11 @@ TEST_F(ContainerIndexTest, readsEveryRowOfSeveralDefaultChunks) {
                "WHERE c[i] = r RETURN count(*)",
                {{"120000"}});
 
-    expectPositionError("UNWIND range(0, 140000) AS r "
-                        "WITH CASE WHEN r = 100000 THEN {a: 1} ELSE [r] END AS c, [0, 'a'][0] AS i "
-                        "WITH c[i] AS v RETURN count(v)");
+    expectKeyedError("UNWIND range(0, 140000) AS r "
+                     "WITH CASE WHEN r = 100000 THEN {a: 1} ELSE [r] END AS c, [0, 'a'][0] AS i "
+                     "WITH c[i] AS v RETURN count(v)",
+                     "map",
+                     "Integer");
 }
 
 TEST_F(ContainerIndexTest, readsInsideAListComprehension) {
@@ -209,7 +214,7 @@ TEST_F(ContainerIndexTest, aggregatesTheReadValue) {
 }
 
 TEST_F(ContainerIndexTest, raisesOnAReadNothingUses) {
-    expectKeyError("UNWIND [1, 'a'] AS b WITH b, [1, 2, 3][b] AS unused RETURN count(*)", "a");
+    expectListError("UNWIND [1, 'a'] AS b WITH b, [1, 2, 3][b] AS unused RETURN count(*)", "String");
 }
 
 // A pattern seeded off the element a position held in a cell reads, as off the one an

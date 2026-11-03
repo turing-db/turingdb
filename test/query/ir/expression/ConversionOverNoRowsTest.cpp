@@ -33,5 +33,5 @@ TEST_F(ConversionOverNoRowsTest, raisesNothingForAConversionOfAFactorNoProductRo
 
 TEST_F(ConversionOverNoRowsTest, raisesOnAConversionARowReaches) {
     expectError("MATCH (n:Person) WHERE n.name = 'Remy' RETURN toInteger([[1], 2][0])",
-                "toInteger() has no conversion for the value this row holds");
+                "toInteger() has no conversion for 'List'");
 }

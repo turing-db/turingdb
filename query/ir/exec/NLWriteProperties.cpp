@@ -21,6 +21,7 @@
 #include "map/MapEntryView.h"
 #include "map/MapView.h"
 #include "metadata/GraphMetadata.h"
+#include "QueryTypeName.h"
 #include "metadata/PropertyType.h"
 #include "metadata/PropertyTypeMap.h"
 #include "reader/GraphReader.h"
@@ -350,27 +351,6 @@ CellTag cellTagOf(ValueType valueType) {
     return tag;
 }
 
-// The name of the type a tagged cell holds: the entity it names, or the property type whose
-// values carry its tag
-std::string_view cellTypeName(CellTag tag) {
-    if (tag == CellTag::NodeID) {
-        return "Node";
-    } else if (tag == CellTag::EdgeID) {
-        return "Edge";
-    } else if (tag == CellTag::Path) {
-        return "Path";
-    }
-
-    for (size_t index = static_cast<size_t>(ValueType::Invalid) + 1; index < static_cast<size_t>(ValueType::_SIZE); index++) {
-        const ValueType valueType = static_cast<ValueType>(index);
-        if (cellTagOf(valueType) == tag) {
-            return ValueTypeName::value(valueType);
-        }
-    }
-
-    return ValueTypeName::value(ValueType::Invalid);
-}
-
 void stageCellAsItsType(const CellView cell,
                         ValueType valueType,
                         CommitWriteBuffer::SupportedTypeVariant& value) {
@@ -448,7 +428,7 @@ void stageCell(const CellView cell,
     if (!stageCellIfItFits(cell, valueType, value)) {
         throw IRException(fmt::format("Cannot set a property of type '{}' to a value of type '{}'",
                                       ValueTypeName::value(valueType),
-                                      cellTypeName(cell.getTag())));
+                                      queryTypeName(cell.getTag())));
     }
 }
 
@@ -594,7 +574,7 @@ void db::stageMapProperties(const WrittenMap& map,
     const bool holdsAMap = map._tag == CellTag::MapView || map._tag == CellTag::Null;
     if (!holdsAMap) {
         throw IRException(fmt::format("Cannot set the properties of an entity to a value of type '{}', which is not a map",
-                                      cellTypeName(map._tag)));
+                                      queryTypeName(map._tag)));
     }
 
     if (!map._map) {
@@ -633,7 +613,7 @@ void db::stageMapProperties(const WrittenMap& map,
             throw IRException(fmt::format("Cannot set property '{}' of type '{}' to a value of type '{}'",
                                           key,
                                           ValueTypeName::value(propertyType->_valueType),
-                                          cellTypeName(value.getTag())));
+                                          queryTypeName(value.getTag())));
         }
     }
 }

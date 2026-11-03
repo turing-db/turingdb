@@ -44,15 +44,15 @@ TEST_F(RangeOverTypeErasedBoundTest, returnsNullForACellHoldingANull) {
 
 TEST_F(RangeOverTypeErasedBoundTest, raisesOnACellHoldingAString) {
     expectError("UNWIND [1, 'a'] AS b RETURN range(0, b)",
-                "A range or a list slice reads an integer bound, and this row holds a value that is not one");
+                "A range or a list slice reads an integer bound, not 'String'");
 }
 
 TEST_F(RangeOverTypeErasedBoundTest, raisesOnACellHoldingADouble) {
     expectError("UNWIND [1.5, 'a'] AS b RETURN range(0, b)",
-                "A range or a list slice reads an integer bound, and this row holds a value that is not one");
+                "A range or a list slice reads an integer bound, not 'Double'");
 }
 
 TEST_F(RangeOverTypeErasedBoundTest, raisesOnTheUnwoundRangeOfACellHoldingAString) {
     expectError("UNWIND [1, 'a'] AS b UNWIND range(0, b) AS i RETURN i",
-                "A range or a list slice reads an integer bound, and this row holds a value that is not one");
+                "A range or a list slice reads an integer bound, not 'String'");
 }

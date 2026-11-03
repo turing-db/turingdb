@@ -3,7 +3,7 @@
   "graph": "simpledb",
   "query": "WITH {a: 1} AS m RETURN m.a[0]",
   "expect": {
-    "result": "EXEC ERROR\nA list index reads a list, and this row holds a value that is not one"
+    "result": "EXEC ERROR\nIndex operator [] can only be applied to a list, a map, a node or a relationship, not 'Integer'"
   },
   "tags": [
     "map",

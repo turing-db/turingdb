@@ -11,6 +11,8 @@
 #include <type_traits>
 #include <vector>
 
+#include <spdlog/fmt/bundled/format.h>
+
 #include "columns/CharacterArgument.h"
 #include "columns/ColumnConst.h"
 #include "columns/ValueText.h"
@@ -18,6 +20,7 @@
 #include "columns/ColumnVector.h"
 #include "TypeUtils.h"
 #include "CellView.h"
+#include "QueryTypeName.h"
 
 #include "list/ListBuffer.h"
 #include "map/MapView.h"
@@ -342,7 +345,7 @@ private:
 
 // A function over a type-erased cell finds out per row what the cell holds. A null answers
 // null; any other type the function does not read is the row's type error.
-[[noreturn]] void throwCellTypeError(std::string_view functionName, std::string_view expected);
+[[noreturn]] void throwCellTypeError(std::string_view functionName, std::string_view expected, CellTag held);
 
 [[noreturn]] void throwEpochSecondsOutOfRange(int64_t seconds);
 [[noreturn]] void throwEpochSecondsOutOfRange(uint64_t seconds);
@@ -482,7 +485,7 @@ public:
             return std::nullopt;
         }
 
-        throw FatalException("a datetime component reads an instant, and this row holds a value that is not one");
+        throw TuringException(fmt::format("a datetime component reads an instant, not '{}'", queryTypeName(tag)));
     }
 
     ResultType operator()(const std::optional<ArgType>& cell) const {
@@ -518,7 +521,7 @@ public:
         }
 
         // We throw here as we only know the type of the list element at runtime.
-        throw FatalException("a duration component reads a duration, and this row holds a value that is not one");
+        throw TuringException(fmt::format("a duration component reads a duration, not '{}'", queryTypeName(tag)));
     }
 
     ResultType operator()(const std::optional<ArgType>& cell) const {
@@ -707,7 +710,7 @@ Result visitNumberCell(const CellView cell, std::string_view functionName, Visit
         return std::nullopt;
     }
 
-    throwCellTypeError(functionName, "a number");
+    throwCellTypeError(functionName, "a number", tag);
 }
 
 std::optional<types::String::Primitive> cellString(const CellView cell, std::string_view functionName);
@@ -716,7 +719,7 @@ std::optional<types::Int64::Primitive> cellInteger(const CellView cell, std::str
 
 types::Int64::Primitive unsignedCharacterArgument(types::UInt64::Primitive value, std::string_view functionName);
 
-[[noreturn]] void throwUnconvertibleCell(std::string_view functionName);
+[[noreturn]] void throwUnconvertibleCell(std::string_view functionName, CellTag held);
 
 // A rule held by a TaggedConversionFunction, built over the string buffer when it writes text
 template <typename Rule>
@@ -757,7 +760,9 @@ public:
     }
 
     ResultType operator()(const ArgType cell) {
-        switch (cell.getTag()) {
+        const CellTag tag = cell.getTag();
+
+        switch (tag) {
             case CellTag::Int:
                 return convert<types::Int64::Primitive>(cell, _fromInteger);
             break;
@@ -783,7 +788,7 @@ public:
                 return std::nullopt;
             break;
             default:
-                return unconvertible();
+                return unconvertible(tag);
             break;
         }
     }
@@ -814,13 +819,13 @@ private:
         if constexpr (HAS_RULE<Element>) {
             return rule.get()(cell.getAs<Element>());
         } else {
-            return unconvertible();
+            return unconvertible(cell.getTag());
         }
     }
 
-    static ResultType unconvertible() {
+    static ResultType unconvertible(CellTag held) {
         if constexpr (OnUnconvertible == UnconvertibleCell::Raise) {
-            throwUnconvertibleCell(StringFunctor::NAME);
+            throwUnconvertibleCell(StringFunctor::NAME, held);
         } else {
             return std::nullopt;
         }
@@ -885,7 +890,7 @@ private:
 
 [[noreturn]] void throwNegationOverflow();
 
-[[noreturn]] void throwSignOperandType(std::string_view operatorName);
+[[noreturn]] void throwSignOperandType(std::string_view operatorName, CellTag held);
 
 // A unary plus over a cell answers the cell itself where it holds a number or a duration
 class TaggedUnaryPlusFunction {

@@ -9,6 +9,7 @@
 
 #include <spdlog/fmt/fmt.h>
 
+#include "QueryTypeName.h"
 #include "TuringException.h"
 #include "map/MapView.h"
 
@@ -332,7 +333,7 @@ bool Duration::fromMap(const MapView& map, Duration& out) {
         } else if (tag == CellTag::Null) {
             holdsANullCount = true;
         } else {
-            throw TuringException(fmt::format("duration() reads a number for each unit, and the map key '{}' holds a value that is not one", unit));
+            throw TuringException(fmt::format("duration() reads a number for the unit '{}', not '{}'", unit, queryTypeName(tag)));
         }
     }
 

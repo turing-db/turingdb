@@ -787,7 +787,7 @@ TEST_F(CypherUnwindExprTest, unwindsANestedEdgeListToItsEdges) {
 TEST_F(CypherUnwindExprTest, rejectsSummingANonNumericCell) {
     // The cells carry a type each, so the check the column types make for a typed
     // reduction is made per row instead - and a string is no number in either.
-    expectRejected("UNWIND [10, 'a'] AS v RETURN sum(v)", "requires a numeric column");
+    expectRejected("UNWIND [10, 'a'] AS v RETURN sum(v)", "sum(), avg() and stdev() read numbers, not 'String'");
 }
 
 TEST_F(CypherUnwindExprTest, rejectsAnUnwoundVariableThatIsAlreadyDeclared) {

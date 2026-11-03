@@ -173,7 +173,7 @@ TEST_F(CaseAnyBinaryOperatorTest, connectsABooleanWithAComparison) {
 TEST_F(CaseAnyBinaryOperatorTest, rejectsANumberUnderAnd) {
     runQueryExpectingError("MATCH (p:Person) WHERE p.name = 'Remy' "
                            "WITH CASE p.name WHEN 'Remy' THEN 32 ELSE true END AS v RETURN v AND true",
-                           "operands must be booleans");
+                           "A logical operand must be a boolean, not 'Integer'");
 }
 
 TEST_F(CaseAnyBinaryOperatorTest, computesOverATemporalValue) {

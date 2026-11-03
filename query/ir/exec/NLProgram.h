@@ -14,6 +14,7 @@
 #include <variant>
 #include <vector>
 
+#include "CellTag.h"
 #include "GraphPath.h"
 #include "PathView.h"
 #include "ID.h"
@@ -4354,6 +4355,9 @@ private:
 // A row holding a value no key reads into: a number, a string, a boolean, an embedding or a
 // list
 struct NLKeylessValue {
+    explicit NLKeylessValue(CellTag tag);
+
+    CellTag _tag {CellTag::INVALID};
 };
 
 // What one row of an nl.static_map_key or an nl.dynamic_map_key reads its key in: a map, the
@@ -4455,6 +4459,9 @@ struct NLContainer {
 using NLContainerReadFunction = NLContainer (*)(const Column* base, size_t row);
 
 struct NLNeitherPositionNorKey {
+    explicit NLNeitherPositionNorKey(CellTag tag);
+
+    CellTag _tag {CellTag::INVALID};
 };
 
 using NLSubscript = std::variant<std::monostate,

@@ -71,7 +71,7 @@ std::optional<ListView> NLTaggedKeysFunction::operator()(const CellView cell) {
         return std::nullopt;
     }
 
-    throwCellTypeError("keys", "a node, a relationship or a map");
+    throwCellTypeError("keys", "a node, a relationship or a map", tag);
 }
 
 std::optional<ListView> NLTaggedKeysFunction::operator()(const std::optional<CellView>& cell) {
@@ -95,7 +95,7 @@ std::optional<ListView> NLTaggedLabelsFunction::operator()(const CellView cell) 
         return std::nullopt;
     }
 
-    throwCellTypeError("labels", "a node");
+    throwCellTypeError("labels", "a node", tag);
 }
 
 std::optional<ListView> NLTaggedLabelsFunction::operator()(const std::optional<CellView>& cell) {
@@ -119,7 +119,7 @@ std::optional<types::String::Primitive> NLTaggedEdgeTypeFunction::operator()(con
         return std::nullopt;
     }
 
-    throwCellTypeError("type", "a relationship");
+    throwCellTypeError("type", "a relationship", tag);
 }
 
 std::optional<types::String::Primitive> NLTaggedEdgeTypeFunction::operator()(const std::optional<CellView>& cell) {
@@ -148,7 +148,7 @@ std::optional<MapView> NLTaggedPropertiesFunction::operator()(const CellView cel
         return std::nullopt;
     }
 
-    throwCellTypeError("properties", "a node, a relationship or a map");
+    throwCellTypeError("properties", "a node, a relationship or a map", tag);
 }
 
 std::optional<MapView> NLTaggedPropertiesFunction::operator()(const std::optional<CellView>& cell) {

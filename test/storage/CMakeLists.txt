@@ -140,3 +140,5 @@ add_turing_test(test_storage_integer_conversion_of_unsigned IntegerConversionOfU
 
 # A cell is null where its tag says so, in a translation unit that includes nothing else.
 add_turing_test(test_storage_cell_null CellNullTest.cpp)
+
+add_turing_test(test_storage_query_type_name QueryTypeNameTest.cpp)

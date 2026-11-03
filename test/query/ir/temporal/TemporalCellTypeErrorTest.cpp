@@ -25,14 +25,14 @@ protected:
 
 TEST_F(TemporalCellTypeErrorTest, rejectsADateTimeOfACellHoldingNoStringIntegerOrMap) {
     expectQueryError("UNWIND [1.5, 'a'] AS x RETURN datetime(x)",
-                     "datetime() reads a string, an integer or a map, and this row holds a value that is not one");
+                     "datetime() reads a string, an integer or a map, not 'Double'");
     expectQueryError("UNWIND [true, 'a'] AS x RETURN datetime(x)",
-                     "datetime() reads a string, an integer or a map, and this row holds a value that is not one");
+                     "datetime() reads a string, an integer or a map, not 'Bool'");
 }
 
 TEST_F(TemporalCellTypeErrorTest, rejectsADurationOfACellHoldingNoIntegerOrMap) {
     expectQueryError("UNWIND [1.5, 1] AS x RETURN duration(x)",
-                     "duration() reads an integer or a map, and this row holds a value that is not one");
+                     "duration() reads an integer or a map, not 'Double'");
     expectQueryError("UNWIND ['a', 1] AS x RETURN duration(x)",
-                     "duration() reads an integer or a map, and this row holds a value that is not one");
+                     "duration() reads an integer or a map, not 'String'");
 }

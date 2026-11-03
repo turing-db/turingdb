@@ -42,3 +42,7 @@ target_sources(test_query_ir_container_index_codegen PRIVATE ${IR_TEST_DIR}/Stri
 add_turing_test(test_query_ir_index_over_an_emptied_chunk IndexOverAnEmptiedChunkTest.cpp)
 
 add_ir_tests(test_query_ir_container_index_verifier ContainerIndexVerifierTest.cpp)
+
+add_turing_test(test_query_ir_any_index_type_error IndexTypeErrorTest.cpp)
+
+add_turing_test(test_query_ir_any_held_type_error HeldTypeErrorTest.cpp)

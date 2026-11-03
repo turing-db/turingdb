@@ -13,6 +13,7 @@
 #include "datapart/EdgeRecord.h"
 #include "CellTag.h"
 #include "PathView.h"
+#include "QueryTypeName.h"
 #include "metadata/LabelMap.h"
 #include "reader/GraphReader.h"
 #include "versioning/CommitWriteBuffer.h"
@@ -72,7 +73,7 @@ std::optional<ListView> taggedList(const CellView cell) {
         return std::nullopt;
     }
 
-    throw TuringException("head(), last() and tail() read a list, and this row holds a value that is not one");
+    throw TuringException(fmt::format("head(), last() and tail() read a list, not '{}'", queryTypeName(tag)));
 }
 
 size_t skipDigits(std::string_view text, size_t position) {
@@ -186,7 +187,7 @@ std::optional<EdgeID> taggedEdge(const CellView cell) {
         return std::nullopt;
     }
 
-    throw TuringException("startNode() and endNode() read an edge, and this row holds a value that is not one");
+    throw TuringException(fmt::format("startNode() and endNode() read an edge, not '{}'", queryTypeName(tag)));
 }
 
 }
@@ -210,7 +211,7 @@ TaggedSizeFunction::ResultType TaggedSizeFunction::operator()(const ArgType cell
         return std::nullopt;
     }
 
-    throw TuringException("size() and length() read a list, a string or a path, and this row holds a value that is none of them");
+    throw TuringException(fmt::format("size() and length() read a list, a string or a path, not '{}'", queryTypeName(tag)));
 }
 
 StringSizeFunction::ResultType StringSizeFunction::operator()(const ArgType string) const {
@@ -234,7 +235,7 @@ TaggedIsEmptyFunction::ResultType TaggedIsEmptyFunction::operator()(const ArgTyp
         return std::nullopt;
     }
 
-    throw TuringException("isEmpty() reads a list, a string or a map, and this row holds a value that is none of them");
+    throwCellTypeError("isEmpty", "a list, a string or a map", tag);
 }
 
 ListIsEmptyFunction::ResultType ListIsEmptyFunction::operator()(const ArgType list) const {
@@ -408,12 +409,12 @@ ToStringFunction::ToStringFunction(StringBuffer* stringBuffer)
 {
 }
 
-void db::throwUnconvertibleCell(std::string_view functionName) {
-    throw TuringException(fmt::format("{}() has no conversion for the value this row holds", functionName));
+void db::throwUnconvertibleCell(std::string_view functionName, CellTag held) {
+    throw TuringException(fmt::format("{}() has no conversion for '{}'", functionName, queryTypeName(held)));
 }
 
-void db::throwCellTypeError(std::string_view functionName, std::string_view expected) {
-    throw TuringException(fmt::format("{}() reads {}, and this row holds a value that is not one", functionName, expected));
+void db::throwCellTypeError(std::string_view functionName, std::string_view expected, CellTag held) {
+    throw TuringException(fmt::format("{}() reads {}, not '{}'", functionName, expected, queryTypeName(held)));
 }
 
 void db::throwEpochSecondsOutOfRange(int64_t seconds) {
@@ -445,7 +446,7 @@ TaggedDateTimeFunction::ResultType TaggedDateTimeFunction::operator()(const ArgT
         return std::nullopt;
     }
 
-    throwCellTypeError("datetime", "a string, an integer or a map");
+    throwCellTypeError("datetime", "a string, an integer or a map", tag);
 }
 
 TaggedDurationFunction::ResultType TaggedDurationFunction::operator()(const ArgType cell) const {
@@ -461,7 +462,7 @@ TaggedDurationFunction::ResultType TaggedDurationFunction::operator()(const ArgT
         return std::nullopt;
     }
 
-    throwCellTypeError("duration", "an integer or a map");
+    throwCellTypeError("duration", "an integer or a map", tag);
 }
 
 std::optional<types::String::Primitive> db::cellString(const CellView cell, std::string_view functionName) {
@@ -473,7 +474,7 @@ std::optional<types::String::Primitive> db::cellString(const CellView cell, std:
         return std::nullopt;
     }
 
-    throwCellTypeError(functionName, "a string");
+    throwCellTypeError(functionName, "a string", tag);
 }
 
 std::optional<types::Int64::Primitive> db::cellInteger(const CellView cell, std::string_view functionName) {
@@ -487,7 +488,7 @@ std::optional<types::Int64::Primitive> db::cellInteger(const CellView cell, std:
         return std::nullopt;
     }
 
-    throwCellTypeError(functionName, "an integer");
+    throwCellTypeError(functionName, "an integer", tag);
 }
 
 types::Int64::Primitive db::unsignedCharacterArgument(types::UInt64::Primitive value, std::string_view functionName) {
@@ -592,7 +593,7 @@ TaggedNegateFunction::ResultType TaggedNegateFunction::operator()(const ArgType 
         return stageCell(_listBuffer, NegateFunction<types::Duration::Primitive> {}(cell.getAs<types::Duration::Primitive>()));
     }
 
-    throwSignOperandType("minus");
+    throwSignOperandType("minus", tag);
 }
 
 TaggedNegateFunction::ResultType TaggedNegateFunction::operator()(const std::optional<ArgType>& cell) const {
@@ -613,16 +614,17 @@ TaggedUnaryPlusFunction::ResultType TaggedUnaryPlusFunction::operator()(const Ar
         return cell;
     }
 
-    throwSignOperandType("plus");
+    throwSignOperandType("plus", tag);
 }
 
 TaggedUnaryPlusFunction::ResultType TaggedUnaryPlusFunction::operator()(const std::optional<ArgType>& cell) const {
     return cell.has_value() ? (*this)(*cell) : std::nullopt;
 }
 
-void db::throwSignOperandType(std::string_view operatorName) {
-    throw TuringException(fmt::format("The operand of a unary {} must be an integer, a double or a duration",
-                                      operatorName));
+void db::throwSignOperandType(std::string_view operatorName, CellTag held) {
+    throw TuringException(fmt::format("The operand of a unary {} must be an integer, a double or a duration, not '{}'",
+                                      operatorName,
+                                      queryTypeName(held)));
 }
 
 void db::throwNegationOverflow() {
@@ -778,7 +780,7 @@ TaggedReverseFunction::ResultType TaggedReverseFunction::operator()(const ArgTyp
         return std::nullopt;
     }
 
-    throwCellTypeError("reverse", "a string or a list");
+    throwCellTypeError("reverse", "a string or a list", tag);
 }
 
 TaggedReverseFunction::ResultType TaggedReverseFunction::operator()(const std::optional<ArgType>& cell) const {
@@ -1082,7 +1084,7 @@ TaggedIdFunction::ResultType TaggedIdFunction::operator()(const ArgType cell) co
         return std::nullopt;
     }
 
-    throw TuringException("id() reads a node or an edge, and this row holds a value that is neither");
+    throwCellTypeError("id", "a node or an edge", tag);
 }
 
 void ToBoolFunction::strToLower(std::string& lower, std::string_view src) {

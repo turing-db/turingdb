@@ -708,6 +708,16 @@ void NLMakeMapData::addEntry(const Entry& entry) {
     _entries.push_back(entry);
 }
 
+NLKeylessValue::NLKeylessValue(CellTag tag)
+    : _tag(tag)
+{
+}
+
+NLNeitherPositionNorKey::NLNeitherPositionNorKey(CellTag tag)
+    : _tag(tag)
+{
+}
+
 NLContainerIndexData::NLContainerIndexData(const Column* base,
                                            NLContainerReadFunction baseRead,
                                            const Column* index,

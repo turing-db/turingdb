@@ -38,7 +38,7 @@ TEST_F(LogicalOperatorOverUnreachedCellTest, readsNoCellInABranchNoRowTakes) {
 
 TEST_F(LogicalOperatorOverUnreachedCellTest, raisesWhereARowReadsTheCell) {
     runQueryExpectingError("MATCH (p:Person) WHERE p.name = 'Remy' RETURN NOT [1, true][0]",
-                           "must be booleans");
+                           "A logical operand must be a boolean, not 'Integer'");
 }
 
 int main(int argc, char** argv) {

@@ -269,7 +269,7 @@ TEST_F(TaggedCellSumTest, ordersTheGroupsByTheirSum) {
 }
 
 TEST_F(TaggedCellSumTest, rejectsACellHoldingNoNumber) {
-    expectError("UNWIND [{v: 1}, {v: 'a'}] AS m RETURN sum(m.v)", "requires a numeric column");
+    expectError("UNWIND [{v: 1}, {v: 'a'}] AS m RETURN sum(m.v)", "sum(), avg() and stdev() read numbers, not 'String'");
 }
 
 int main(int argc, char** argv) {

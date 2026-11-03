@@ -75,8 +75,12 @@ ContainerIndex expression reads it the same way. A row whose base holds a list a
 holds an integer reads the element, as `db.list_index` does. A row whose base holds a map, a node
 or an edge and whose index holds a string reads the value under that key, as `db.dynamic_map_key`
 does. A null base or a null index reads null, and any other pair raises: `UNWIND [1, 'a'] AS b
-RETURN [1, 2, 3][b]` raises on the row holding `'a'`. An integer, a string or a null index keeps
-the op it emitted before.
+RETURN [1, 2, 3][b]` raises on the row holding `'a'`. The error names the index the base takes and
+the type the row held, as the analyzer words it: `A list index expression must be an integer, not
+'String'` there, and `A map is indexed by a string key, not by 'Integer'` for `UNWIND [1, 'k'] AS b
+RETURN {k: 1}[b]`. A base holding 1 raises `Index operator [] can only be applied to a list, a
+map, a node or a relationship, not 'Integer'`. An integer, a string or a null index keeps the op it
+emitted before.
 
 # Reading through a nested value
 

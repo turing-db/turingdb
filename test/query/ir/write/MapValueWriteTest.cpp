@@ -29,7 +29,7 @@ TEST_F(MapValueWriteTest, widensAnIntegerMapValueToADoubleProperty) {
 TEST_F(MapValueWriteTest, rejectsAMapValueOfAnotherTypeThanTheProperty) {
     applyWrite("MATCH (n:Person {name: 'Adam'}) SET n.attrs = {a: 0}");
     expectWriteError("UNWIND [{v: 5}] AS m MATCH (n:Person {name: 'Remy'}) SET n.attrs = m.v",
-                     "Cannot set a property of type 'Map' to a value of type 'Int64'");
+                     "Cannot set a property of type 'Map' to a value of type 'Integer'");
 }
 
 TEST_F(MapValueWriteTest, rejectsAPropertyCreatedFromAMapValue) {

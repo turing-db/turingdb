@@ -5,6 +5,7 @@ set(storage_sources
         RowStore.cpp
         GraphPath.cpp
         CellOrder.cpp
+        QueryTypeName.cpp
 
         buffers/BufferChunk.cpp
         buffers/RawBuffer.cpp
@@ -100,6 +101,7 @@ set(storage_sources
         columns/ColumnConst.cpp
         columns/ColumnStringTable.cpp
         columns/Functions.cpp
+        columns/IndexTypeError.cpp
 
         dataframe/Dataframe.cpp
         dataframe/NamedColumn.cpp

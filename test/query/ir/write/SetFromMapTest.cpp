@@ -118,7 +118,7 @@ TEST_F(SetFromMapTest, rejectsAValueThatIsNoMap) {
 
 TEST_F(SetFromMapTest, rejectsACellThatHoldsNoMap) {
     expectWriteError("WITH [{name: 'R'}, 5] AS xs MATCH (n:Person {name: 'Remy'}) SET n = xs[1]",
-                     "Cannot set the properties of an entity to a value of type 'Int64', which is not a map");
+                     "Cannot set the properties of an entity to a value of type 'Integer', which is not a map");
 }
 
 TEST_F(SetFromMapTest, rejectsAMapLiteralEntryOfAnotherType) {
@@ -191,7 +191,7 @@ TEST_F(SetFromMapTest, replacesTheEdgeAnAggregateReturns) {
 
 TEST_F(SetFromMapTest, namesThePropertyAMapEntryOfAnotherTypeWrites) {
     expectWriteError("UNWIND [{name: 'x', isFrench: 5}] AS m MATCH (n:Person {name: 'Remy'}) SET n = m",
-                     "Cannot set property 'isFrench' of type 'Bool' to a value of type 'Int64'");
+                     "Cannot set property 'isFrench' of type 'Bool' to a value of type 'Integer'");
 }
 
 TEST_F(SetFromMapTest, writesNoRowWhenALaterRowHoldsAnEntryOfAnotherType) {

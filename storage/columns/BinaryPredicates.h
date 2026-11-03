@@ -8,9 +8,12 @@
 #include <type_traits>
 #include <utility>
 
+#include <spdlog/fmt/bundled/format.h>
+
 #include "GraphPath.h"
 #include "ID.h"
 #include "NumberOrder.h"
+#include "QueryTypeName.h"
 #include "TypeUtils.h"
 #include "ColumnMask.h"
 #include "ColumnConst.h"
@@ -312,7 +315,7 @@ inline std::optional<CustomBool> truthValue(const T& value) {
             return std::nullopt;
         }
 
-        throw TuringException("Logical operands must be booleans");
+        throw TuringException(fmt::format("A logical operand must be a boolean, not '{}'", queryTypeName(tag)));
     } else if constexpr (std::is_same_v<Decayed, PropertyNull>) {
         return std::nullopt;
     } else {

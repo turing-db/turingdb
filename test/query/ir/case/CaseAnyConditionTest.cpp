@@ -48,7 +48,7 @@ TEST_F(CaseAnyConditionTest, selectsABranchOnAConstantCell) {
 TEST_F(CaseAnyConditionTest, rejectsAConditionHoldingNoBoolean) {
     runQueryExpectingError("MATCH (p:Person) WHERE p.name IN ['Remy', 'Luc'] "
                            "RETURN CASE WHEN CASE WHEN p.age > 30 THEN true ELSE 'no' END THEN 1 ELSE 2 END",
-                           "A condition reads a value that is not a boolean");
+                           "A condition must be a boolean, not 'String'");
 }
 
 int main(int argc, char** argv) {

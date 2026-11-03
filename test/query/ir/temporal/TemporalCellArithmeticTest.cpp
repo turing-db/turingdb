@@ -30,9 +30,9 @@ TEST_F(TemporalCellArithmeticTest, computesTwoCellsInTheirOwnTypes) {
 TEST_F(TemporalCellArithmeticTest, rejectsCellsWithNoOperatorBetweenThem) {
     expectError("UNWIND [datetime('2024-01-02T00:00:00Z'), 1] AS a "
                 "UNWIND [datetime('2024-01-01T00:00:00Z'), 2] AS b RETURN a - b",
-                "Operands are not valid and compatible types");
+                "Operands are not valid and compatible numeric types: 'DateTime' and 'Integer'");
     expectError("UNWIND [datetime('2024-01-01T00:00:00Z'), 1] AS x RETURN x * x",
-                "Operands are not valid and compatible types");
+                "Operands are not valid and compatible numeric types: 'DateTime' and 'DateTime'");
 }
 
 TEST_F(TemporalCellArithmeticTest, rejectsADurationMinusAnInstant) {

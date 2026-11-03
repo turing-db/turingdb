@@ -12,22 +12,22 @@ class UnreadConversionRaisesTest : public WriteQueryTest {
 
 TEST_F(UnreadConversionRaisesTest, anIntegerConversionOfAList) {
     expectError("MATCH (n:Person) WITH n, toInteger([[1], n.name][0]) AS l RETURN n.name",
-                "toInteger() has no conversion for the value this row holds");
+                "toInteger() has no conversion for 'List'");
 }
 
 TEST_F(UnreadConversionRaisesTest, aFloatConversionOfAList) {
     expectError("MATCH (n:Person) WITH n, toFloat([[1], n.name][0]) AS l RETURN n.name",
-                "toFloat() has no conversion for the value this row holds");
+                "toFloat() has no conversion for 'List'");
 }
 
 TEST_F(UnreadConversionRaisesTest, aBooleanConversionOfAList) {
     expectError("MATCH (n:Person) WITH n, toBoolean([[1], n.name][0]) AS l RETURN n.name",
-                "toBoolean() has no conversion for the value this row holds");
+                "toBoolean() has no conversion for 'List'");
 }
 
 TEST_F(UnreadConversionRaisesTest, aStringConversionOfAList) {
     expectError("MATCH (n:Person) WITH n, toString([[1], n.name][0]) AS l RETURN n.name",
-                "toString() has no conversion for the value this row holds");
+                "toString() has no conversion for 'List'");
 }
 
 TEST_F(UnreadConversionRaisesTest, returnsEveryRowPastAConversionToNull) {

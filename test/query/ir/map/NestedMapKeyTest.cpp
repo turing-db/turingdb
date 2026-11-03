@@ -84,11 +84,11 @@ TEST_F(NestedMapKeyTest, ordersByANestedKeyOfADistinctKey) {
 }
 
 TEST_F(NestedMapKeyTest, raisesOnAKeyOfAValueThatHoldsNone) {
-    expectError("WITH {d: 1} AS m RETURN m.d.e", "Type mismatch: property 'e' is read off a map");
-    expectError("WITH {d: [1]} AS m RETURN m.d.e", "Type mismatch: property 'e' is read off a map");
-    expectError("WITH {a: {b: 'x'}} AS m RETURN m.a.b.c", "Type mismatch: property 'c' is read off a map");
+    expectError("WITH {d: 1} AS m RETURN m.d.e", "Type mismatch: a value of type 'Integer' has no property 'e'");
+    expectError("WITH {d: [1]} AS m RETURN m.d.e", "Type mismatch: a value of type 'List' has no property 'e'");
+    expectError("WITH {a: {b: 'x'}} AS m RETURN m.a.b.c", "Type mismatch: a value of type 'String' has no property 'c'");
     expectError("WITH {d: datetime('2020-03-04T00:00:00Z')} AS m RETURN m.d.year.x",
-                "Type mismatch: property 'x' is read off a map");
+                "Type mismatch: a value of type 'Integer' has no property 'x'");
 }
 
 TEST_F(NestedMapKeyTest, raisesOnANameNoComponentOfANestedDatetimeHas) {

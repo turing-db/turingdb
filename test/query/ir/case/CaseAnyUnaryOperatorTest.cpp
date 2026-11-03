@@ -51,7 +51,7 @@ TEST_F(CaseAnyUnaryOperatorTest, filtersOnANegatedBoolean) {
 
 // NOT reads a boolean, as a WHERE does, and a number is not one
 TEST_F(CaseAnyUnaryOperatorTest, rejectsANumberUnderNot) {
-    runQueryExpectingError(query("'Remy'", "RETURN NOT v"), "operands must be booleans");
+    runQueryExpectingError(query("'Remy'", "RETURN NOT v"), "A logical operand must be a boolean, not 'Integer'");
 }
 
 TEST_F(CaseAnyUnaryOperatorTest, negatesANumberOrADuration) {

@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <string>
 #include <string_view>
 
 #include "WriteQueryTest.h"
@@ -9,42 +10,47 @@ using namespace turing::test;
 
 class IndexOrSliceANonListCellTest : public WriteQueryTest {
 protected:
-    void expectIndexError(std::string_view query) {
-        expectError(query, "A list index reads a list, and this row holds a value that is not one");
+    void expectIndexError(std::string_view query, std::string_view type) {
+        expectError(query,
+                    "Index operator [] can only be applied to a list, a map, a node or a relationship, not '" + std::string(type) + "'");
     }
 
-    void expectSliceError(std::string_view query) {
-        expectError(query, "A list slice or a percentile reads a list, and this row holds a value that is not one");
+    void expectKeyedError(std::string_view query, std::string_view base) {
+        expectError(query, "A " + std::string(base) + " is indexed by a string key, not by 'Integer'");
+    }
+
+    void expectSliceError(std::string_view query, std::string_view type) {
+        expectError(query, "A list slice or a percentile reads a list, not '" + std::string(type) + "'");
     }
 };
 
 TEST_F(IndexOrSliceANonListCellTest, indexesNoIntegerCell) {
-    expectIndexError("UNWIND [[1, 2], 3] AS v RETURN v[0]");
-    expectIndexError("UNWIND [[1, 2], 3] AS v RETURN v[-1]");
+    expectIndexError("UNWIND [[1, 2], 3] AS v RETURN v[0]", "Integer");
+    expectIndexError("UNWIND [[1, 2], 3] AS v RETURN v[-1]", "Integer");
 }
 
 TEST_F(IndexOrSliceANonListCellTest, indexesNoStringCell) {
-    expectIndexError("UNWIND [[1, 2], 'a'] AS v RETURN v[0]");
+    expectIndexError("UNWIND [[1, 2], 'a'] AS v RETURN v[0]", "String");
 }
 
 TEST_F(IndexOrSliceANonListCellTest, indexesNoMapCellByPosition) {
-    expectIndexError("UNWIND [[1, 2], {k: 1}] AS v RETURN v[0]");
+    expectKeyedError("UNWIND [[1, 2], {k: 1}] AS v RETURN v[0]", "map");
 }
 
 TEST_F(IndexOrSliceANonListCellTest, indexesNoNodeCell) {
-    expectIndexError("MATCH (n:Person {name: 'Remy'}) UNWIND [[1, 2], n] AS v RETURN v[0]");
+    expectKeyedError("MATCH (n:Person {name: 'Remy'}) UNWIND [[1, 2], n] AS v RETURN v[0]", "node");
 }
 
 TEST_F(IndexOrSliceANonListCellTest, indexesNoConstantCell) {
-    expectIndexError("RETURN [[1, 2], 3][1][0]");
+    expectIndexError("RETURN [[1, 2], 3][1][0]", "Integer");
 }
 
 TEST_F(IndexOrSliceANonListCellTest, indexesNoCellInAComprehension) {
-    expectIndexError("RETURN [x IN [[1, 2], 3] | x[0]]");
+    expectIndexError("RETURN [x IN [[1, 2], 3] | x[0]]", "Integer");
 }
 
 TEST_F(IndexOrSliceANonListCellTest, indexesNoCellNothingReads) {
-    expectIndexError("UNWIND [[1, 2], 3] AS v WITH v, v[0] AS e RETURN v");
+    expectIndexError("UNWIND [[1, 2], 3] AS v WITH v, v[0] AS e RETURN v", "Integer");
 }
 
 TEST_F(IndexOrSliceANonListCellTest, indexesTheListACellHolds) {
@@ -64,24 +70,24 @@ TEST_F(IndexOrSliceANonListCellTest, indexesNothingWhereNoRowReaches) {
 }
 
 TEST_F(IndexOrSliceANonListCellTest, slicesNoStringCell) {
-    expectSliceError("UNWIND [[1, 2], 'a'] AS l RETURN l[0..1]");
+    expectSliceError("UNWIND [[1, 2], 'a'] AS l RETURN l[0..1]", "String");
 }
 
 TEST_F(IndexOrSliceANonListCellTest, slicesNoIntegerCell) {
-    expectSliceError("UNWIND [[1, 2], 3] AS l RETURN l[1..]");
-    expectSliceError("UNWIND [[1, 2], 3] AS l RETURN l[..1]");
+    expectSliceError("UNWIND [[1, 2], 3] AS l RETURN l[1..]", "Integer");
+    expectSliceError("UNWIND [[1, 2], 3] AS l RETURN l[..1]", "Integer");
 }
 
 TEST_F(IndexOrSliceANonListCellTest, slicesNoMapCell) {
-    expectSliceError("UNWIND [[1, 2], {k: 1}] AS l RETURN l[0..1]");
+    expectSliceError("UNWIND [[1, 2], {k: 1}] AS l RETURN l[0..1]", "Map");
 }
 
 TEST_F(IndexOrSliceANonListCellTest, slicesNoConstantCell) {
-    expectSliceError("RETURN [[1, 2], 'a'][1][0..1]");
+    expectSliceError("RETURN [[1, 2], 'a'][1][0..1]", "String");
 }
 
 TEST_F(IndexOrSliceANonListCellTest, slicesNoCellNothingReads) {
-    expectSliceError("UNWIND [[1, 2], 'a'] AS l WITH l, l[0..1] AS s RETURN l");
+    expectSliceError("UNWIND [[1, 2], 'a'] AS l WITH l, l[0..1] AS s RETURN l", "String");
 }
 
 TEST_F(IndexOrSliceANonListCellTest, slicesTheListACellHolds) {

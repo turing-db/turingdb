@@ -63,7 +63,7 @@ TEST_F(ListPredicateOverAListPropertyTest, keepsTheElementsAComprehensionHolds) 
 TEST_F(ListPredicateOverAListPropertyTest, rejectsAnElementThatIsNotABoolean) {
     runWrite("MATCH (n:Person {name: 'Luc'}) SET n.flags = [true, 1]");
 
-    runQueryExpectingError("MATCH (n:Person {name: 'Luc'}) RETURN any(x IN n.flags WHERE x)", "not a boolean");
+    runQueryExpectingError("MATCH (n:Person {name: 'Luc'}) RETURN any(x IN n.flags WHERE x)", "A condition must be a boolean, not 'Integer'");
 }
 
 TEST_F(ListPredicateOverAListPropertyTest, testsAnElementForNull) {

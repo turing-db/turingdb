@@ -130,14 +130,14 @@ TEST_F(LiteralMapKeyTest, readsNullThroughANull) {
 }
 
 TEST_F(LiteralMapKeyTest, raisesOnAKeyOfAValueThatHoldsNone) {
-    expectError("WITH {d: 1} AS m RETURN m['d']['e']", "Type mismatch: key 'e' is read off a map, a node or a relationship");
-    expectError("WITH [1, 'x'] AS xs RETURN xs[0]['a']", "Type mismatch: key 'a' is read off a map, a node or a relationship");
-    expectError("UNWIND [{a: 1}, 'x'] AS m RETURN m['a']", "Type mismatch: key 'a' is read off a map, a node or a relationship");
+    expectError("WITH {d: 1} AS m RETURN m['d']['e']", "Index operator [] can only be applied to a list, a map, a node or a relationship, not 'Integer'");
+    expectError("WITH [1, 'x'] AS xs RETURN xs[0]['a']", "Index operator [] can only be applied to a list, a map, a node or a relationship, not 'Integer'");
+    expectError("UNWIND [{a: 1}, 'x'] AS m RETURN m['a']", "Index operator [] can only be applied to a list, a map, a node or a relationship, not 'String'");
 }
 
 TEST_F(LiteralMapKeyTest, raisesOnAKeyOfADatetimeACellHolds) {
     expectError("WITH {d: datetime('2020-03-04T00:00:00Z')} AS m RETURN m['d']['year']",
-                "Type mismatch: key 'year' is read off a map, a node or a relationship");
+                "Index operator [] can only be applied to a list, a map, a node or a relationship, not 'DateTime'");
     expectRows("WITH {d: datetime('2020-03-04T00:00:00Z')} AS m RETURN m['d'].year", {{"2020"}});
 }
 

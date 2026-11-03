@@ -11,23 +11,23 @@ class UnreadLogicalRaisesTest : public WriteQueryTest {
 };
 
 TEST_F(UnreadLogicalRaisesTest, aConjunctionOfCellsHoldingNoBoolean) {
-    expectError("UNWIND [1, 'a'] AS b WITH b, b AND (b = 1) AS z RETURN count(b)", "Logical operands must be booleans");
+    expectError("UNWIND [1, 'a'] AS b WITH b, b AND (b = 1) AS z RETURN count(b)", "A logical operand must be a boolean, not 'Integer'");
 }
 
 TEST_F(UnreadLogicalRaisesTest, aDisjunctionOfCellsHoldingNoBoolean) {
-    expectError("UNWIND [1, 'a'] AS b WITH b, b OR (b = 1) AS z RETURN count(b)", "Logical operands must be booleans");
+    expectError("UNWIND [1, 'a'] AS b WITH b, b OR (b = 1) AS z RETURN count(b)", "A logical operand must be a boolean, not 'Integer'");
 }
 
 TEST_F(UnreadLogicalRaisesTest, anExclusiveDisjunctionOfCellsHoldingNoBoolean) {
-    expectError("UNWIND [1, 'a'] AS b WITH b, b XOR (b = 1) AS z RETURN count(b)", "Logical operands must be booleans");
+    expectError("UNWIND [1, 'a'] AS b WITH b, b XOR (b = 1) AS z RETURN count(b)", "A logical operand must be a boolean, not 'Integer'");
 }
 
 TEST_F(UnreadLogicalRaisesTest, aNegationOfACellHoldingNoBoolean) {
-    expectError("UNWIND [1, 'a'] AS b WITH b, NOT b AS z RETURN count(b)", "Logical operands must be booleans");
+    expectError("UNWIND [1, 'a'] AS b WITH b, NOT b AS z RETURN count(b)", "A logical operand must be a boolean, not 'Integer'");
 }
 
 TEST_F(UnreadLogicalRaisesTest, aConjunctionReadAfter) {
-    expectError("UNWIND [1, 'a'] AS b WITH b, b AND (b = 1) AS z RETURN count(z)", "Logical operands must be booleans");
+    expectError("UNWIND [1, 'a'] AS b WITH b, b AND (b = 1) AS z RETURN count(z)", "A logical operand must be a boolean, not 'Integer'");
 }
 
 TEST_F(UnreadLogicalRaisesTest, returnsEveryRowPastAConjunctionOfBooleans) {

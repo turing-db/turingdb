@@ -9,6 +9,8 @@
 #include <string_view>
 #include <type_traits>
 
+#include <spdlog/fmt/bundled/format.h>
+
 #include "ColumnVector.h"
 #include "ValueText.h"
 #include "ColumnConst.h"
@@ -16,6 +18,8 @@
 #include "buffers/StringBuffer.h"
 #include "list/ListBuffer.h"
 #include "CellUtils.h"
+#include "IndexTypeError.h"
+#include "QueryTypeName.h"
 #include "metadata/DateTime.h"
 
 #include "BioAssert.h"
@@ -281,6 +285,21 @@ inline bool holdsNull(const T& value) {
         return !value.has_value() || holdsNull(*value);
     } else {
         return std::is_same_v<Decayed, PropertyNull>;
+    }
+}
+
+template <typename T>
+inline std::string_view operandTypeName(const T& value) {
+    using Decayed = std::decay_t<T>;
+
+    if constexpr (std::is_same_v<Decayed, CellView>) {
+        return queryTypeName(value.getTag());
+    } else if constexpr (TypeUtils::is_optional_v<Decayed>) {
+        return value.has_value() ? operandTypeName(*value) : queryTypeName(CellTag::Null);
+    } else if constexpr (std::is_same_v<Decayed, types::String::OwningPrimitive>) {
+        return queryTypeName(CellTag::String);
+    } else {
+        return queryTypeName(TypeToCellTag<Decayed>::Tag);
     }
 }
 
@@ -603,12 +622,12 @@ struct BinaryOp {
 
                 const std::optional<std::string_view> text = joinedText(_stringBuffer, a, b);
                 if (!text.has_value()) {
-                    throwAdditionTypeError();
+                    throwAdditionTypeError(a, b);
                 }
 
                 return stagedCell(_listBuffer, *text);
             } else if (!holdsAnArithmeticValue(a) || !holdsAnArithmeticValue(b)) {
-                throwAdditionTypeError();
+                throwAdditionTypeError(a, b);
             }
         }
 
@@ -616,8 +635,12 @@ struct BinaryOp {
             return visitArithmeticOperand(b, [this, lhs](const auto rhs) -> std::optional<CellView> {
                 if constexpr (requires { F {}(lhs, rhs); }) {
                     return stagedCell(this->_listBuffer, F {}(lhs, rhs));
+                } else if constexpr (std::is_same_v<F, std::plus<>>) {
+                    throwAdditionTypeError(lhs, rhs);
                 } else {
-                    throw TuringException("Operands are not valid and compatible types");
+                    throw TuringException(fmt::format("Operands are not valid and compatible numeric types: '{}' and '{}'",
+                                                      operandTypeName(lhs),
+                                                      operandTypeName(rhs)));
                 }
             });
         });
@@ -659,8 +682,11 @@ struct BinaryOp {
                                         joinedListOperand(_listBuffer, _stringBuffer, b));
     }
 
-    [[noreturn]] static void throwAdditionTypeError() {
-        throw TuringException("Operands are not valid and compatible types for '+'");
+    template <typename T, typename U>
+    [[noreturn]] static void throwAdditionTypeError(const T& a, const U& b) {
+        throw TuringException(fmt::format("Operands are not valid and compatible types for '+': '{}' and '{}'",
+                                          operandTypeName(a),
+                                          operandTypeName(b)));
     }
 };
 
@@ -798,7 +824,9 @@ struct Concatenate {
             }
         }
 
-        throw TuringException("Operands are not valid and compatible types for '||'");
+        throw TuringException(fmt::format("Operands are not valid and compatible types for '||': '{}' and '{}'",
+                                          operandTypeName(a),
+                                          operandTypeName(b)));
     }
 
     template <typename A, typename B>
@@ -838,7 +866,7 @@ struct ListIndexImpl {
             return std::nullopt;
         }
 
-        return operator()(indexedList(cell), index);
+        return operator()(indexedList(cell, CellTag::Int), index);
     }
 
     inline std::optional<CellView> operator()(ListView list, uint64_t index) const {
@@ -854,7 +882,7 @@ struct ListIndexImpl {
             return std::nullopt;
         }
 
-        return operator()(indexedList(cell), index);
+        return operator()(indexedList(cell, CellTag::UInt), index);
     }
 
     inline std::optional<CellView> operator()(ListView /*unused*/, PropertyNull /*unused*/) const {
@@ -885,16 +913,12 @@ struct ListIndexImpl {
         throw TuringException("Index operands the wrong way round.");
     }
 
-    static ListView indexedList(CellView cell) {
+    static ListView indexedList(CellView cell, CellTag index) {
         if (!holdsAList(cell)) {
-            throwNotAList();
+            throwIndexTypeError(cell.getTag(), index);
         }
 
         return operandList(cell);
-    }
-
-    [[noreturn]] static void throwNotAList() {
-        throw TuringException("A list index reads a list, and this row holds a value that is not one");
     }
 };
 

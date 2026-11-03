@@ -34,5 +34,5 @@ TEST_F(MapLiteralRuntimeKeyTest, readsNullByANullKey) {
 TEST_F(MapLiteralRuntimeKeyTest, readsAMapLiteralByAKeyACellHolds) {
     expectRows("WITH ['a', 0][0] AS k RETURN {a: 1}[k]", {{"1"}});
     expectError("WITH [0, 'a'][0] AS k RETURN {a: 1}[k]",
-                "A list index reads a list, and this row holds a value that is not one");
+                "A map is indexed by a string key, not by 'Integer'");
 }

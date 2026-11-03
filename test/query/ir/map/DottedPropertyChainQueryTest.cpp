@@ -32,8 +32,8 @@ TEST_F(DottedPropertyChainQueryTest, readsAComponentOfADatetimeAMapHolds) {
 }
 
 TEST_F(DottedPropertyChainQueryTest, raisesOnAKeyOfAScalarAMapHolds) {
-    expectError("WITH {a: 1} AS m RETURN m.a.x", "Type mismatch: property 'x' is read off a map");
-    expectError("WITH {s: 'abc'} AS m RETURN m.s.x", "Type mismatch: property 'x' is read off a map");
+    expectError("WITH {a: 1} AS m RETURN m.a.x", "Type mismatch: a value of type 'Integer' has no property 'x'");
+    expectError("WITH {s: 'abc'} AS m RETURN m.s.x", "Type mismatch: a value of type 'String' has no property 'x'");
 }
 
 TEST_F(DottedPropertyChainQueryTest, rejectsAKeyOfAComponent) {

@@ -56,9 +56,11 @@
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/AllowedKinds.h"
 #include "columns/Functions.h"
+#include "columns/IndexTypeError.h"
 #include "columns/UnaryPredicates.h"
 #include "CellOrder.h"
 #include "CellUtils.h"
+#include "QueryTypeName.h"
 #include "list/ListHash.h"
 #include "map/MapHash.h"
 #include "map/MapUtils.h"
@@ -1520,7 +1522,9 @@ void collectNoSurvivors(const Column*, ColumnVector<size_t>*) {
 
 // The truth value a type-erased cell holds: its boolean, or null where it holds a null
 std::optional<bool> cellTruth(CellView cell) {
-    switch (cell.getTag()) {
+    const CellTag tag = cell.getTag();
+
+    switch (tag) {
         case CellTag::Bool:
             return static_cast<bool>(cell.getAs<types::Bool::Primitive>());
         break;
@@ -1530,7 +1534,7 @@ std::optional<bool> cellTruth(CellView cell) {
         break;
 
         default:
-            throw IRException("A condition reads a value that is not a boolean");
+            throw IRException(fmt::format("A condition must be a boolean, not '{}'", queryTypeName(tag)));
         break;
     }
 }
@@ -2052,7 +2056,7 @@ ID checkedEntity(const CellView cell) {
     }
 
     constexpr std::string_view ENTITY = std::is_same_v<ID, NodeID> ? "a node" : "a relationship";
-    throw IRException(fmt::format("A pattern reads {}, and this row holds a value that is not one", ENTITY));
+    throw IRException(fmt::format("A pattern reads {}, not '{}'", ENTITY, queryTypeName(tag)));
 }
 
 template <typename ID>
@@ -2309,7 +2313,7 @@ std::optional<PathView> taggedPath(const CellView cell) {
         return std::nullopt;
     }
 
-    throw IRException("nodes(), relationships() and length() read a path, and this row holds a value that is not one");
+    throw IRException(fmt::format("nodes(), relationships() and length() read a path, not '{}'", queryTypeName(tag)));
 }
 
 std::optional<PathView> taggedColumnPath(const Column* paths, size_t row) {
@@ -3584,7 +3588,9 @@ void aggregateUpdateMinMax(NLAggregateState* state, const Column* input) {
 // a type-erased column is defined over numbers only, so any other tag is a query error -
 // the check the static column types make for a typed column, made per row here.
 double taggedNumericValue(const CellView element) {
-    switch (element.getTag()) {
+    const CellTag tag = element.getTag();
+
+    switch (tag) {
         case CellTag::Int:
             return static_cast<double>(element.getAs<types::Int64::Primitive>());
         break;
@@ -3598,7 +3604,7 @@ double taggedNumericValue(const CellView element) {
         break;
 
         default:
-            throw IRException("sum/avg/stdev over type-erased cells requires a numeric column");
+            throw IRException(fmt::format("sum(), avg() and stdev() read numbers, not '{}'", queryTypeName(tag)));
         break;
     }
 }
@@ -5326,7 +5332,9 @@ NLKeyedValue mapRead(const Column* input, size_t row) {
 }
 
 NLKeyedValue readKeyedCell(const CellView cell) {
-    switch (cell.getTag()) {
+    const CellTag tag = cell.getTag();
+
+    switch (tag) {
         case CellTag::MapView:
             return cell.getAs<MapView>();
         break;
@@ -5353,7 +5361,7 @@ NLKeyedValue readKeyedCell(const CellView cell) {
         case CellTag::Embedding:
         case CellTag::ListView:
         case CellTag::Path:
-            return NLKeylessValue {};
+            return NLKeylessValue {tag};
         break;
         case CellTag::INVALID:
             throw IRException("a map key read reads an untagged cell");
@@ -5376,6 +5384,21 @@ NLKeyedValue readKeyedCell(const std::optional<CellView>& cell) {
 template <typename ColumnT>
 NLKeyedValue readTaggedKeyed(const Column* input, size_t row) {
     return readKeyedCell((*static_cast<const ColumnT*>(input))[row]);
+}
+
+template <typename Held>
+CellTag heldTag(const Held& held) {
+    const auto tagOf = []<typename Value>(const Value& value) {
+        if constexpr (std::is_same_v<Value, std::monostate>) {
+            return CellTag::Null;
+        } else if constexpr (std::is_same_v<Value, NLKeylessValue> || std::is_same_v<Value, NLNeitherPositionNorKey>) {
+            return value._tag;
+        } else {
+            return TypeToCellTag<Value>::Tag;
+        }
+    };
+
+    return std::visit(tagOf, held);
 }
 
 // The entry @param keyed holds under @param key: the one its map holds, or its node's or
@@ -5401,9 +5424,7 @@ bool findKeyedEntry(const NLKeyedValue& keyed,
             return false;
         }
     } else {
-        throw IRException(fmt::format("Type mismatch: key '{}' is read off a map, a node or a relationship, "
-                                      "and this row holds none of them",
-                                      key));
+        throwIndexTypeError(heldTag(keyed), CellTag::String);
     }
 
     entry = mapBuffer.insert(std::span<const MapBuffer<>::MapKeyValuePair> {&property, 1}).front();
@@ -5444,9 +5465,9 @@ CellView readStaticKey(const NLKeyedValue& keyed,
         return componentCell(*instant, mapKey->getDateTimePart(), key, "datetime", mapBuffer);
     } else if (const Duration* duration = std::get_if<Duration>(&keyed)) {
         return componentCell(*duration, mapKey->getDurationPart(), key, "duration", mapBuffer);
-    } else if (std::holds_alternative<NLKeylessValue>(keyed)) {
-        throw IRException(fmt::format("Type mismatch: property '{}' is read off a map, a node, a relationship, "
-                                      "a datetime or a duration, and this row holds none of them",
+    } else if (const NLKeylessValue* keyless = std::get_if<NLKeylessValue>(&keyed)) {
+        throw IRException(fmt::format("Type mismatch: a value of type '{}' has no property '{}'",
+                                      queryTypeName(keyless->_tag),
                                       key));
     }
 
@@ -5517,7 +5538,7 @@ std::optional<ListView> cellListRead(const CellView cell) {
         return operandList(cell);
     }
 
-    throw IRException("A list slice or a percentile reads a list, and this row holds a value that is not one");
+    throw IRException(fmt::format("A list slice or a percentile reads a list, not '{}'", queryTypeName(cell.getTag())));
 }
 
 std::optional<ListView> taggedListRead(const Column* input, size_t row) {
@@ -5557,7 +5578,7 @@ NLContainer listContainer(const Column* input, size_t row) {
         return NLContainer {};
     }
 
-    return NLContainer {._list = list, ._keyed = NLKeylessValue {}};
+    return NLContainer {._list = list, ._keyed = NLKeylessValue {CellTag::ListView}};
 }
 
 template <typename ColumnT>
@@ -5572,11 +5593,13 @@ NLContainer cellContainer(const Column* input, size_t row) {
         return NLContainer {._keyed = readKeyedCell(cell)};
     }
 
-    return NLContainer {._list = operandList(cell), ._keyed = NLKeylessValue {}};
+    return NLContainer {._list = operandList(cell), ._keyed = NLKeylessValue {CellTag::ListView}};
 }
 
 NLSubscript subscriptOf(const CellView cell) {
-    switch (cell.getTag()) {
+    const CellTag tag = cell.getTag();
+
+    switch (tag) {
         case CellTag::Int:
             return cell.getAs<types::Int64::Primitive>();
         break;
@@ -5599,7 +5622,7 @@ NLSubscript subscriptOf(const CellView cell) {
         case CellTag::MapView:
         case CellTag::Duration:
         case CellTag::Path:
-            return NLNeitherPositionNorKey {};
+            return NLNeitherPositionNorKey {tag};
         break;
         case CellTag::INVALID:
             throw IRException("an index reads an untagged cell");
@@ -5643,6 +5666,8 @@ std::optional<CellView> readContainerElement(const NLContainer& container,
                                              MapBuffer<>& mapBuffer) {
     const bool readsANull = std::holds_alternative<std::monostate>(subscript)
                          || std::holds_alternative<std::monostate>(container._keyed);
+    const bool readsAPositionOfAList = container._list.has_value()
+                                    && !std::holds_alternative<NLNeitherPositionNorKey>(subscript);
 
     if (readsANull) {
         return std::nullopt;
@@ -5653,10 +5678,8 @@ std::optional<CellView> readContainerElement(const NLContainer& container,
         }
 
         return entry.getValue();
-    } else if (std::holds_alternative<NLNeitherPositionNorKey>(subscript)) {
-        throw IRException("An index is an integer position or a string key, and this row holds a value that is neither");
-    } else if (!container._list) {
-        ListIndexImpl::throwNotAList();
+    } else if (!readsAPositionOfAList) {
+        throwIndexTypeError(heldTag(container._keyed), heldTag(subscript));
     } else if (const types::Int64::Primitive* position = std::get_if<types::Int64::Primitive>(&subscript)) {
         return ListIndexImpl {}(*container._list, *position);
     }
@@ -5694,7 +5717,7 @@ std::optional<types::Int64::Primitive> cellBound(const std::optional<CellView>& 
         return cellInteger(*cell);
     }
 
-    throw IRException("A range or a list slice reads an integer bound, and this row holds a value that is not one");
+    throw IRException(fmt::format("A range or a list slice reads an integer bound, not '{}'", queryTypeName(cell->getTag())));
 }
 
 template <typename ColumnT>
@@ -5731,7 +5754,7 @@ void sortListNumbers(const ListView list, std::vector<CellView>& numbers, std::s
         if (tag == CellTag::Null) {
             continue;
         } else if (!isNumber) {
-            throw IRException(fmt::format("{}() takes the percentile of numbers only", functionName));
+            throw IRException(fmt::format("{}() takes the percentile of numbers, not '{}'", functionName, queryTypeName(tag)));
         }
 
         numbers.push_back(element);

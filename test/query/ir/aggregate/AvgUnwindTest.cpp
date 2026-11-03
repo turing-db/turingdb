@@ -189,7 +189,7 @@ TEST_F(AvgUnwindTest, averagesAnEmptyListToNull) {
 
 // A string is no number, so averaging one is an error rather than a cell the fold skips.
 TEST_F(AvgUnwindTest, rejectsAveragingANonNumericElement) {
-    expectError("UNWIND [1, 'two'] AS x RETURN avg(x)", "numeric");
+    expectError("UNWIND [1, 'two'] AS x RETURN avg(x)", "sum(), avg() and stdev() read numbers, not 'String'");
 }
 
 // avg(DISTINCT x) over tagged cells keys them by value: the repeated element is charged

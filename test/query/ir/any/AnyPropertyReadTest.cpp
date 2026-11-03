@@ -2,6 +2,7 @@
 
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "WriteQueryTest.h"
 
@@ -10,12 +11,13 @@ using namespace turing::test;
 
 class AnyPropertyReadTest : public WriteQueryTest {
 protected:
-    void expectPropertyError(std::string_view query, std::string_view key) {
-        expectError(query, "Type mismatch: property '" + std::string(key) + "' is read off a map");
+    void expectPropertyError(std::string_view query, std::string_view type, std::string_view key) {
+        expectError(query, "Type mismatch: a value of type '" + std::string(type) + "' has no property '" + std::string(key) + "'");
     }
 
-    void expectKeyError(std::string_view query, std::string_view key) {
-        expectError(query, "Type mismatch: key '" + std::string(key) + "' is read off a map");
+    void expectKeyError(std::string_view query, std::string_view type) {
+        expectError(query,
+                    "Index operator [] can only be applied to a list, a map, a node or a relationship, not '" + std::string(type) + "'");
     }
 };
 
@@ -49,12 +51,14 @@ TEST_F(AnyPropertyReadTest, readsNullOffANullCell) {
 }
 
 TEST_F(AnyPropertyReadTest, raisesOnAnIntegerCell) {
-    expectPropertyError("UNWIND [{a: 1}, 2] AS x RETURN x.a", "a");
+    expectPropertyError("UNWIND [{a: 1}, 2] AS x RETURN x.a", "Integer", "a");
 }
 
 TEST_F(AnyPropertyReadTest, raisesOnEveryCellWithNoProperty) {
-    for (const std::string value : {"2.5", "true", "'b'", "[1]"}) {
-        expectPropertyError("UNWIND [{a: 1}, " + value + "] AS x RETURN x.a", "a");
+    const std::pair<std::string_view, std::string_view> cells[] {{"2.5", "Double"}, {"true", "Bool"}, {"'b'", "String"}, {"[1]", "List"}};
+
+    for (const auto& [value, type] : cells) {
+        expectPropertyError("UNWIND [{a: 1}, " + std::string(value) + "] AS x RETURN x.a", type, "a");
     }
 }
 
@@ -69,11 +73,11 @@ TEST_F(AnyPropertyReadTest, raisesOnANameNoComponentOfADurationHas) {
 }
 
 TEST_F(AnyPropertyReadTest, raisesOnACellNothingReadsTheProperty) {
-    expectPropertyError("UNWIND [{a: 1}, 2] AS x WITH x, x.a AS l RETURN x", "a");
+    expectPropertyError("UNWIND [{a: 1}, 2] AS x WITH x, x.a AS l RETURN x", "Integer", "a");
 }
 
 TEST_F(AnyPropertyReadTest, raisesOnAConstantCell) {
-    expectPropertyError("RETURN [{a: 1}, 2][1].a", "a");
+    expectPropertyError("RETURN [{a: 1}, 2][1].a", "Integer", "a");
 }
 
 TEST_F(AnyPropertyReadTest, readsNothingWhereNoRowReaches) {
@@ -85,7 +89,7 @@ TEST_F(AnyPropertyReadTest, readsOnlyTheRowsACaseTakes) {
 }
 
 TEST_F(AnyPropertyReadTest, raisesOnAProjectionOfAnIntegerCell) {
-    expectPropertyError("UNWIND [{a: 1}, 2] AS x RETURN x {.a}", "a");
+    expectPropertyError("UNWIND [{a: 1}, 2] AS x RETURN x {.a}", "Integer", "a");
 }
 
 TEST_F(AnyPropertyReadTest, readsNullOffANullCellByAKeyComputedPerRow) {
@@ -98,13 +102,13 @@ TEST_F(AnyPropertyReadTest, readsAPropertyOfANodeByAKeyComputedPerRow) {
 }
 
 TEST_F(AnyPropertyReadTest, raisesOnAnIntegerCellByAKeyComputedPerRow) {
-    expectKeyError("WITH 'a' AS k UNWIND [{a: 1}, 2] AS x RETURN x[k]", "a");
+    expectKeyError("WITH 'a' AS k UNWIND [{a: 1}, 2] AS x RETURN x[k]", "Integer");
 }
 
 TEST_F(AnyPropertyReadTest, raisesOnAListCellByAKeyComputedPerRow) {
-    expectKeyError("WITH 'a' AS k UNWIND [{a: 1}, [1]] AS x RETURN x[k]", "a");
+    expectError("WITH 'a' AS k UNWIND [{a: 1}, [1]] AS x RETURN x[k]", "A list index expression must be an integer, not 'String'");
 }
 
 TEST_F(AnyPropertyReadTest, raisesOnADatetimeCellByAKeyComputedPerRow) {
-    expectKeyError("WITH 'year' AS k, {d: datetime('2020-03-04T00:00:00Z')} AS m WITH k, m.d AS d RETURN d[k]", "year");
+    expectKeyError("WITH 'year' AS k, {d: datetime('2020-03-04T00:00:00Z')} AS m WITH k, m.d AS d RETURN d[k]", "DateTime");
 }

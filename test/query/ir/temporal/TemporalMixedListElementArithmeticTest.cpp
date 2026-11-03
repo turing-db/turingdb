@@ -28,5 +28,5 @@ TEST_F(TemporalMixedListElementArithmeticTest, subtractsAnInstantFromEachUnwound
 
 TEST_F(TemporalMixedListElementArithmeticTest, rejectsAnInstantSubtractedFromAnInteger) {
     expectError("UNWIND [datetime('2024-01-02T00:00:00Z'), 1] AS t RETURN t - datetime('2024-01-01T00:00:00Z')",
-                "Operands are not valid and compatible types");
+                "Operands are not valid and compatible numeric types: 'Integer' and 'DateTime'");
 }
