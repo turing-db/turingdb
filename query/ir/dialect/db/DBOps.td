@@ -3442,6 +3442,25 @@ def ListIndex : BinaryOp<"list_index", [Pure]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
+def IndexOf : BinaryOp<"index_of", [Pure]> {
+  let summary = "Row-wise position of the first element of a list equal to a value";
+
+  let description = [{
+    `coll.indexOf(['a', 'b'], 'b')`
+
+      %i = db.index_of %xs, %x : (!db.column<none>, !db.column<!storage.string>) -> !db.column<none>
+
+    Row r of the result is the 0-based position of the first element of row r's list equal
+    to row r's value, and -1 where no element is. It is null where the list or the value is
+    null. A null element matches nothing, where db.in answers null over it.
+  }];
+
+  let arguments = (ins Column:$list, Column:$value);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = "$list `,` $value attr-dict `:` functional-type(operands, results)";
+}
+
 def DynamicMapKey : BinaryOp<"dynamic_map_key", [Pure]> {
   let summary = "Row-wise read of one value of a map column, by a key computed per row";
 

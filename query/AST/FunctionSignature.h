@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <string>
 #include <string_view>
 
 #include "decl/EvaluatedType.h"
@@ -125,7 +126,7 @@ public:
     void setReturnedListShape(const ListShape& shape) { _returnedListShape = shape; }
 
 private:
-    std::string_view _fullName;
+    std::string _fullName;
     ArgumentTypes _argumentTypes;
     std::vector<FunctionReturnType> _returnTypes;
     ListShape _returnedListShape;

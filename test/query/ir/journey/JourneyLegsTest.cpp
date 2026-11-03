@@ -199,9 +199,7 @@ TEST_F(JourneyLegsTest, DISABLED_readsTheWindowFromParameters) {
                });
 }
 
-// Disabled: coll.indexOf does not exist. The coll.* functions need the function namespaces
-// TUR-298 asks for.
-TEST_F(JourneyLegsTest, DISABLED_slicesTheInterchangesAtCollIndexOf) {
+TEST_F(JourneyLegsTest, slicesTheInterchangesAtCollIndexOf) {
     std::string query;
     findLegsFromOxford(query, "['DID', 'RDG', 'PAD']", 470, 500);
     query += "RETURN firstStop.service, interchanges[coll.indexOf(interchanges, inter.crs)+1..]";

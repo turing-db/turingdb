@@ -44,13 +44,11 @@ protected:
         "ELSE depart_before >= firstStop.depart >= depart_from "
         "END ";
 
-    // The columns the customer returns for a leg, with its service and stop named. The
-    // interchanges left are sliced past a reduce, which stands in for coll.indexOf
+    // The columns the customer returns for a leg, with its service and stop named
     static constexpr std::string_view LEG_ROW =
         "firstStop.service AS service, "
         "inter.crs AS stop, "
-        "interchanges[reduce(found = -1, i IN range(0, size(interchanges) - 1) | "
-        "CASE WHEN found = -1 AND interchanges[i] = inter.crs THEN i ELSE found END) + 1..] AS interchanges, "
+        "interchanges[coll.indexOf(interchanges, inter.crs) + 1..] AS interchanges, "
         "lastStop.nlc AS nlc, "
         "firstStop.depart AS departure, "
         "coalesce(lastStop.arrive, depart_from) AS arrival, "

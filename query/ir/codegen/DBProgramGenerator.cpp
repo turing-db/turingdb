@@ -564,6 +564,7 @@ mlir::Value emitBinaryFunction(mlir::OpBuilder& builder,
 const std::unordered_map<std::string_view, BinaryFunctionEmitter> binaryFunctionEmitters = {
     {"cosine_similarity", &emitBinaryFunction<mlir::db::CosineSimilarity>},
     {"euclidean_distance", &emitBinaryFunction<mlir::db::EuclideanDistance>},
+    {"coll.indexOf", &emitBinaryFunction<mlir::db::IndexOf>},
 };
 
 // The list a literal UNWIND spreads, null for the one literal that is no list and still

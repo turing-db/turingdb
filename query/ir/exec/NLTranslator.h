@@ -1066,6 +1066,9 @@ private:
     template <ColumnOperator Op, typename OpType>
     void translateBinaryOp(OpType op, NLStmtContainer* body);
 
+    // A list is searched for a boolean held in a value column, never in a mask
+    const Column* searchedValueColumn(const Column* column, NLStmtContainer* body);
+
     // Binds the index kernel an nl.list_index runs, chosen by what its result holds: a
     // value of the type its list names, or the tagged cell a mixed list holds
     void translateListIndex(mlir::nl::ListIndex index, NLStmtContainer* body);

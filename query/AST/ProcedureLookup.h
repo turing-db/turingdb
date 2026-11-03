@@ -1,7 +1,6 @@
 #pragma once
 
 #include <memory>
-#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -10,6 +9,7 @@
 namespace db {
 
 class FunctionSignature;
+class Procedure;
 class ProcedureManager;
 
 class ProcedureLookup : public FunctionResolver {
@@ -22,12 +22,12 @@ public:
     ProcedureLookup& operator=(const ProcedureLookup&) = delete;
     ProcedureLookup& operator=(ProcedureLookup&&) = delete;
 
-    FunctionSignatureRange lookup(std::string_view fullName) const override;
+    FunctionSignatureRange lookup(const QualifiedName* name) const override;
 
 private:
     const ProcedureManager* _manager {nullptr};
     mutable std::vector<std::unique_ptr<FunctionSignature>> _cacheOwned;
-    mutable std::unordered_map<std::string_view, FunctionSignature*> _cacheMap;
+    mutable std::unordered_map<const Procedure*, FunctionSignature*> _cacheMap;
 };
 
 }

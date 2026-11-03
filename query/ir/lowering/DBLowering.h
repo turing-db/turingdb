@@ -647,6 +647,7 @@ private:
         Concat,    // concat: string or list (determined at lowering)
         Index,     // index: a nullable tagged scalar, whatever the list holds
         Membership, // in: a nullable i1, since a list element can be null
+        Position,   // index_of: a nullable i64, null where the list or the value is
     };
 
     template <typename NLOp>

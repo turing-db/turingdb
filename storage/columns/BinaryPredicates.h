@@ -4,6 +4,7 @@
 #include <concepts>
 #include <functional>
 #include <optional>
+#include <span>
 #include <type_traits>
 #include <utility>
 
@@ -946,6 +947,73 @@ struct StringContains {
     }
 };
 
+// The first element of a list equal to a value, and whether an element before it compared
+// as unknown: a null, or a list or map holding one. The value is never null.
+struct ListElementMatch {
+    std::optional<size_t> _position;
+    bool _unknown {false};
+};
+
+template <typename Scalar>
+inline ListElementMatch findListElement(const ListView elements, const Scalar& scalar) {
+    if constexpr (std::is_same_v<Scalar, CellView>) {
+        const std::optional<ListView> scalarList = taggedList(scalar);
+        if (scalarList) {
+            return findListElement(elements, *scalarList);
+        }
+
+        const std::optional<MapView> scalarMap = heldMap(scalar);
+        if (scalarMap) {
+            return findListElement(elements, *scalarMap);
+        }
+    }
+
+    ListElementMatch match;
+    const std::span<const CellView> cells = elements.elements();
+
+    for (size_t position = 0; position < cells.size(); position++) {
+        const CellView element = cells[position];
+
+        if (element.getTag() == CellTag::Null) {
+            match._unknown = true;
+            continue;
+        }
+
+        bool equal = false;
+
+        if constexpr (std::is_same_v<Scalar, ListView> || std::is_same_v<Scalar, MapView>) {
+            std::optional<Scalar> elementValue;
+            if constexpr (std::is_same_v<Scalar, ListView>) {
+                elementValue = heldList(element);
+            } else {
+                elementValue = heldMap(element);
+            }
+
+            if (!elementValue) {
+                continue;
+            }
+
+            const std::optional<CustomBool> containersEqual = TuringEqual {}(*elementValue, scalar);
+            if (!containersEqual) {
+                match._unknown = true;
+            } else {
+                equal = containersEqual->_boolean;
+            }
+        } else if constexpr (TypedInternalID<Scalar>) {
+            equal = cellIsID(element, scalar);
+        } else {
+            equal = element == scalar;
+        }
+
+        if (equal) {
+            match._position = position;
+            return match;
+        }
+    }
+
+    return match;
+}
+
 /// IN [ ... ]
 struct TuringIn {
     template <typename L>
@@ -991,73 +1059,19 @@ struct TuringIn {
             return CustomBool {false};
         }
 
-        if constexpr (TypeUtils::is_optional_v<T>) {
-            if (!value.has_value()) {
-                return std::nullopt;
-            }
-        }
-
-        using Scalar = TypeUtils::unwrap_optional_t<T>;
-        const Scalar& scalar = TypeUtils::unwrap(value);
-
-        if constexpr (std::is_same_v<Scalar, CellView>) {
-            if (scalar.getTag() == CellTag::Null) {
-                return std::nullopt;
-            }
-
-            const std::optional<ListView> scalarList = taggedList(scalar);
-            if (scalarList) {
-                return (*this)(*scalarList, elements);
-            }
-
-            const std::optional<MapView> scalarMap = heldMap(scalar);
-            if (scalarMap) {
-                return (*this)(*scalarMap, elements);
-            }
-        } else if (!holdsAValue(scalar)) {
+        if (!holdsAValue(value)) {
             return std::nullopt;
         }
 
-        bool unknown = false;
+        const ListElementMatch match = findListElement(elements, TypeUtils::unwrap(value));
 
-        for (const CellView element : elements) {
-            if (element.getTag() == CellTag::Null) {
-                unknown = true;
-                continue;
-            }
-
-            if constexpr (std::is_same_v<Scalar, ListView> || std::is_same_v<Scalar, MapView>) {
-                std::optional<Scalar> elementValue;
-                if constexpr (std::is_same_v<Scalar, ListView>) {
-                    elementValue = heldList(element);
-                } else {
-                    elementValue = heldMap(element);
-                }
-
-                if (!elementValue) {
-                    continue;
-                }
-
-                const std::optional<CustomBool> equal = TuringEqual {}(*elementValue, scalar);
-                if (!equal) {
-                    unknown = true;
-                } else if (equal->_boolean) {
-                    return CustomBool {true};
-                }
-            } else if constexpr (TypedInternalID<Scalar>) {
-                if (cellIsID(element, scalar)) {
-                    return CustomBool {true};
-                }
-            } else if (element == scalar) {
-                return CustomBool {true};
-            }
-        }
-
-        if (unknown) {
+        if (match._position) {
+            return CustomBool {true};
+        } else if (match._unknown) {
             return std::nullopt;
+        } else {
+            return CustomBool {false};
         }
-
-        return CustomBool {false};
     }
 
     // Unused but needed to satisfy symmetry of dispatcher
@@ -1072,6 +1086,62 @@ struct TuringIn {
         requires TaggedListOperand<C> && (!TaggedListOperand<T>) && (!ListOperand<T>)
     std::optional<CustomBool> operator()(const C& cell, const T& value) const {
         throw FatalException("IN operands in incorrect order");
+    }
+};
+
+/// coll.indexOf(list, value). A null element matches nothing and is skipped, where IN
+/// answers null over it.
+struct TuringIndexOf {
+    template <typename L>
+        requires ListOperand<L> || TaggedListOperand<L>
+    std::optional<types::Int64::Primitive> operator()(const L& list, const PropertyNull& null) const {
+        return std::nullopt;
+    }
+
+    template <typename L, typename T>
+        requires ListOperand<L>
+    std::optional<types::Int64::Primitive> operator()(const L& list, const T& value) const {
+        if constexpr (TypeUtils::is_optional_v<L>) {
+            if (!list.has_value()) {
+                return std::nullopt;
+            }
+        }
+
+        if (!holdsAValue(value)) {
+            return std::nullopt;
+        }
+
+        const ListElementMatch match = findListElement(TypeUtils::unwrap(list), TypeUtils::unwrap(value));
+        if (!match._position) {
+            return -1;
+        }
+
+        return static_cast<types::Int64::Primitive>(*match._position);
+    }
+
+    // The list a type-erased cell holds is the list the value is looked for in
+    template <typename C, typename T>
+        requires TaggedListOperand<C>
+    std::optional<types::Int64::Primitive> operator()(const C& cell, const T& value) const {
+        const std::optional<ListView> list = taggedList(cell);
+        if (!list) {
+            return std::nullopt;
+        }
+
+        return (*this)(*list, value);
+    }
+
+    // Unused but needed to satisfy symmetry of dispatcher
+    template <typename T, typename L>
+        requires ListOperand<L> && (!ListOperand<T>) && (!TaggedListOperand<T>)
+    std::optional<types::Int64::Primitive> operator()(const T& value, const L& list) const {
+        throw FatalException("coll.indexOf operands in incorrect order");
+    }
+
+    template <typename T, typename C>
+        requires TaggedListOperand<C> && (!TaggedListOperand<T>) && (!ListOperand<T>)
+    std::optional<types::Int64::Primitive> operator()(const T& value, const C& cell) const {
+        throw FatalException("coll.indexOf operands in incorrect order");
     }
 };
 
@@ -1095,5 +1165,6 @@ using EndsWith = BinaryPredicate<StringPredicate<StringEndsWith>>;
 using Contains = BinaryPredicate<StringPredicate<StringContains>>;
 
 using In = BinaryPredicate<TuringIn>;
+using IndexOf = TuringIndexOf;
 
 }

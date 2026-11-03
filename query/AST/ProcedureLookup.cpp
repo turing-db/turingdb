@@ -1,8 +1,11 @@
 #include "ProcedureLookup.h"
 
 #include "ProcedureManager.h"
+#include "ProcedureNamespace.h"
 #include "Procedure.h"
 #include "FunctionSignature.h"
+#include "QualifiedName.h"
+#include "Symbol.h"
 
 using namespace db;
 
@@ -74,22 +77,27 @@ ProcedureLookup::ProcedureLookup(const ProcedureManager* manager)
 ProcedureLookup::~ProcedureLookup() {
 }
 
-FunctionResolver::FunctionSignatureRange ProcedureLookup::lookup(std::string_view fullName) const {
-    const auto it = _cacheMap.find(fullName);
-    if (it != _cacheMap.end()) {
-        return FunctionSignatureRange(&it->second, &it->second + 1);
+FunctionResolver::FunctionSignatureRange ProcedureLookup::lookup(const QualifiedName* name) const {
+    if (name->size() != 2) {
+        return FunctionSignatureRange();
     }
 
-    const Procedure* proc = _manager->getProcedure(fullName);
+    const ProcedureNamespace* procedureNamespace = _manager->getNamespace(name->front()->getName());
+    if (!procedureNamespace) {
+        return FunctionSignatureRange();
+    }
+
+    const Procedure* proc = procedureNamespace->getProcedure(name->back()->getName());
     if (!proc) {
         return FunctionSignatureRange();
     }
 
-    // Use the Procedure's stable std::string as the backing
-    // memory for both the FunctionSignature name and cache key.
-    const std::string_view stableName = proc->getFullName();
+    const auto it = _cacheMap.find(proc);
+    if (it != _cacheMap.end()) {
+        return FunctionSignatureRange(&it->second, &it->second + 1);
+    }
 
-    auto sig = std::make_unique<FunctionSignature>(stableName);
+    auto sig = std::make_unique<FunctionSignature>(proc->getFullName());
     sig->setIsProcedure(true);
 
     // Convert argument types
@@ -119,6 +127,6 @@ FunctionResolver::FunctionSignatureRange ProcedureLookup::lookup(std::string_vie
     FunctionSignature* ptr = sig.get();
     _cacheOwned.push_back(std::move(sig));
 
-    const auto [inserted, ok] = _cacheMap.emplace(stableName, ptr);
+    const auto [inserted, ok] = _cacheMap.emplace(proc, ptr);
     return FunctionSignatureRange(&inserted->second, &inserted->second + 1);
 }
