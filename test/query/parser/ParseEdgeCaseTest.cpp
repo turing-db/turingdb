@@ -80,6 +80,32 @@ TEST_F(ParseEdgeCaseTest, parsesScripts) {
                 "     1 | RETURN 1 +\n"
                 "       |          ^\n"
                 "-------* syntax error, unexpected PROG_END");
+
+    expectParse("RETURN 1; RETURN 2; RETURN 3",
+                {query({}, returning({integer(1)})),
+                 query({}, returning({integer(2)})),
+                 query({}, returning({integer(3)}))});
+
+    expectParse("CREATE (n:A); MATCH (n:A) RETURN n",
+                {query({createStmt(pattern({path({node({._symbol = "n", ._labels = labels({"A"})})})}))}),
+                 query({match({._pattern = pattern({path({node({._symbol = "n", ._labels = labels({"A"})})})})})},
+                       returning({symbol("n")}))});
+
+    expectParse("LOAD GRAPH g; MATCH (n) RETURN n",
+                {LoadGraphQuery::create(getExpectedAST(), "g"),
+                 query({match({._pattern = pattern({path({node({._symbol = "n"})})})})}, returning({symbol("n")}))});
+
+    expectParse("RETURN 1;\nRETURN 2", {query({}, returning({integer(1)})), query({}, returning({integer(2)}))});
+
+    expectParse("RETURN 1; /* c */ RETURN 2;", {query({}, returning({integer(1)})), query({}, returning({integer(2)}))});
+
+    getExpectedAST()->explainRequest().requestDefaults();
+    expectParse("EXPLAIN RETURN 1; RETURN 2", {query({}, returning({integer(1)})), query({}, returning({integer(2)}))});
+
+    expectError("RETURN 1; RETURN 2 +",
+                "     1 | RETURN 1; RETURN 2 +\n"
+                "       |                    ^\n"
+                "-------* syntax error, unexpected PROG_END");
 }
 
 TEST_F(ParseEdgeCaseTest, parsesAdministrativeQueries) {
@@ -626,6 +652,63 @@ TEST_F(ParseEdgeCaseTest, parsesUnionsNextChainsAndConditionalQueries) {
                 "     1 | RETURN 1 UNION 5\n"
                 "       |                ^\n"
                 "-------* syntax error, unexpected DIGIT");
+}
+
+TEST_F(ParseEdgeCaseTest, parsesMultiPartQueries) {
+    expectParse("MATCH (a) WITH a MATCH (a)-->(b) WITH a, b WHERE b.x > 1 RETURN a, b",
+                {query({match({._pattern = pattern({path({node({._symbol = "a"})})})}),
+                        with({._projection = projection({._items = {symbol("a")}})}),
+                        match({._pattern = pattern({path({node({._symbol = "a"}),
+                                                          edge({._direction = EdgePattern::Direction::Forward}),
+                                                          node({._symbol = "b"})})})}),
+                        with({._projection = projection({._items = {symbol("a"), symbol("b")}}),
+                              ._where = where(binary(BinaryOperator::GreaterThan, property({"b", "x"}), integer(1)))})},
+                       returning({symbol("a"), symbol("b")}))});
+
+    expectParse("MATCH (a) MATCH (b) OPTIONAL MATCH (a)-->(c) RETURN a, b, c",
+                {query({match({._pattern = pattern({path({node({._symbol = "a"})})})}),
+                        match({._pattern = pattern({path({node({._symbol = "b"})})})}),
+                        match({._pattern = pattern({path({node({._symbol = "a"}),
+                                                          edge({._direction = EdgePattern::Direction::Forward}),
+                                                          node({._symbol = "c"})})}),
+                               ._optional = true})},
+                       returning({symbol("a"), symbol("b"), symbol("c")}))});
+
+    expectParse("MATCH (a) UNWIND a.list AS x WITH x ORDER BY x LIMIT 1 RETURN x",
+                {query({match({._pattern = pattern({path({node({._symbol = "a"})})})}),
+                        unwind(property({"a", "list"}), "x"),
+                        with({._projection = projection({._items = {symbol("x")},
+                                                         ._orderBy = orderBy({{symbol("x"), OrderByType::ASC}}),
+                                                         ._limit = limit(integer(1))})})},
+                       returning({symbol("x")}))});
+
+    expectParse("MATCH (a) SET a.x = 1 WITH a MATCH (a)-->(b) DELETE b RETURN a",
+                {query({match({._pattern = pattern({path({node({._symbol = "a"})})})}),
+                        set({setProperty(property({"a", "x"}), integer(1))}),
+                        with({._projection = projection({._items = {symbol("a")}})}),
+                        match({._pattern = pattern({path({node({._symbol = "a"}),
+                                                          edge({._direction = EdgePattern::Direction::Forward}),
+                                                          node({._symbol = "b"})})})}),
+                        deleteStmt({symbol("b")})},
+                       returning({symbol("a")}))});
+
+    expectParse("CREATE (a) WITH a CREATE (a)-[:R]->(b) RETURN a, b",
+                {query({createStmt(pattern({path({node({._symbol = "a"})})})),
+                        with({._projection = projection({._items = {symbol("a")}})}),
+                        createStmt(pattern({path({node({._symbol = "a"}),
+                                                  edge({._direction = EdgePattern::Direction::Forward,
+                                                        ._labels = labels({"R"})}),
+                                                  node({._symbol = "b"})})}))},
+                       returning({symbol("a"), symbol("b")}))});
+
+    expectParse("UNWIND [1, 2] AS x WITH x AS y WITH y * 2 AS z RETURN z",
+                {query({unwind(list({integer(1), integer(2)}), "x"),
+                        with({._projection = projection({._items = {named(symbol("x"), "y")}})}),
+                        with({._projection = projection({._items = {named(binary(BinaryOperator::Mult,
+                                                                                 symbol("y"),
+                                                                                 integer(2)),
+                                                                          "z")}})})},
+                       returning({symbol("z")}))});
 }
 
 TEST_F(ParseEdgeCaseTest, parsesCallsAndSubqueries) {
