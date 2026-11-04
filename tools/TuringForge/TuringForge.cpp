@@ -385,7 +385,7 @@ int main(int argc, const char** argv) {
 
     parser.add_argument("--server")
         .metavar("ADDRESS:PORT")
-        .help("Server address and port to benchmark, e.g. 127.0.0.1:6666")
+        .help("Server address and port to benchmark, e.g. 127.0.0.1:6686")
         .required()
         .store_into(server);
 

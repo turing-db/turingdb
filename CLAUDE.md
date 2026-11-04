@@ -89,7 +89,7 @@ These are structural properties of the graph model, not validation rules layered
 - Single TCP listener with two response strategies selected at startup by `USE_TURING_PROTO`:
   - **REST (default):** in-tree HTTP/1.1 stack — `net/http_parser/HTTPParser`, `net/http_common/HTTPWriter`, dispatched by `server/DBServerProcessor`. JSON over HTTP, endpoints routed in `server/DBURIParser.h` / `server/Endpoints.h`. No third-party web framework.
   - **Native binary protocol (`USE_TURING_PROTO=1`):** TuringDB's binary proto framed as HTTP/1.1 chunked transfer — same `HTTPParser` reads the request, `net/turing_proto_server/TuringProtoWriter` emits one proto packet per HTTP chunk, `server/TuringProtoServerProcessor` handles dispatch. Client side: `net/turing_proto_client/TuringClient` (C++) / `python/turingdb/binary_client.py` (`BinaryClient`).
-- Default port: 6666
+- Default port: 6686 (not 6666: browsers and Node's `fetch()` refuse it as an IRC port)
 
 ### Key Modules
 - `db/` - TuringDB main class
@@ -416,7 +416,7 @@ cleared the 55 regressions.
 - Linux x86 CI runs on **self-hosted runner containers** (`ubuntu-22.04-turing`, `ubuntu-24.04-turing`), several per host. The containers of a host share one cache directory, mounted at `/opt/actions-local-cache`, where `scripts/ci_cache.py` restores and saves `external/dependencies` and the reactome dataset. Bump the key's salt when changing how deps are built, or stale entries persist.
 - macOS CI runs on **GitHub-hosted larger runners** (`macos15`, `macos26`), one job at a time each. They cache `external/dependencies` with `actions/cache`, whose repo limit is 10 GB. Linux ARM runs on GitHub-hosted `ubuntu-*-arm` and caches `external/dependencies` with `actions/cache` the same way.
 - The dependency build bakes **absolute paths into its installed CMake/pkg-config files** (e.g. faiss's `BLAS_LIBRARIES=…/external/dependencies/lib/libopenblas.a`, the LLVM/MLIR configs). A cached tree is only valid at the checkout path it was built at.
-- Per-host serialization (port 6666, host-wide `pkill turingdb`) uses a kernel `flock` via `scripts/with_host_lock.py`, which the OS releases on process exit.
+- Per-host serialization (port 6686, host-wide `pkill turingdb`) uses a kernel `flock` via `scripts/with_host_lock.py`, which the OS releases on process exit.
 
 ## Commit style
 

@@ -27,5 +27,5 @@ and [[feedback_separate_test_file]].
 once under the binary protocol (`TURINGDB_TYPE=native USE_TURING_PROTO=1`) against the
 first wheel in `wheel/` - currently `turingdb-1.32.1.dev20`, several versions behind the
 built server. Every `[native]` test then fails or hangs on an established but silent
-socket while every `json` test passes; two concurrent runs also fight over port 6666 and
+socket while every `json` test passes; two concurrent runs also fight over the default port and
 leave a daemon holding it. None of that says anything about the change under test.

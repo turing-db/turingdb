@@ -71,7 +71,7 @@ def main() -> None:
         print(f"ERROR: Tests directory not found: {tests_dir}")
         sys.exit(1)
 
-    client = TuringDB(host="http://localhost:6666")
+    client = TuringDB(host="http://localhost:6686")
     client.try_reach()
     print("Connected to DB")
 

@@ -1,7 +1,7 @@
 import sys
 from turingdb import TuringDB, TuringDBException
 
-client = TuringDB(host="http://localhost:6666")
+client = TuringDB(host="http://localhost:6686")
 
 #Missing Region Name Causes Error
 

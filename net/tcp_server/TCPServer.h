@@ -47,7 +47,7 @@ public:
 private:
     const char* _name {"server"};
     const char* _address {"127.0.0.1"};
-    uint32_t _port {6666};
+    uint32_t _port {0};
     uint32_t _workerCount {8};
     uint32_t _maxConnections {1024};
 
