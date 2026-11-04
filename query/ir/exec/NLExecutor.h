@@ -542,21 +542,15 @@ public:
     static NLUnaryFunctionKernel selectFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
     // A conversion reads whichever element the argument column holds, so the functor is
-    // picked from that column rather than fixed by the op: the string form named here is
-    // what a column of strings converts through.
-    template <typename StringFunctor>
+    // picked from that column rather than fixed by the op: the functor named here is what
+    // a column of its own ArgType converts through.
+    template <typename Conversion>
     static NLUnaryFunctionKernel selectConversion(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
     // An OrNull conversion converts a typed column as its strict sibling does, and reads a
     // type-erased cell through a functor answering null where no conversion rule applies.
     template <auto StrictSelector, typename TaggedFunctor>
     static NLUnaryFunctionKernel selectOrNull(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
-
-    // datetime() reads text or a count of seconds since the epoch, so it picks its functor
-    // from the argument column as a conversion does. It is not selectConversion itself
-    // because no numeric form of the conversion is named by the string one.
-    static NLUnaryFunctionKernel selectDateTimeConversion(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
-    static NLUnaryFunctionKernel selectDurationConversion(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
     // size() counts the elements of a list or the characters of a string, so it picks
     // its functor from the argument column as a conversion does.

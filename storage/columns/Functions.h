@@ -214,7 +214,7 @@ enum class UnconvertibleCell {
     Raise,
 };
 
-template <typename StringFunctor, UnconvertibleCell OnUnconvertible>
+template <typename Conversion, UnconvertibleCell OnUnconvertible>
 class TaggedConversionFunction;
 
 // NOTE: macOS wheel build libc++ doesn't support from_chars on double: use strtod instead
@@ -297,6 +297,9 @@ class ToDateTimeFunction {
 public:
     using ArgType = types::String::Primitive;
     using ResultType = std::optional<types::DateTime::Primitive>;
+    using TaggedCounterpart = TaggedConversionFunction<ToDateTimeFunction, UnconvertibleCell::Raise>;
+
+    static constexpr std::string_view NAME = "datetime";
 
     ResultType operator()(std::string_view sv) {
         return DateTime::parse(sv);
@@ -374,19 +377,29 @@ public:
     }
 };
 
-// duration() over a count of microseconds. A UInt64 count past INT64_MAX has no duration
-// and reads as null.
-template <typename Number>
-class MicrosecondsToDurationFunction {
+// duration() over a count of microseconds
+class ToDurationFunction {
 public:
-    using ArgType = Number;
+    using ArgType = types::Int64::Primitive;
+    using ResultType = std::optional<types::Duration::Primitive>;
+    using TaggedCounterpart = TaggedConversionFunction<ToDurationFunction, UnconvertibleCell::Raise>;
+
+    static constexpr std::string_view NAME = "duration";
+
+    ResultType operator()(const types::Int64::Primitive microseconds) const {
+        return types::Duration::Primitive {microseconds};
+    }
+};
+
+// A UInt64 count past INT64_MAX has no duration and reads as null
+class UnsignedMicrosecondsToDurationFunction {
+public:
+    using ArgType = types::UInt64::Primitive;
     using ResultType = std::optional<types::Duration::Primitive>;
 
-    ResultType operator()(const Number microseconds) {
-        if constexpr (std::is_unsigned_v<Number>) {
-            if (microseconds > static_cast<Number>(std::numeric_limits<types::Int64::Primitive>::max())) {
-                return std::nullopt;
-            }
+    ResultType operator()(const types::UInt64::Primitive microseconds) const {
+        if (microseconds > static_cast<types::UInt64::Primitive>(std::numeric_limits<types::Int64::Primitive>::max())) {
+            return std::nullopt;
         }
 
         return types::Duration::Primitive {static_cast<types::Int64::Primitive>(microseconds)};
@@ -439,30 +452,6 @@ public:
 private:
     QueryListBuffer* _listBuffer {nullptr};
     std::vector<QueryListBuffer::ListItemVariant> _elements;
-};
-
-class TaggedDateTimeFunction {
-public:
-    using ArgType = CellView;
-    using ResultType = std::optional<types::DateTime::Primitive>;
-
-    ResultType operator()(const ArgType cell) const;
-
-    ResultType operator()(const std::optional<ArgType>& cell) const {
-        return cell.has_value() ? (*this)(*cell) : std::nullopt;
-    }
-};
-
-class TaggedDurationFunction {
-public:
-    using ArgType = CellView;
-    using ResultType = std::optional<types::Duration::Primitive>;
-
-    ResultType operator()(const ArgType cell) const;
-
-    ResultType operator()(const std::optional<ArgType>& cell) const {
-        return cell.has_value() ? (*this)(*cell) : std::nullopt;
-    }
 };
 
 // The field of an instant a type-erased cell carries, which is what an UNWIND of a list of
@@ -652,11 +641,11 @@ concept TemporalValue = std::is_same_v<Argument, types::DateTime::Primitive>
 template <typename ColumnType>
 using ConversionArgument = TypeUtils::unwrap_inner_t<TypeUtils::decay_col_t<ColumnType>>;
 
-// The conversion a column of the given element type goes through. A conversion names its
-// string form, which stays the one every element without a rule of its own converts through.
-template <typename StringFunctor, typename Argument>
+// The conversion a column of the given element type goes through. A conversion is named by
+// the functor converting its own ArgType, which an element with no rule of its own maps to.
+template <typename Conversion, typename Argument>
 struct ConversionFunctorFor {
-    using Type = StringFunctor;
+    using Type = Conversion;
 };
 
 template <ConvertibleNumber Argument>
@@ -692,6 +681,31 @@ struct ConversionFunctorFor<ToIntegerFunction, types::Bool::Primitive> {
 template <ConvertibleToBool Argument>
 struct ConversionFunctorFor<ToBoolFunction, Argument> {
     using Type = ToBoolFromValueFunction<Argument>;
+};
+
+template <>
+struct ConversionFunctorFor<ToDateTimeFunction, types::Int64::Primitive> {
+    using Type = EpochSecondsToDateTimeFunction<types::Int64::Primitive>;
+};
+
+template <>
+struct ConversionFunctorFor<ToDateTimeFunction, types::UInt64::Primitive> {
+    using Type = EpochSecondsToDateTimeFunction<types::UInt64::Primitive>;
+};
+
+template <>
+struct ConversionFunctorFor<ToDateTimeFunction, MapView> {
+    using Type = MapToDateTimeFunction;
+};
+
+template <>
+struct ConversionFunctorFor<ToDurationFunction, types::UInt64::Primitive> {
+    using Type = UnsignedMicrosecondsToDurationFunction;
+};
+
+template <>
+struct ConversionFunctorFor<ToDurationFunction, MapView> {
+    using Type = MapToDurationFunction;
 };
 
 
@@ -741,11 +755,11 @@ private:
 
 // A conversion over a type-erased cell. The cell's tag names the element it holds, which
 // converts by the rule ConversionFunctorFor gives a column of that element.
-template <typename StringFunctor, UnconvertibleCell OnUnconvertible>
+template <typename Conversion, UnconvertibleCell OnUnconvertible>
 class TaggedConversionFunction {
 public:
     using ArgType = CellView;
-    using ResultType = std::optional<TypeUtils::unwrap_optional_t<typename StringFunctor::ResultType>>;
+    using ResultType = std::optional<TypeUtils::unwrap_optional_t<typename Conversion::ResultType>>;
 
     explicit TaggedConversionFunction(StringBuffer* stringBuffer)
         : _fromInteger(stringBuffer),
@@ -754,7 +768,8 @@ public:
         _fromBoolean(stringBuffer),
         _fromString(stringBuffer),
         _fromDateTime(stringBuffer),
-        _fromDuration(stringBuffer)
+        _fromDuration(stringBuffer),
+        _fromMap(stringBuffer)
     {
     }
 
@@ -783,6 +798,9 @@ public:
             case CellTag::Duration:
                 return convert<types::Duration::Primitive>(cell, _fromDuration);
             break;
+            case CellTag::MapView:
+                return convert<MapView>(cell, _fromMap);
+            break;
             case CellTag::Null:
                 return std::nullopt;
             break;
@@ -798,12 +816,13 @@ public:
 
 private:
     template <typename Element>
-    using Rule = typename ConversionFunctorFor<StringFunctor, Element>::Type;
+    using Rule = typename ConversionFunctorFor<Conversion, Element>::Type;
 
-    // The string functor is the rule of strings alone: any other element it is named for has none
+    // The conversion's own functor is the rule of its ArgType alone: any other element it is
+    // named for has none
     template <typename Element>
-    static constexpr bool HAS_RULE = std::is_same_v<Element, types::String::Primitive>
-                                     || !std::is_same_v<Rule<Element>, StringFunctor>;
+    static constexpr bool HAS_RULE = std::is_same_v<Element, typename Conversion::ArgType>
+                                     || !std::is_same_v<Rule<Element>, Conversion>;
 
     ConversionRule<Rule<types::Int64::Primitive>> _fromInteger;
     ConversionRule<Rule<types::UInt64::Primitive>> _fromUnsigned;
@@ -812,6 +831,7 @@ private:
     ConversionRule<Rule<types::String::Primitive>> _fromString;
     ConversionRule<Rule<types::DateTime::Primitive>> _fromDateTime;
     ConversionRule<Rule<types::Duration::Primitive>> _fromDuration;
+    ConversionRule<Rule<MapView>> _fromMap;
 
     template <typename Element>
     ResultType convert(const ArgType cell, ConversionRule<Rule<Element>>& rule) {
@@ -824,7 +844,7 @@ private:
 
     static ResultType unconvertible(CellTag held) {
         if constexpr (OnUnconvertible == UnconvertibleCell::Raise) {
-            throwUnconvertibleCell(StringFunctor::NAME, held);
+            throwUnconvertibleCell(Conversion::NAME, held);
         } else {
             return std::nullopt;
         }

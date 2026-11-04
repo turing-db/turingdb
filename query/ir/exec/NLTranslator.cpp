@@ -376,8 +376,8 @@ const std::unordered_map<std::string_view, NLUnaryFunctionSelector> unaryFunctio
     {"nl.to_float_or_null",   &NLExecutor::selectOrNull<&NLExecutor::selectConversion<ToFloatFunction>, TaggedToFloatOrNullFunction>},
     {"nl.to_boolean_or_null", &NLExecutor::selectOrNull<&NLExecutor::selectConversion<ToBoolFunction>, TaggedToBooleanOrNullFunction>},
     {"nl.to_string_or_null",  &NLExecutor::selectOrNull<&NLExecutor::selectConversion<ToStringFunction>, TaggedToStringOrNullFunction>},
-    {"nl.to_datetime", &NLExecutor::selectDateTimeConversion},
-    {"nl.to_duration", &NLExecutor::selectDurationConversion},
+    {"nl.to_datetime", &NLExecutor::selectConversion<ToDateTimeFunction>},
+    {"nl.to_duration", &NLExecutor::selectConversion<ToDurationFunction>},
 
     {"nl.datetime_year",        &NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Year>>},
     {"nl.datetime_month",       &NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Month>>},

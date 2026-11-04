@@ -11162,14 +11162,14 @@ NLUnaryFunctionKernel NLExecutor::selectFunction(const Column* input, bool input
     }
 }
 
-template <typename StringFunctor>
+template <typename Conversion>
 NLUnaryFunctionKernel NLExecutor::selectConversion(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
     NLUnaryFunctionKernel kernel = nullptr;
 
     const auto selectForElement = [&]<typename Element>() {
-        using Functor = ConversionFunctorFor<StringFunctor, Element>::Type;
+        using Functor = ConversionFunctorFor<Conversion, Element>::Type;
 
-        if constexpr (!std::is_same_v<Functor, StringFunctor>) {
+        if constexpr (!std::is_same_v<Functor, Conversion>) {
             if (!kernel && columnHoldsConvertible<Element>(input)) {
                 kernel = selectFunction<Functor>(input, inputNullable, memory, result);
             }
@@ -11182,40 +11182,13 @@ NLUnaryFunctionKernel NLExecutor::selectConversion(const Column* input, bool inp
     selectForElement.template operator()<types::Bool::Primitive>();
     selectForElement.template operator()<types::DateTime::Primitive>();
     selectForElement.template operator()<types::Duration::Primitive>();
+    selectForElement.template operator()<MapView>();
 
     if (kernel) {
         return kernel;
     }
 
-    return selectFunction<StringFunctor>(input, inputNullable, memory, result);
-}
-
-NLUnaryFunctionKernel NLExecutor::selectDateTimeConversion(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
-    if (columnHoldsElement<types::Int64::Primitive>(input)) {
-        return selectFunction<EpochSecondsToDateTimeFunction<types::Int64::Primitive>>(input, inputNullable, memory, result);
-    } else if (columnHoldsElement<types::UInt64::Primitive>(input)) {
-        return selectFunction<EpochSecondsToDateTimeFunction<types::UInt64::Primitive>>(input, inputNullable, memory, result);
-    } else if (columnHoldsElement<MapView>(input)) {
-        return selectFunction<MapToDateTimeFunction>(input, inputNullable, memory, result);
-    } else if (readsTaggedCells(input)) {
-        return selectTaggedCellFunction<TaggedDateTimeFunction>(input, inputNullable, memory, result);
-    }
-
-    return selectFunction<ToDateTimeFunction>(input, inputNullable, memory, result);
-}
-
-NLUnaryFunctionKernel NLExecutor::selectDurationConversion(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
-    if (columnHoldsElement<types::Int64::Primitive>(input)) {
-        return selectFunction<MicrosecondsToDurationFunction<types::Int64::Primitive>>(input, inputNullable, memory, result);
-    } else if (columnHoldsElement<types::UInt64::Primitive>(input)) {
-        return selectFunction<MicrosecondsToDurationFunction<types::UInt64::Primitive>>(input, inputNullable, memory, result);
-    } else if (columnHoldsElement<MapView>(input)) {
-        return selectFunction<MapToDurationFunction>(input, inputNullable, memory, result);
-    } else if (readsTaggedCells(input)) {
-        return selectTaggedCellFunction<TaggedDurationFunction>(input, inputNullable, memory, result);
-    }
-
-    throw IRException("duration() requires an integer count of microseconds or a map of unit counts");
+    return selectFunction<Conversion>(input, inputNullable, memory, result);
 }
 
 NLUnaryFunctionKernel NLExecutor::selectSize(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
@@ -11390,12 +11363,6 @@ template NLUnaryFunctionKernel NLExecutor::selectFunction<LabelsFunction>(const 
 template NLUnaryFunctionKernel NLExecutor::selectFunction<EdgeTypesFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<StartNodeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<EndNodeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
-template NLUnaryFunctionKernel NLExecutor::selectFunction<ToDateTimeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
-template NLUnaryFunctionKernel NLExecutor::selectFunction<EpochSecondsToDateTimeFunction<types::Int64::Primitive>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
-template NLUnaryFunctionKernel NLExecutor::selectFunction<EpochSecondsToDateTimeFunction<types::UInt64::Primitive>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
-template NLUnaryFunctionKernel NLExecutor::selectFunction<MicrosecondsToDurationFunction<types::Int64::Primitive>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
-template NLUnaryFunctionKernel NLExecutor::selectFunction<MicrosecondsToDurationFunction<types::UInt64::Primitive>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
-template NLUnaryFunctionKernel NLExecutor::selectFunction<MapToDurationFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Year>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Month>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Day>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
@@ -11444,6 +11411,8 @@ template NLUnaryFunctionKernel NLExecutor::selectConversion<ToIntegerFunction>(c
 template NLUnaryFunctionKernel NLExecutor::selectConversion<ToFloatFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectConversion<ToStringFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectConversion<ToBoolFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectConversion<ToDateTimeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectConversion<ToDurationFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
 template <auto StrictSelector, typename TaggedFunctor>
 NLUnaryFunctionKernel NLExecutor::selectOrNull(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
