@@ -44,8 +44,6 @@ static int fuzzOne(const char* data, size_t size) {
         // Expected for malformed queries.
     } catch (const TuringException&) {
         // Expected for various error conditions.
-    } catch (const std::exception&) {
-        // Catch anything else that isn't a crash.
     }
 
     return 0;
