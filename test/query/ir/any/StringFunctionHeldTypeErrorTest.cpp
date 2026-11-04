@@ -43,9 +43,13 @@ const std::vector<HeldValue> NON_STRINGS = {
 class StringFunctionHeldTypeErrorTest : public WriteQueryTest {
 protected:
     void expectRaisesOnEveryNonString(std::string_view call, std::string_view functionName) {
+        expectErrorOnEveryNonString(call, fmt::format("{}() reads a string", functionName));
+    }
+
+    void expectErrorOnEveryNonString(std::string_view call, std::string_view expectation) {
         for (const HeldValue& held : NON_STRINGS) {
             expectError(fmt::format("{}UNWIND ['a', {}] AS x RETURN {}", held._match, held._value, call),
-                        fmt::format("{}() reads a string, not '{}'", functionName, held._typeName));
+                        fmt::format("{}, not '{}'", expectation, held._typeName));
         }
     }
 };
@@ -100,8 +104,8 @@ TEST_F(StringFunctionHeldTypeErrorTest, splits) {
 
 TEST_F(StringFunctionHeldTypeErrorTest, countsCharacters) {
     expectRows("UNWIND ['ab', null, 1] AS x WITH x LIMIT 2 RETURN char_length(x), character_length(x)", {{"2", "2"}, {"null", "null"}});
-    expectRaisesOnEveryNonString("char_length(x)", "char_length");
-    expectRaisesOnEveryNonString("character_length(x)", "char_length");
+    expectErrorOnEveryNonString("char_length(x)", "char_length() and character_length() read a string");
+    expectErrorOnEveryNonString("character_length(x)", "char_length() and character_length() read a string");
 }
 
 TEST_F(StringFunctionHeldTypeErrorTest, reversesAStringOrAList) {

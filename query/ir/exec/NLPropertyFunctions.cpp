@@ -1,9 +1,14 @@
 #include "NLPropertyFunctions.h"
 
+#include <spdlog/fmt/bundled/format.h>
+
 #include "CellTag.h"
+#include "QueryTypeName.h"
 
 #include "NLExecutionContext.h"
 #include "NLStepBuffers.h"
+
+#include "TuringException.h"
 
 using namespace db;
 
@@ -148,7 +153,7 @@ std::optional<MapView> NLTaggedPropertiesFunction::operator()(const CellView cel
         return std::nullopt;
     }
 
-    throwCellTypeError("properties", "a node, a relationship or a map", tag);
+    throw TuringException(fmt::format("Reading every property needs a node, a relationship or a map, not '{}'", queryTypeName(tag)));
 }
 
 std::optional<MapView> NLTaggedPropertiesFunction::operator()(const std::optional<CellView>& cell) {

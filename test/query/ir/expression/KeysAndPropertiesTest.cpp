@@ -203,7 +203,7 @@ TEST_F(KeysAndPropertiesTest, keysOfAnUnwoundNodeOrMap) {
 
 TEST_F(KeysAndPropertiesTest, rejectsACellHoldingNoMap) {
     expectError("UNWIND [{a: 1}, 1] AS x RETURN keys(x)", "keys() reads a node, a relationship or a map");
-    expectError("WITH {v: 1} AS m RETURN properties(m.v)", "properties() reads a node, a relationship or a map");
+    expectError("WITH {v: 1} AS m RETURN properties(m.v)", "Reading every property needs a node, a relationship or a map");
 }
 
 TEST_F(KeysAndPropertiesTest, readsAWrittenValueAsThePropertyType) {

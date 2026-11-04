@@ -273,7 +273,7 @@ TEST_F(IdFunctionTest, readsNullFromAStoredListElementThatIsNull) {
 TEST_F(IdFunctionTest, rejectsAStoredListElementThatIsNoEntity) {
     write("CREATE (m:Bag {items: ['a']})");
 
-    expectRejected("MATCH (m:Bag) UNWIND m.items AS x RETURN id(x)", "reads a node or an edge");
+    expectRejected("MATCH (m:Bag) UNWIND m.items AS x RETURN id(x)", "read a node or an edge");
 }
 
 TEST_F(IdFunctionTest, filtersByAnIDBelowANumber) {

@@ -130,7 +130,7 @@ TEST_F(HeldTypeErrorTest, readsTheEntriesOfAValueThatHasNone) {
     expectMessage("UNWIND [{a: 1}, 1] AS x RETURN keys(x)", "keys() reads a node, a relationship or a map, not 'Integer'");
     expectMessage("UNWIND [{a: 1}, 1] AS x RETURN labels(x)", "labels() reads a node, not 'Map'");
     expectMessage(std::string(REMY) + "UNWIND [p, 1] AS x RETURN type(x)", "type() reads a relationship, not 'NodePattern'");
-    expectMessage("UNWIND [[1], 1] AS x RETURN properties(x)", "properties() reads a node, a relationship or a map, not 'List'");
+    expectMessage("UNWIND [[1], 1] AS x RETURN properties(x)", "Reading every property needs a node, a relationship or a map, not 'List'");
 }
 
 TEST_F(HeldTypeErrorTest, convertsAValueThatHasNoConversion) {
@@ -146,7 +146,7 @@ TEST_F(HeldTypeErrorTest, signsAValueThatIsNoNumber) {
 }
 
 TEST_F(HeldTypeErrorTest, readsTheIdOfAValueThatIsNoEntity) {
-    expectMessage("UNWIND [true, 'a'] AS x RETURN id(x)", "id() reads a node or an edge, not 'Bool'");
+    expectMessage("UNWIND [true, 'a'] AS x RETURN id(x)", "id() and elementId() read a node or an edge, not 'Bool'");
 }
 
 TEST_F(HeldTypeErrorTest, makesADurationOutOfAValueThatIsNeitherAnIntegerNorAMap) {

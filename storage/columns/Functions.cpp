@@ -255,12 +255,15 @@ TaggedCharLengthFunction::ResultType TaggedCharLengthFunction::operator()(const 
 }
 
 TaggedCharLengthFunction::ResultType TaggedCharLengthFunction::operator()(const ArgType cell) const {
-    const std::optional<types::String::Primitive> string = cellString(cell, "char_length");
-    if (!string) {
+    const CellTag tag = cell.getTag();
+
+    if (tag == CellTag::String) {
+        return characterCount(cell.getAs<types::String::Primitive>());
+    } else if (tag == CellTag::Null) {
         return std::nullopt;
     }
 
-    return characterCount(*string);
+    throw TuringException(fmt::format("char_length() and character_length() read a string, not '{}'", queryTypeName(tag)));
 }
 
 CharLengthFunction::ResultType CharLengthFunction::operator()(const ArgType string) const {
@@ -1084,7 +1087,7 @@ TaggedIdFunction::ResultType TaggedIdFunction::operator()(const ArgType cell) co
         return std::nullopt;
     }
 
-    throwCellTypeError("id", "a node or an edge", tag);
+    throw TuringException(fmt::format("id() and elementId() read a node or an edge, not '{}'", queryTypeName(tag)));
 }
 
 void ToBoolFunction::strToLower(std::string& lower, std::string_view src) {

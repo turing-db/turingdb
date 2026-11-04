@@ -50,3 +50,5 @@ add_turing_test(test_query_ir_any_held_type_error HeldTypeErrorTest.cpp)
 add_turing_test(test_query_ir_any_string_function_held_type_error StringFunctionHeldTypeErrorTest.cpp)
 
 add_turing_test(test_query_ir_any_arithmetic_held_type_error ArithmeticHeldTypeErrorTest.cpp)
+
+add_turing_test(test_query_ir_any_shared_op_held_type_error SharedOpHeldTypeErrorTest.cpp)

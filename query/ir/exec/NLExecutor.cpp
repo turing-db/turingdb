@@ -10962,7 +10962,7 @@ NLUnaryFunctionKernel NLExecutor::selectProperties(const Column* input, bool inp
         return selectFunction<MapPropertiesFunction>(input, inputNullable, memory, result);
     }
 
-    throw IRException("properties() reads a node, a relationship or a map column");
+    throw IRException("Reading every property needs a node, a relationship or a map column");
 }
 
 template <template <typename> typename NumberFunctor>
