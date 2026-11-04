@@ -62,9 +62,9 @@ void TuringProtoServerProcessor::process(net::AbstractThreadContext* threadConte
         _threadContext->getLocalMemory().clear();
     } catch (const ProtocolException& e) {
         // Protocol exceptions are errors that occur at the protocol level: e.g invalid
-        // method, unknown endpoint.
+        // method, unknown endpoint. The request was read whole and the error packet ends the
+        // response, so the connection stays open, as the Keep-Alive already sent promised.
         writer.writeProtocolError(e.what());
-        _connection.setCloseRequired(true);
     } catch (const NetException&) {
         // Net Exceptions have to do with errors that occur during networking syscalls
         _connection.setCloseRequired(true);

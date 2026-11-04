@@ -39,6 +39,9 @@ add_turing_test(test_net_change_id_param ChangeIDParamTest.cpp)
 
 add_turing_test(test_net_json_parameters JsonParametersTest.cpp)
 
+add_turing_test(test_net_turing_proto_keep_alive TuringProtoKeepAliveTest.cpp)
+target_sources(test_net_turing_proto_keep_alive PRIVATE ProtoServerTest.cpp)
+
 add_turing_test(test_net_turing_proto_parameters TuringProtoParametersTest.cpp)
 target_sources(test_net_turing_proto_parameters PRIVATE
     ${CMAKE_SOURCE_DIR}/test/query-test-suite/QueryResultFormatter.cpp)
