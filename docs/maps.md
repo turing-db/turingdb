@@ -99,10 +99,13 @@ is 2020. Any other value has no key, and the key read raises on it, as `d[k]` do
 datetime or a duration. Where the tag says no list the index raises too. A null reads null.
 
 A key read is speculatable only where its operand provably holds maps, nodes, edges and nulls
-alone: a column of one of those types, a merge of maps, an unwound literal list of maps, a
-selection between such columns, or one of them carried through a filter, a cross product or a
-hash join. So `row.src` in `UNWIND [{src: 'Remy'}, {src: 7}] AS row MATCH (a {name: row.src})`
-can still be sunk into its factor as a hash join key.
+alone, and an index or a slice only where its operand holds lists and nulls alone.
+`holdsOnlyNullOr` (`DBHeldTags`) walks the operand back to where its values were made: through
+every op implementing `ColumnCarrierOpInterface` (a filter, a sort, a limit, a hop, an unwind's
+carry set, a factor, an OPTIONAL MATCH, a UNION branch, a CASE), and from a key or element read
+to the literal, `db.make_map` or `db.make_list` it reads. So `row.s.name` in
+`UNWIND [{s: {name: 'Remy'}}, {s: null}] AS row MATCH (a {name: row.s.name})` can still be sunk
+into its factor as a hash join key, and so can `row.src` after `WITH row ORDER BY row.src`.
 
 A key read takes a cell column wherever it takes a map column: `holdsAMapPerRow` says so in
 `DBLowering` and in the two nl verifiers, and `NLExecutor::selectMapRead` takes the `MapView`

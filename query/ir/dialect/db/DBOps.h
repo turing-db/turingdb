@@ -10,6 +10,7 @@
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 
 #include "DBDialect.h"
+#include "DBInterfaces.h"
 #include "DBTypes.h"
 
 #include "IRConstantColumn.h"

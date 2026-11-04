@@ -7,6 +7,10 @@ set(LLVM_TARGET_DEFINITIONS DBDialect.td)
 mlir_tablegen(DBDialect.h.inc    -gen-dialect-decls -dialect db  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
 mlir_tablegen(DBDialect.cpp.inc  -gen-dialect-defs  -dialect db  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
 
+set(LLVM_TARGET_DEFINITIONS DBInterfaces.td)
+mlir_tablegen(DBInterfaces.h.inc   -gen-op-interface-decls  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
+mlir_tablegen(DBInterfaces.cpp.inc -gen-op-interface-defs   EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
+
 set(LLVM_TARGET_DEFINITIONS DBOps.td)
 mlir_tablegen(DBOps.h.inc        -gen-op-decls      -dialect db  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS} ${STORAGE_DIALECT_SOURCE_DIR})
 mlir_tablegen(DBOps.cpp.inc      -gen-op-defs       -dialect db  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS} ${STORAGE_DIALECT_SOURCE_DIR})
@@ -32,6 +36,8 @@ set_source_files_properties(
 add_mlir_library(turing_db_ir_dbdialect_s
   DBColumnElement.cpp
   DBDialect.cpp
+  DBHeldTags.cpp
+  DBInterfaces.cpp
   DBOps.cpp
   DBTypes.cpp
   DBPasses.cpp

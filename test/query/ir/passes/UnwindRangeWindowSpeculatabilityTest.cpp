@@ -71,3 +71,19 @@ TEST_F(UnwindRangeWindowSpeculatabilityTest, raisesOnAWindowBoundOfTypeErasedCel
                                 ": (!i64s, !i64s, !i64s, !i64s, !cells) -> !elements"),
               NotSpeculatable);
 }
+
+TEST_F(UnwindRangeWindowSpeculatabilityTest, countsOutAWindowBoundByAnIntegerAMapHolds) {
+    EXPECT_EQ(speculatabilityOf(R"mlir(
+  %m = db.constant({from = 1 : i64})
+  %from = db.static_map_key %m key "from" : (!db.column<!storage.map>) -> !cells
+  %x = db.unwind_range(%zero, %three, %one, from %from, to %integer, {}) : (!i64s, !i64s, !i64s, !cells, !i64s) -> !elements
+)mlir"),
+              Speculatable);
+
+    EXPECT_EQ(speculatabilityOf(R"mlir(
+  %m = db.constant({from = "a" : !storage.string})
+  %from = db.static_map_key %m key "from" : (!db.column<!storage.map>) -> !cells
+  %x = db.unwind_range(%zero, %three, %one, from %from, to %integer, {}) : (!i64s, !i64s, !i64s, !cells, !i64s) -> !elements
+)mlir"),
+              NotSpeculatable);
+}

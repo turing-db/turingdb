@@ -83,6 +83,30 @@ TEST_F(HashJoinCrossTypeKeyTest, joinsAMapValue) {
                                 2);
 }
 
+TEST_F(HashJoinCrossTypeKeyTest, joinsAMapValueCarriedPastASort) {
+    expectJoinMatchesTheProduct("UNWIND [{src: 'Remy'}, {src: 'Luc'}] AS row WITH row ORDER BY row.src "
+                                "MATCH (a:Person {name: row.src}) RETURN a.name",
+                                2);
+}
+
+TEST_F(HashJoinCrossTypeKeyTest, joinsAMapValueCarriedPastADistinct) {
+    expectJoinMatchesTheProduct("UNWIND [{src: 'Remy'}, {src: 'Luc'}, {src: 'Remy'}] AS row WITH DISTINCT row "
+                                "MATCH (a:Person {name: row.src}) RETURN a.name",
+                                2);
+}
+
+TEST_F(HashJoinCrossTypeKeyTest, joinsAValueOfAMapHeldByAMap) {
+    expectJoinMatchesTheProduct("UNWIND [{s: {name: 'Remy'}}, {s: {name: 'Luc'}}, {s: null}] AS row "
+                                "MATCH (a:Person {name: row.s.name}) RETURN a.name",
+                                2);
+}
+
+TEST_F(HashJoinCrossTypeKeyTest, joinsAValueOfAMapHeldByAList) {
+    expectJoinMatchesTheProduct("UNWIND [[{a: 'Remy'}], [null], [{a: 'Luc'}]] AS xs "
+                                "MATCH (p:Person {name: xs[0].a}) RETURN p.name",
+                                2);
+}
+
 TEST_F(HashJoinCrossTypeKeyTest, joinsAParsedKey) {
     expectJoinMatchesTheProduct("UNWIND ['32', 'x'] AS s MATCH (a:Person) WHERE a.age = toInteger(s) RETURN a.name, s",
                                 2);

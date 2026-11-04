@@ -11,6 +11,7 @@
 #include "columns/CharacterArgument.h"
 
 #include "DBColumnElement.h"
+#include "DBHeldTags.h"
 #include "IRLiteralList.h"
 #include "IRRange.h"
 #include "IRValueTypes.h"
@@ -152,10 +153,6 @@ bool isSafeLiteralDivisor(Value divisor, bool minusOneOverflows) {
     return false;
 }
 
-bool isMapOrNullLiteral(Attribute literal) {
-    return isa<DictionaryAttr, UnitAttr>(literal);
-}
-
 Value yieldedFactorColumn(Region& leftFactor, Region& rightFactor, size_t resultNumber) {
     Yield leftYield = cast<Yield>(leftFactor.front().getTerminator());
     const OperandRange leftColumns = leftYield.getColumns();
@@ -168,56 +165,60 @@ Value yieldedFactorColumn(Region& leftFactor, Region& rightFactor, size_t result
     return rightYield.getColumns()[resultNumber - leftColumns.size()];
 }
 
-// Whether every row of @param column holds a map, a node, an edge or null, so that a key read
-// over it raises on none. A column whose type names another value never reaches a key read:
-// only a type-erased or unresolved one is followed back to where it was made.
-bool holdsOnlyKeyedValues(Value column) {
-    llvm::SmallVector<Value> worklist {column};
-    llvm::DenseSet<Value> visited;
+constexpr size_t HOP_FIXED_RESULT_COUNT = 4;
+constexpr size_t PATH_FIXED_RESULT_COUNT = 3;
 
-    while (!worklist.empty()) {
-        const Value value = worklist.pop_back_val();
-        if (!visited.insert(value).second || !mayHoldAnyType(value)) {
-            continue;
-        }
-
-        if (const BlockArgument argument = dyn_cast<BlockArgument>(value)) {
-            Operation* const selection = argument.getOwner()->getParentOp();
-            if (!isa_and_nonnull<LazyCase, Coalesce>(selection)) {
-                return false;
-            }
-
-            worklist.push_back(selection->getOperand(argument.getArgNumber()));
-            continue;
-        }
-
-        Operation* const definingOp = value.getDefiningOp();
-        const size_t resultNumber = cast<OpResult>(value).getResultNumber();
-
-        if (isa<MergeMaps>(definingOp)) {
-            continue;
-        } else if (UnwindConst unwind = dyn_cast<UnwindConst>(definingOp)) {
-            if (!llvm::all_of(unwind.getElements(), isMapOrNullLiteral)) {
-                return false;
-            }
-        } else if (Case selection = dyn_cast<Case>(definingOp)) {
-            selection.collectSelectedValues(worklist);
-        } else if (LazyCase selection = dyn_cast<LazyCase>(definingOp)) {
-            selection.collectSelectedValues(worklist);
-        } else if (Coalesce selection = dyn_cast<Coalesce>(definingOp)) {
-            selection.collectSelectedValues(worklist);
-        } else if (FilterOp filter = dyn_cast<FilterOp>(definingOp)) {
-            worklist.push_back(filter.getColumnsToFilter()[resultNumber]);
-        } else if (CrossProduct product = dyn_cast<CrossProduct>(definingOp)) {
-            worklist.push_back(yieldedFactorColumn(product.getLeftFactor(), product.getRightFactor(), resultNumber));
-        } else if (HashJoin join = dyn_cast<HashJoin>(definingOp)) {
-            worklist.push_back(yieldedFactorColumn(join.getLeftFactor(), join.getRightFactor(), resultNumber));
-        } else {
-            return false;
-        }
+void collectCarriedResult(Value value, size_t firstCarriedResult, ValueRange carriedColumns, llvm::SmallVectorImpl<Value>& carried) {
+    const OpResult result = dyn_cast<OpResult>(value);
+    if (!result || result.getResultNumber() < firstCarriedResult) {
+        return;
     }
 
-    return true;
+    const size_t carriedIndex = result.getResultNumber() - firstCarriedResult;
+    if (carriedIndex < carriedColumns.size()) {
+        carried.push_back(carriedColumns[carriedIndex]);
+    }
+}
+
+void collectCarriedArgument(Value value, ValueRange carriedColumns, llvm::SmallVectorImpl<Value>& carried) {
+    const BlockArgument argument = dyn_cast<BlockArgument>(value);
+    if (argument && argument.getArgNumber() < carriedColumns.size()) {
+        carried.push_back(carriedColumns[argument.getArgNumber()]);
+    }
+}
+
+// A hop hands the node it walks from back as one of its fixed results, @param inputResult
+void collectHopCarriedColumns(Operation* hop, size_t inputResult, Value value, llvm::SmallVectorImpl<Value>& carried) {
+    const OpResult result = dyn_cast<OpResult>(value);
+    if (result && result.getResultNumber() == inputResult) {
+        carried.push_back(hop->getOperand(0));
+    }
+
+    collectCarriedResult(value, HOP_FIXED_RESULT_COUNT, hop->getOperands().drop_front(), carried);
+}
+
+void collectBranchYields(Value value, MutableArrayRef<Region> branches, llvm::SmallVectorImpl<Value>& carried) {
+    const OpResult result = dyn_cast<OpResult>(value);
+    if (!result) {
+        return;
+    }
+
+    for (Region& branch : branches) {
+        Yield yield = cast<Yield>(branch.front().getTerminator());
+        carried.push_back(yield.getColumns()[result.getResultNumber()]);
+    }
+}
+
+bool holdsOnlyKeyedValues(Value column) {
+    return ::db::holdsOnlyNullOr(column, {::db::CellTag::MapView, ::db::CellTag::NodeID, ::db::CellTag::EdgeID});
+}
+
+bool holdsOnlyLists(Value column) {
+    return ::db::holdsOnlyNullOr(column, {::db::CellTag::ListView});
+}
+
+bool holdsOnlyIntegers(Value column) {
+    return ::db::holdsOnlyNullOr(column, {::db::CellTag::Int, ::db::CellTag::UInt});
 }
 
 // What a filter reads as a mask: a boolean column, a boolean literal, one whose values may be
@@ -2770,6 +2771,193 @@ Speculation::Speculatability CheckedCast::getSpeculatability() {
     return speculatableOverKnownTypes(getOperation()->getOperands());
 }
 
+void FilterOp::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectCarriedResult(value, 0, getColumnsToFilter(), carried);
+}
+
+void Limit::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectCarriedResult(value, 0, getColumns(), carried);
+}
+
+void Skip::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectCarriedResult(value, 0, getColumns(), carried);
+}
+
+void Sort::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectCarriedResult(value, 0, getColumns(), carried);
+}
+
+void RemoveDuplicates::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectCarriedResult(value, 0, getColumns(), carried);
+}
+
+void GroupAggregate::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectCarriedResult(value, 0, getColumns().take_front(getKeyCount()), carried);
+}
+
+void Collect::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectCarriedResult(value, 0, getColumns().take_front(getKeyCount()), carried);
+}
+
+void FetchNodes::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectCarriedResult(value, 1, getColumnsToFilter(), carried);
+}
+
+void Unwind::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectCarriedResult(value, 1, getColumnsToFilter(), carried);
+}
+
+void UnwindRange::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectCarriedResult(value, 1, getColumnsToFilter(), carried);
+}
+
+void UnwindComputed::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectCarriedResult(value, 1, getColumnsToFilter(), carried);
+    collectCarriedArgument(value, getColumnsToFilter(), carried);
+}
+
+void CallProcedure::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectCarriedResult(value, getYields().size(), getCarriedColumns(), carried);
+}
+
+void GetOutEdges::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectHopCarriedColumns(getOperation(), 0, value, carried);
+}
+
+void GetInEdges::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectHopCarriedColumns(getOperation(), 3, value, carried);
+}
+
+void GetEdges::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectHopCarriedColumns(getOperation(), 0, value, carried);
+}
+
+void GetOutEdgesByType::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectHopCarriedColumns(getOperation(), 0, value, carried);
+}
+
+void GetInEdgesByType::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectHopCarriedColumns(getOperation(), 3, value, carried);
+}
+
+void GetOutEdgesByLabel::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectHopCarriedColumns(getOperation(), 0, value, carried);
+}
+
+void GetInEdgesByLabel::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectHopCarriedColumns(getOperation(), 3, value, carried);
+}
+
+void GetOutEdgesByTypeAndLabel::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectHopCarriedColumns(getOperation(), 0, value, carried);
+}
+
+void GetInEdgesByTypeAndLabel::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectHopCarriedColumns(getOperation(), 3, value, carried);
+}
+
+// The seed comes back as srcids, and as tgtids too when the walk ends on it
+void ExplorePaths::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    const bool holdsTheSeed = value == getSrcids() || (value == getTgtids() && getEndsOnSeed());
+    if (holdsTheSeed) {
+        carried.push_back(getInputNodes());
+    }
+
+    collectCarriedResult(value, PATH_FIXED_RESULT_COUNT, getColumnsToFilter(), carried);
+}
+
+void CrossProduct::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    const OpResult result = dyn_cast<OpResult>(value);
+    if (result) {
+        carried.push_back(yieldedFactorColumn(getLeftFactor(), getRightFactor(), result.getResultNumber()));
+    }
+}
+
+void HashJoin::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    const OpResult result = dyn_cast<OpResult>(value);
+    if (result) {
+        carried.push_back(yieldedFactorColumn(getLeftFactor(), getRightFactor(), result.getResultNumber()));
+    }
+}
+
+void OptionalMatch::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    OptionalYield yield = cast<OptionalYield>(getPattern().front().getTerminator());
+
+    collectCarriedResult(value, 0, yield.getColumns(), carried);
+    collectCarriedArgument(value, getInputColumns(), carried);
+}
+
+// A body carrying its scope yields the inputs back ahead of its own columns; otherwise the
+// inputs come back unchanged ahead of what the body yields
+void CallSubquery::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    SubqueryYield yield = cast<SubqueryYield>(getBody().front().getTerminator());
+    const OperandRange inputs = getInputColumns();
+
+    if (getCarriesScope()) {
+        collectCarriedResult(value, 0, yield.getColumns(), carried);
+    } else {
+        collectCarriedResult(value, 0, inputs, carried);
+        collectCarriedResult(value, inputs.size(), yield.getColumns(), carried);
+    }
+
+    collectCarriedArgument(value, inputs, carried);
+}
+
+void ExistsSubquery::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectCarriedArgument(value, getInputColumns(), carried);
+}
+
+void CountSubquery::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectCarriedArgument(value, getInputColumns(), carried);
+}
+
+void CollectSubquery::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectCarriedArgument(value, getInputColumns(), carried);
+}
+
+void Union::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectBranchYields(value, getBranches(), carried);
+}
+
+void ScanMaterialized::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    Materialize materialize = getRows().getDefiningOp<Materialize>();
+    if (materialize) {
+        collectCarriedResult(value, 0, materialize.getColumns(), carried);
+    }
+}
+
+void BroadcastConstant::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    carried.push_back(getValue());
+}
+
+void RowConstant::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    carried.push_back(getRow());
+}
+
+void ToNullable::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    carried.push_back(getOperand());
+}
+
+void Case::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    collectSelectedValues(carried);
+}
+
+void LazyCase::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    if (isa<OpResult>(value)) {
+        collectSelectedValues(carried);
+    }
+
+    collectCarriedArgument(value, getColumnsToFilter(), carried);
+}
+
+void Coalesce::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    if (isa<OpResult>(value)) {
+        collectSelectedValues(carried);
+    }
+
+    collectCarriedArgument(value, getColumnsToFilter(), carried);
+}
+
 Speculation::Speculatability Range::getSpeculatability() {
     int64_t from = 0;
     int64_t to = 0;
@@ -2788,11 +2976,15 @@ Speculation::Speculatability Range::getSpeculatability() {
 }
 
 Speculation::Speculatability ListSlice::getSpeculatability() {
-    return speculatableOverKnownTypes(getOperands());
+    const Value from = getFrom();
+    const Value to = getTo();
+    const bool readsIntegerBounds = (!from || holdsOnlyIntegers(from)) && (!to || holdsOnlyIntegers(to));
+
+    return speculatableWhen(holdsOnlyLists(getList()) && readsIntegerBounds);
 }
 
 Speculation::Speculatability ListIndex::getSpeculatability() {
-    return speculatableOverKnownTypes(getLhs());
+    return speculatableWhen(holdsOnlyLists(getLhs()));
 }
 
 Speculation::Speculatability StaticMapKey::getSpeculatability() {
@@ -2821,7 +3013,7 @@ Speculation::Speculatability UnwindRange::getSpeculatability() {
         bounds.push_back(to);
     }
 
-    return speculatableOverKnownTypes(bounds);
+    return speculatableWhen(llvm::all_of(bounds, holdsOnlyIntegers));
 }
 
 Speculation::Speculatability Substring::getSpeculatability() {

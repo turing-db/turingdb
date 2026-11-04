@@ -217,3 +217,229 @@ TEST_F(MapKeyReadSpeculatabilityTest, readsMapsAFactorYields) {
 )mlir"),
               NotSpeculatable);
 }
+
+TEST_F(MapKeyReadSpeculatabilityTest, raisesOnASelectionOfAMapAndAString) {
+    EXPECT_EQ(speculatabilityOfTheKeyRead(R"mlir(
+  %held = db.is_not_null %map : (!maps) -> !bools
+  %selected = db.case({%held}, {%map}, %string) : (!bools, !maps, !strings) -> !unresolved
+  %r = db.static_map_key %selected key "a" : (!unresolved) -> !cells
+)mlir"),
+              NotSpeculatable);
+}
+
+TEST_F(MapKeyReadSpeculatabilityTest, readsMapsCarriedPastTheRowOperators) {
+    EXPECT_EQ(speculatabilityOfTheKeyRead(R"mlir(
+  %rows = db.unwind_const([{a = 1 : i64}, unit]) : !cells
+  %deduped = db.remove_duplicates(%rows) : (!cells) -> !cells
+  %skipped = db.skip(%deduped) count 1 : (!cells) -> !cells
+  %limited = db.limit(%skipped) count 2 : (!cells) -> !cells
+  %sorted = db.sort(%limited) keys [0] ascending [true] : (!cells) -> !cells
+  %grouped:2 = db.group_aggregate(%sorted, %sorted) keys 1 aggregates [count_rows] : (!cells, !cells) -> (!cells, !unresolved)
+  %r = db.static_map_key %grouped#0 key "a" : (!cells) -> !cells
+)mlir"),
+              Speculatable);
+
+    EXPECT_EQ(speculatabilityOfTheKeyRead(R"mlir(
+  %rows = db.unwind_const([{a = 1 : i64}, 2 : i64]) : !cells
+  %sorted = db.sort(%rows) keys [0] ascending [true] : (!cells) -> !cells
+  %r = db.static_map_key %sorted key "a" : (!cells) -> !cells
+)mlir"),
+              NotSpeculatable);
+}
+
+TEST_F(MapKeyReadSpeculatabilityTest, readsMapsCarriedPastAHop) {
+    EXPECT_EQ(speculatabilityOfTheKeyRead(R"mlir(
+  %rows = db.unwind_const([{a = 1 : i64}, unit]) : !cells
+  %s, %e, %et, %t, %carried = db.get_out_edges(%node, {%rows}) : (!nodes, !cells) -> (!nodes, !edges, !db.column<!storage.edge_type_id>, !nodes, !cells)
+  %r = db.static_map_key %carried key "a" : (!cells) -> !cells
+)mlir"),
+              Speculatable);
+}
+
+TEST_F(MapKeyReadSpeculatabilityTest, readsMapsCarriedPastAnUnwind) {
+    EXPECT_EQ(speculatabilityOfTheKeyRead(R"mlir(
+  %rows = db.unwind_const([{a = 1 : i64}, unit]) : !cells
+  %x, %carried = db.unwind(%string, {%rows}) : (!strings, !cells) -> (!strings, !cells)
+  %r = db.static_map_key %carried key "a" : (!cells) -> !cells
+)mlir"),
+              Speculatable);
+
+    EXPECT_EQ(speculatabilityOfTheKeyRead(R"mlir(
+  %rows = db.unwind_const([{a = 1 : i64}, unit]) : !cells
+  %x, %carried = db.unwind_computed({%rows}) {
+  ^bb0(%in: !cells):
+    %xs = db.make_list(%in) : (!cells) -> !db.column<!storage.list<!storage.any>>
+    db.unwind_yield %xs : !db.column<!storage.list<!storage.any>>
+  } : (!cells) -> (!cells, !cells)
+  %r = db.static_map_key %carried key "a" : (!cells) -> !cells
+)mlir"),
+              Speculatable);
+}
+
+TEST_F(MapKeyReadSpeculatabilityTest, readsMapsCarriedIntoAndPastAnOptionalMatch) {
+    EXPECT_EQ(speculatabilityOfTheKeyRead(R"mlir(
+  %rows = db.unwind_const([{a = 1 : i64}, unit]) : !cells
+  %matched:2 = db.optional_match(%rows) {
+  ^bb0(%in: !cells, %tag: !db.column<ui64>):
+    %pairs:3 = db.cross_product factor {
+      db.yield %in, %tag : !cells, !db.column<ui64>
+    } factor {
+      %n = db.scan_nodes() : !nodes
+      db.yield %n : !nodes
+    }
+    db.optional_yield %pairs#1, {%pairs#0, %pairs#2} : {!cells, !nodes}
+  } : (!cells) -> (!cells, !nodes)
+  %r = db.static_map_key %matched#0 key "a" : (!cells) -> !cells
+)mlir"),
+              Speculatable);
+
+    EXPECT_EQ(speculatabilityOfTheKeyRead(R"mlir(
+  %rows = db.unwind_const([{a = 1 : i64}, 2 : i64]) : !cells
+  %matched:2 = db.optional_match(%rows) {
+  ^bb0(%in: !cells, %tag: !db.column<ui64>):
+    %pairs:3 = db.cross_product factor {
+      db.yield %in, %tag : !cells, !db.column<ui64>
+    } factor {
+      %n = db.scan_nodes() : !nodes
+      db.yield %n : !nodes
+    }
+    db.optional_yield %pairs#1, {%pairs#0, %pairs#2} : {!cells, !nodes}
+  } : (!cells) -> (!cells, !nodes)
+  %r = db.static_map_key %matched#0 key "a" : (!cells) -> !cells
+)mlir"),
+              NotSpeculatable);
+}
+
+TEST_F(MapKeyReadSpeculatabilityTest, readsMapsCarriedIntoAndPastACallSubquery) {
+    EXPECT_EQ(speculatabilityOfTheKeyRead(R"mlir(
+  %rows = db.unwind_const([{a = 1 : i64}, unit]) : !cells
+  %called:2 = db.call_subquery(%rows) carries_scope {
+  ^bb0(%in: !cells):
+    %v = db.static_map_key %in key "a" : (!cells) -> !cells
+    db.subquery_yield {%in, %v} : {!cells, !cells}
+  } : (!cells) -> (!cells, !cells)
+  %r = db.static_map_key %called#0 key "a" : (!cells) -> !cells
+)mlir"),
+              Speculatable);
+}
+
+TEST_F(MapKeyReadSpeculatabilityTest, readsMapsEveryUnionBranchYields) {
+    EXPECT_EQ(speculatabilityOfTheKeyRead(R"mlir(
+  %called = db.call_subquery() {
+    %union = db.union {
+      %x = db.unwind_const([{a = 1 : i64}, unit]) : !cells
+      db.yield %x : !cells
+    }, {
+      %y = db.unwind_const([{a = 2 : i64}, unit]) : !cells
+      db.yield %y : !cells
+    } : !cells
+    db.subquery_yield {%union} : {!cells}
+  } : () -> !cells
+  %r = db.static_map_key %called key "a" : (!cells) -> !cells
+)mlir"),
+              Speculatable);
+
+    EXPECT_EQ(speculatabilityOfTheKeyRead(R"mlir(
+  %called = db.call_subquery() {
+    %union = db.union {
+      %x = db.unwind_const([{a = 1 : i64}, unit]) : !cells
+      db.yield %x : !cells
+    }, {
+      %y = db.unwind_const([2 : i64, unit]) : !cells
+      db.yield %y : !cells
+    } : !cells
+    db.subquery_yield {%union} : {!cells}
+  } : () -> !cells
+  %r = db.static_map_key %called key "a" : (!cells) -> !cells
+)mlir"),
+              NotSpeculatable);
+}
+
+TEST_F(MapKeyReadSpeculatabilityTest, readsTheMapsAnUnwoundListHolds) {
+    EXPECT_EQ(speculatabilityOfTheKeyRead(R"mlir(
+  %x, %carried = db.unwind_computed({%node}) {
+  ^bb0(%in: !nodes):
+    %name = db.get_node_properties(%in, "name") : (!nodes) -> !db.column<!storage.nullable<!storage.string>>
+    %m = db.make_map(%name) keys ["a"] : !db.column<!storage.nullable<!storage.string>>
+    %xs = db.make_list(%m) : (!maps) -> !db.column<!storage.list<!storage.map>>
+    db.unwind_yield %xs : !db.column<!storage.list<!storage.map>>
+  } : (!nodes) -> (!cells, !nodes)
+  %r = db.static_map_key %x key "a" : (!cells) -> !cells
+)mlir"),
+              Speculatable);
+
+    EXPECT_EQ(speculatabilityOfTheKeyRead(R"mlir(
+  %x, %carried = db.unwind_computed({%node}) {
+  ^bb0(%in: !nodes):
+    %xs = db.make_list(%in, %string) : (!nodes, !strings) -> !db.column<!storage.list<!storage.any>>
+    db.unwind_yield %xs : !db.column<!storage.list<!storage.any>>
+  } : (!nodes) -> (!cells, !nodes)
+  %r = db.static_map_key %x key "a" : (!cells) -> !cells
+)mlir"),
+              NotSpeculatable);
+}
+
+TEST_F(MapKeyReadSpeculatabilityTest, readsAMapHeldByAConstantMap) {
+    EXPECT_EQ(speculatabilityOfTheKeyRead(R"mlir(
+  %m = db.constant({d = {e = 1 : i64}})
+  %d = db.static_map_key %m key "d" : (!maps) -> !cells
+  %laid = db.broadcast_constant(%d, %node) : (!cells, !nodes) -> !cells
+  %r = db.static_map_key %laid key "e" : (!cells) -> !cells
+)mlir"),
+              Speculatable);
+
+    EXPECT_EQ(speculatabilityOfTheKeyRead(R"mlir(
+  %m = db.constant({f = {e = 1 : i64}})
+  %d = db.static_map_key %m key "d" : (!maps) -> !cells
+  %r = db.static_map_key %d key "e" : (!cells) -> !cells
+)mlir"),
+              Speculatable);
+
+    EXPECT_EQ(speculatabilityOfTheKeyRead(R"mlir(
+  %m = db.constant({d = 1 : i64})
+  %d = db.static_map_key %m key "d" : (!maps) -> !cells
+  %r = db.static_map_key %d key "e" : (!cells) -> !cells
+)mlir"),
+              NotSpeculatable);
+}
+
+TEST_F(MapKeyReadSpeculatabilityTest, readsAMapHeldByAnUnwoundMap) {
+    EXPECT_EQ(speculatabilityOfTheKeyRead(R"mlir(
+  %rows = db.unwind_const([{s = {name = "Remy" : !storage.string}}, {t = 1 : i64}, unit]) : !cells
+  %s = db.static_map_key %rows key "s" : (!cells) -> !cells
+  %r = db.static_map_key %s key "name" : (!cells) -> !cells
+)mlir"),
+              Speculatable);
+
+    EXPECT_EQ(speculatabilityOfTheKeyRead(R"mlir(
+  %rows = db.unwind_const([{s = {name = "Remy" : !storage.string}}, unit]) : !cells
+  %s = db.static_map_key %rows key "s" : (!cells) -> !cells
+  %r = db.dynamic_map_key %s, %string : (!cells, !strings) -> !cells
+)mlir"),
+              Speculatable);
+
+    EXPECT_EQ(speculatabilityOfTheKeyRead(R"mlir(
+  %rows = db.unwind_const([{s = {name = "Remy" : !storage.string}}, {s = "x" : !storage.string}]) : !cells
+  %s = db.static_map_key %rows key "s" : (!cells) -> !cells
+  %r = db.static_map_key %s key "name" : (!cells) -> !cells
+)mlir"),
+              NotSpeculatable);
+}
+
+TEST_F(MapKeyReadSpeculatabilityTest, readsAMapAListElementHolds) {
+    EXPECT_EQ(speculatabilityOfTheKeyRead(R"mlir(
+  %lists = db.unwind_const([[{a = "Remy" : !storage.string}], [unit]]) : !db.column<!storage.list<!storage.any>>
+  %zero = db.constant(0 : i64)
+  %x = db.list_index %lists, %zero : (!db.column<!storage.list<!storage.any>>, !db.column<i64>) -> !unresolved
+  %r = db.static_map_key %x key "a" : (!unresolved) -> !cells
+)mlir"),
+              Speculatable);
+
+    EXPECT_EQ(speculatabilityOfTheKeyRead(R"mlir(
+  %lists = db.unwind_const([[{a = "Remy" : !storage.string}], [1 : i64]]) : !db.column<!storage.list<!storage.any>>
+  %zero = db.constant(0 : i64)
+  %x = db.list_index %lists, %zero : (!db.column<!storage.list<!storage.any>>, !db.column<i64>) -> !unresolved
+  %r = db.static_map_key %x key "a" : (!unresolved) -> !cells
+)mlir"),
+              NotSpeculatable);
+}
