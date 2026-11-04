@@ -406,6 +406,52 @@ capped one busy core at 2.8 GHz instead of 3.9. The two binaries timed the same,
 `LOAD JSONL`, whose code had not changed, took 215 s against 167 s. With C6 back on, a rerun
 cleared the 55 regressions.
 
+## Triaging review findings
+
+**Every finding a review turns up gets one outcome: fixed now, filed, by design, or not
+tracked. When no rule below clearly applies, file it.** "By design" and "not tracked" take a
+finding out of view, so they need a rule that covers it. A ticket costs little; a wrong
+dismissal hides a bug.
+
+Classify each finding with the first rule that fits:
+- **Non-determinism: fix now, before anything else.** A query whose IR, plan or answer differs
+  between two runs of one binary. Example: codegen walked pointer-keyed maps, so 6 fixtures
+  carried their columns in heap-address order; #1316 made those maps `llvm::MapVector`s.
+- **An answer that depends on chunk boundaries or row order: never by design**, even when it
+  follows from a design that was chosen. Example: TUR-419. A cell write types a new property
+  from its first chunk, so 65,536 integers then 2.5 store as Double, while 65,537 raise.
+- **A major bug, related to the change under review, with a simple fix: fix now.** A bug that
+  predates the change, or whose fix needs a design choice, is filed instead (TUR-416:
+  a failed write query keeps its writes).
+- **Arithmetic overflow: not tracked, except for durations.** Integer overflow is out of scope
+  for now (TUR-214 was cancelled). `sum()` of durations wrapping where `duration + duration`
+  raises is tracked (TUR-410).
+- **Error messages: not tracked.** A wording, a type name inside a message, a missing caret.
+- **TuringDB policy: by design.** `id()` and `elementId()` are always numbers.
+- **Where TuringDB chose better than Neo4j: by design.** A property holding mixed kinds raises,
+  a map can be a property, and values are more typed: a typed `sum()` of no rows is the zero
+  of its type (0.0, PT0S), `percentileCont()` is always a Double, and a duration has no month,
+  so two durations compare. A difference from Neo4j is a bug only if it is wrong in
+  TuringDB's own model.
+- **Dead code: delete it now**, with its build entries. Never file it.
+- **Everything else: file a ticket**, as a bug, a gap or a limitation. A missing feature is
+  filed, not built during triage.
+
+Fixing one:
+- Each fix is its own PR, stacked on the previous one. Write the failing test first.
+
+Filing one:
+- Reproduce it on the current tip first. Put the query and the answer you got in the ticket.
+- Search Linear for a duplicate. A sibling of an open ticket goes on it as a comment: the
+  `count()` cell beside a double that cannot type a new property went on TUR-394.
+- Team TuringDB, project Query Engine, no priority. Write the description for people; code
+  locations and reproduction details go in a collapsible `+++ Agent notes` section.
+- When the fix is a design choice, list the options with their costs and leave the choice open.
+
+After each fix or ticket, update the review document. Each finding states its status
+(`fixed by #N`, `ticketed as TUR-N`, `by design`, `not tracked`, `open`), and every summary
+line points to the same place.
+
 ## Project context
 
 - **Partitioning** is on the near-term roadmap (as of 2026-05-04). Some customers have specifically asked for **METIS-style structural partitioning** (edge-cut minimization), not hash partitioning. Treat partitioning as a near-term constraint when discussing scale-out, not a future-optional.
