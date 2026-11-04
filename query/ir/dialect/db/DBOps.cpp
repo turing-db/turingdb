@@ -2885,3 +2885,7 @@ Speculation::Speculatability DivOp::getSpeculatability() {
 Speculation::Speculatability ModOp::getSpeculatability() {
     return speculatableWhen(isNumberColumn(getLhs()) && isSafeLiteralDivisor(getRhs(), false));
 }
+
+Speculation::Speculatability PowOp::getSpeculatability() {
+    return speculatableOverNumbers(getOperation());
+}

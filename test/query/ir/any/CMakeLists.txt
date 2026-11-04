@@ -46,3 +46,7 @@ add_ir_tests(test_query_ir_container_index_verifier ContainerIndexVerifierTest.c
 add_turing_test(test_query_ir_any_index_type_error IndexTypeErrorTest.cpp)
 
 add_turing_test(test_query_ir_any_held_type_error HeldTypeErrorTest.cpp)
+
+add_turing_test(test_query_ir_any_string_function_held_type_error StringFunctionHeldTypeErrorTest.cpp)
+
+add_turing_test(test_query_ir_any_arithmetic_held_type_error ArithmeticHeldTypeErrorTest.cpp)

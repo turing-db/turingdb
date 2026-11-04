@@ -157,8 +157,7 @@ inline auto arithmeticOperand(T&& value) {
 
 /**
  * @brief The number a type-erased cell holds, whatever numeric type it is tagged as.
- * Absent when the cell holds no number - a string, a nested list or a null - so the
- * arithmetic over it answers null the way it does over an absent operand.
+ * Absent when the cell holds no number - a string, a nested list or a null.
  */
 inline std::optional<double> cellNumber(const CellView cell) {
     switch (cell.getTag()) {
@@ -303,6 +302,13 @@ inline std::string_view operandTypeName(const T& value) {
     }
 }
 
+template <typename T, typename U>
+[[noreturn]] inline void throwNumericOperandTypeError(const T& a, const U& b) {
+    throw TuringException(fmt::format("Operands are not valid and compatible numeric types: '{}' and '{}'",
+                                      operandTypeName(a),
+                                      operandTypeName(b)));
+}
+
 // The list an operand of a '+' that joins a list stands for: the list a cell holds, or the
 // one-element list of any other value, a null among them. The list buffer keeps a string
 // as a view, so a string owning its characters is copied into @param stringBuffer first.
@@ -376,33 +382,15 @@ template <typename T>
 concept Temporal = std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, DateTime>
                 || std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, Duration>;
 
-/// Whether such an operand holds a number, an instant or a duration.
-template <typename T>
-inline bool holdsAnArithmeticValue(const T& value) {
+// Calls @param visit with the value an operand holds, read as its own type: a cell as the
+// type its tag names, a column value as itself. A null answers null, and any other value
+// that is no number, instant or duration is handed to @param reject, which raises.
+template <typename T, typename Visit, typename Reject>
+inline std::optional<CellView> visitArithmeticOperand(const T& value, Visit&& visit, Reject&& reject) {
     using Decayed = std::decay_t<T>;
 
     if constexpr (std::is_same_v<Decayed, CellView>) {
-        const CellTag tag = value.getTag();
-
-        return tag == CellTag::Int
-            || tag == CellTag::UInt
-            || tag == CellTag::Double
-            || tag == CellTag::DateTime
-            || tag == CellTag::Duration;
-    } else if constexpr (TypeUtils::is_optional_v<T>) {
-        return value.has_value() && holdsAnArithmeticValue(*value);
-    } else {
-        return std::is_arithmetic_v<Decayed> || Temporal<Decayed>;
-    }
-}
-
-// Calls @param visit with the value an operand holds, read as its own type: a cell as the
-// type its tag names, a column value as itself. An operand holding nothing arithmetic reads
-// answers null, as an absent operand does.
-template <typename T, typename Visit>
-inline std::optional<CellView> visitArithmeticOperand(const T& value, Visit&& visit) {
-    if constexpr (std::is_same_v<std::decay_t<T>, CellView>) {
-        auto visitor = [&visit]<typename N>(CellView view) -> std::optional<CellView> {
+        auto visitor = [&visit, &reject]<typename N>(CellView view) -> std::optional<CellView> {
             if constexpr (std::is_same_v<N, types::UInt64::Primitive>) {
                 return visit(static_cast<int64_t>(view.getAs<N>()));
             } else if constexpr (std::is_same_v<N, types::Int64::Primitive>
@@ -410,20 +398,23 @@ inline std::optional<CellView> visitArithmeticOperand(const T& value, Visit&& vi
                               || std::is_same_v<N, types::DateTime::Primitive>
                               || std::is_same_v<N, types::Duration::Primitive>) {
                 return visit(view.getAs<N>());
-            } else {
+            } else if constexpr (std::is_same_v<N, PropertyNull>) {
                 return std::nullopt;
+            } else {
+                return reject();
             }
         };
 
        return CellTagDispatcher{value.getTag()}.execute(visitor, value);
 
     } else if constexpr (TypeUtils::is_optional_v<T>) {
-        return value.has_value() ? visitArithmeticOperand(*value, visit) : std::nullopt;
-    } else if constexpr (std::is_same_v<std::decay_t<T>, PropertyNull>
-                      || std::is_same_v<std::decay_t<T>, types::Bool::Primitive>) {
+        return value.has_value() ? visitArithmeticOperand(*value, visit, reject) : std::nullopt;
+    } else if constexpr (std::is_same_v<Decayed, PropertyNull>) {
         return std::nullopt;
-    } else {
+    } else if constexpr (std::is_arithmetic_v<Decayed> || Temporal<Decayed>) {
         return visit(arithmeticOperand(value));
+    } else {
+        return reject();
     }
 }
 
@@ -622,28 +613,32 @@ struct BinaryOp {
 
                 const std::optional<std::string_view> text = joinedText(_stringBuffer, a, b);
                 if (!text.has_value()) {
-                    throwAdditionTypeError(a, b);
+                    throwOperandTypeError(a, b);
                 }
 
                 return stagedCell(_listBuffer, *text);
-            } else if (!holdsAnArithmeticValue(a) || !holdsAnArithmeticValue(b)) {
-                throwAdditionTypeError(a, b);
             }
+        } else if (holdsNull(a) || holdsNull(b)) {
+            return std::nullopt;
         }
 
-        return visitArithmeticOperand(a, [this, &b](const auto lhs) {
-            return visitArithmeticOperand(b, [this, lhs](const auto rhs) -> std::optional<CellView> {
+        const auto reject = [&a, &b]() -> std::optional<CellView> {
+            throwOperandTypeError(a, b);
+        };
+
+        const auto computeFrom = [this, &b, &reject](const auto lhs) {
+            const auto compute = [this, lhs](const auto rhs) -> std::optional<CellView> {
                 if constexpr (requires { F {}(lhs, rhs); }) {
                     return stagedCell(this->_listBuffer, F {}(lhs, rhs));
-                } else if constexpr (std::is_same_v<F, std::plus<>>) {
-                    throwAdditionTypeError(lhs, rhs);
                 } else {
-                    throw TuringException(fmt::format("Operands are not valid and compatible numeric types: '{}' and '{}'",
-                                                      operandTypeName(lhs),
-                                                      operandTypeName(rhs)));
+                    throwOperandTypeError(lhs, rhs);
                 }
-            });
-        });
+            };
+
+            return visitArithmeticOperand(b, compute, reject);
+        };
+
+        return visitArithmeticOperand(a, computeFrom, reject);
     }
 
     // A list beside a cell joins the list the cell holds, or takes the cell as one more
@@ -664,11 +659,15 @@ struct BinaryOp {
     template <typename T, typename U>
         requires ComputesRealOverTaggedCell<F, T, U>
     inline std::optional<double> operator()(T&& a, U&& b) const {
+        if (holdsNull(a) || holdsNull(b)) {
+            return std::nullopt;
+        }
+
         const std::optional<double> lhs = cellOperand(a);
         const std::optional<double> rhs = cellOperand(b);
 
         if (!lhs.has_value() || !rhs.has_value()) {
-            return std::nullopt;
+            throwOperandTypeError(a, b);
         }
 
         return F {}(*lhs, *rhs);
@@ -683,19 +682,23 @@ struct BinaryOp {
     }
 
     template <typename T, typename U>
-    [[noreturn]] static void throwAdditionTypeError(const T& a, const U& b) {
-        throw TuringException(fmt::format("Operands are not valid and compatible types for '+': '{}' and '{}'",
-                                          operandTypeName(a),
-                                          operandTypeName(b)));
+    [[noreturn]] static void throwOperandTypeError(const T& a, const U& b) {
+        if constexpr (std::is_same_v<F, std::plus<>>) {
+            throw TuringException(fmt::format("Operands are not valid and compatible types for '+': '{}' and '{}'",
+                                              operandTypeName(a),
+                                              operandTypeName(b)));
+        } else {
+            throwNumericOperandTypeError(a, b);
+        }
     }
 };
 
 struct Subtract : std::minus<> {
     using std::minus<>::operator();
 
-    // Unused but defined to satisfy dispatcher
+    // Reached over a type-erased cell alone: the analyzer turns the typed pair away
     DateTime operator()(Duration duration, DateTime instant) const {
-        throw TuringException("A duration minus a datetime is not defined.");
+        throwNumericOperandTypeError(duration, instant);
     }
 };
 
@@ -721,10 +724,10 @@ struct SafeDivides {
         return std::divides<> {}(std::forward<T>(a), std::forward<U>(b));
     }
 
-    // Unused but defined to satisfy dispatcher
+    // Reached over a type-erased cell alone: the analyzer turns the typed pair away
     template <typename T>
     Duration operator()(T&& number, Duration duration) const {
-        throw TuringException("A number divided by a duration is not defined.");
+        throwNumericOperandTypeError(number, duration);
     }
 };
 

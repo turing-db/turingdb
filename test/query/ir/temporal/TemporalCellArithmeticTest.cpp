@@ -16,9 +16,9 @@ TEST_F(TemporalCellArithmeticTest, computesEachCellInItsOwnType) {
 }
 
 TEST_F(TemporalCellArithmeticTest, computesTwoCellsInTheirOwnTypes) {
-    expectRows("UNWIND [datetime('2024-01-02T00:00:00Z'), 'x'] AS a "
-               "UNWIND [datetime('2024-01-01T00:00:00Z'), 'y'] AS b RETURN a - b",
-               {{"PT24H"}, {"null"}, {"null"}, {"null"}});
+    expectRows("UNWIND [datetime('2024-01-02T00:00:00Z'), null, 'x'] AS a WITH a LIMIT 2 "
+               "UNWIND [datetime('2024-01-01T00:00:00Z'), null, 'y'] AS b WITH a, b LIMIT 2 RETURN a - b",
+               {{"PT24H"}, {"null"}});
     expectRows("UNWIND [datetime('2024-01-01T00:00:00Z'), 'x'] AS a "
                "UNWIND [duration(3600000000), 'y'] AS b RETURN a + b, b + a",
                {{"2024-01-01T01:00:00Z", "2024-01-01T01:00:00Z"},
@@ -33,9 +33,12 @@ TEST_F(TemporalCellArithmeticTest, rejectsCellsWithNoOperatorBetweenThem) {
                 "Operands are not valid and compatible numeric types: 'DateTime' and 'Integer'");
     expectError("UNWIND [datetime('2024-01-01T00:00:00Z'), 1] AS x RETURN x * x",
                 "Operands are not valid and compatible numeric types: 'DateTime' and 'DateTime'");
+    expectError("UNWIND [datetime('2024-01-02T00:00:00Z'), 'x'] AS a "
+                "UNWIND [datetime('2024-01-01T00:00:00Z'), 'y'] AS b RETURN a - b",
+                "Operands are not valid and compatible numeric types: 'DateTime' and 'String'");
 }
 
 TEST_F(TemporalCellArithmeticTest, rejectsADurationMinusAnInstant) {
     expectError("UNWIND [duration(1), 'x'] AS x RETURN x - datetime('2024-01-01T00:00:00Z')",
-                "A duration minus a datetime is not defined.");
+                "Operands are not valid and compatible numeric types: 'Duration' and 'DateTime'");
 }

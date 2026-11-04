@@ -112,9 +112,15 @@ TEST_F(NormalizeFunctionTest, constantIsLaidOutOverEveryRow) {
 TEST_F(NormalizeFunctionTest, normalizeReadsTaggedCells) {
     expectRows("MATCH (p:Person {name: 'Remy'}) RETURN normalize(p.words[0]), normalize(p.words[0], NFD), normalize(p.words[2], NFKC)",
                {{COMPOSED_E_ACUTE, DECOMPOSED_E_ACUTE, "null"}});
-    expectRows("MATCH (p:Person {name: 'Remy'}) RETURN normalize(p.words[1]), normalize(p.words[1], NFKD)", {{"null", "null"}});
-    expectRows("MATCH (p:Person {name: 'Remy'}) UNWIND p.words AS w RETURN normalize(w, NFD)",
-               {{DECOMPOSED_E_ACUTE}, {"null"}, {"null"}});
+    expectRows("MATCH (p:Person {name: 'Remy'}) UNWIND [p.words[0], p.words[2]] AS w RETURN normalize(w, NFD)",
+               {{DECOMPOSED_E_ACUTE}, {"null"}});
+}
+
+TEST_F(NormalizeFunctionTest, normalizeRaisesOnACellHoldingNoString) {
+    expectError("MATCH (p:Person {name: 'Remy'}) RETURN normalize(p.words[1])", "normalize() reads a string, not 'Integer'");
+    expectError("MATCH (p:Person {name: 'Remy'}) RETURN normalize(p.words[1], NFKD)", "normalize() reads a string, not 'Integer'");
+    expectError("MATCH (p:Person {name: 'Remy'}) UNWIND p.words AS w RETURN normalize(w, NFD)",
+                "normalize() reads a string, not 'Integer'");
 }
 
 TEST_F(NormalizeFunctionTest, formNamesRemainUsableAsNames) {

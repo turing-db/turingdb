@@ -1147,46 +1147,17 @@ private:
     std::vector<int32_t> _codepoints;
 };
 
-// A cell holding no string has no normal form, so it answers null rather than raising
-template <typename NormalFormFunctor>
-class TaggedNormalFormFunction {
-public:
-    using ArgType = CellView;
-    using ResultType = std::optional<typename NormalFormFunctor::ResultType>;
-
-    TaggedNormalFormFunction()
-        requires std::is_default_constructible_v<NormalFormFunctor>
-    {
-    }
-
-    explicit TaggedNormalFormFunction(StringBuffer* stringBuffer)
-        requires std::is_constructible_v<NormalFormFunctor, StringBuffer*>
-        : _functor(stringBuffer)
-    {
-    }
-
-    ResultType operator()(const ArgType cell) {
-        if (cell.getTag() != CellTag::String) {
-            return std::nullopt;
-        }
-
-        return _functor(cell.getAs<types::String::Primitive>());
-    }
-
-    ResultType operator()(const std::optional<ArgType>& cell) {
-        return cell.has_value() ? (*this)(*cell) : std::nullopt;
-    }
-
-private:
-    NormalFormFunctor _functor;
-};
+template <UnicodeNormalForm Form>
+class TaggedIsNormalizedFunction;
 
 template <UnicodeNormalForm Form>
 class NormalizeFunction {
 public:
     using ArgType = types::String::Primitive;
     using ResultType = types::String::Primitive;
-    using TaggedCounterpart = TaggedNormalFormFunction<NormalizeFunction<Form>>;
+    using TaggedCounterpart = TaggedTextFunction<NormalizeFunction<Form>>;
+
+    static constexpr std::string_view NAME = "normalize";
 
     explicit NormalizeFunction(StringBuffer* stringBuffer);
 
@@ -1202,7 +1173,7 @@ class IsNormalizedFunction {
 public:
     using ArgType = types::String::Primitive;
     using ResultType = types::Bool::Primitive;
-    using TaggedCounterpart = TaggedNormalFormFunction<IsNormalizedFunction<Form>>;
+    using TaggedCounterpart = TaggedIsNormalizedFunction<Form>;
 
     IsNormalizedFunction();
 
@@ -1210,6 +1181,29 @@ public:
 
 private:
     UnicodeNormalizer<Form> _normalizer;
+};
+
+// A cell holding no string has no normal form, so it answers null rather than raising
+template <UnicodeNormalForm Form>
+class TaggedIsNormalizedFunction {
+public:
+    using ArgType = CellView;
+    using ResultType = std::optional<types::Bool::Primitive>;
+
+    ResultType operator()(const ArgType cell) {
+        if (cell.getTag() != CellTag::String) {
+            return std::nullopt;
+        }
+
+        return _functor(cell.getAs<types::String::Primitive>());
+    }
+
+    ResultType operator()(const std::optional<ArgType>& cell) {
+        return cell.has_value() ? (*this)(*cell) : std::nullopt;
+    }
+
+private:
+    IsNormalizedFunction<Form> _functor;
 };
 
 enum class TrimSide : uint8_t {

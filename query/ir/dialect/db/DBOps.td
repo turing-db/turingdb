@@ -3411,13 +3411,18 @@ def IsNotNullOp : TuringOp<"is_not_null", [Pure, ConstantThroughOperands]> {
   let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
 }
 
-def AddOp : BinaryOp<"add", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
-  let summary = "Row-wise addition of two value columns";
-
+// An arithmetic operator may raise on a type-erased cell holding a value it does not compute
+// over, on a zero divisor, or on an overflow: each op says which operands rule them out
+class ArithmeticOp<string mnemonic>
+    : BinaryOp<mnemonic, [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let arguments = (ins Column:$lhs, Column:$rhs);
   let results   = (outs Column:$result);
 
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
+def AddOp : ArithmeticOp<"add"> {
+  let summary = "Row-wise addition of two value columns";
 }
 
 def ConcatOp : BinaryOp<"concat", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
@@ -3513,49 +3518,24 @@ def ContainerIndex : BinaryOp<"container_index", [MayRaise]> {
   let assemblyFormat = "$base `,` $index attr-dict `:` functional-type(operands, results)";
 }
 
-def SubOp : BinaryOp<"sub", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def SubOp : ArithmeticOp<"sub"> {
   let summary = "Row-wise subtraction of two value columns";
-
-  let arguments = (ins Column:$lhs, Column:$rhs);
-  let results   = (outs Column:$result);
-
-  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def MulOp : BinaryOp<"mul", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def MulOp : ArithmeticOp<"mul"> {
   let summary = "Row-wise multiplication of two value columns";
-
-  let arguments = (ins Column:$lhs, Column:$rhs);
-  let results   = (outs Column:$result);
-
-  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def DivOp : BinaryOp<"div", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def DivOp : ArithmeticOp<"div"> {
   let summary = "Row-wise division of two value columns";
-
-  let arguments = (ins Column:$lhs, Column:$rhs);
-  let results   = (outs Column:$result);
-
-  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def ModOp : BinaryOp<"mod", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def ModOp : ArithmeticOp<"mod"> {
   let summary = "Row-wise modulo of two value columns";
-
-  let arguments = (ins Column:$lhs, Column:$rhs);
-  let results   = (outs Column:$result);
-
-  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def PowOp : BinaryOp<"pow", [Pure]> {
+def PowOp : ArithmeticOp<"pow"> {
   let summary = "Row-wise exponentiation of two value columns";
-
-  let arguments = (ins Column:$lhs, Column:$rhs);
-  let results   = (outs Column:$result);
-
-  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
 def GtOp : PredicateOp<"gt", [Pure]> {

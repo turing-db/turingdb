@@ -150,7 +150,11 @@ add_turing_test(test_query_ir_unread_slice_raises UnreadSliceRaisesTest.cpp)
 
 add_turing_test(test_query_ir_unread_logical_raises UnreadLogicalRaisesTest.cpp)
 
+add_turing_test(test_query_ir_unread_held_type_error_raises UnreadHeldTypeErrorRaisesTest.cpp)
+
 add_ir_tests(test_query_ir_raise_effect RaiseEffectTest.cpp)
+
+add_ir_tests(test_query_ir_held_type_error_raise_effect HeldTypeErrorRaiseEffectTest.cpp)
 
 add_ir_tests(test_query_ir_unwind_range_window_speculatability UnwindRangeWindowSpeculatabilityTest.cpp)
 
