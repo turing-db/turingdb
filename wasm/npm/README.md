@@ -17,13 +17,13 @@ npm install turingdb
 ## Use
 
 The server speaks the binary protocol when it is launched with `USE_TURING_PROTO=1`. It
-listens on port 6666 and takes queries on `/query`.
+listens on port 6686 and takes queries on `/query`.
 
 ```js
 import { TuringClient } from "turingdb";
 
 const client = new TuringClient({
-    url: "http://localhost:6666/query",
+    url: "http://localhost:6686/query",
     graph: "mygraph",
 });
 

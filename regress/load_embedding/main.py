@@ -56,7 +56,7 @@ def assert_close(actual, expected):
 
 
 def main():
-    client = turingdb.TuringDB(host="http://localhost:6666")
+    client = turingdb.TuringDB(host="http://localhost:6686")
     client.try_reach()
 
     print("Running LOAD EMBEDDING Test")

@@ -24,14 +24,14 @@ def spawn_turingdb_process():
     cmd = "turingdb -demon -turing-dir .turing"
     print(f"- {GREEN}Starting turingdb with `{BLUE}{cmd}{NC}`{NC}")
     assert subprocess.call(cmd, shell=True) == 0
-    assert listening_port(6666)
+    assert listening_port(6686)
 
 
 def stop_with_signal(proc):
     cmd = "pkill -2 turingdb"
     print(f"- {GREEN}Stopping turingdb with `{BLUE}{cmd}{NC}`{NC}")
     assert subprocess.call(cmd, shell=True) == 0
-    assert wait_port_avail(6666)
+    assert wait_port_avail(6686)
 
 
 def wait_port_avail(port):
@@ -50,7 +50,7 @@ def stop_with_cmd(proc):
     cmd = "turingdb stop -turing-dir .turing"
     print(f"- {GREEN}Stopping turingdb with `{BLUE}{cmd}{NC}`{NC}")
     assert subprocess.call(cmd, shell=True) == 0
-    assert not listening_port(6666)
+    assert not listening_port(6686)
 
 
 if __name__ == "__main__":

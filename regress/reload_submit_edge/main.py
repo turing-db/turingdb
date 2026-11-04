@@ -5,7 +5,7 @@ import turingdb
 
 
 GRAPH_NAME = "reload_submit_edge"
-HOST = "http://localhost:6666"
+HOST = "http://localhost:6686"
 TURING_DIR = ".turing"
 
 

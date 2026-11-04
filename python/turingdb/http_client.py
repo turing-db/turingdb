@@ -4,6 +4,7 @@ import time
 from typing import Literal, Optional
 
 from .exceptions import TuringDBException
+from .protocol import DEFAULT_HOST
 from .s3 import S3Client
 
 _DURATION_COMPONENT = re.compile(r"(-?)(\d+)(?:\.(\d+))?([HMS])")
@@ -66,7 +67,7 @@ class HTTPClient:
 
     def __init__(
         self,
-        host: str = "http://localhost:6666",
+        host: str = DEFAULT_HOST,
         token: Optional[str] = None,
     ):
         import os

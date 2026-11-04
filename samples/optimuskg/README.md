@@ -30,7 +30,7 @@ After import:
 turingdb start -demon -turing-dir ./turingdb.out
 python3 - <<'PY'
 from turingdb import TuringDB
-c = TuringDB(host="http://localhost:6666")
+c = TuringDB(host="http://localhost:6686")
 c.load_graph("optimuskg")
 c.set_graph("optimuskg")
 print(c.query("MATCH (n:GEN) WHERE n.symbol = 'TSPAN6' RETURN n.id, n.symbol, n.biotype"))

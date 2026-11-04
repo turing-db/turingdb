@@ -34,6 +34,7 @@
 #include "ShellTable.h"
 #include "LocalMemory.h"
 #include "ParameterJson.h"
+#include "DBServerConfig.h"
 #include "ParameterValue.h"
 
 #include "NLOutputSink.h"
@@ -319,7 +320,7 @@ void connectCommand(const TuringShell::Command::Words& args, TuringShell& shell,
     argParser.add_argument("port")
         .nargs(1)
         .metavar("port")
-        .default_value("6666")
+        .default_value(std::to_string(DBServerConfig::DEFAULT_PORT))
         .help("The port of the server you want to connect to")
         .store_into(port);
 
@@ -400,7 +401,7 @@ TuringShell::TuringShell(TuringDB& turingDB,
                          LocalMemory* mem,
                          LineNoiseHandle* lineNoiseHandle)
     : _turingDB(turingDB),
-    _client("127.0.0.1", "6666", mem),
+    _client("127.0.0.1", std::to_string(DBServerConfig::DEFAULT_PORT), mem),
     _mem(mem),
     _lineNoiseHandle(lineNoiseHandle)
 {

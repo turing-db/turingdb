@@ -8,7 +8,7 @@ def open_clients(script_dir: str) -> list[tuple[str, turingdb.TuringDB]]:
     embedded_dir = os.path.join(script_dir, ".turing-embedded")
     os.makedirs(embedded_dir, exist_ok=True)
 
-    native = turingdb.TuringDB(type="native", host="http://localhost:6666")
+    native = turingdb.TuringDB(type="native", host="http://localhost:6686")
     native.try_reach()
     json = turingdb.TuringDB(type="json", host="http://localhost:6676")
     json.try_reach()

@@ -115,7 +115,7 @@ Startup sequence:
 | Flag | Description |
 |---|---|
 | `-turing-dir <path>` | Override root turing directory (default: `~/.turing`) |
-| `-p <port>` | HTTP listen port (default: 6666) |
+| `-p <port>` | HTTP listen port (default: 6686) |
 | `-i <addr>` | HTTP listen address (default: 127.0.0.1) |
 | `-demon` | Daemonise the process |
 | `-reset-default` | Delete the default graph before starting |
