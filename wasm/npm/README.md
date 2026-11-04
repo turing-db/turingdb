@@ -87,7 +87,8 @@ A `Column` holds the decoded buffers and builds JS values only when a row is rea
 - `url` — the query endpoint. Default `/query`.
 - `graph` — graph name. Default `default`.
 - `authToken` — sent as `Authorization: Bearer`.
-- `bufferCapacity` — decoder buffer size in bytes. Default 1 MiB.
+- `bufferCapacity` — the decoder buffer's starting size in bytes; it grows to fit a larger
+  packet. Default 1 MiB.
 - `fetch` — a `fetch` implementation to use instead of the global one.
 - `wasmUrl` — where to fetch `turing_wasm_decoder.wasm` from. See The wasm file.
 

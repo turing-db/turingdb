@@ -354,9 +354,7 @@ TuringAsyncClient::RecvState TuringAsyncClient::processChunkSize() {
     const size_t payloadSize = _incomingHTTPChunkSize - ProtoHeader::wireSize();
 
     _inBuf.reset();
-    if (payloadSize > _inBuf.capacity()) {
-        throw TuringException("Server proto payload exceeds client inbuf capacity");
-    }
+    _inBuf.ensureCapacity(payloadSize);
 
     _protoHeaderRecvIovecs = {
         {
