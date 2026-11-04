@@ -6,6 +6,7 @@ WebAssembly build of the engine's own decoder, so the browser and the server run
 decode code.
 
 Works in Node 18+ and in the browser. No dependencies.
+TypeScript declarations ship with the package.
 
 ## Install
 
@@ -37,8 +38,9 @@ for (const { names, columns } of chunks) {
 A query resolves to one entry in `chunks` per streamed dataframe. Each is
 `{ names, columns }`, where every column is a `Column`.
 
-`queryData(cypher)` is the shortcut for plain JSON-shaped output: chunks by columns by
-rows, with 64-bit integers converted to `Number`.
+`queryData(cypher)` is the shortcut for plain arrays: chunks by columns by rows, with
+64-bit integers converted to `Number`. A result with no rows still has its columns, so
+`RETURN a, b` with no match gives `[[[], []]]`.
 
 ```js
 const data = await client.queryData("MATCH (n:Person) RETURN n.name");

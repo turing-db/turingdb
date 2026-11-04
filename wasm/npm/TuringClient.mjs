@@ -21,8 +21,7 @@
 //     // 64-bit integers and IDs as BigInt
 //
 //     const data = await client.queryData("MATCH (n) RETURN n");
-//     // chunks x columns x rows with BigInt converted to Number — the shape the
-//     // visualizer's REST client returned as json.data
+//     // chunks x columns x rows with BigInt converted to Number
 
 const PROTO_HEADER_SIZE = 5;
 
@@ -102,6 +101,7 @@ const QUERY_STATUS_NAMES = [
 // ignoreBOM keeps a leading U+FEFF as a character, so decoded lengths match the
 // decoder's UTF-16 offsets.
 const utf8Decoder = new TextDecoder("utf-8", { ignoreBOM: true });
+const utf8Encoder = new TextEncoder();
 
 // Thrown for every failed query: status carries the server's QueryStatus name (or a
 // client-side pseudo-status such as HTTP_ERROR / PROTOCOL_ERROR / DECODE_ERROR) and
@@ -452,8 +452,8 @@ export class Column {
         return out;
     }
 
-    // Every row with 64-bit integers and IDs as Number (JSON parity: past 2^53 the
-    // precision is lost), inside lists and paths too.
+    // Every row with 64-bit integers and IDs as Number (past 2^53 the precision is lost),
+    // inside lists and paths too.
     toNumberArray() {
         const fixed = FIXED_WIDTH_KINDS[this.typeCode];
         if (fixed === undefined) {
@@ -521,6 +521,18 @@ function readExecTime(packet) {
         return null;
     }
     return new DataView(packet.buffer, packet.byteOffset + PROTO_HEADER_SIZE, 4).getFloat32(0, true);
+}
+
+// Request body, read by TuringProtoQueryRequest on the server:
+// [queryLen u32le][query UTF-8][paramLen u32le][param bytes]. No parameters: paramLen 0.
+function encodeRequestBody(cypher) {
+    const query = utf8Encoder.encode(cypher);
+    const body = new Uint8Array(4 + query.length + 4);
+    const view = new DataView(body.buffer);
+    view.setUint32(0, query.length, true);
+    body.set(query, 4);
+    view.setUint32(4 + query.length, 0, true);
+    return body;
 }
 
 // ERROR packet payload: one QueryStatus byte followed by the UTF-8 message.
@@ -617,7 +629,7 @@ export class TuringClient {
         const response = await this._fetch(url, {
             method: "POST",
             headers,
-            body: cypher,
+            body: encodeRequestBody(cypher),
             signal: options.signal,
         });
         if (!response.ok) {
@@ -633,9 +645,8 @@ export class TuringClient {
         }
     }
 
-    // Drop-in shape for the visualizer's REST client: chunks x columns x row values,
-    // all 64-bit integers as Number — matching what JSON gave it (values past 2^53 lose
-    // precision exactly as JSON does; use query() to keep BigInt).
+    // Chunks x columns x row values, 64-bit integers as Number: past 2^53 the precision
+    // is lost, so use query() to keep BigInt. An empty result is one chunk of empty columns.
     async queryData(cypher, options = {}) {
         const { chunks } = await this.query(cypher, options);
         return chunks.map((chunk) => chunk.columns.map((column) => column.toNumberArray()));
