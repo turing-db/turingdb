@@ -68,6 +68,16 @@ export async function runVersionCases(runner: CaseRunner): Promise<void> {
     const newChange = await runner.execute("CHANGE NEW");
     const change = newChange.rows[0][0] as bigint;
 
+    await runner.runChecks("versions: a change", [
+        {
+            name: "numbers the change it opens with a CHANGE_ID",
+            run: async () => {
+                assert.deepEqual(newChange.types, ["CHANGE_ID"]);
+                assert.equal(typeof change, "bigint");
+            },
+        },
+    ]);
+
     await runner.execute(CANCEL_S8, { change });
     await runner.execute(ADD_S15, { change });
     for (const update of UPDATE_STATIONS) {

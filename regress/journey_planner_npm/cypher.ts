@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 
-import { Column, ColumnEncoding, ColumnType, TuringQueryError, double } from "turingdb";
-import type { Parameters } from "turingdb";
+import { Column, ColumnEncoding, ColumnType, TuringClient, TuringQueryError, double } from "turingdb";
+import type { Parameters, QueryResult, Value } from "turingdb";
 
 import { at, embedding, minutes } from "./harness.js";
 import type { Case, Check } from "./harness.js";
+import { TIMETABLE_GRAPH } from "./timetable.js";
 
 const OXFORD_FACILITIES = { parking: true, cycleSpaces: 400n, retail: ["café", "newsagent"] };
 
@@ -189,6 +190,38 @@ export const VALUE_CASES: Case[] = [
         query: "RETURN abs(-3), sqrt(16), ceil(2.1), floor(2.9), 7 / 2, 7 % 3, 7.0 / 2, 2 + 0.5, -(3)",
         rows: [[3n, 4.0, 3.0, 2.0, 3n, 1n, 3.5, 2.5, -3n]],
     },
+    {
+        name: "reads an element of a mixed list and a key of a map as cells",
+        query: "WITH [1, 'two', 2.5] AS mixed, {open: true} AS stop RETURN mixed[0], mixed[1], mixed[2], stop.open",
+        types: ["CELL_VIEW", "CELL_VIEW", "CELL_VIEW", "CELL_VIEW"],
+        rows: [[1n, "two", 2.5, true]],
+    },
+    {
+        name: "returns an empty map and an empty list",
+        query: "RETURN {} AS empty, [] AS none",
+        types: ["MAP_VIEW", "LIST_VIEW"],
+        rows: [[{}, []]],
+    },
+    {
+        name: "returns the edges of a path as a list of their IDs",
+        query: "MATCH p = (o:STATION {crs: 'OXF'})-[t:THU]->(m:MODE) RETURN relationships(p), [id(t)]",
+        check: ({ rows }) => {
+            const [edges, ids] = rows[0];
+            assert.deepEqual(edges, ids);
+        },
+    },
+    // 2^21 characters, over the 1 MiB a packet holds, in a column and inside a list
+    {
+        name: "returns a string longer than a packet",
+        query: "WITH reduce(s = 'x', i IN range(1, 21) | s + s) AS long RETURN long, [long, 'end'], size(long)",
+        check: ({ rows }) => {
+            const [long, list, size] = rows[0];
+
+            assert.equal(size, 2n ** 21n);
+            assert.equal(long, "x".repeat(2 ** 21));
+            assert.deepEqual(list, ["x".repeat(2 ** 21), "end"]);
+        },
+    },
 ];
 
 // The timetable is 5 stations, 34 calling points and 2 fixed links: 36 ARRIVE edges, 20 NEXT
@@ -198,6 +231,7 @@ export const MECHANISM_CASES: Case[] = [
     {
         name: "counts the nodes of each label set",
         query: "MATCH (n) RETURN labels(n), count(n)",
+        types: ["LIST_VIEW", "UINT64"],
         rows: [[["STATION"], 5n], [["MODE"], 34n], [["MODE", "FIXED"], 2n]],
     },
     {
@@ -389,6 +423,12 @@ export const PARAMETER_CASES: Case[] = [
         rows: [[5n]],
     },
     {
+        name: "parses a parameter map larger than the client's first buffer",
+        query: "MATCH (s:$label) RETURN count(s)",
+        options: { parameters: { label: "STATION", stops: Array.from({ length: 10000 }, (_, index) => `stop ${index}`) } },
+        rows: [[5n]],
+    },
+    {
         name: "reports a parameter the query names but the map lacks",
         query: "MATCH (s:$label) RETURN s",
         options: { parameters: { lable: "STATION" } },
@@ -422,76 +462,231 @@ export const PARAMETER_CASES: Case[] = [
     },
 ];
 
-export const CLIENT_CHECKS: Check[] = [
-    {
-        name: "rejects a parameter a query cannot hold before sending it",
-        run: async (client) => {
-            // A JavaScript caller has no declarations to turn the Date away
-            const parameters = { when: new Date(0) } as unknown as Parameters;
+function firstValue(result: QueryResult): Value | undefined {
+    return result.chunks[0].columns[0].get(0);
+}
 
-            await assert.rejects(client.query("RETURN 1", { parameters }), (raised) => {
-                assert.ok(raised instanceof TuringQueryError);
-                assert.equal(raised.status, "PARAMETER_ERROR");
-                assert.ok(raised.message.includes("$when"));
-                return true;
-            });
-        },
-    },
-    {
-        name: "returns plain numbers from queryData",
-        run: async (client) => {
-            const data = await client.queryData("MATCH (s:STATION) RETURN s.crs, s.minInterchange, s.lat ORDER BY s.crs");
+function expectStatus(status: string, message: string): (raised: unknown) => boolean {
+    return (raised) => {
+        assert.ok(raised instanceof TuringQueryError, String(raised));
+        assert.equal(raised.status, status);
+        assert.ok(raised.message.includes(message), raised.message);
+        return true;
+    };
+}
 
-            assert.deepEqual(data, [[
-                ["DID", "OXF", "PAD", "RDG", "SWI"],
-                [4, 5, 10, 6, 5],
-                [51.611, 51.7535, 51.5154, 51.4589, 51.5655],
-            ]]);
-        },
-    },
-    {
-        name: "times the query",
-        run: async (client) => {
-            const { execTimeMs } = await client.query("MATCH (n) RETURN count(n)");
+// The timetable before the version cases rewrite it: 5 stations, 34 calling points, 2 fixed links
+const TIMETABLE_NODE_COUNT = 41n;
 
-            assert.equal(typeof execTimeMs, "number");
-            assert.ok((execTimeMs as number) >= 0);
-        },
-    },
-    {
-        name: "exposes a vector column's values as a typed array",
-        run: async (client) => {
-            const { chunks } = await client.query("MATCH (m:MODE) WHERE m.depart IS NOT NULL RETURN m.depart ORDER BY m.depart LIMIT 3");
-            const column: Column = chunks[0].columns[0];
+// The checks that need a client of their own make it from the server's query endpoint
+export function clientChecks(url: string): Check[] {
+    return [
+        {
+            name: "rejects a parameter a query cannot hold before sending it",
+            run: async (client) => {
+                // A JavaScript caller has no declarations to turn the Date away
+                const parameters = { when: new Date(0) } as unknown as Parameters;
 
-            assert.equal(column.typeCode, ColumnType.INT64);
-            assert.equal(column.length, 3);
-            assert.deepEqual(column.toArray(), [470n, 475n, 480n]);
-            assert.deepEqual(column.toNumberArray(), [470, 475, 480]);
+                await assert.rejects(client.query("RETURN 1", { parameters }), expectStatus("PARAMETER_ERROR", "$when"));
+            },
         },
-    },
-    {
-        name: "marks the missing rows of an optional column",
-        run: async (client) => {
-            const { chunks } = await client.query("MATCH (s:STATION) RETURN s.sign ORDER BY s.crs");
-            const column: Column = chunks[0].columns[0];
+        {
+            name: "returns plain numbers from queryData",
+            run: async (client) => {
+                const data = await client.queryData("MATCH (s:STATION) RETURN s.crs, s.minInterchange, s.lat ORDER BY s.crs");
 
-            assert.ok(column.isOptional);
-            assert.deepEqual(column.toArray(), [null, "Oxford 🚆", null, null, null]);
+                assert.deepEqual(data, [[
+                    ["DID", "OXF", "PAD", "RDG", "SWI"],
+                    [4, 5, 10, 6, 5],
+                    [51.611, 51.7535, 51.5154, 51.4589, 51.5655],
+                ]]);
+            },
         },
-    },
-    {
-        name: "sends one value for a constant column",
-        run: async (client) => {
-            const { chunks } = await client.query("MATCH (s:STATION) RETURN s.crs, 'UK' AS country");
-            const column: Column = chunks[0].columns[1];
+        {
+            name: "converts the integers inside lists, maps and paths in queryData",
+            run: async (client) => {
+                const data = await client.queryData("MATCH p = (o:STATION {crs: 'OXF'})-[t:THU]->(m:MODE) " +
+                    "RETURN p, {path: p, hops: [length(p)]}, [id(o), id(t), id(m)]");
+                const [[[path], [map], [ids]]] = data;
 
-            assert.ok(column.isConstant);
-            assert.equal(column.encoding, ColumnEncoding.CONSTANT);
-            assert.deepEqual(column.toArray(), ["UK", "UK", "UK", "UK", "UK"]);
+                assert.ok((ids as Value[]).every((id) => typeof id === "number"));
+                assert.deepEqual(path, ids);
+                assert.deepEqual(map, { path: ids, hops: [1] });
+            },
         },
-    },
-];
+        {
+            name: "returns one entry per chunk from queryData",
+            run: async (client) => {
+                const data = await client.queryData("UNWIND range(1, 150000) AS x RETURN x");
+                const values = data.flatMap((chunk) => chunk[0]);
+
+                assert.ok(data.length > 1, `expected several chunks, got ${data.length}`);
+                assert.equal(values.length, 150000);
+                assert.equal(values[0], 1);
+                assert.equal(values[149999], 150000);
+            },
+        },
+        {
+            name: "times the query",
+            run: async (client) => {
+                const { execTimeMs } = await client.query("MATCH (n) RETURN count(n)");
+
+                assert.equal(typeof execTimeMs, "number");
+                assert.ok((execTimeMs as number) >= 0);
+            },
+        },
+        {
+            name: "exposes a vector column's values as a typed array",
+            run: async (client) => {
+                const { chunks } = await client.query("MATCH (m:MODE) WHERE m.depart IS NOT NULL RETURN m.depart ORDER BY m.depart LIMIT 3");
+                const column: Column = chunks[0].columns[0];
+
+                assert.equal(column.typeCode, ColumnType.INT64);
+                assert.equal(column.length, 3);
+                assert.ok(column.values instanceof BigInt64Array);
+                assert.deepEqual(Array.from(column.values), [470n, 475n, 480n]);
+                assert.deepEqual(column.toArray(), [470n, 475n, 480n]);
+                assert.deepEqual(column.toNumberArray(), [470, 475, 480]);
+            },
+        },
+        {
+            name: "marks the missing rows of an optional column",
+            run: async (client) => {
+                const { chunks } = await client.query("MATCH (s:STATION) RETURN s.sign ORDER BY s.crs");
+                const column: Column = chunks[0].columns[0];
+
+                assert.ok(column.isOptional);
+                assert.deepEqual(Array.from(column.validity as Uint8Array), [0b00010]);
+                assert.deepEqual(column.toArray(), [null, "Oxford 🚆", null, null, null]);
+            },
+        },
+        {
+            name: "sends one value for a constant column",
+            run: async (client) => {
+                const { chunks } = await client.query("MATCH (s:STATION) RETURN s.crs, 'UK' AS country");
+                const column: Column = chunks[0].columns[1];
+
+                assert.ok(column.isConstant);
+                assert.equal(column.encoding, ColumnEncoding.CONSTANT);
+                assert.deepEqual(column.toArray(), ["UK", "UK", "UK", "UK", "UK"]);
+            },
+        },
+        {
+            name: "sends a slice of a constant list as an optional constant",
+            run: async (client) => {
+                const { chunks } = await client.query("WITH [7, 8, 9] AS platforms RETURN platforms[1..]");
+                const column: Column = chunks[0].columns[0];
+
+                assert.equal(column.encoding, ColumnEncoding.OPTIONAL_CONSTANT);
+                assert.ok(column.isConstant && column.isOptional);
+                assert.deepEqual(column.get(0), [8n, 9n]);
+            },
+        },
+        {
+            name: "queries the graph, change and commit the client is set to",
+            run: async () => {
+                const client = new TuringClient({ url, graph: "default" });
+                assert.equal(client.getGraph(), "default");
+
+                client.setGraph(TIMETABLE_GRAPH);
+                assert.equal(client.getGraph(), TIMETABLE_GRAPH);
+                assert.equal(firstValue(await client.query("MATCH (n) RETURN count(n)")), TIMETABLE_NODE_COUNT);
+
+                const head = (firstValue(await client.query("CALL db.history() YIELD commit RETURN commit")) as string).replace("(HEAD)", "");
+                client.setCommit(head);
+                assert.equal(firstValue(await client.query("MATCH (n) RETURN count(n)")), TIMETABLE_NODE_COUNT);
+
+                client.setCommit("deadbeefdeadbeef");
+                await assert.rejects(client.query("MATCH (n) RETURN count(n)"), expectStatus("COMMIT_NOT_FOUND", "deadbeefdeadbeef"));
+
+                client.setCommit("HEAD");
+                client.setChange(9999);
+                await assert.rejects(client.query("MATCH (n) RETURN count(n)"), expectStatus("CHANGE_NOT_FOUND", "9999"));
+
+                client.setChange("main");
+                assert.equal(firstValue(await client.query("MATCH (n) RETURN count(n)")), TIMETABLE_NODE_COUNT);
+            },
+        },
+        {
+            name: "aborts a query mid-stream and answers the next one",
+            run: async (client) => {
+                const controller = new AbortController();
+                const streaming = client.query("UNWIND range(1, 50000000) AS x RETURN x", { signal: controller.signal });
+                setTimeout(() => controller.abort(), 100);
+
+                await assert.rejects(streaming, (raised) => raised instanceof Error && raised.name === "AbortError");
+                assert.equal(firstValue(await client.query("MATCH (s:STATION) RETURN count(s)")), 5n);
+            },
+        },
+        {
+            name: "answers queries sent side by side",
+            run: async (client) => {
+                const stations = ["OXF", "DID", "RDG", "PAD", "SWI"];
+                const results = await Promise.all(stations.map((crs) => client.query(`MATCH (s:STATION {crs: '${crs}'}) RETURN s.name`)));
+
+                assert.deepEqual(results.map(firstValue), ["Oxford", "Didcot Parkway", "Reading", "London Paddington", "Swindon"]);
+            },
+        },
+        {
+            name: "grows a small decoder buffer to a packet larger than it",
+            run: async () => {
+                const client = new TuringClient({ url, graph: TIMETABLE_GRAPH, bufferCapacity: 1024 });
+                const { chunks } = await client.query("WITH reduce(s = 'x', i IN range(1, 21) | s + s) AS long RETURN long, [long, 'end']");
+                const [long, list] = chunks[0].columns.map((column) => column.get(0));
+
+                assert.equal(long, "x".repeat(2 ** 21));
+                assert.deepEqual(list, ["x".repeat(2 ** 21), "end"]);
+            },
+        },
+        {
+            name: "reports an endpoint the server does not serve",
+            run: async () => {
+                const client = new TuringClient({ url: url.replace(/\/query$/, "/nowhere"), graph: TIMETABLE_GRAPH });
+
+                await assert.rejects(client.query("MATCH (n) RETURN n"), expectStatus("PROTOCOL_ERROR", "Unsupported endpoint"));
+            },
+        },
+    ];
+}
+
+// A server started with -auth-on answers only the requests bearing its TURINGDB_AUTH_TOKEN
+export function authChecks(url: string, token: string): Check[] {
+    const unauthorized = expectStatus("PROTOCOL_ERROR", "Unauthorized: missing or invalid authentication token");
+
+    return [
+        {
+            name: "turns away a request with no token",
+            run: async () => {
+                const client = new TuringClient({ url, graph: "default" });
+                await assert.rejects(client.query("LIST GRAPH"), unauthorized);
+            },
+        },
+        {
+            name: "turns away a request with the wrong token",
+            run: async () => {
+                const client = new TuringClient({ url, graph: "default", authToken: `${token}-wrong` });
+                await assert.rejects(client.query("LIST GRAPH"), unauthorized);
+            },
+        },
+        {
+            name: "answers a request bearing the token",
+            run: async () => {
+                const client = new TuringClient({ url, graph: "default", authToken: token });
+                assert.equal(firstValue(await client.query("LIST GRAPH")), "default");
+            },
+        },
+        {
+            name: "sends the token set after the client was made",
+            run: async () => {
+                const client = new TuringClient({ url, graph: "default" });
+                await assert.rejects(client.query("LIST GRAPH"), unauthorized);
+
+                client.setAuthToken(token);
+                assert.equal(firstValue(await client.query("LIST GRAPH")), "default");
+            },
+        },
+    ];
+}
 
 // db::ValueType's ordinals, which are append-only on disk
 const VALUE_TYPE = { INT64: 1, DOUBLE: 3, STRING: 4, BOOL: 5, EMBEDDING: 6, LIST: 7, DATE_TIME: 8, MAP: 9, DURATION: 10 };
@@ -504,13 +699,24 @@ export const SYSTEM_CASES: Case[] = [
     },
     {
         name: "lists the labels",
-        query: "CALL db.labels() YIELD label RETURN label",
-        rows: [["STATION"], ["MODE"], ["FIXED"]],
+        query: "CALL db.labels()",
+        types: ["LABEL_ID", "STRING"],
+        rows: [[0n, "STATION"], [1n, "MODE"], [2n, "FIXED"]],
     },
     {
         name: "lists the edge types",
-        query: "CALL db.edgeTypes() YIELD edgeType RETURN edgeType",
-        rows: [["ARRIVE"], ["NEXT"], ["WED"], ["THU"]],
+        query: "CALL db.edgeTypes()",
+        types: ["EDGE_TYPE_ID", "STRING"],
+        rows: [[0n, "ARRIVE"], [1n, "NEXT"], [2n, "WED"], [3n, "THU"]],
+    },
+    {
+        name: "numbers the property types",
+        query: "CALL db.propertyTypes()",
+        types: ["PROPERTY_TYPE_ID", "STRING", "VALUE_TYPE"],
+        check: ({ rows }) => {
+            const ids = rows.map((row) => row[0] as number).sort((left, right) => left - right);
+            assert.deepEqual(ids, Array.from({ length: 22 }, (_, index) => index));
+        },
     },
     {
         name: "types every property of the timetable",

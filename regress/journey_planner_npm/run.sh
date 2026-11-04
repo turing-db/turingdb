@@ -20,21 +20,32 @@ if [[ -z "$TURINGDB_NPM" || ! -f "$TURINGDB_NPM" ]]; then
 fi
 echo "- Using turingdb npm package: $TURINGDB_NPM"
 
+# A second server checks the token every request carries
+AUTH_PORT=6687
+AUTH_TOKEN=journey-planner-token
+
 # Kill any existing turingdb processes (SIGKILL for reliability)
 pkill -9 turingdb 2>/dev/null || true
-# Wait for port 6686 to be free (nc -z returns 0 if open, 1 if closed)
-for i in $(seq 1 100); do nc -z localhost 6686 2>/dev/null || break; sleep 0.1; done
+# Wait for the ports to be free (nc -z returns 0 if open, 1 if closed)
+for port in 6686 $AUTH_PORT; do
+    for i in $(seq 1 100); do nc -z localhost $port 2>/dev/null || break; sleep 0.1; done
+done
 
-rm -rf $SCRIPT_DIR/.turing $SCRIPT_DIR/node_modules $SCRIPT_DIR/dist
+rm -rf $SCRIPT_DIR/.turing $SCRIPT_DIR/.turing-auth $SCRIPT_DIR/node_modules $SCRIPT_DIR/dist
 
 # The npm client speaks only the binary protocol
 USE_TURING_PROTO=1 turingdb -demon -turing-dir $SCRIPT_DIR/.turing
+TURINGDB_AUTH_TOKEN=$AUTH_TOKEN USE_TURING_PROTO=1 turingdb -demon -turing-dir $SCRIPT_DIR/.turing-auth -p $AUTH_PORT -auth-on
 
 npm install --no-audit --no-fund --no-package-lock --no-save "$TURINGDB_NPM"
 
-npx tsc -p . && TURINGDB_URL=http://localhost:6686/query node dist/main.js
+npx tsc -p . && TURINGDB_URL=http://localhost:6686/query \
+    TURINGDB_AUTH_URL=http://localhost:$AUTH_PORT/query \
+    TURINGDB_AUTH_TOKEN=$AUTH_TOKEN \
+    node dist/main.js
 testres=$?
 
 turingdb stop -turing-dir $SCRIPT_DIR/.turing
+turingdb stop -turing-dir $SCRIPT_DIR/.turing-auth
 
 exit $testres

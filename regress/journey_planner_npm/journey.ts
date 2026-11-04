@@ -499,6 +499,30 @@ export const LEG_PATH_CASES: Case[] = [
             }
         },
     },
+    {
+        name: "returns a station alone as a path of no hop",
+        query: "MATCH p = (s:STATION {crs: 'OXF'}) RETURN p, length(p), [p], {path: p}, id(s)",
+        types: ["GRAPH_PATH", "UINT64", "LIST_VIEW", "MAP_VIEW", "INT64"],
+        check: ({ rows }) => {
+            assert.equal(rows.length, 1);
+            const [path, hops, list, map, station] = rows[0];
+
+            assert.deepEqual(path, [station]);
+            assert.equal(hops, 0n);
+            assert.deepEqual(list, [[station]]);
+            assert.deepEqual(map, { path: [station] });
+        },
+    },
+    {
+        name: "collects the stations as paths of no hop",
+        query: "MATCH p = (s:STATION) RETURN collect(p), collect(id(s))",
+        check: ({ rows }) => {
+            const [paths, stations] = rows[0] as Value[][];
+
+            assert.equal(paths.length, 5);
+            assert.deepEqual(paths, stations.map((station) => [station]));
+        },
+    },
 ];
 
 const MIDNIGHT = "datetime('2026-11-04T00:00:00Z')";
