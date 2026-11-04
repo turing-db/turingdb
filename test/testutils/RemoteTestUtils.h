@@ -3,6 +3,7 @@
 #include <chrono>
 #include <stdint.h>
 #include <string>
+#include <vector>
 
 namespace turing::test {
 
@@ -17,6 +18,11 @@ namespace turing::test {
 // the timeout elapses. Returns true if the listener is reachable.
 [[nodiscard]] bool waitUntilListening(uint16_t port, std::chrono::milliseconds timeout);
 
+struct HttpRequest {
+    std::string uri;
+    std::string body;
+};
+
 struct HttpResponse {
     std::string statusLine;
     std::string body;
@@ -24,6 +30,10 @@ struct HttpResponse {
 
 // Posts the body on a fresh connection and reads a chunked response.
 void postHttpBody(uint16_t port, const std::string& uri, const std::string& body, HttpResponse& response);
+
+// Posts the requests one after the other on one connection, reading each chunked response
+// before sending the next.
+void postHttpBodies(uint16_t port, const std::vector<HttpRequest>& requests, std::vector<HttpResponse>& responses);
 
 // Posts the query in the JSON body the REST server reads.
 void postHttpQuery(uint16_t port, const std::string& uri, const std::string& query, HttpResponse& response);
