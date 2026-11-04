@@ -1016,6 +1016,10 @@ private:
                                 mlir::OperandRange propValues,
                                 NLMergeData::Node& node);
 
+    void translateCreatedProperty(llvm::StringRef propName,
+                                  mlir::Value propValue,
+                                  NLCreatedProperty& property);
+
     // Resolves one property constraint of a merge pattern on both sides: the row's
     // asked-for value column with the appender that keys it, and - when the graph's
     // schema has the property - the scratch column a candidate's value is read back
@@ -1032,13 +1036,10 @@ private:
     void collectWrittenMergeProperties(const std::vector<NLMergeProperty>& properties,
                                        NLMergeScanProperties& writtenProperties);
 
-    // The property a set writes to. A write of a null or of list elements carries no single
-    // type on its value chunk, so the property's own type is what it stages, and a name no
-    // property in the graph carries has nothing to remove - answered by an invalid property
-    // rather than by interning the name.
-    PropertyType setPropertyType(llvm::StringRef propName,
-                                 mlir::Type valueChunkType,
-                                 bool writesNull) const;
+    // The property a set writes to. A write of a null or of tagged cells carries no single
+    // type on its value chunk, so it reaches a property the program types as it runs -
+    // answered by an invalid property rather than by interning the name.
+    PropertyType setPropertyType(llvm::StringRef propName, mlir::Type valueChunkType) const;
 
     void translateSetNodeProperty(mlir::nl::SetNodeProperty setNodeProperty, NLStmtContainer* body);
 

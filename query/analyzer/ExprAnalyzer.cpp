@@ -681,7 +681,25 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         return ValueType::Invalid;
     }
 
-    if (vt == ValueType::Invalid && allowCreate) {
+    const bool readsACellWrite = vt == ValueType::Invalid
+                              && !allowCreate
+                              && _cellCreatedProperties.contains(name);
+
+    if (readsACellWrite) {
+        expr->setPropertyName(name);
+        expr->setEntityVarDecl(varDecl);
+        expr->setType(EvaluatedType::Any);
+        expr->setDynamic();
+
+        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
+
+        return ValueType::Invalid;
+    }
+
+    // A value whose type is only known per row creates no property here: the write
+    // creates it as it runs
+    const bool createsTheProperty = vt == ValueType::Invalid && allowCreate && defaultType != ValueType::Invalid;
+    if (createsTheProperty) {
         addToBeCreatedType(name, defaultType, expr);
         vt = defaultType;
     }
@@ -797,6 +815,8 @@ void ExprAnalyzer::analyzePropertyLookupExpr(PropertyLookupExpr* expr) {
 
             expr->setValueType(valueType);
             type = *maybeEvalType;
+        } else if (_cellCreatedProperties.contains(propName)) {
+            type = EvaluatedType::Any;
         }
     } else if (readsAMapKey) {
         expr->setReadsAMapKey();
@@ -1449,6 +1469,10 @@ void ExprAnalyzer::addToBeCreatedType(std::string_view name, ValueType type, con
 
     // Register the new type
     _toBeCreatedTypes[name] = type;
+}
+
+void ExprAnalyzer::addCellCreatedProperty(std::string_view name) {
+    _cellCreatedProperties.insert(name);
 }
 
 ValueType ExprAnalyzer::narrowParameterWrite(std::string_view name, Expr* value) {

@@ -627,6 +627,12 @@ bool holdsAMapPerRow(mlir::Type chunkType) {
     return mlir::isa<storage::MapType, storage::AnyType>(read);
 }
 
+bool holdsAnEntityPerRow(mlir::Type chunkType) {
+    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+
+    return chunk && mlir::isa<storage::NodeIDType, storage::EdgeIDType>(chunk.getElementType());
+}
+
 // The element type an indexed list hands out, read through the nullable an optional list
 // wears. None when the indexed operand is a type-erased cell rather than a list.
 mlir::Type indexedListElementType(mlir::Type chunkType) {
@@ -2533,16 +2539,19 @@ void DBLowering::lowerContainerIndex(mlir::db::ContainerIndex index) {
 }
 
 void DBLowering::lowerStaticMapKey(mlir::db::StaticMapKey mapKey) {
-    const mlir::Value mapChunk = mapValue(mapKey.getMap());
-
-    if (!holdsAMapPerRow(mapChunk.getType())) {
-        throw IRException("db.static_map_key reads from a map column, or from a column of tagged cells");
-    }
+    mlir::Value mapChunk = mapValue(mapKey.getMap());
 
     // A cell carries its own null in its tag, so the result is never wrapped in a
     // nullable: a missing key and an absent map both read back as a Null-tagged cell
     const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(),
                                                         storage::AnyType::get(_builder.getContext()));
+
+    const mlir::Type mapChunkType = mapChunk.getType();
+    if (holdsAnEntityPerRow(mapChunkType)) {
+        mapChunk = toAnyChunk(mapChunk, resultType);
+    } else if (!holdsAMapPerRow(mapChunkType)) {
+        throw IRException("db.static_map_key reads from a map column, a column of tagged cells, or a column of nodes or edges");
+    }
 
     setInsertionForUnaryOp(mapChunk);
 

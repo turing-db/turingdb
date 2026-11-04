@@ -87,6 +87,7 @@
 #include "NLSystemContext.h"
 
 #include "NLProgram.h"
+#include "NLRuntimeProperty.h"
 #include "NLMergeExecutor.h"
 #include "NLPendingEdges.h"
 #include "NLPendingNodes.h"
@@ -6526,8 +6527,61 @@ void setPendingProperty(CommitWriteBuffer::UntypedProperties& properties,
     properties.push_back(property);
 }
 
-bool writeTouchesRow(const ColumnMask* rows, size_t row) {
-    return !rows || (*rows)[row];
+template <TypedInternalID IDT>
+bool setWritesRow(const ColumnMask* rows, IDT entity, size_t row) {
+    return writeTouchesRow(rows, row) && entity.isValid();
+}
+
+template <typename IDColumn>
+void markWrittenRows(const IDColumn* entities, const ColumnMask* rows, ColumnMask& written) {
+    const auto& raw = entities->getRaw();
+    written.resize(raw.size());
+
+    for (size_t row = 0; row < raw.size(); row++) {
+        written[row] = setWritesRow(rows, raw[row], row);
+    }
+}
+
+// Stages the values a SET writes in @param buffer and answers the property it writes them
+// to: invalid where it writes nothing
+template <typename SetData>
+PropertyTypeID stageSetProperty(MetadataBuilder* metadataBuilder,
+                                SetData* setData,
+                                size_t rowCount,
+                                CommitWriteBuffer::UntypedProperties& buffer) {
+    NLRuntimeProperty* runtimeProperty = setData->getRuntimeProperty();
+    const PropertyTypeID propertyTypeID = setData->getPropertyTypeID();
+    const Column* values = setData->getValue();
+
+    if (!runtimeProperty) {
+        extractColumnProperties(values, rowCount, propertyTypeID, buffer);
+        return propertyTypeID;
+    } else if (setData->writesNull()) {
+        const bool staged = runtimeProperty->stageNulls(metadataBuilder, rowCount, buffer);
+        return staged ? runtimeProperty->getType()._id : PropertyTypeID {};
+    }
+
+    ColumnMask* written = setData->getWrittenRows();
+    markWrittenRows(setData->getInput(), setData->getRows(), *written);
+
+    const bool staged = runtimeProperty->stage(metadataBuilder, values, rowCount, written, buffer);
+
+    return staged ? runtimeProperty->getType()._id : PropertyTypeID {};
+}
+
+// False for a chunk of nulls held in cells reaching a property with no type, which writes
+// it nothing
+bool stageCreatedProperty(MetadataBuilder* metadataBuilder,
+                          const NLCreatedProperty& property,
+                          size_t rowCount,
+                          CommitWriteBuffer::UntypedProperties& buffer) {
+    if (property._runtimeProperty) {
+        return property._runtimeProperty->stage(metadataBuilder, property._values, rowCount, nullptr, buffer);
+    }
+
+    extractColumnProperties(property._values, rowCount, property._propertyTypeID, buffer);
+
+    return true;
 }
 
 bool isSameMap(const WrittenMap& lhs, const WrittenMap& rhs) {
@@ -7110,7 +7164,7 @@ NLExecutor::NLExecutor(const GraphView* view,
                        NLOutputSink* sink,
                        CommitWriteBuffer* writeBuffer,
                        const NLSystemContext* system,
-                       const MetadataBuilder* metadataBuilder)
+                       MetadataBuilder* metadataBuilder)
     : _ctxt(view, sink, prog->getChunkSize(), writeBuffer, system, metadataBuilder),
     _prog(prog)
 {
@@ -7142,12 +7196,18 @@ void NLExecutor::runCreateNode(NLExecutionContext* context, NLFunctionData* data
     const size_t rowCount = createData->getRowCount();
     const LabelSetHandle labelsetHandle = createData->getLabelSetHandle();
 
-    const std::vector<NLCreateNodeData::Property>& properties = createData->properties();
-    std::vector<CommitWriteBuffer::UntypedProperties> extracted(properties.size());
+    MetadataBuilder* metadataBuilder = context->getMetadataBuilder();
 
-    for (size_t index = 0; index < properties.size(); index++) {
-        const NLCreateNodeData::Property& property = properties[index];
-        extractColumnProperties(property._values, rowCount, property._propertyTypeID, extracted[index]);
+    const std::vector<NLCreateNodeData::Property>& properties = createData->properties();
+    std::vector<CommitWriteBuffer::UntypedProperties> extracted;
+    extracted.reserve(properties.size());
+
+    for (const NLCreateNodeData::Property& property : properties) {
+        CommitWriteBuffer::UntypedProperties& values = extracted.emplace_back();
+
+        if (!stageCreatedProperty(metadataBuilder, property, rowCount, values)) {
+            extracted.pop_back();
+        }
     }
 
     // Must extract this value before adding in the loop
@@ -7203,12 +7263,18 @@ void NLExecutor::runCreateEdge(NLExecutionContext* context, NLFunctionData* data
     const PendingRows srcRows(srcPending, srcIsPending, firstPendingNodeID, numPendingNodes);
     const PendingRows tgtRows(tgtPending, tgtIsPending, firstPendingNodeID, numPendingNodes);
 
-    const std::vector<NLCreateEdgeData::Property>& properties = createData->properties();
-    std::vector<CommitWriteBuffer::UntypedProperties> extracted(properties.size());
+    MetadataBuilder* metadataBuilder = context->getMetadataBuilder();
 
-    for (size_t index = 0; index < properties.size(); index++) {
-        const NLCreateEdgeData::Property& property = properties[index];
-        extractColumnProperties(property._values, rowCount, property._propertyTypeID, extracted[index]);
+    const std::vector<NLCreateEdgeData::Property>& properties = createData->properties();
+    std::vector<CommitWriteBuffer::UntypedProperties> extracted;
+    extracted.reserve(properties.size());
+
+    for (const NLCreateEdgeData::Property& property : properties) {
+        CommitWriteBuffer::UntypedProperties& values = extracted.emplace_back();
+
+        if (!stageCreatedProperty(metadataBuilder, property, rowCount, values)) {
+            extracted.pop_back();
+        }
     }
 
     // Must extract this value before adding in the loop
@@ -7244,16 +7310,9 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
     const size_t rowCount = nodes->size();
 
     CommitWriteBuffer::UntypedProperties propsBuffer;
-    const PropertyTypeID propID = setData->getPropertyTypeID();
-    const ValueType nullValueType = setData->getNullValueType();
-    const ValueType cellValueType = setData->getCellValueType();
-
-    if (nullValueType != ValueType::Invalid) {
-        fillNullProperties(rowCount, propID, nullValueType, propsBuffer);
-    } else if (cellValueType != ValueType::Invalid) {
-        extractCellProperties(setData->getValue(), rowCount, propID, cellValueType, propsBuffer);
-    } else {
-        extractColumnProperties(setData->getValue(), rowCount, propID, propsBuffer);
+    const PropertyTypeID propID = stageSetProperty(context->getMetadataBuilder(), setData, rowCount, propsBuffer);
+    if (!propID.isValid()) {
+        return;
     }
 
     const ColumnMask* pending = setData->getPending();
@@ -7269,7 +7328,7 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
     // wrote, where it is not.
     const auto& raw = nodes->getRaw();
     for (size_t row = 0; row < rowCount; row++) {
-        if (!writeTouchesRow(rows, row) || !raw[row].isValid()) {
+        if (!setWritesRow(rows, raw[row], row)) {
             continue;
         }
 
@@ -7291,18 +7350,11 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
 
     const ColumnEdgeIDs* edges = setData->getInput();
     const size_t rowCount = edges->size();
-    const PropertyTypeID propID = setData->getPropertyTypeID();
-    const ValueType nullValueType = setData->getNullValueType();
-    const ValueType cellValueType = setData->getCellValueType();
 
     CommitWriteBuffer::UntypedProperties propsBuffer;
-
-    if (nullValueType != ValueType::Invalid) {
-        fillNullProperties(rowCount, propID, nullValueType, propsBuffer);
-    } else if (cellValueType != ValueType::Invalid) {
-        extractCellProperties(setData->getValue(), rowCount, propID, cellValueType, propsBuffer);
-    } else {
-        extractColumnProperties(setData->getValue(), rowCount, propID, propsBuffer);
+    const PropertyTypeID propID = stageSetProperty(context->getMetadataBuilder(), setData, rowCount, propsBuffer);
+    if (!propID.isValid()) {
+        return;
     }
 
     const ColumnMask* pending = setData->getPending();
@@ -7314,7 +7366,7 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
 
     const auto& raw = edges->getRaw();
     for (size_t row = 0; row < rowCount; row++) {
-        if (!writeTouchesRow(rows, row) || !raw[row].isValid()) {
+        if (!setWritesRow(rows, raw[row], row)) {
             continue;
         }
 

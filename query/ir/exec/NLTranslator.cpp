@@ -55,6 +55,7 @@
 #include "views/GraphView.h"
 #include "writers/MetadataBuilder.h"
 
+#include "NLRuntimeProperty.h"
 #include "NLExecutor.h"
 #include "NLSystemTranslator.h"
 
@@ -636,6 +637,8 @@ NLMergeDirection mergeDirectionFromValue(int64_t raw) {
     return NLMergeDirection::Forward;
 }
 
+// A property written from tagged cells that has no type yet is told apart by its name,
+// behind the invalid ID no typed property carries
 void appendMergePropertySignature(const std::vector<NLMergeProperty>& properties,
                                   std::string& signature) {
     for (const NLMergeProperty& property : properties) {
@@ -644,6 +647,14 @@ void appendMergePropertySignature(const std::vector<NLMergeProperty>& properties
 
         signature.append(reinterpret_cast<const char*>(&id), sizeof(id));
         signature.append(reinterpret_cast<const char*>(&valueType), sizeof(valueType));
+
+        if (!property._propertyType.isValid()) {
+            const std::string_view name = property._runtimeProperty->getName();
+            const size_t length = name.size();
+
+            signature.append(reinterpret_cast<const char*>(&length), sizeof(length));
+            signature.append(name);
+        }
     }
 }
 
@@ -2850,13 +2861,10 @@ void NLTranslator::translateCreateNode(nl::CreateNode createNode, NLStmtContaine
 
     for (size_t propIndex = 0; propIndex < propNames.size(); propIndex++) {
         const llvm::StringRef propName = mlir::cast<mlir::StringAttr>(propNames[propIndex]).getValue();
-        const mlir::Value propValue = propValues[propIndex];
-        const ValueType valueType = valueTypeFromChunkType(propValue.getType());
 
-        const PropertyType propType = _metadataBuilder->getOrCreatePropertyType(propName, valueType);
-        const Column* propColumn = getColumn(propValue);
-
-        data->addProperty({._propertyTypeID=propType._id, ._values=propColumn});
+        NLCreatedProperty property;
+        translateCreatedProperty(propName, propValues[propIndex], property);
+        data->addProperty(property);
     }
 
     if (const mlir::Value cardinality = createNode.getCardinality()) {
@@ -2902,16 +2910,27 @@ void NLTranslator::translateCreateEdge(nl::CreateEdge createEdge, NLStmtContaine
 
     for (size_t propIndex = 0; propIndex < propNames.size(); propIndex++) {
         const llvm::StringRef propName = mlir::cast<mlir::StringAttr>(propNames[propIndex]).getValue();
-        const mlir::Value propValue = propValues[propIndex];
-        const ValueType valueType = valueTypeFromChunkType(propValue.getType());
 
-        const PropertyType propType = _metadataBuilder->getOrCreatePropertyType(propName, valueType);
-        const Column* propColumn = getColumn(propValue);
-
-        data->addProperty({._propertyTypeID=propType._id, ._values=propColumn});
+        NLCreatedProperty property;
+        translateCreatedProperty(propName, propValues[propIndex], property);
+        data->addProperty(property);
     }
 
     body->emplaceStmt(&NLExecutor::runCreateEdge, data);
+}
+
+void NLTranslator::translateCreatedProperty(llvm::StringRef propName,
+                                            mlir::Value propValue,
+                                            NLCreatedProperty& property) {
+    const mlir::Type valueChunkType = propValue.getType();
+    property._values = getColumn(propValue);
+
+    if (isAnyChunk(valueChunkType)) {
+        property._runtimeProperty = _program->getRuntimeProperty(propName);
+    } else {
+        const ValueType valueType = valueTypeFromChunkType(valueChunkType);
+        property._propertyTypeID = _metadataBuilder->getOrCreatePropertyType(propName, valueType)._id;
+    }
 }
 
 void NLTranslator::translateMerge(nl::Merge merge, NLStmtContainer* body) {
@@ -2935,7 +2954,7 @@ void NLTranslator::translateMerge(nl::Merge merge, NLStmtContainer* body) {
     ColumnMask* created = _memory->alloc<ColumnMask>();
     created->reserve(_program->getChunkSize());
 
-    NLMergeData* data = _program->allocFunctionData<NLMergeData>(_program->getMergePendingEdges(), created);
+    NLMergeData* data = _program->allocFunctionData<NLMergeData>(_program->getMergePendingEdges(), created, _memory);
 
     const size_t nodeCount = nodeLabels.size();
     const size_t hopCount = nodeCount - 1;
@@ -3112,9 +3131,13 @@ void NLTranslator::collectWrittenMergeProperties(const std::vector<NLMergeProper
     for (const NLMergeProperty& property : properties) {
         const ValueType valueType = property._propertyType._valueType;
 
-        writtenProperties.push_back({._propertyType=property._propertyType,
-                                     ._values=allocOptColumnForValueType(valueType),
-                                     ._keyAppend=NLExecutor::selectOptKeyAppendFunction(valueType)});
+        if (!property._propertyType.isValid()) {
+            writtenProperties.emplace_back();
+        } else {
+            writtenProperties.push_back({._propertyType=property._propertyType,
+                                         ._values=allocOptColumnForValueType(valueType),
+                                         ._keyAppend=NLExecutor::selectOptKeyAppendFunction(valueType)});
+        }
     }
 }
 
@@ -3123,19 +3146,31 @@ void NLTranslator::translateMergeProperty(llvm::StringRef propName,
                                           std::vector<NLMergeProperty>& properties,
                                           std::vector<NLMergeScanProperty>& scanProperties,
                                           bool& matchable) {
-    const ValueType valueType = valueTypeFromChunkType(propValue.getType());
     const Column* column = getColumn(propValue);
+    const mlir::Type valueChunkType = propValue.getType();
 
-    // Created where the schema lacks it, since a written pattern carries the property.
-    // Both sides of the key serialize in its registered type: the analyzer lets an
-    // integer constrain a double-typed property, and 5 keys like the 5.0 the graph side
-    // reads back only once converted to it.
-    const PropertyType writeType = _metadataBuilder->getOrCreatePropertyType(propName, valueType);
-    properties.push_back({._propertyType=writeType,
-                          ._values=column,
-                          ._keyAppend=selectMergeKeyAppend(propValue.getType(),
-                                                           column,
-                                                           writeType._valueType)});
+    if (isAnyChunk(valueChunkType)) {
+        // A property the change knows is typed here, so the merge keys it as a typed merge
+        // of it does and shares that merge's index
+        NLRuntimeProperty* runtimeProperty = _program->getRuntimeProperty(propName);
+        const bool typed = runtimeProperty->findType(_metadataBuilder);
+
+        properties.push_back({._propertyType=typed ? runtimeProperty->getType() : PropertyType {},
+                              ._values=column,
+                              ._runtimeProperty=runtimeProperty});
+    } else {
+        // Created where the schema lacks it, since a written pattern carries the property.
+        // Both sides of the key serialize in its registered type: the analyzer lets an
+        // integer constrain a double-typed property, and 5 keys like the 5.0 the graph side
+        // reads back only once converted to it.
+        const ValueType valueType = valueTypeFromChunkType(valueChunkType);
+        const PropertyType writeType = _metadataBuilder->getOrCreatePropertyType(propName, valueType);
+        properties.push_back({._propertyType=writeType,
+                              ._values=column,
+                              ._keyAppend=selectMergeKeyAppend(valueChunkType,
+                                                               column,
+                                                               writeType._valueType)});
+    }
 
     // The graph's own property, which is what a candidate's value is read back through.
     // Absent means no committed entity carries it, so nothing there can match.
@@ -3150,24 +3185,15 @@ void NLTranslator::translateMergeProperty(llvm::StringRef propName,
                               ._keyAppend=NLExecutor::selectOptKeyAppendFunction(graphType->_valueType)});
 }
 
-PropertyType NLTranslator::setPropertyType(llvm::StringRef propName,
-                                           mlir::Type valueChunkType,
-                                           bool writesNull) const {
-    const bool writesCells = isAnyChunk(valueChunkType);
-
-    if (!writesNull && !writesCells) {
-        const ValueType valueType = valueTypeFromChunkType(valueChunkType);
-
-        return _metadataBuilder->getOrCreatePropertyType(propName, valueType);
-    }
-
-    const std::optional<PropertyType> existing = findPropertyType(propName);
-    if (!existing) {
-        bioassert(!writesCells, "Cells written to property '{}', which the graph does not hold", propName.str());
+PropertyType NLTranslator::setPropertyType(llvm::StringRef propName, mlir::Type valueChunkType) const {
+    const bool typedAsItRuns = isUntypedNullChunk(valueChunkType) || isAnyChunk(valueChunkType);
+    if (typedAsItRuns) {
         return PropertyType {};
     }
 
-    return *existing;
+    const ValueType valueType = valueTypeFromChunkType(valueChunkType);
+
+    return _metadataBuilder->getOrCreatePropertyType(propName, valueType);
 }
 
 void NLTranslator::translateSetNodeProperty(nl::SetNodeProperty setNodeProperty, NLStmtContainer* body) {
@@ -3179,12 +3205,7 @@ void NLTranslator::translateSetNodeProperty(nl::SetNodeProperty setNodeProperty,
     const mlir::Value inputValue = setNodeProperty.getInputNodes();
     const mlir::Value propValue = setNodeProperty.getValue();
     const mlir::Type valueChunkType = propValue.getType();
-    const bool writesNull = isUntypedNullChunk(valueChunkType);
-
-    const PropertyType propType = setPropertyType(propName, valueChunkType, writesNull);
-    if (!propType.isValid()) {
-        return;
-    }
+    const PropertyType propType = setPropertyType(propName, valueChunkType);
 
     const ColumnNodeIDs* inputColumn = static_cast<const ColumnNodeIDs*>(getColumn(inputValue));
     const Column* valueColumn = getColumn(propValue);
@@ -3194,10 +3215,17 @@ void NLTranslator::translateSetNodeProperty(nl::SetNodeProperty setNodeProperty,
         inputColumn,
         valueColumn);
 
-    if (writesNull) {
-        data->setNullValueType(propType._valueType);
-    } else if (isAnyChunk(valueChunkType)) {
-        data->setCellValueType(propType._valueType);
+    if (!propType.isValid()) {
+        const bool writesNull = isUntypedNullChunk(valueChunkType);
+
+        data->setRuntimeProperty(_program->getRuntimeProperty(propName));
+        data->setWritesNull(writesNull);
+
+        if (!writesNull) {
+            ColumnMask* writtenRows = _memory->alloc<ColumnMask>();
+            writtenRows->reserve(_program->getChunkSize());
+            data->setWrittenRows(writtenRows);
+        }
     }
 
     data->setPending(getMaskColumn(setNodeProperty.getPending()));
@@ -3216,12 +3244,7 @@ void NLTranslator::translateSetEdgeProperty(nl::SetEdgeProperty setEdgeProperty,
     const mlir::Value inputValue = setEdgeProperty.getInputEdges();
     const mlir::Value propValue = setEdgeProperty.getValue();
     const mlir::Type valueChunkType = propValue.getType();
-    const bool writesNull = isUntypedNullChunk(valueChunkType);
-
-    const PropertyType propType = setPropertyType(propName, valueChunkType, writesNull);
-    if (!propType.isValid()) {
-        return;
-    }
+    const PropertyType propType = setPropertyType(propName, valueChunkType);
 
     const ColumnEdgeIDs* inputColumn = static_cast<const ColumnEdgeIDs*>(getColumn(inputValue));
     const Column* valueColumn = getColumn(propValue);
@@ -3231,10 +3254,17 @@ void NLTranslator::translateSetEdgeProperty(nl::SetEdgeProperty setEdgeProperty,
         inputColumn,
         valueColumn);
 
-    if (writesNull) {
-        data->setNullValueType(propType._valueType);
-    } else if (isAnyChunk(valueChunkType)) {
-        data->setCellValueType(propType._valueType);
+    if (!propType.isValid()) {
+        const bool writesNull = isUntypedNullChunk(valueChunkType);
+
+        data->setRuntimeProperty(_program->getRuntimeProperty(propName));
+        data->setWritesNull(writesNull);
+
+        if (!writesNull) {
+            ColumnMask* writtenRows = _memory->alloc<ColumnMask>();
+            writtenRows->reserve(_program->getChunkSize());
+            data->setWrittenRows(writtenRows);
+        }
     }
 
     data->setPending(getMaskColumn(setEdgeProperty.getPending()));
@@ -7641,18 +7671,7 @@ Column* NLTranslator::allocOptCellColumn() {
 }
 
 Column* NLTranslator::allocOptColumn(ValueType valueType, size_t reserveSize) {
-    // Allocate a ColumnOptVector for the value type's primitive, reserving
-    // reserveSize optionals up front; ValueTypeDispatcher maps the runtime value
-    // type to that compile-time primitive.
-    Column* column = nullptr;
-    const auto allocate = [&]<SupportedType T>() {
-        ColumnOptVector<typename T::Primitive>* typed = _memory->alloc<ColumnOptVector<typename T::Primitive>>();
-        typed->reserve(reserveSize);
-        column = typed;
-    };
-    ValueTypeDispatcher(valueType).execute(allocate);
-
-    return column;
+    return allocOptValueColumn(_memory, valueType, reserveSize);
 }
 
 Column* NLTranslator::getColumn(mlir::Value chunkValue) const {

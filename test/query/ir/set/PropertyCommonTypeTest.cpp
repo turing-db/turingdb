@@ -84,8 +84,8 @@ TEST_F(PropertyCommonTypeTest, mergesANodePropertyFromACase) {
     expectRows("MATCH (t:Thing) RETURN t.v", {{"1.000000"}});
 }
 
-TEST_F(PropertyCommonTypeTest, rejectsCreatingAPropertyFromValuesSharingNoType) {
-    const std::string_view error = "Cannot create property 'v' from a value whose type is only known per row";
+TEST_F(PropertyCommonTypeTest, raisesOnCreatingAPropertyFromValuesSharingNoType) {
+    const std::string_view error = "One write gives the new property 'v' two types: 'Integer' and 'String'";
 
     expectWriteError("MATCH (n:Person) SET n.v = CASE WHEN n.isFrench THEN 1 ELSE 'a' END", error);
     expectWriteError("UNWIND [1, 'a'] AS x CREATE (:Thing {v: x})", error);

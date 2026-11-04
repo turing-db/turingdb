@@ -25,7 +25,9 @@
 #include "views/GraphView.h"
 #include "writers/MetadataBuilder.h"
 
+#include "NLRuntimeProperty.h"
 #include "NLExecutionContext.h"
+#include "NLExecutor.h"
 #include "NLWriteProperties.h"
 #include "NLWrittenValues.h"
 
@@ -96,27 +98,40 @@ void fetchMergeEdgeProperty(const GraphView& view,
     ValueTypeDispatcher(property._propertyType._valueType).execute(fetch);
 }
 
+// One value a write staged, as the single row of the property's scratch column: null for
+// a null @param value
+void readStagedValue(NLWrittenValues& written,
+                     NLValueStore& readValues,
+                     const CommitWriteBuffer::SupportedTypeVariant* value,
+                     const NLMergeScanProperty& property) {
+    const auto read = [&]<SupportedType T>() {
+        auto* column = static_cast<ColumnOptVector<typename T::Primitive>*>(property._values);
+        column->clear();
+
+        if (value) {
+            column->push_back(written.read<T>(*value, readValues));
+        } else {
+            column->push_back(std::nullopt);
+        }
+    };
+
+    ValueTypeDispatcher(property._propertyType._valueType).execute(read);
+}
+
 // The value a pending entity was written with for one property, as the single row of the
 // property's scratch column: null when it was written without one
 void readPendingValue(NLWrittenValues& written,
                       NLValueStore& readValues,
                       const CommitWriteBuffer::UntypedProperties& values,
                       const NLMergeScanProperty& property) {
-    const auto read = [&]<SupportedType T>() {
-        auto* column = static_cast<ColumnOptVector<typename T::Primitive>*>(property._values);
-        column->clear();
-
-        for (const CommitWriteBuffer::UntypedProperty& value : values) {
-            if (value.propertyID == property._propertyType._id) {
-                column->push_back(written.read<T>(value.value, readValues));
-                return;
-            }
+    for (const CommitWriteBuffer::UntypedProperty& value : values) {
+        if (value.propertyID == property._propertyType._id) {
+            readStagedValue(written, readValues, &value.value, property);
+            return;
         }
+    }
 
-        column->push_back(std::nullopt);
-    };
-
-    ValueTypeDispatcher(property._propertyType._valueType).execute(read);
+    readStagedValue(written, readValues, nullptr, property);
 }
 
 // The key a pending entity's own values serialize into, which a row's asked-for values are
@@ -150,6 +165,10 @@ void throwIfBoundNodeIsNull(const NLMergeData::Node& node, size_t rowCount) {
     }
 }
 
+[[noreturn]] void throwNullKey(std::string_view name) {
+    throw IRException(fmt::format("MERGE cannot match on property '{}', which is null", name));
+}
+
 // A null matches no stored value, so a merge keyed on one would write the pattern again
 // on every run
 void throwIfKeyIsNull(const MetadataBuilder* metadataBuilder,
@@ -165,8 +184,23 @@ void throwIfKeyIsNull(const MetadataBuilder* metadataBuilder,
             const std::optional<std::string_view> name = metadataBuilder->findPropertyTypeName(propertyTypeID);
             bioassert(name, "Property type {} is not in the change's metadata", propertyTypeID.getValue());
 
-            throw IRException(fmt::format("MERGE cannot match on property '{}', which is null", *name));
+            throwNullKey(*name);
         }
+    }
+}
+
+// A property written from tagged cells is still untyped only on a step with no row
+void extractMergeProperty(const NLMergeProperty& property,
+                          size_t rowCount,
+                          CommitWriteBuffer::UntypedProperties& extracted) {
+    const PropertyType& type = property._propertyType;
+
+    if (!type.isValid()) {
+        extracted.clear();
+    } else if (property._runtimeProperty) {
+        extractCellProperties(property._values, rowCount, nullptr, type._id, type._valueType, extracted);
+    } else {
+        extractColumnProperties(property._values, rowCount, type._id, extracted);
     }
 }
 
@@ -196,6 +230,7 @@ void NLMergeExecutor::run() {
     const size_t rowCount = rowCarrier ? rowCarrier->size() : 1;
 
     clearResults();
+    typeCellProperties(rowCount);
     extractProperties(rowCount);
 
     const std::vector<NLMergeData::Node>& nodes = _data->nodes();
@@ -244,6 +279,49 @@ void NLMergeExecutor::clearResults() {
     _data->getIndices()->clear();
 }
 
+void NLMergeExecutor::typeCellProperties(size_t rowCount) {
+    for (NLMergeData::Node& node : _data->nodes()) {
+        if (!node._index) {
+            continue;
+        }
+
+        NLMergeScanProperties& writtenProperties = node._index->writtenProperties();
+        for (size_t index = 0; index < node._properties.size(); index++) {
+            typeCellProperty(node._properties[index], writtenProperties[index], rowCount);
+        }
+    }
+
+    for (NLMergeData::Hop& hop : _data->hops()) {
+        for (size_t index = 0; index < hop._properties.size(); index++) {
+            typeCellProperty(hop._properties[index], hop._writtenProperties[index], rowCount);
+        }
+    }
+}
+
+void NLMergeExecutor::typeCellProperty(NLMergeProperty& property, NLMergeScanProperty& written, size_t rowCount) {
+    NLRuntimeProperty* runtimeProperty = property._runtimeProperty;
+    const bool typed = !runtimeProperty || property._propertyType.isValid();
+    if (typed) {
+        return;
+    }
+
+    const bool resolved = runtimeProperty->resolve(_context->getMetadataBuilder(), property._values, rowCount, nullptr);
+    if (!resolved && rowCount > 0) {
+        throwNullKey(runtimeProperty->getName());
+    } else if (!resolved) {
+        return;
+    }
+
+    const PropertyType& type = runtimeProperty->getType();
+    property._propertyType = type;
+
+    if (!written._propertyType.isValid()) {
+        written._propertyType = type;
+        written._values = allocOptValueColumn(_data->getMemory(), type._valueType, 1);
+        written._keyAppend = NLExecutor::selectOptKeyAppendFunction(type._valueType);
+    }
+}
+
 void NLMergeExecutor::extractProperties(size_t rowCount) {
     const std::vector<NLMergeData::Node>& nodes = _data->nodes();
     const std::vector<NLMergeData::Hop>& hops = _data->hops();
@@ -257,10 +335,7 @@ void NLMergeExecutor::extractProperties(size_t rowCount) {
         extracted.resize(properties.size());
 
         for (size_t index = 0; index < properties.size(); index++) {
-            extractColumnProperties(properties[index]._values,
-                                                rowCount,
-                                                properties[index]._propertyType._id,
-                                                extracted[index]);
+            extractMergeProperty(properties[index], rowCount, extracted[index]);
         }
     }
 
@@ -271,10 +346,7 @@ void NLMergeExecutor::extractProperties(size_t rowCount) {
         extracted.resize(properties.size());
 
         for (size_t index = 0; index < properties.size(); index++) {
-            extractColumnProperties(properties[index]._values,
-                                                rowCount,
-                                                properties[index]._propertyType._id,
-                                                extracted[index]);
+            extractMergeProperty(properties[index], rowCount, extracted[index]);
         }
     }
 }
@@ -351,7 +423,7 @@ void NLMergeExecutor::collectCandidates(size_t row) {
 
             std::string& key = _work->_key;
             key.clear();
-            appendMergeKey(node._properties, row, key);
+            appendRowKey(node._properties, index->writtenProperties(), _work->_nodeProperties[nodeIndex], row, key);
 
             for (const NLMergeRef& candidate : index->find(key)) {
                 const bool holds = !isDeletedNode(candidate)
@@ -538,7 +610,7 @@ void NLMergeExecutor::matchRow(size_t row) {
     }
 
     for (size_t hopIndex = 0; hopIndex < hops.size() && !matches.empty(); hopIndex++) {
-        buildHopKeys(hops[hopIndex], row);
+        buildHopKeys(hopIndex, row);
 
         extendHop(hopIndex);
     }
@@ -554,9 +626,34 @@ void NLMergeExecutor::matchRow(size_t row) {
 }
 
 // The values the hop asks for, which a candidate edge's own values are compared against
-void NLMergeExecutor::buildHopKeys(const NLMergeData::Hop& hop, size_t row) {
+void NLMergeExecutor::buildHopKeys(size_t hopIndex, size_t row) {
+    const NLMergeData::Hop& hop = _data->hops()[hopIndex];
+
     _work->_hopKey.clear();
-    appendMergeKey(hop._properties, row, _work->_hopKey);
+    appendRowKey(hop._properties, hop._writtenProperties, _work->_hopProperties[hopIndex], row, _work->_hopKey);
+}
+
+// A value held in a tagged cell is keyed as the value it was staged as, read back the way
+// a pending entity's value is, so the two keys compare
+void NLMergeExecutor::appendRowKey(const std::vector<NLMergeProperty>& properties,
+                                   const NLMergeScanProperties& writtenProperties,
+                                   const NLMergeWorkingSet::PropertiesPerRow& staged,
+                                   size_t row,
+                                   std::string& key) {
+    NLWrittenValues& written = _context->getWrittenValues();
+
+    for (size_t index = 0; index < properties.size(); index++) {
+        const NLMergeProperty& property = properties[index];
+        const NLMergeScanProperty& writtenProperty = writtenProperties[index];
+
+        if (property._runtimeProperty) {
+            _readValues.clear();
+            readStagedValue(written, _readValues, &staged[index][row].value, writtenProperty);
+            writtenProperty._keyAppend(writtenProperty._values, 0, key);
+        } else {
+            property._keyAppend(property._values, row, key);
+        }
+    }
 }
 
 void NLMergeExecutor::extendHop(size_t hopIndex) {

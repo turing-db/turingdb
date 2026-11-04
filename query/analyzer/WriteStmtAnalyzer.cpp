@@ -277,8 +277,10 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
 
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
             if (propType) {
-                // Property type already exists
-                if (!ExprAnalyzer::propTypeCompatible(propType->_valueType, writtenType)) {
+                // Property type already exists. A value whose type is only known per row
+                // is checked against it as each row is written
+                const bool checksTheTypePerRow = writtenType == EvaluatedType::Any;
+                if (!checksTheTypePerRow && !ExprAnalyzer::propTypeCompatible(propType->_valueType, writtenType)) {
                     throwError(fmt::format("Cannot evaluate node property: types '{}' and '{}' are incompatible",
                                            ValueTypeName::value(propType->_valueType),
                                            EvaluatedTypeName::value(writtenType)),
@@ -288,8 +290,10 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
             } else {
                 // Property type needs to be created
                 const ValueType valueType = evaluatedToValueType(writtenType);
-                if (valueType == ValueType::Invalid && writtenType == EvaluatedType::Any) {
-                    throwPropertyTypedPerRow(propName->getName(), expr);
+                if (writtenType == EvaluatedType::Any) {
+                    data->addExprConstraint(propName->getName(), valueType, expr);
+                    _exprAnalyzer->addCellCreatedProperty(propName->getName());
+                    continue;
                 } else if (valueType == ValueType::Invalid) {
                     throwError(fmt::format("Cannot evaluate node property: unsupported type '{}'", EvaluatedTypeName::value(exprType)),
                                expr);
@@ -359,8 +363,10 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
 
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
             if (propType) {
-                // Property type already exists
-                if (!ExprAnalyzer::propTypeCompatible(propType->_valueType, writtenType)) {
+                // Property type already exists. A value whose type is only known per row
+                // is checked against it as each row is written
+                const bool checksTheTypePerRow = writtenType == EvaluatedType::Any;
+                if (!checksTheTypePerRow && !ExprAnalyzer::propTypeCompatible(propType->_valueType, writtenType)) {
                     throwError(fmt::format("Cannot evaluate edge property: types '{}' and '{}' are incompatible",
                                            ValueTypeName::value(propType->_valueType),
                                            EvaluatedTypeName::value(writtenType)),
@@ -370,8 +376,10 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
             } else {
                 // Property type needs to be created
                 const ValueType valueType = evaluatedToValueType(writtenType);
-                if (valueType == ValueType::Invalid && writtenType == EvaluatedType::Any) {
-                    throwPropertyTypedPerRow(propName->getName(), expr);
+                if (writtenType == EvaluatedType::Any) {
+                    data->addExprConstraint(propName->getName(), valueType, expr);
+                    _exprAnalyzer->addCellCreatedProperty(propName->getName());
+                    continue;
                 } else if (valueType == ValueType::Invalid) {
                     throwError(fmt::format("Cannot evaluate edge property: unsupported type '{}'", EvaluatedTypeName::value(exprType)),
                                expr);
@@ -428,17 +436,16 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
             }
 
             // A value whose type is only known per row is checked against the property's
-            // type as each row is written
+            // type as each row is written, and types a property that has none
             const bool writesAValueTypedPerRow = rhsType == EvaluatedType::Any;
-            const bool propertyHasAType = lhsEvaluatedVt != ValueType::Invalid;
-            const bool checksTheTypePerRow = writesAValueTypedPerRow && propertyHasAType;
+            const bool createsTheProperty = writesAValueTypedPerRow && lhsEvaluatedVt == ValueType::Invalid;
 
-            if (writesNull || checksTheTypePerRow) {
-                return;
+            if (createsTheProperty) {
+                _exprAnalyzer->addCellCreatedProperty(lhs->getPropName());
             }
 
-            if (writesAValueTypedPerRow) {
-                throwPropertyTypedPerRow(lhs->getPropName(), item);
+            if (writesNull || writesAValueTypedPerRow) {
+                return;
             }
 
             if (!ExprAnalyzer::propTypeCompatible(lhsEvaluatedVt, rhsType)) {
@@ -551,7 +558,8 @@ void WriteStmtAnalyzer::analyzeMapLiteralProperties(const Expr* value, std::vect
         const bool isTypedPerRow = hasNoType && exprType == EvaluatedType::Any;
 
         if (isTypedPerRow) {
-            throwPropertyTypedPerRow(propertyName, expr);
+            throwError(fmt::format("Cannot create property '{}' from a value whose type is only known per row", propertyName),
+                       expr);
         } else if (hasNoType) {
             throwError(fmt::format("Cannot evaluate property: unsupported type '{}'", EvaluatedTypeName::value(exprType)),
                        expr);
@@ -566,11 +574,6 @@ void WriteStmtAnalyzer::throwError(std::string_view msg, const void* obj) const 
     std::string errorStr;
     _ast->getDiagnosticsManager()->createErrorString(msg, obj, errorStr);
     throw AnalyzeException(std::move(errorStr));
-}
-
-void WriteStmtAnalyzer::throwPropertyTypedPerRow(std::string_view propName, const void* obj) const {
-    throwError(fmt::format("Cannot create property '{}' from a value whose type is only known per row", propName),
-               obj);
 }
 
 db::ValueType WriteStmtAnalyzer::evaluatedToValueType(EvaluatedType type) {

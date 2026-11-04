@@ -4481,9 +4481,9 @@ void DBProgramGenerator::publishCreatedEntity(const VarDecl* decl,
                                               mlir::Value column,
                                               std::span<const LabelRef> labels,
                                               const EdgeTypeRef& edgeType,
-                                              llvm::ArrayRef<llvm::StringRef> propNames,
+                                              std::span<const EntityPropertyConstraint> constraints,
                                               llvm::ArrayRef<mlir::Value> propValues) {
-    bioassert(propNames.size() == propValues.size(), "One value per created property expected");
+    bioassert(constraints.size() == propValues.size(), "One value per created property expected");
 
     PartScope::CreatedEntity& created = _part._createdEntities[decl];
     created._column = column;
@@ -4502,9 +4502,14 @@ void DBProgramGenerator::publishCreatedEntity(const VarDecl* decl,
     written._edgeTypeKnown = !edgeType._isParameter;
     written._edgeType.assign(edgeType._isParameter ? std::string_view {} : edgeType._name);
 
-    for (size_t index = 0; index < propNames.size(); index++) {
-        const llvm::StringRef propName = propNames[index];
-        created._properties[std::string_view {propName.data(), propName.size()}] = propValues[index];
+    for (size_t index = 0; index < constraints.size(); index++) {
+        const EntityPropertyConstraint& constraint = constraints[index];
+
+        // A value held in a tagged cell is stored as the type the write gives the property,
+        // which the column does not hold, so a read of it goes to the written entity instead
+        if (constraint._expr->getCommonType() != EvaluatedType::Any) {
+            created._properties[constraint._propTypeName] = propValues[index];
+        }
     }
 }
 
@@ -5020,15 +5025,18 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
         const NodePatternData* data = node->getData();
         const std::span<const LabelRef> labels = data ? data->labelConstraints() : std::span<const LabelRef> {};
 
+        std::span<const EntityPropertyConstraint> constraints;
+        if (data) {
+            constraints = data->exprConstraints();
+        }
+
         llvm::SmallVector<llvm::StringRef> propNames;
         llvm::SmallVector<mlir::Value> propValues;
-        if (data) {
-            for (const EntityPropertyConstraint& constraint : data->exprConstraints()) {
-                translateExprOverRows(constraint._expr);
-                const std::string_view propName = constraint._propTypeName;
-                propNames.push_back(llvm::StringRef(propName.data(), propName.size()));
-                propValues.push_back(assignedColumn(constraint._expr, constraint._valueType));
-            }
+        for (const EntityPropertyConstraint& constraint : constraints) {
+            translateExprOverRows(constraint._expr);
+            const std::string_view propName = constraint._propTypeName;
+            propNames.push_back(llvm::StringRef(propName.data(), propName.size()));
+            propValues.push_back(assignedColumn(constraint._expr, constraint._valueType));
         }
 
         const mlir::Value cardinality = matchCardinality;
@@ -5044,7 +5052,7 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
 
         if (decl) {
             knownVars[decl] = nodeValue;
-            publishCreatedEntity(decl, nodeValue, labels, EdgeTypeRef {}, propNames, propValues);
+            publishCreatedEntity(decl, nodeValue, labels, EdgeTypeRef {}, constraints, propValues);
         }
 
         return nodeValue;
@@ -5068,20 +5076,21 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
         for (auto [edge, targetNode] : element->getElementChain()) {
             const mlir::Value rhsValue = resolveOrCreateNode(targetNode);
 
-            propNames.clear();
-            propValues.clear();
             const EdgePatternData* edgeData = edge->getData();
-            if (edgeData) {
-                for (const EntityPropertyConstraint& constraint : edgeData->exprConstraints()) {
-                    translateExprOverRows(constraint._expr);
-                    const std::string_view propName = constraint._propTypeName;
-                    propNames.push_back(llvm::StringRef(propName.data(), propName.size()));
-                    propValues.push_back(assignedColumn(constraint._expr, constraint._valueType));
-                }
-            }
-
             bioassert(edgeData && !edgeData->edgeTypeConstraints().empty(),
                       "CREATE edge must have an edge type");
+
+            const std::span<const EntityPropertyConstraint> edgeConstraints = edgeData->exprConstraints();
+
+            propNames.clear();
+            propValues.clear();
+            for (const EntityPropertyConstraint& constraint : edgeConstraints) {
+                translateExprOverRows(constraint._expr);
+                const std::string_view propName = constraint._propTypeName;
+                propNames.push_back(llvm::StringRef(propName.data(), propName.size()));
+                propValues.push_back(assignedColumn(constraint._expr, constraint._valueType));
+            }
+
             const EdgeTypeRef& edgeType = edgeData->edgeTypeConstraints().front();
 
             const bool backward = edge->getDirection() == EdgePattern::Direction::Backward;
@@ -5109,7 +5118,7 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
                                      createEdge.getResult(),
                                      {},
                                      edgeType,
-                                     propNames,
+                                     edgeConstraints,
                                      propValues);
             }
 
@@ -9823,7 +9832,8 @@ mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propEx
 }
 
 mlir::Value DBProgramGenerator::translatePropertyLookupExpr(const PropertyLookupExpr* lookupExpr) {
-    if (lookupExpr->getType() == EvaluatedType::Null) {
+    const EvaluatedType readType = lookupExpr->getType();
+    if (readType == EvaluatedType::Null) {
         return nullConstantColumn();
     }
 
@@ -9842,6 +9852,8 @@ mlir::Value DBProgramGenerator::translatePropertyLookupExpr(const PropertyLookup
         return emitDateTimeComponent(lookupExpr->getDateTimePart(), baseColumn);
     } else if (lookupExpr->readsADurationComponent()) {
         return emitDurationComponent(lookupExpr->getDurationPart(), baseColumn);
+    } else if (readType == EvaluatedType::Any) {
+        return emitStaticMapKey(baseColumn, lookupExpr->getPropName());
     }
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
@@ -10039,9 +10051,17 @@ mlir::Value DBProgramGenerator::translatePropertyRead(const PropertyExpr* propEx
     }
 
     // No property in the graph carries the name - the analyzer typed the read null for
-    // it - so there is nothing to fetch and every row reads null
-    if (propExpr->getType() == EvaluatedType::Null) {
+    // it - so there is nothing to fetch and every row reads null. A property only a write
+    // of tagged cells creates is typed as the program runs, so its value is read by name,
+    // as a tagged cell.
+    const EvaluatedType readType = propExpr->getType();
+    if (readType == EvaluatedType::Null) {
         return nullConstantColumn();
+    } else if (readType == EvaluatedType::Any) {
+        const mlir::Value entityColumn = resolveEntityColumn(entityDecl);
+        bioassert(entityColumn, "Property access on unknown variable: {}", varName);
+
+        return emitStaticMapKey(entityColumn, propName);
     }
 
     // The value of a property a CREATE wrote is the column it wrote it from, which saves

@@ -19,7 +19,7 @@ NLExecutionContext::NLExecutionContext(const GraphView* view,
                                        size_t chunkSize,
                                        CommitWriteBuffer* writeBuffer,
                                        const NLSystemContext* system,
-                                       const MetadataBuilder* metadataBuilder)
+                                       MetadataBuilder* metadataBuilder)
     : _view(view),
     _sink(sink),
     _chunkSize(chunkSize),

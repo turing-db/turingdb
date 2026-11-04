@@ -126,6 +126,10 @@ public:
 
     void addToBeCreatedType(std::string_view name, ValueType type, const void* obj = nullptr);
 
+    // A property a write of a value whose type is only known per row creates as it runs,
+    // which a read later in the query reads as such a value
+    void addCellCreatedProperty(std::string_view name);
+
     // Narrows @param value, a parameter written to the property @param name, to the types the
     // property takes. Answers that type, or Invalid where the property is new and its bind
     // decides it, in which case the property takes the candidates the writes of it share.
@@ -157,6 +161,7 @@ private:
 
     std::unordered_map<std::string_view, ValueType> _toBeCreatedTypes;
     std::unordered_map<std::string_view, EvaluatedTypeSet> _parameterCreatedTypes;
+    std::unordered_set<std::string_view> _cellCreatedProperties;
 
     // The LOAD CSV each row variable in scope was bound by
     std::unordered_map<const VarDecl*, LoadCSVStmt*> _csvSources;

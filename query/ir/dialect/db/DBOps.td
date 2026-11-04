@@ -600,7 +600,9 @@ def StaticMapKey : TuringOp<"static_map_key", [MayRaise, ConstantThroughOperands
     map. A cell holding a node or an edge reads that entity's property under the key, as
     `n.name` does, and one holding a datetime or a duration reads the component the key
     names, as `d.year` does. A cell holding any other value, or a datetime or a duration
-    with no such component, raises.
+    with no such component, raises. A column of nodes or edges reads each entity's
+    property under the key, which is how a property whose type the program decides as it
+    runs - one only a write of tagged cells creates - is read.
   }];
 
   let arguments = (ins Column:$map, StrAttr:$key);

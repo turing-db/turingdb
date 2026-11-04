@@ -42,6 +42,8 @@ private:
     size_t _firstPendingNodeID {0};
     size_t _firstPendingEdgeID {0};
 
+    void typeCellProperties(size_t rowCount);
+    void typeCellProperty(NLMergeProperty& property, NLMergeScanProperty& written, size_t rowCount);
     void extractProperties(size_t rowCount);
     void clearResults();
 
@@ -56,7 +58,12 @@ private:
     bool holdsTheHopValues(const NLMergeData::Hop& hop, uint64_t offset);
     void collectCandidates(size_t row);
     void matchRow(size_t row);
-    void buildHopKeys(const NLMergeData::Hop& hop, size_t row);
+    void buildHopKeys(size_t hopIndex, size_t row);
+    void appendRowKey(const std::vector<NLMergeProperty>& properties,
+                      const NLMergeScanProperties& writtenProperties,
+                      const NLMergeWorkingSet::PropertiesPerRow& staged,
+                      size_t row,
+                      std::string& key);
     void extendHop(size_t hopIndex);
 
     void collectGraphExtensions(const NLMergeData::Hop& hop, size_t hopIndex);

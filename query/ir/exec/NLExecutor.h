@@ -28,7 +28,7 @@ public:
                NLOutputSink* sink,
                CommitWriteBuffer* writeBuffer = nullptr,
                const NLSystemContext* system = nullptr,
-               const MetadataBuilder* metadataBuilder = nullptr);
+               MetadataBuilder* metadataBuilder = nullptr);
     ~NLExecutor();
 
     void run();

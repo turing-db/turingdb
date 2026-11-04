@@ -396,23 +396,34 @@ void stageCellAsItsType(const CellView cell,
     }
 }
 
-// An integer widens to the other numeric types an integer literal can be written to. False
-// for a cell of another type, which stages nothing.
+// An integer widens to the other numeric types an integer literal can be written to
+bool widensTo(CellTag tag, ValueType valueType) {
+    return tag == CellTag::Int && (valueType == ValueType::Double || valueType == ValueType::UInt64);
+}
+
+types::UInt64::Primitive unsignedIntegerOf(types::Int64::Primitive integer) {
+    if (integer < 0) {
+        throw IRException(fmt::format("Cannot set a property of type '{}' to the negative integer {}",
+                                      ValueTypeName::value(ValueType::UInt64),
+                                      integer));
+    }
+
+    return static_cast<types::UInt64::Primitive>(integer);
+}
+
+// False for a cell of another type, which stages nothing
 bool stageCellIfItFits(const CellView cell,
                        ValueType valueType,
                        CommitWriteBuffer::SupportedTypeVariant& value) {
     const CellTag tag = cell.getTag();
-
-    const bool holdsAnInteger = tag == CellTag::Int;
-    const bool widensToDouble = holdsAnInteger && valueType == ValueType::Double;
-    const bool widensToUnsigned = holdsAnInteger && valueType == ValueType::UInt64;
+    const bool widens = widensTo(tag, valueType);
 
     if (tag == CellTag::Null) {
         disengagedValue(valueType, value);
-    } else if (widensToDouble) {
+    } else if (widens && valueType == ValueType::Double) {
         value = std::optional {static_cast<types::Double::Primitive>(cell.getAs<types::Int64::Primitive>())};
-    } else if (widensToUnsigned) {
-        value = std::optional {static_cast<types::UInt64::Primitive>(cell.getAs<types::Int64::Primitive>())};
+    } else if (widens) {
+        value = std::optional {unsignedIntegerOf(cell.getAs<types::Int64::Primitive>())};
     } else if (tag == cellTagOf(valueType)) {
         stageCellAsItsType(cell, valueType, value);
     } else {
@@ -505,16 +516,79 @@ std::optional<PropertyType> findWrittenPropertyType(const GraphView* view,
     return metadataBuilder->findPropertyType(id);
 }
 
-void stageCellRows(const CellView cell,
-                   size_t rowCount,
-                   PropertyTypeID propID,
-                   ValueType valueType,
-                   CommitWriteBuffer::UntypedProperties& buf) {
-    CommitWriteBuffer::UntypedProperty property {propID, {}};
-    stageCell(cell, valueType, property.value);
+// The cell of each row @param written holds, or of every row for a null mask. A constant
+// column holds its one cell on each of the @param rowCount rows.
+template <typename Visit>
+void visitWrittenCells(const Column* column, size_t rowCount, const ColumnMask* written, Visit visit) {
+    const ColumnKind::Code kind = column->getKind();
 
-    buf.assign(rowCount, property);
+    const auto visitRows = [&](const auto& cellAt) {
+        for (size_t row = 0; row < rowCount; row++) {
+            if (writeTouchesRow(written, row)) {
+                visit(row, cellAt(row));
+            }
+        }
+    };
+
+    if (kind == ColumnConst<CellView>::staticKind()) {
+        const CellView cell = static_cast<const ColumnConst<CellView>*>(column)->getRaw();
+        visitRows([cell](size_t) { return cell; });
+    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
+        const std::optional<CellView>& held = static_cast<const ColumnConst<std::optional<CellView>>*>(column)->getRaw();
+        const CellView cell = held.value_or(CellView::nullElement());
+        visitRows([cell](size_t) { return cell; });
+    } else if (kind == ColumnVector<CellView>::staticKind()) {
+        const auto& cells = static_cast<const ColumnVector<CellView>*>(column)->getRaw();
+        visitRows([&cells](size_t row) { return cells[row]; });
+    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
+        const auto& cells = static_cast<const ColumnOptVector<CellView>*>(column)->getRaw();
+        visitRows([&cells](size_t row) { return cells[row].value_or(CellView::nullElement()); });
+    } else {
+        throw IRException("A property write of cells reads a column of cells");
+    }
 }
+
+// The value type a cell tagged @param tag is staged as, the inverse of cellTagOf: Invalid
+// for a tag no property holds
+ValueType cellValueType(CellTag tag) {
+    for (size_t index = 1; index < static_cast<size_t>(ValueType::_SIZE); index++) {
+        const ValueType valueType = static_cast<ValueType>(index);
+
+        if (cellTagOf(valueType) == tag) {
+            return valueType;
+        }
+    }
+
+    return ValueType::Invalid;
+}
+
+// The type a property no write has typed takes once it holds a value tagged @param tag
+// beside values of type @param widest: the one stageCellIfItFits stages all of them as
+ValueType widenCellType(ValueType widest, CellTag tag, std::string_view propertyName) {
+    const bool stagesAsWidest = widest != ValueType::Invalid
+                             && (tag == cellTagOf(widest) || widensTo(tag, widest));
+
+    if (tag == CellTag::Null || stagesAsWidest) {
+        return widest;
+    }
+
+    const ValueType own = cellValueType(tag);
+    const bool holdsIntegersAlone = widest == ValueType::Int64;
+
+    if (own == ValueType::Invalid) {
+        throw IRException(fmt::format("Cannot evaluate property: unsupported type '{}'", queryTypeName(tag)));
+    } else if (widest == ValueType::Invalid) {
+        return own;
+    } else if (holdsIntegersAlone && widensTo(CellTag::Int, own)) {
+        return own;
+    }
+
+    throw IRException(fmt::format("One write gives the new property '{}' two types: '{}' and '{}'",
+                                  propertyName,
+                                  queryTypeName(widest),
+                                  queryTypeName(tag)));
+}
+
 
 }
 
@@ -534,6 +608,10 @@ size_t db::committedEdgeCount(const GraphView* view) {
 
     const GraphReader reader = view->read();
     return reader.getTotalEdgesAllocated();
+}
+
+bool db::writeTouchesRow(const ColumnMask* rows, size_t row) {
+    return !rows || (*rows)[row];
 }
 
 bool db::holdsValue(const CommitWriteBuffer::SupportedTypeVariant& value) {
@@ -680,35 +758,28 @@ void db::extractColumnProperties(const Column* column,
     }
 }
 
+ValueType db::cellPropertyType(const Column* column,
+                               size_t rowCount,
+                               const ColumnMask* written,
+                               std::string_view propertyName) {
+    ValueType widest {ValueType::Invalid};
+
+    visitWrittenCells(column, rowCount, written, [&](size_t row, const CellView cell) {
+        widest = widenCellType(widest, cell.getTag(), propertyName);
+    });
+
+    return widest;
+}
+
 void db::extractCellProperties(const Column* column,
                                size_t rowCount,
+                               const ColumnMask* written,
                                PropertyTypeID propID,
                                ValueType valueType,
                                CommitWriteBuffer::UntypedProperties& buf) {
-    const ColumnKind::Code kind = column->getKind();
+    buf.assign(rowCount, CommitWriteBuffer::UntypedProperty {propID, {}});
 
-    if (kind == ColumnConst<CellView>::staticKind()) {
-        const CellView cell = static_cast<const ColumnConst<CellView>*>(column)->getRaw();
-        stageCellRows(cell, rowCount, propID, valueType, buf);
-    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
-        const std::optional<CellView>& cell =
-            static_cast<const ColumnConst<std::optional<CellView>>*>(column)->getRaw();
-        stageCellRows(cell.value_or(CellView::nullElement()), rowCount, propID, valueType, buf);
-    } else if (kind == ColumnVector<CellView>::staticKind()) {
-        const auto& cells = static_cast<const ColumnVector<CellView>*>(column)->getRaw();
-        buf.assign(cells.size(), CommitWriteBuffer::UntypedProperty {propID, {}});
-
-        for (size_t row = 0; row < cells.size(); row++) {
-            stageCell(cells[row], valueType, buf[row].value);
-        }
-    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
-        const auto& cells = static_cast<const ColumnOptVector<CellView>*>(column)->getRaw();
-        buf.assign(cells.size(), CommitWriteBuffer::UntypedProperty {propID, {}});
-
-        for (size_t row = 0; row < cells.size(); row++) {
-            stageCell(cells[row].value_or(CellView::nullElement()), valueType, buf[row].value);
-        }
-    } else {
-        throw IRException("A property write of cells reads a column of cells");
-    }
+    visitWrittenCells(column, rowCount, written, [&](size_t row, const CellView cell) {
+        stageCell(cell, valueType, buf[row].value);
+    });
 }

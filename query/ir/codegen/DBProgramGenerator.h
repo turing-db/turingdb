@@ -727,7 +727,7 @@ private:
                               mlir::Value column,
                               std::span<const LabelRef> labels,
                               const EdgeTypeRef& edgeType,
-                              llvm::ArrayRef<llvm::StringRef> propNames,
+                              std::span<const EntityPropertyConstraint> constraints,
                               llvm::ArrayRef<mlir::Value> propValues);
 
     // The chain of one MERGE pattern, as db.merge carries it: one entry per node and

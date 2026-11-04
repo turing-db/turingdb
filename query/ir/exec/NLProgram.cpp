@@ -4,6 +4,7 @@
 #include <limits>
 #include <numeric>
 
+#include "NLRuntimeProperty.h"
 #include "NLMergeWorkingSet.h"
 #include "Procedure.h"
 #include "ProcedureData.h"
@@ -93,6 +94,27 @@ NLMergeNodeIndex* NLProgram::addMergeNodeIndex(const std::string& signature,
     _mergeNodeIndexes.emplace(signature, std::move(index));
 
     return indexPtr;
+}
+
+Column* db::allocOptValueColumn(LocalMemory* memory, ValueType valueType, size_t reserveSize) {
+    Column* column = nullptr;
+    const auto allocate = [&]<SupportedType T>() {
+        ColumnOptVector<typename T::Primitive>* typed = memory->alloc<ColumnOptVector<typename T::Primitive>>();
+        typed->reserve(reserveSize);
+        column = typed;
+    };
+    ValueTypeDispatcher(valueType).execute(allocate);
+
+    return column;
+}
+
+NLRuntimeProperty* NLProgram::getRuntimeProperty(std::string_view name) {
+    std::unique_ptr<NLRuntimeProperty>& property = _runtimeProperties[std::string(name)];
+    if (!property) {
+        property = std::make_unique<NLRuntimeProperty>(name);
+    }
+
+    return property.get();
 }
 
 NLProcedureState::NLProcedureState(const Procedure* procedure,
@@ -685,9 +707,10 @@ std::span<const NLMergePendingEdges::Entry> NLMergePendingEdges::lookup(
     return findIt->second;
 }
 
-NLMergeData::NLMergeData(NLMergePendingEdges* pendingEdges, ColumnMask* created)
+NLMergeData::NLMergeData(NLMergePendingEdges* pendingEdges, ColumnMask* created, LocalMemory* memory)
     : _pendingEdges(pendingEdges),
     _created(created),
+    _memory(memory),
     _workingSet(std::make_unique<NLMergeWorkingSet>())
 {
 }

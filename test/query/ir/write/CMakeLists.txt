@@ -70,3 +70,24 @@ add_turing_test(test_query_ir_set_from_map SetFromMapTest.cpp)
 add_turing_test(test_query_ir_set_merge_from_map SetMergeFromMapTest.cpp)
 
 add_turing_test(test_query_ir_set_from_null SetFromNullTest.cpp)
+
+# A write of a value held in a type-erased cell to a property no write has typed yet.
+add_turing_test(test_query_ir_cell_created_property CellCreatedPropertyTest.cpp)
+
+# The rows a SET of type-erased cells does not write, which neither type nor check the property.
+add_turing_test(test_query_ir_cell_write_skipped_rows CellWriteSkippedRowsTest.cpp)
+
+# A negative integer written to a property of unsigned integers.
+add_turing_test(test_query_ir_negative_integer_unsigned_property NegativeIntegerUnsignedPropertyTest.cpp)
+
+# A CREATE or a MERGE of type-erased cells over a step of no row.
+add_turing_test(test_query_ir_cell_write_of_no_row CellWriteOfNoRowTest.cpp)
+
+# A read, in the query that writes it, of a property a write of type-erased cells creates.
+add_turing_test(test_query_ir_cell_created_property_read CellCreatedPropertyReadTest.cpp)
+
+# A CREATE or a MERGE of type-erased cells to a property the graph already holds.
+add_turing_test(test_query_ir_cell_write_to_existing_property CellWriteToExistingPropertyTest.cpp)
+
+# One write giving a property with no type two types.
+add_turing_test(test_query_ir_new_property_two_types NewPropertyTwoTypesTest.cpp)

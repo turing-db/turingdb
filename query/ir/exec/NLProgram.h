@@ -48,6 +48,7 @@
 
 namespace db {
 
+class NLRuntimeProperty;
 class NLExecutionContext;
 class NLFunctionData;
 struct NLMergeWorkingSet;
@@ -56,6 +57,8 @@ class Procedure;
 class ProcedureData;
 class LocalMemory;
 class StringBuffer;
+
+Column* allocOptValueColumn(LocalMemory* memory, ValueType valueType, size_t reserveSize);
 
 // Translation resolves every chunk SSA value
 // to a concrete ColumnVector type through this kind
@@ -3380,12 +3383,17 @@ private:
     NLStmtContainer _stmts;
 };
 
+// One property a CREATE writes and the column its values come from. A column of tagged
+// cells carries the runtime property that types it as the write runs in place of a type ID.
+struct NLCreatedProperty {
+    PropertyTypeID _propertyTypeID;
+    const Column* _values {nullptr};
+    NLRuntimeProperty* _runtimeProperty {nullptr};
+};
+
 class NLCreateNodeData : public NLFunctionData {
 public:
-    struct Property {
-        PropertyTypeID _propertyTypeID;
-        const Column* _values {nullptr};
-    };
+    using Property = NLCreatedProperty;
 
     NLCreateNodeData(LabelSetHandle labelsetHandle, ColumnNodeIDs* result)
         : _result(result),
@@ -3416,10 +3424,7 @@ private:
 
 class NLCreateEdgeData : public NLFunctionData {
 public:
-    struct Property {
-        PropertyTypeID _propertyTypeID;
-        const Column* _values {nullptr};
-    };
+    using Property = NLCreatedProperty;
 
     NLCreateEdgeData(EdgeTypeID edgeTypeID,
                      const ColumnNodeIDs* src,
@@ -3506,6 +3511,10 @@ struct NLMergeProperty {
     PropertyType _propertyType;
     const Column* _values {nullptr};
     NLKeyAppendFunction _keyAppend {nullptr};
+
+    // Set for a column of tagged cells, whose rows are keyed as the values they are staged
+    // as. The type stays unset until the merge's first chunk holding a value types it.
+    NLRuntimeProperty* _runtimeProperty {nullptr};
 };
 
 // The graph side of that key: the same property, read out of the graph into a scratch
@@ -3551,6 +3560,7 @@ public:
     // The spec's key properties in the types they are written with, which is what a
     // pending node's values are read back through
     const NLMergeScanProperties& writtenProperties() const { return _writtenProperties; }
+    NLMergeScanProperties& writtenProperties() { return _writtenProperties; }
     void addWrittenProperty(const NLMergeScanProperty& property) { _writtenProperties.push_back(property); }
 
     size_t getNextPendingNode() const { return _nextPendingNode; }
@@ -3658,7 +3668,7 @@ public:
         ColumnMask* _outputPending {nullptr};
     };
 
-    NLMergeData(NLMergePendingEdges* pendingEdges, ColumnMask* created);
+    NLMergeData(NLMergePendingEdges* pendingEdges, ColumnMask* created, LocalMemory* memory);
     ~NLMergeData() override;
 
     const std::vector<Node>& nodes() const { return _nodes; }
@@ -3670,6 +3680,8 @@ public:
 
     NLMergePendingEdges* getPendingEdges() const { return _pendingEdges; }
     ColumnMask* getCreated() const { return _created; }
+
+    LocalMemory* getMemory() const { return _memory; }
 
     // The column whose length is the number of rows the op runs over: a chunk some part
     // of the pattern reads. Null for a pattern reading none, which is the single row a
@@ -3693,6 +3705,7 @@ private:
     std::vector<NLCarriedColumn> _carriedColumns;
     NLMergePendingEdges* _pendingEdges {nullptr};
     ColumnMask* _created {nullptr};
+    LocalMemory* _memory {nullptr};
     const Column* _rowCarrier {nullptr};
     std::unique_ptr<NLMergeWorkingSet> _workingSet;
 
@@ -3730,25 +3743,28 @@ public:
     const ColumnMask* getRows() const { return _rows; }
     void setRows(const ColumnMask* rows) { _rows = rows; }
 
-    // A removal stages a null of the property's own type. Its value column carries no
-    // type to dispatch on, so this is where the type comes from. Invalid when the write
-    // reads its values off the column.
-    ValueType getNullValueType() const { return _nullValueType; }
-    void setNullValueType(ValueType valueType) { _nullValueType = valueType; }
+    // A null or a column of tagged cells reaches a property the program types as it runs:
+    // a removal stages a null of the type it has by then, and every cell is checked against
+    // that type and staged as it. Null for a column of a type the write was translated with.
+    NLRuntimeProperty* getRuntimeProperty() const { return _runtimeProperty; }
+    void setRuntimeProperty(NLRuntimeProperty* runtimeProperty) { _runtimeProperty = runtimeProperty; }
 
-    // A column of cells carries each row's type in the cell, so the property's own type is
-    // what every cell is checked against and staged as. Invalid for any other column.
-    ValueType getCellValueType() const { return _cellValueType; }
-    void setCellValueType(ValueType valueType) { _cellValueType = valueType; }
+    bool writesNull() const { return _writesNull; }
+    void setWritesNull(bool writesNull) { _writesNull = writesNull; }
+
+    // The rows of this step the write reaches, which alone type and check its cells
+    ColumnMask* getWrittenRows() const { return _writtenRows; }
+    void setWrittenRows(ColumnMask* writtenRows) { _writtenRows = writtenRows; }
 
 private:
     const ColumnNodeIDs* _input {nullptr};
     const Column* _value {nullptr};
     const ColumnMask* _pending {nullptr};
     const ColumnMask* _rows {nullptr};
+    NLRuntimeProperty* _runtimeProperty {nullptr};
+    ColumnMask* _writtenRows {nullptr};
     PropertyTypeID _propertyTypeID;
-    ValueType _nullValueType {ValueType::Invalid};
-    ValueType _cellValueType {ValueType::Invalid};
+    bool _writesNull {false};
     bool _allPending {false};
 };
 
@@ -3776,25 +3792,28 @@ public:
     const ColumnMask* getRows() const { return _rows; }
     void setRows(const ColumnMask* rows) { _rows = rows; }
 
-    // A removal stages a null of the property's own type. Its value column carries no
-    // type to dispatch on, so this is where the type comes from. Invalid when the write
-    // reads its values off the column.
-    ValueType getNullValueType() const { return _nullValueType; }
-    void setNullValueType(ValueType valueType) { _nullValueType = valueType; }
+    // A null or a column of tagged cells reaches a property the program types as it runs:
+    // a removal stages a null of the type it has by then, and every cell is checked against
+    // that type and staged as it. Null for a column of a type the write was translated with.
+    NLRuntimeProperty* getRuntimeProperty() const { return _runtimeProperty; }
+    void setRuntimeProperty(NLRuntimeProperty* runtimeProperty) { _runtimeProperty = runtimeProperty; }
 
-    // A column of cells carries each row's type in the cell, so the property's own type is
-    // what every cell is checked against and staged as. Invalid for any other column.
-    ValueType getCellValueType() const { return _cellValueType; }
-    void setCellValueType(ValueType valueType) { _cellValueType = valueType; }
+    bool writesNull() const { return _writesNull; }
+    void setWritesNull(bool writesNull) { _writesNull = writesNull; }
+
+    // The rows of this step the write reaches, which alone type and check its cells
+    ColumnMask* getWrittenRows() const { return _writtenRows; }
+    void setWrittenRows(ColumnMask* writtenRows) { _writtenRows = writtenRows; }
 
 private:
     const ColumnEdgeIDs* _input {nullptr};
     const Column* _value {nullptr};
     const ColumnMask* _pending {nullptr};
     const ColumnMask* _rows {nullptr};
+    NLRuntimeProperty* _runtimeProperty {nullptr};
+    ColumnMask* _writtenRows {nullptr};
     PropertyTypeID _propertyTypeID;
-    ValueType _nullValueType {ValueType::Invalid};
-    ValueType _cellValueType {ValueType::Invalid};
+    bool _writesNull {false};
     bool _allPending {false};
 };
 
@@ -5894,6 +5913,10 @@ public:
     // of its merges: a pending edge is what a merge's hop extends a candidate with.
     NLMergePendingEdges* getMergePendingEdges() { return &_mergePendingEdges; }
 
+    // The property every write of @param name the program types as it runs reaches, owned
+    // by the program
+    NLRuntimeProperty* getRuntimeProperty(std::string_view name);
+
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
 
@@ -5938,6 +5961,7 @@ private:
     std::vector<std::unique_ptr<NLRowState>> _rowStates;
     std::vector<std::unique_ptr<NLProcedureState>> _procedureStates;
     std::unordered_map<std::string, std::unique_ptr<NLMergeNodeIndex>> _mergeNodeIndexes;
+    std::unordered_map<std::string, std::unique_ptr<NLRuntimeProperty>> _runtimeProperties;
     NLMergePendingEdges _mergePendingEdges;
     NLStmtContainer _stmts;
 };

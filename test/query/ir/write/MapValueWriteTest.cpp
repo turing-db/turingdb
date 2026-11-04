@@ -32,9 +32,9 @@ TEST_F(MapValueWriteTest, rejectsAMapValueOfAnotherTypeThanTheProperty) {
                      "Cannot set a property of type 'Map' to a value of type 'Integer'");
 }
 
-TEST_F(MapValueWriteTest, rejectsAPropertyCreatedFromAMapValue) {
-    expectWriteError("UNWIND [{v: 5}] AS m MATCH (n:Person {name: 'Remy'}) SET n.fresh = m.v",
-                     "Cannot create property 'fresh' from a value whose type is only known per row");
+TEST_F(MapValueWriteTest, createsAPropertyFromAMapValue) {
+    applyWrite("UNWIND [{v: 5}] AS m MATCH (n:Person {name: 'Remy'}) SET n.fresh = m.v");
+    expectRows("MATCH (n:Person {name: 'Remy'}) RETURN n.fresh", {{"5"}});
 }
 
 int main(int argc, char** argv) {

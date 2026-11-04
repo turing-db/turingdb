@@ -138,14 +138,24 @@ TEST_F(SetListElementPropertyTest, rejectsAnElementWhoseTypeThePropertyDoesNotHo
                            "Cannot set a property of type 'Int64' to a value of type 'String'");
 }
 
-TEST_F(SetListElementPropertyTest, rejectsAPropertyCreatedFromAnElement) {
-    runWriteExpectingError("WITH ['Remy', 5] AS pair MATCH (p:Person {name: pair[0]}) SET p.score = pair[1]",
-                           "Cannot create property 'score' from a value whose type is only known per row");
+TEST_F(SetListElementPropertyTest, createsAPropertyFromAnElement) {
+    runWrite("WITH ['Remy', 5] AS pair MATCH (p:Person {name: pair[0]}) SET p.score = pair[1]");
+
+    StringRowSink read;
+    runQuery("MATCH (p:Person {name: 'Remy'}) RETURN p.score", read);
+
+    const std::vector<StringRowSink::Row> expectedRead {{"5"}};
+    EXPECT_EQ(read.getRows(), expectedRead);
 }
 
-TEST_F(SetListElementPropertyTest, rejectsAPropertyCreatedFromAComputedElement) {
-    runWriteExpectingError("WITH ['Remy', 5] AS pair MATCH (p:Person {name: pair[0]}) SET p.score = pair[1] + 1",
-                           "Cannot create property 'score' from a value whose type is only known per row");
+TEST_F(SetListElementPropertyTest, createsAPropertyFromAComputedElement) {
+    runWrite("WITH ['Remy', 5] AS pair MATCH (p:Person {name: pair[0]}) SET p.score = pair[1] + 1");
+
+    StringRowSink read;
+    runQuery("MATCH (p:Person {name: 'Remy'}) RETURN p.score", read);
+
+    const std::vector<StringRowSink::Row> expectedRead {{"6"}};
+    EXPECT_EQ(read.getRows(), expectedRead);
 }
 
 int main(int argc, char** argv) {

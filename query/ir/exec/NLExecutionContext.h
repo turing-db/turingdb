@@ -32,7 +32,7 @@ public:
                        size_t chunkSize,
                        CommitWriteBuffer* writeBuffer = nullptr,
                        const NLSystemContext* system = nullptr,
-                       const MetadataBuilder* metadataBuilder = nullptr);
+                       MetadataBuilder* metadataBuilder = nullptr);
     ~NLExecutionContext();
 
     const GraphView* getView() const { return _view; }
@@ -40,7 +40,7 @@ public:
     size_t getChunkSize() const { return _chunkSize; }
     CommitWriteBuffer* getWriteBuffer() const { return _writeBuffer; }
 
-    const MetadataBuilder* getMetadataBuilder() const { return _metadataBuilder; }
+    MetadataBuilder* getMetadataBuilder() const { return _metadataBuilder; }
 
     // The server-level facilities the system commands reach for. Every query the server
     // runs carries one, ordinary reads included; it is null only for a caller that hands
@@ -81,7 +81,7 @@ private:
     size_t _chunkSize {0};
     CommitWriteBuffer* _writeBuffer {nullptr};
     const NLSystemContext* _system {nullptr};
-    const MetadataBuilder* _metadataBuilder {nullptr};
+    MetadataBuilder* _metadataBuilder {nullptr};
     size_t _firstQueryNode {0};
     size_t _firstQueryEdge {0};
     std::unique_ptr<NLWrittenValues> _writtenValues;

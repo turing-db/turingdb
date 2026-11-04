@@ -5,6 +5,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "CellTag.h"
@@ -15,6 +16,7 @@
 namespace db {
 
 class Column;
+class ColumnMask;
 class GraphView;
 class MetadataBuilder;
 
@@ -26,6 +28,9 @@ size_t committedEdgeCount(const GraphView* view);
 
 bool holdsValue(const CommitWriteBuffer::SupportedTypeVariant& value);
 
+// A write with no rows mask touches every row
+bool writeTouchesRow(const ColumnMask* rows, size_t row);
+
 // The values one property column holds, as the write buffer takes them: one entry per
 // row, owning whatever the column only borrows. What a create, a set and a merge all
 // turn a row's asked-for value into before writing it.
@@ -36,9 +41,11 @@ void extractColumnProperties(const Column* column,
 
 // The values a column of cells - list elements or map values - holds, as a property of
 // @param valueType takes them. Each cell carries its own type, so a cell holding another
-// type throws on its row.
+// type throws on its row. @param written holds the rows the write reaches, or is null for
+// every row: a row it does not reach is neither checked nor staged.
 void extractCellProperties(const Column* column,
                            size_t rowCount,
+                           const ColumnMask* written,
                            PropertyTypeID propID,
                            ValueType valueType,
                            CommitWriteBuffer::UntypedProperties& buf);
@@ -84,6 +91,15 @@ void stageRemovals(std::span<const PropertyTypeID> held,
                    const MetadataBuilder* metadataBuilder,
                    std::vector<ValueType>& heldTypes,
                    CommitWriteBuffer::UntypedProperties& removals);
+
+// The type a property no write has typed takes from the @param rowCount rows of a column of
+// tagged cells @param written holds: the one every value they hold is staged as. Invalid for
+// no row or rows of nulls. Raises where two values share no such type, or where one is a
+// value no property holds.
+ValueType cellPropertyType(const Column* column,
+                           size_t rowCount,
+                           const ColumnMask* written,
+                           std::string_view propertyName);
 
 // The disengaged value of one property, repeated over every row. A write of a null has no
 // value column to read a type off, so the property's own type picks the variant it stages.
