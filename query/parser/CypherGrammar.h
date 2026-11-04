@@ -198,19 +198,49 @@ private:
     CypherAST* _ast {nullptr};
     SourceManager* _sourceManager {nullptr};
     CypherLexer* _lexer {nullptr};
+
+    /* ***** Parser State ***** */
+
+    // Tokens lexed ahead and not consumed yet; the front is the current token
     std::deque<CypherToken> _window;
+
+    // The last consumed token, where the location of the node being built ends
     CypherToken _previous;
+
+    // True once the parser consumes a token; emptyLocation() reads _previous only then
     bool _consumedAny {false};
+
+    // True if a check read the current token; throwSemanticError() then holds the error
     bool _examined {false};
+
+    // Token kinds checked at the current token, for the "expecting" list of a syntax error
     TokenKinds _expected;
+
+    // Token kinds checked at the next token; consume() moves them into _expected
     TokenKinds _pending;
+
+    // Number of open brackets and CASE, at most MAX_NESTING_DEPTH
     size_t _depth {0};
+
+    // What may follow the current expression: AS before an alias, or a PIPE that ends it
     ExprFollower _follower {ExprFollower::NONE};
+
+    // Nesting depth where _follower was set; _follower applies only at that depth
     size_t _followerDepth {0};
+
+    // True if a semantic error waits for the next consume() to throw it
     bool _holdsError {false};
+
+    // Location of the held semantic error
     SourceLocation _heldErrorLocation;
+
+    // Message of the held semantic error
     std::string _heldErrorMessage;
+
+    // Operators that parseExpr has read and not reduced yet, shared by all nesting levels
     std::vector<PendingOperator> _operators;
+
+    // Operands that parseExpr has read and not reduced yet, shared by all nesting levels
     std::vector<PendingOperand> _operands;
 
     const CypherToken& peek(size_t offset);
