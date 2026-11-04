@@ -114,8 +114,6 @@ set(ast_sources
     CreateEdgePropertyIndexQuery.cpp
     DropIndexQuery.cpp
     MergeDataPartsQuery.cpp
-
-    ExprUtils.cpp
   )
 
 add_library(turing_db_ast_s STATIC ${ast_sources})
