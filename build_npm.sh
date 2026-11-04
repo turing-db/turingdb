@@ -67,6 +67,11 @@ node decoder_smoke.mjs
 
 cd "$PACKAGE_DIR"
 node client_smoke.mjs
+node parameter_errors_smoke.mjs
+node split_error_smoke.mjs
+node payload_limit_smoke.mjs
+node cancel_on_error_smoke.mjs
+node response_without_end_smoke.mjs
 
 set_package_version "$VERSION"
 

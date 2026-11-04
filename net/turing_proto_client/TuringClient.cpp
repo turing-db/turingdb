@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -179,8 +180,7 @@ void TuringClient::disconnect() {
     }
 }
 
-void TuringClient::sendRequest(const std::string& query, const db::ParameterMap* parameters) {
-    _requestBody.build(query, parameters);
+void TuringClient::sendRequest(const std::string& query) {
     const std::span<char> prefix = _requestBody.getPrefix();
     const std::span<char> suffix = _requestBody.getSuffix();
 
@@ -370,8 +370,7 @@ void TuringClient::recvChunkBody(size_t chunkSize, ProtoHeader* outHeader) {
     bioassert(chunkSize >= ProtoHeader::wireSize(), "Chunk smaller than ProtoHeader");
     const size_t payloadSize = chunkSize - ProtoHeader::wireSize();
 
-    _inBuf.reset();
-    _inBuf.ensureCapacity(payloadSize);
+    _inBuf.reset(payloadSize);
 
     std::array<iovec, 2> iovecs = {{
         {_protoHeaderBuf.data(), ProtoHeader::wireSize()},
@@ -442,9 +441,25 @@ db::QueryStatus TuringClient::sendQuery(const std::string& query,
         throw TuringException(fmt::format("The graph name is {} bytes, more than the {} bytes the binary protocol allows",
                                           _graphName.length(),
                                           MAX_WIRE_SIZE));
+    } else if (!isConnected()) {
+        throw TuringException("The client is not connected: call connect() before sending a query");
     }
 
-    sendRequest(query, parameters);
+    _requestBody.build(query, parameters);
+
+    db::QueryStatus status;
+    try {
+        sendRequest(query);
+        receiveResponse(callback, status);
+    } catch (...) {
+        disconnect();
+        throw;
+    }
+
+    return status;
+}
+
+void TuringClient::receiveResponse(const db::QueryCallbacks::OnOutputData& callback, db::QueryStatus& queryStatus) {
     recvHttpResponseHeaders();
 
     _embeddingBuffer.clear();
@@ -455,7 +470,6 @@ db::QueryStatus TuringClient::sendQuery(const std::string& query,
     _localMem->clear();
 
     db::DataframeManager dfMan;
-    db::QueryStatus res;
     std::vector<DecodedColumnSchema> columnSchemas;
     db::Dataframe df;
     TuringSink sink(_localMem, &_embeddingBuffer, &_pathBuffer, &_listBuffer, &_mapBuffer);
@@ -464,6 +478,8 @@ db::QueryStatus TuringClient::sendQuery(const std::string& query,
 
     bool callbackFired = false;
     bool sawTerminalPacket = false;
+    std::optional<std::string> errorMessage;
+    std::optional<std::string> protocolError;
 
     while (true) {
         const size_t chunkSize = recvChunkSizeLine();
@@ -478,7 +494,8 @@ db::QueryStatus TuringClient::sendQuery(const std::string& query,
         recvChunkBody(chunkSize, &responseHeader);
         recvCrlf();
 
-        if (sawTerminalPacket) {
+        const bool continuesProtocolError = protocolError && responseHeader._type == MessageTypes::PROTOCOL_ERROR;
+        if (sawTerminalPacket && !continuesProtocolError) {
             throw TuringException("Unexpected proto packet after END/ERROR");
         }
 
@@ -518,21 +535,22 @@ db::QueryStatus TuringClient::sendQuery(const std::string& query,
 
                 db::QueryCallbacks::ExecTimeMilliseconds totalTimeMs = 0;
                 memcpy(&totalTimeMs, _inBuf.data(), sizeof(totalTimeMs));
-                res.setTotalTime(Milliseconds(totalTimeMs));
+                queryStatus.setTotalTime(Milliseconds(totalTimeMs));
                 sawTerminalPacket = true;
             }
             break;
 
             case MessageTypes::ERROR: {
-                if (_inBuf.size() < sizeof(db::QueryStatus::Status)) {
+                if (errorMessage) {
+                    errorMessage->append(_inBuf.data(), _inBuf.size());
+                } else if (_inBuf.size() < sizeof(db::QueryStatus::Status)) {
                     throw TuringException("Invalid ERROR packet payload size");
+                } else {
+                    db::QueryStatus::Status status;
+                    memcpy(&status, _inBuf.data(), sizeof(status));
+                    queryStatus.setStatus(status);
+                    errorMessage.emplace(_inBuf.data() + sizeof(status), _inBuf.size() - sizeof(status));
                 }
-
-                db::QueryStatus::Status status;
-                memcpy(&status, _inBuf.data(), sizeof(status));
-                res.setStatus(status);
-                res.setMessage(std::string_view(_inBuf.data() + sizeof(status),
-                                                _inBuf.size() - sizeof(status)));
                 // ERROR is not the response terminator — the server still
                 // emits an END packet afterwards (with the elapsed time)
                 // even when the query failed. Mirrors the binary protocol
@@ -541,8 +559,11 @@ db::QueryStatus TuringClient::sendQuery(const std::string& query,
             break;
 
             case MessageTypes::PROTOCOL_ERROR:
-                throw TuringException("Protocol error from server: "
-                                      + std::string(_inBuf.data(), _inBuf.size()));
+                if (!protocolError) {
+                    protocolError.emplace();
+                }
+                protocolError->append(_inBuf.data(), _inBuf.size());
+                sawTerminalPacket = true;
             break;
 
             default:
@@ -551,5 +572,13 @@ db::QueryStatus TuringClient::sendQuery(const std::string& query,
         }
     }
 
-    return res;
+    if (protocolError) {
+        throw TuringException("Protocol error from server: " + *protocolError);
+    } else if (!sawTerminalPacket) {
+        throw TuringException("The response ended before the END packet");
+    }
+
+    if (errorMessage) {
+        queryStatus.setMessage(*errorMessage);
+    }
 }

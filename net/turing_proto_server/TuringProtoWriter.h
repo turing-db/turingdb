@@ -57,6 +57,7 @@ public:
     void writeColumns(std::span<const db::Column* const> columns, size_t offset, size_t rowCount);
     void writeError(const db::QueryStatus* status);
     void writeProtocolError(std::string_view message);
+    void writeProtocolErrorResponse(std::string_view message);
     void writeEndPacket(db::QueryCallbacks::ExecTimeMilliseconds milliseconds);
     void writeAnalyzeError(int32_t) override;
 

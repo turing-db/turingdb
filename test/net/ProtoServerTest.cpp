@@ -13,7 +13,8 @@
 using namespace db;
 using namespace turing::test;
 
-ProtoServerTest::ProtoServerTest() {
+ProtoServerTest::ProtoServerTest()
+{
 }
 
 ProtoServerTest::~ProtoServerTest() {

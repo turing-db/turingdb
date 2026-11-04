@@ -5,17 +5,23 @@
 #include <string>
 
 #include "DecodeContext.h"
+#include "GraphPath.h"
 #include "TuringException.h"
 #include "TuringProtoHeaders.h"
 #include "TuringProtoInBuf.h"
 
 namespace net::proto {
 
-inline void throwIfPathTooLong(WireSize nodeCount) {
+inline void readPathNodeCount(DecodeContext* context, db::GraphPath& path) {
+    WireSize nodeCount = 0;
+    context->_inBuf->readData(&nodeCount, sizeof(nodeCount));
+
     constexpr size_t MAX_NODE_COUNT = (MAX_WIRE_SIZE / sizeof(uint64_t) + 1) / 2;
     if (nodeCount > MAX_NODE_COUNT) {
         throw TuringException("Invalid path node count " + std::to_string(nodeCount));
     }
+
+    path.setNodeCount(nodeCount);
 }
 
 template <typename T>

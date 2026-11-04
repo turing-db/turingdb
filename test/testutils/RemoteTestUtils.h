@@ -25,6 +25,7 @@ struct HttpRequest {
 
 struct HttpResponse {
     std::string statusLine;
+    std::string headers;
     std::string body;
 };
 

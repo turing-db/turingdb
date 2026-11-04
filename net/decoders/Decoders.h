@@ -223,12 +223,8 @@ struct VectorColumnDecoder<db::GraphPath, Sink> {
                 return false;
             }
 
-            WireSize nodeCount = 0;
-            context->_inBuf->readData(&nodeCount, sizeof(nodeCount));
-            throwIfPathTooLong(nodeCount);
-
             db::GraphPath& path = (*typedColumn)[context->_rowIndex + i];
-            path.setNodeCount(nodeCount);
+            readPathNodeCount(context, path);
 
             const std::span<uint64_t> ids = path.getIDs();
             if (!readVarLenPayload(context, reinterpret_cast<char*>(ids.data()), ids.size_bytes())) {
@@ -670,8 +666,6 @@ struct ConstColumnDecoder<SinkMapView<Sink>, Sink> {
     }
 };
 
-// The path moves into the column before its IDs arrive: the move hands the column the path's
-// ID buffer, so IDs split across packets still land in the column
 template <ProtoDecodeSink Sink>
 struct ConstColumnDecoder<db::GraphPath, Sink> {
     using T = db::GraphPath;
@@ -682,12 +676,8 @@ struct ConstColumnDecoder<db::GraphPath, Sink> {
             return false;
         }
 
-        WireSize nodeCount = 0;
-        context->_inBuf->readData(&nodeCount, sizeof(nodeCount));
-        throwIfPathTooLong(nodeCount);
-
         db::GraphPath path;
-        path.setNodeCount(nodeCount);
+        readPathNodeCount(context, path);
         const std::span<uint64_t> ids = path.getIDs();
         typedColumn->set(std::move(path));
 

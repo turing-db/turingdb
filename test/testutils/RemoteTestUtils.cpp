@@ -100,6 +100,9 @@ void receiveChunkedResponse(int socket, std::string& received, size_t& position,
         headerEnd = received.find("\r\n\r\n", position);
     }
 
+    const size_t headersBegin = statusLineEnd + 2;
+    response.headers = received.substr(headersBegin, headerEnd + 2 - headersBegin);
+
     position = headerEnd + 4;
     while (true) {
         const size_t sizeLineEnd = receiveLine(socket, received, position);

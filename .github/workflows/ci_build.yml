@@ -371,6 +371,8 @@ jobs:
   # os/python combination, and it shares no build tree with the native compiler.
   build-wasm:
     name: Build npm package
+    # Only the top PR of a stack builds, as for the native build that needs this job
+    if: github.event.pull_request.stack == null || github.event.pull_request.stack.position == github.event.pull_request.stack.size
     runs-on: ubuntu-24.04-turing
 
     steps:

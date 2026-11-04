@@ -14,8 +14,17 @@
 
 using namespace net::proto;
 
+namespace {
+
+size_t checkedBufferCapacity(size_t capacity) {
+    bioassert(capacity <= MAX_PAYLOAD_SIZE, "The proto buffer capacity exceeds the protocol's maximum payload size");
+    return capacity;
+}
+
+}
+
 TuringProtoWriter::TuringProtoWriter(size_t bufferCapacity)
-    : _buffer(bufferCapacity),
+    : _buffer(checkedBufferCapacity(bufferCapacity)),
     _encoder(&_buffer)
 {
 }
@@ -118,16 +127,24 @@ void TuringProtoWriter::writeProtocolError(std::string_view message) {
     writePacket(MessageTypes::PROTOCOL_ERROR);
 }
 
+// No response has been started yet. A send failure is swallowed: the connection is closed
+// right after.
+void TuringProtoWriter::writeProtocolErrorResponse(std::string_view message) {
+    try {
+        startResponse(net::ConnectionHeader::CLOSE);
+        writeProtocolError(message);
+    } catch (const NetException&) {
+    }
+}
+
 void TuringProtoWriter::writeAnalyzeError(int32_t error) {
     std::string details;
     net::HTTP::describeError(static_cast<net::HTTP::Error>(error), details);
 
-    // The request failed HTTP framing analysis before dispatch, so no response has been
-    // started yet. Open the 200 OK envelope, send one PROTOCOL_ERROR packet and the chunk
-    // terminator, and swallow a send failure: the connection is closed right after.
+    // The request failed HTTP framing analysis before dispatch and the connection is closed
+    // without the end-of-request flush, so the terminator is sent here.
+    writeProtocolErrorResponse(details);
     try {
-        startResponse(net::ConnectionHeader::CLOSE);
-        writeProtocolError(details);
         flush();
     } catch (const NetException&) {
     }
