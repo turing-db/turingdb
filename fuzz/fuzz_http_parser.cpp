@@ -1,7 +1,8 @@
 // AFL++ / stdin fuzzing harness for the TuringDB HTTP server. The input is one recv() on a
 // connection, handled as TCPConnectionManager handles it: HTTPParser<DBURIParser>, then
-// DBServerProcessor runs the query on SimpleGraph data and writes the JSON response to a socket.
-// The server answers internal errors with a JSON error, so the harness aborts on those and on invalid JSON.
+// TuringProtoServerProcessor runs the query on SimpleGraph data and writes the binary response to
+// a socket. The harness aborts on broken chunked framing, on a malformed packet, and on an ERROR
+// packet that reports an internal error.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,20 +14,21 @@
 #include <string>
 #include <string_view>
 #include <thread>
-
-#include <nlohmann/json.hpp>
+#include <vector>
 
 #include "TuringTestEnv.h"
 #include "SimpleGraph.h"
 #include "SystemAccessor.h"
 #include "SystemManager.h"
 
-#include "DBServerProcessor.h"
 #include "DBThreadContext.h"
 #include "DBURIParser.h"
 #include "HTTPParser.h"
-#include "HTTPWriter.h"
 #include "TCPConnection.h"
+#include "TuringProtoHeaders.h"
+#include "TuringProtoServerProcessor.h"
+#include "TuringProtoWriter.h"
+#include "QueryStatus.h"
 
 #include "BioAssert.h"
 
@@ -53,7 +55,7 @@ void initOnce() {
     g_threadContext = std::make_unique<db::DBThreadContext>();
 
     g_connection = std::make_unique<net::TCPConnection>();
-    g_connection->setWriter(std::make_unique<net::HTTPWriter>());
+    g_connection->setWriter(std::make_unique<net::proto::TuringProtoWriter>(net::proto::DEFAULT_BUFFER_CAPACITY));
     g_connection->setParser(std::make_unique<net::HTTPParser<db::DBURIParser>>(&g_connection->getInputBuffer()));
 }
 
@@ -78,7 +80,7 @@ void processReceivedBytes(const char* data, size_t size) {
     if (!analyzeRes) {
         parser.handleAnalyzeError(analyzeRes.error(), writer);
     } else if (analyzeRes.value()) {
-        db::DBServerProcessor processor(g_env->getDB(), connection);
+        db::TuringProtoServerProcessor processor(g_env->getDB(), connection);
         processor.process(g_threadContext.get());
 
         if (writer.getBytesWritten() != 0) {
@@ -108,7 +110,7 @@ void readResponse(int socket, std::string& response) {
     }
 }
 
-void decodeChunkedBody(std::string_view encoded, std::string& body) {
+void decodeChunks(std::string_view encoded, std::vector<std::string_view>& chunks) {
     while (true) {
         const size_t sizeEnd = encoded.find("\r\n");
         bioassert(sizeEnd != std::string_view::npos, "The response has an unterminated chunk size");
@@ -129,33 +131,45 @@ void decodeChunkedBody(std::string_view encoded, std::string& body) {
             return;
         }
 
-        body.append(encoded.substr(0, chunkSize));
+        chunks.push_back(encoded.substr(0, chunkSize));
         encoded.remove_prefix(chunkSize + 2);
     }
 }
 
+void checkPacket(std::string_view packet) {
+    constexpr size_t HEADER_SIZE = net::proto::ProtoHeader::wireSize();
+    bioassert(packet.size() >= HEADER_SIZE, "A response chunk is shorter than a packet header");
+
+    const net::proto::ProtoHeader header = net::proto::ProtoHeader::decode(packet.data(), packet.size());
+    bioassert(net::proto::ProtoHeader::isValidMessageType(header._type), "A response packet has an invalid type");
+    bioassert(header._dataLen == packet.size() - HEADER_SIZE, "A response packet length does not match its chunk");
+
+    if (header._type != net::proto::MessageTypes::ERROR) {
+        return;
+    }
+
+    const std::string_view payload = packet.substr(HEADER_SIZE);
+    bioassert(payload.size() >= sizeof(db::QueryStatus::Status), "An ERROR packet has no status");
+
+    const std::string_view message = payload.substr(sizeof(db::QueryStatus::Status));
+    const bool internalError = message.starts_with("Unexpected exception") || message == "Unknown exception occurred";
+    bioassert(!internalError, "The server answered with an internal error: {}", message);
+}
+
 void checkResponse(std::string_view response) {
-    if (!response.starts_with("HTTP/1.1 200 OK\r\n")) {
+    if (!response.starts_with("HTTP/1.1 ")) {
         return;
     }
 
     const size_t headerEnd = response.find("\r\n\r\n");
     bioassert(headerEnd != std::string_view::npos, "The response header is not terminated");
 
-    std::string body;
-    decodeChunkedBody(response.substr(headerEnd + 4), body);
+    std::vector<std::string_view> chunks;
+    decodeChunks(response.substr(headerEnd + 4), chunks);
 
-    const nlohmann::json json = nlohmann::json::parse(body, nullptr, false);
-    bioassert(!json.is_discarded(), "The response body is not valid JSON:\n{}", body);
-
-    const auto errorDetails = json.find("error_details");
-    if (errorDetails == json.end() || !errorDetails->is_string()) {
-        return;
+    for (const std::string_view chunk : chunks) {
+        checkPacket(chunk);
     }
-
-    const std::string_view message = errorDetails->get_ref<const std::string&>();
-    const bool internalError = message.starts_with("Unexpected exception") || message == "Unknown exception occurred";
-    bioassert(!internalError, "The server answered with an internal error: {}", message);
 }
 
 int fuzzOne(const char* data, size_t size) {

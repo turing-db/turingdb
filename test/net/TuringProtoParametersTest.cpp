@@ -13,6 +13,7 @@
 #include "NetBuffer.h"
 #include "ParameterMap.h"
 #include "ParameterValue.h"
+#include "ProtoTestUtils.h"
 #include "QueryResultFormatter.h"
 #include "QueryStatus.h"
 #include "RemoteTestUtils.h"
@@ -36,7 +37,7 @@ using namespace turing::test;
 
 namespace {
 
-using Rows = std::vector<std::vector<std::string>>;
+constexpr std::string_view BAD_REQUEST = "HTTP/1.1 400 Bad Request";
 
 void setString(ParameterMap& parameters, std::string_view name, std::string_view text) {
     ParameterValue value;
@@ -92,21 +93,18 @@ protected:
         }
     }
 
-    void runQuery(const std::string& query, const ParameterMap* parameters, Rows& rows, QueryStatus& status) {
+    void runQuery(const std::string& query, const ParameterMap* parameters, ResultRows& rows, QueryStatus& status) {
         net::proto::TuringClient client("127.0.0.1", std::to_string(_port), &_env->getMem());
         client.setGraphName("simpledb");
         client.connect();
 
-        std::vector<std::string> values;
-        status = client.sendQuery(query, [&rows, &values](const Dataframe* dataframe) {
-            QueryResultFormatter::appendRows(rows, values, dataframe);
-        }, parameters);
+        runProtoQuery(&client, query, parameters, rows, status);
 
         client.disconnect();
     }
 
-    void expectRows(const std::string& query, const ParameterMap* parameters, const Rows& expected) {
-        Rows rows;
+    void expectRows(const std::string& query, const ParameterMap* parameters, const ResultRows& expected) {
+        ResultRows rows;
         QueryStatus status;
         runQuery(query, parameters, rows, status);
 
@@ -114,9 +112,14 @@ protected:
         EXPECT_EQ(rows, expected) << query;
     }
 
-    void postEnvelope(const std::string& body, net::proto::MessageTypes expectedType, std::string_view expectedMessage) {
+    void postEnvelope(const std::string& body,
+                      std::string_view expectedStatusLine,
+                      net::proto::MessageTypes expectedType,
+                      std::string_view expectedMessage) {
         HttpResponse response;
         postHttpBody(_port, "/query?graph=simpledb", body, response);
+
+        EXPECT_EQ(response.statusLine, expectedStatusLine);
 
         ASSERT_GE(response.body.size(), net::proto::ProtoHeader::wireSize());
         const net::proto::ProtoHeader header = net::proto::ProtoHeader::decode(response.body.data(),
@@ -125,7 +128,6 @@ protected:
         EXPECT_NE(response.body.find(expectedMessage), std::string::npos) << response.body;
     }
 
-    ProtoEnvScope _protoScope;
     std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<TuringServer> _server;
     DBServerConfig _serverConfig;
@@ -167,7 +169,7 @@ TEST_F(TuringProtoParametersTest, noParametersAndAnEmptyMapRunTheQuery) {
 }
 
 TEST_F(TuringProtoParametersTest, aMissingParameterIsReported) {
-    Rows rows;
+    ResultRows rows;
     QueryStatus status;
     runQuery("MATCH (n:$label) RETURN n", nullptr, rows, status);
 
@@ -183,7 +185,7 @@ TEST_F(TuringProtoParametersTest, theAsyncClientSendsParameters) {
     client.setGraphName("simpledb");
     client.connect();
 
-    Rows rows;
+    ResultRows rows;
     std::vector<std::string> values;
     client.sendQuery("MATCH (n:$label) RETURN n.name ORDER BY n.name", [&rows, &values](const Dataframe* dataframe) {
         QueryResultFormatter::appendRows(rows, values, dataframe);
@@ -197,7 +199,7 @@ TEST_F(TuringProtoParametersTest, theAsyncClientSendsParameters) {
 
     ASSERT_TRUE(client.isRecvComplete());
     ASSERT_TRUE(client.getQueryStatus().isOk()) << client.getQueryStatus().getError();
-    EXPECT_EQ(rows, (Rows {{"Adam"}, {"Remy"}}));
+    EXPECT_EQ(rows, (ResultRows {{"Adam"}, {"Remy"}}));
 
     client.disconnect();
 }
@@ -205,22 +207,22 @@ TEST_F(TuringProtoParametersTest, theAsyncClientSendsParameters) {
 TEST_F(TuringProtoParametersTest, aMalformedEnvelopeIsAProtocolError) {
     using net::proto::MessageTypes;
 
-    postEnvelope("MA", MessageTypes::PROTOCOL_ERROR, "The request body ends before the query length");
-    postEnvelope("MATCH (n) RETURN n", MessageTypes::PROTOCOL_ERROR, "The request body ends before the end of the query");
+    postEnvelope("MA", BAD_REQUEST, MessageTypes::PROTOCOL_ERROR, "The request body ends before the query length");
+    postEnvelope("MATCH (n) RETURN n", BAD_REQUEST, MessageTypes::PROTOCOL_ERROR, "The request body ends before the end of the query");
 
     std::string noParameterLength;
     appendLength(noParameterLength, 8);
     noParameterLength += "RETURN 1";
-    postEnvelope(noParameterLength, MessageTypes::PROTOCOL_ERROR, "The request body ends before the parameter map length");
+    postEnvelope(noParameterLength, BAD_REQUEST, MessageTypes::PROTOCOL_ERROR, "The request body ends before the parameter map length");
 
     std::string wrongParameterLength;
     makeEnvelope("RETURN 1", "", wrongParameterLength);
     wrongParameterLength += "xyz";
-    postEnvelope(wrongParameterLength, MessageTypes::PROTOCOL_ERROR, "The parameter map length does not match the rest of the request body");
+    postEnvelope(wrongParameterLength, BAD_REQUEST, MessageTypes::PROTOCOL_ERROR, "The parameter map length does not match the rest of the request body");
 
     std::string truncatedMap;
     makeEnvelope("RETURN 1", std::string(6, '\0'), truncatedMap);
-    postEnvelope(truncatedMap, MessageTypes::PROTOCOL_ERROR, "The parameter map ends before its last value");
+    postEnvelope(truncatedMap, BAD_REQUEST, MessageTypes::PROTOCOL_ERROR, "The parameter map ends before its last value");
 }
 
 TEST_F(TuringProtoParametersTest, aTypeAParameterCannotHoldIsAQueryError) {
@@ -233,7 +235,7 @@ TEST_F(TuringProtoParametersTest, aTypeAParameterCannotHoldIsAQueryError) {
 
     std::string body;
     makeEnvelope("RETURN 1", std::string_view(parameterBuffer.data(), parameterBuffer.size()), body);
-    postEnvelope(body, net::proto::MessageTypes::ERROR, "A parameter cannot hold a UInt64 value");
+    postEnvelope(body, "HTTP/1.1 200 OK", net::proto::MessageTypes::ERROR, "A parameter cannot hold a UInt64 value");
 }
 
 TEST_F(TuringProtoParametersTest, aQueryAndParametersUnderTheLimitRun) {
@@ -256,7 +258,7 @@ TEST_F(TuringProtoParametersTest, aQueryAndParametersOverTheLimitGetTheServerErr
 
     std::string message;
     try {
-        Rows rows;
+        ResultRows rows;
         QueryStatus status;
         runQuery(query, &parameters, rows, status);
     } catch (const TuringException& e) {

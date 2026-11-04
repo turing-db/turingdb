@@ -392,7 +392,7 @@ added a **small consensus layer for metadata** because pure-gossip schema/topolo
 |---|---|---|---|---|
 | **SWIM membership** | node ↔ node | own listener: UDP probes + TCP state sync | continuous, tiny | source of truth for liveness / membership |
 | **Data anti-entropy** | node ↔ node | TCP (bulk part pulls) | periodic | exchange part-hash digests, pull missing parts |
-| **`/cluster/*` HTTP** | operator / CLI ↔ a node | the existing 6666 REST listener | on-demand, request/response | *observe and command* the cluster |
+| **`/cluster/*` HTTP** | operator / CLI ↔ a node | the existing 6666 HTTP listener | on-demand, request/response | *observe and command* the cluster |
 
 The HTTP `/cluster/*` endpoints sit **on top of** SWIM: `status`/`members` *read* the
 membership table SWIM maintains; `join`/`drain` are *admin triggers* (hand a node its seeds and
@@ -430,8 +430,9 @@ commands the *local* node, which then performs the actual join (SWIM gossip with
 CP-metadata read, writer-ID allocation, anti-entropy catch-up). This mirrors `cockroach` /
 `nodetool` / `etcdctl`, where the CLI drives the node it sits next to.
 
-1. Add `/cluster/{join,members,status}` endpoints to the existing HTTP server
-   (`server/DBServerProcessor`, `server/Endpoints.h`) — they **read out** the membership view
+1. Add `/cluster/{join,members,status}` endpoints to the 6666 listener (`server/DBURIParser.h`,
+   `server/Endpoints.h`, dispatched by `server/TuringProtoServerProcessor`, which today serves
+   only `/query` over the binary protocol) — they **read out** the membership view
    + frontier VVs and **trigger** lifecycle actions. On the existing 6666 listener; no new
    transport *for the API*.
 2. Thin `turingctl` CLI driving them (`cluster init`, `node add --join`, `cluster status`,

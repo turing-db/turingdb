@@ -16,6 +16,9 @@ class TuringProtoOutBuf;
 inline constexpr size_t DEFAULT_BUFFER_CAPACITY = 1024ul * 1024;
 inline constexpr size_t MAX_PAYLOAD_SIZE = 64ul * 1024 * 1024;
 
+inline constexpr std::string_view CONTENT_TYPE = "application/turing-proto";
+inline constexpr std::string_view CONTENT_TYPE_HEADER = "Content-type: application/turing-proto";
+
 // Integer type used on the wire for every variable-length framing field of the binary protocol:
 // the message payload length, column name lengths, per-value byte sizes, and element / row /
 // column counts. Encoder and decoder both frame each such field as exactly sizeof(WireSize)

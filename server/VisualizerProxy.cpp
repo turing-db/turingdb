@@ -10,6 +10,7 @@
 #include "AbstractThreadContext.h"
 #include "TCPConnection.h"
 #include "HTTP.h"
+#include "HTTPWriter.h"
 
 using namespace db;
 

@@ -35,7 +35,7 @@ def submit_change(client: TuringDB, change_id: int):
 
 
 def main():
-    client = TuringDB(host="http://localhost:6666")
+    client = TuringDB(host="localhost")
     client.try_reach()
     print("Connected to DB")
 

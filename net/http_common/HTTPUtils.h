@@ -5,7 +5,6 @@
 #include <string_view>
 
 #include "ConnectionHeader.h"
-#include "ContentType.h"
 #include "HTTP.h"
 
 namespace net::http {
@@ -48,7 +47,6 @@ inline bool equalsIgnoreCaseAscii(std::string_view value, std::string_view lower
 //     std::array<char, RESPONSE_HEADER_BUFFER_SIZE> buf;
 //     size_t off = 0;
 //     off += writeStatusLine(HTTP::Status::OK, buf.data() + off, buf.size() - off);
-//     off += writeContentType(ContentType::JSON, buf.data() + off, buf.size() - off);
 //     off += writeChunkedTransferEncoding(buf.data() + off, buf.size() - off);
 //     off += writeConnection(ConnectionHeader::KEEP_ALIVE, buf.data() + off, buf.size() - off);
 //     off += writeHeadersEnd(buf.data() + off, buf.size() - off);
@@ -94,8 +92,6 @@ void writeChunkTrailer(char* dst, size_t dstSize);
 [[nodiscard]] size_t writeContentLength(size_t length, char* dst, size_t dstSize);
 
 [[nodiscard]] size_t writeChunkedTransferEncoding(char* dst, size_t dstSize);
-
-[[nodiscard]] size_t writeContentType(net::ContentType contentType, char* dst, size_t dstSize);
 
 [[nodiscard]] size_t writeConnection(net::ConnectionHeader connection, char* dst, size_t dstSize);
 

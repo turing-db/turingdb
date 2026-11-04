@@ -86,9 +86,7 @@ These are structural properties of the graph model, not validation rules layered
 - **`Duration` is a signed count of microseconds** (`storage/metadata/Duration.h`). It has no month component, because a month has no fixed length; a calendar duration would be a second type. `duration(<integer>)` reads the count as microseconds, and a duration renders as ISO-8601 hours, minutes and seconds (`PT25H1M1S`).
 
 ### Server (`server/`, `net/`)
-- Single TCP listener with two response strategies selected at startup by `USE_TURING_PROTO`:
-  - **REST (default):** in-tree HTTP/1.1 stack — `net/http_parser/HTTPParser`, `net/http_common/HTTPWriter`, dispatched by `server/DBServerProcessor`. JSON over HTTP, endpoints routed in `server/DBURIParser.h` / `server/Endpoints.h`. No third-party web framework.
-  - **Native binary protocol (`USE_TURING_PROTO=1`):** TuringDB's binary proto framed as HTTP/1.1 chunked transfer — same `HTTPParser` reads the request, `net/turing_proto_server/TuringProtoWriter` emits one proto packet per HTTP chunk, `server/TuringProtoServerProcessor` handles dispatch. Client side: `net/turing_proto_client/TuringClient` (C++) / `python/turingdb/binary_client.py` (`BinaryClient`).
+- Single TCP listener speaking TuringDB's binary protocol framed as HTTP/1.1 chunked transfer. The in-tree `net/http_parser/HTTPParser` reads the request (endpoints routed in `server/DBURIParser.h` / `server/Endpoints.h`), `server/TuringProtoServerProcessor` handles dispatch, and `net/turing_proto_server/TuringProtoWriter` emits one proto packet per HTTP chunk. There is no JSON protocol and no third-party web framework. Client side: `net/turing_proto_client/TuringClient` (C++), `python/turingdb/binary_client.py` (`BinaryClient`), `wasm/npm` (JS).
 - Default port: 6666
 
 ### Key Modules

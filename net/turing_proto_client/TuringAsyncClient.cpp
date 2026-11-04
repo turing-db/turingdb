@@ -19,6 +19,7 @@
 #include "HTTPUtils.h"
 #include "TuringProtoDecoder.h"
 #include "TuringProtoHeaders.h"
+#include "TuringResponseHead.h"
 #include "TuringException.h"
 #include "TuringSink.h"
 #include "TuringSinkColumnContainer.h"
@@ -38,28 +39,6 @@ constexpr size_t HEADERS_END_SIZE = 4;
 
 // Size of the CRLF that follows every HTTP/1.1 chunk body.
 constexpr size_t CRLF_SIZE = 2;
-
-// Parses the integer status code from an HTTP/1.1 status line —
-// "HTTP/1.1 200 OK" -> 200. Throws TuringException on malformed input.
-int parseStatusCode(std::string_view statusLine) {
-    const size_t space1 = statusLine.find(' ');
-    if (space1 == std::string_view::npos) {
-        throw TuringException("Malformed HTTP response status line");
-    }
-    const std::string_view afterVersion = statusLine.substr(space1 + 1);
-    const size_t space2 = afterVersion.find(' ');
-    const std::string_view codeStr = (space2 == std::string_view::npos)
-                                       ? afterVersion
-                                       : afterVersion.substr(0, space2);
-    int statusCode = 0;
-    for (const char c : codeStr) {
-        if (c < '0' || c > '9') {
-            throw TuringException("Malformed HTTP status code");
-        }
-        statusCode = statusCode * 10 + (c - '0');
-    }
-    return statusCode;
-}
 
 // Inverse of net::http::writeHexU32. Lowercases each digit first so the a-f
 // and A-F cases collapse into one branch.
@@ -272,14 +251,9 @@ TuringAsyncClient::AsyncIOProgress TuringAsyncClient::recvToHTTPHeaderScratchBuf
 
         if (headerEnd != std::string_view::npos) {
             const std::string_view headerBlock(_httpScratch.data(), headerEnd);
-            const size_t crlf = headerBlock.find("\r\n");
-            const std::string_view statusLine = (crlf == std::string_view::npos)
-                                                  ? headerBlock
-                                                  : headerBlock.substr(0, crlf);
-            const int statusCode = parseStatusCode(statusLine);
-            if (statusCode != 200) {
-                throw TuringException("Server returned HTTP " + std::to_string(statusCode));
-            }
+            TuringResponseHead head;
+            TuringResponseHead::parse(headerBlock, head);
+            head.throwIfNoPackets();
 
             _scratchHead = headerEnd + HEADERS_END_SIZE;
             _chunkFramingBufOffset = 0;
@@ -526,7 +500,8 @@ void TuringAsyncClient::buildRequest(const std::string& query, const db::Paramet
     _sendBuffer += _remotePort;
     _sendBuffer += "\r\n";
 
-    _sendBuffer += "Content-type: application/turing-proto\r\n";
+    _sendBuffer += CONTENT_TYPE_HEADER;
+    _sendBuffer += "\r\n";
     _sendBuffer += "Content-Length: ";
     _sendBuffer += std::to_string(bodySize);
     _sendBuffer += "\r\n";

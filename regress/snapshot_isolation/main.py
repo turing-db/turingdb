@@ -8,7 +8,7 @@ import set_after_set_test              as SAS_test
 
 
 def main():
-    client = TuringDB(host="http://localhost:6666")
+    client = TuringDB(host="localhost")
     client.try_reach()
     print("Connected to DB")
 

@@ -106,7 +106,7 @@ That is it. You have created a graph, written a versioned change, and queried it
 
 ### 3. Or run it as a server
 
-Prefer a long-running server (REST API on `http://localhost:6666`)?
+Prefer a long-running server (binary protocol on port 6666)?
 
 ```bash
 turingdb            # foreground / interactive
@@ -117,7 +117,7 @@ turingdb -ui        # launch with the graph visualizer
 Then point the client at it:
 
 ```python
-client = TuringDB(host="http://localhost:6666")
+client = TuringDB(host="localhost", port=6666)
 ```
 
 See the [full Quickstart](https://docs.turingdb.ai/quickstart) and [Python SDK guide](https://docs.turingdb.ai/pythonsdk/get_started) for more.

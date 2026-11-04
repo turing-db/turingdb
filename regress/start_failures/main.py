@@ -1,10 +1,10 @@
-import json
 import os
 import shutil
 import socket
 import subprocess
 import time
-import urllib.request
+
+from turingdb import TuringDB
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 TURING_DIR = os.path.join(SCRIPT_DIR, ".turing")
@@ -28,8 +28,8 @@ def start_command(*args):
     return ["turingdb", "start", "-turing-dir", TURING_DIR, "-demon", *args]
 
 
-def start(*args, env=None):
-    result = subprocess.run(start_command(*args), capture_output=True, text=True, timeout=TIMEOUT_SECONDS, env=env)
+def start(*args):
+    result = subprocess.run(start_command(*args), capture_output=True, text=True, timeout=TIMEOUT_SECONDS)
     return result.returncode, result.stdout + result.stderr
 
 
@@ -46,29 +46,17 @@ def expect_start_failure(args, error):
     print(f"OK: {' '.join(args)} -> {error}")
 
 
-def rest_query(port, graph, query, change=None):
-    url = f"http://127.0.0.1:{port}/query?graph={graph}"
-    if change is not None:
-        url += f"&change={change}"
-
-    request = urllib.request.Request(url, data=json.dumps({"query": query}).encode(), method="POST")
-    with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
-        body = json.load(response)
-
-    assert "error" not in body, body
-    return body
-
-
 def create_graph(api_port, graph, node_count):
-    rest_env = {name: value for name, value in os.environ.items() if name != "USE_TURING_PROTO"}
-    returncode, output = start("-p", str(api_port), env=rest_env)
+    returncode, output = start("-p", str(api_port))
     assert returncode == 0, output
 
-    rest_query(api_port, "default", f"CREATE GRAPH {graph}")
-    change = rest_query(api_port, graph, "CHANGE NEW")["data"][0][0][0]
-    rest_query(api_port, graph, f"UNWIND range(1, {node_count}) AS i CREATE (:N {{id: i}})", change)
-    rest_query(api_port, graph, "COMMIT", change)
-    rest_query(api_port, graph, "CHANGE SUBMIT", change)
+    client = TuringDB(type="native", host="127.0.0.1", port=api_port)
+    client.create_graph(graph)
+    client.set_graph(graph)
+    client.new_change()
+    client.query(f"UNWIND range(1, {node_count}) AS i CREATE (:N {{id: i}})")
+    client.query("COMMIT")
+    client.query("CHANGE SUBMIT")
 
     stop()
 

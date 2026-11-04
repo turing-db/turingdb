@@ -166,6 +166,20 @@ nb::object embeddingToNdarray(std::span<const float> s) {
     return wrapVectorAsNdarray(std::move(buf));
 }
 
+nb::str toPyString(std::string_view text) {
+    PyObject* const decoded = PyUnicode_DecodeUTF8(text.data(), static_cast<Py_ssize_t>(text.size()), "replace");
+    if (!decoded) {
+        throw nb::python_error();
+    }
+
+    return nb::steal<nb::str>(decoded);
+}
+
+void setRuntimeError(std::string_view message) {
+    const nb::str text = toPyString(message);
+    PyErr_SetObject(PyExc_RuntimeError, text.ptr());
+}
+
 namespace {
 
 // Converts a list or map value (or a single list element / map entry) to plain Python
@@ -209,7 +223,7 @@ struct ValueToPyObject {
     nb::object view(const db::MapView& mapView) const {
         nb::dict out;
         for (const db::MapEntryView entry : mapView.entries()) {
-            out[nb::cast(entry.getKey())] = this->entry(entry);
+            out[toPyString(entry.getKey())] = this->entry(entry);
         }
         return out;
     }
@@ -312,9 +326,8 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 break;
             }
             case db::ColumnVector<db::PropertyTypeID>::staticKind(): {
-                // Widen to uint64 and report as "UInt64" so the HTTP path's
-                // numeric dtype matches; a bespoke "PropertyTypeID" name would
-                // fall through DTYPE_MAP to object dtype on the Python side.
+                // Widen to uint64 and report as "UInt64"; a bespoke "PropertyTypeID" name
+                // would fall through DTYPE_MAP to object dtype on the Python side.
                 const auto& src = static_cast<const db::ColumnVector<db::PropertyTypeID>*>(col)->getRaw();
                 value = transformVectorAsNdarray<uint64_t>(src, [](const db::PropertyTypeID& v) { return v.getValue(); });
                 dtypeName = "UInt64";
@@ -327,9 +340,8 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 break;
             }
             case db::ColumnVector<db::LabelSetID>::staticKind(): {
-                // Widen to uint64 and report as "UInt64" so the HTTP path's
-                // numeric dtype matches; a bespoke "LabelSetID" name would
-                // fall through DTYPE_MAP to object dtype on the Python side.
+                // Widen to uint64 and report as "UInt64"; a bespoke "LabelSetID" name
+                // would fall through DTYPE_MAP to object dtype on the Python side.
                 const auto& src = static_cast<const db::ColumnVector<db::LabelSetID>*>(col)->getRaw();
                 value = transformVectorAsNdarray<uint64_t>(src, [](const db::LabelSetID& v) { return v.getValue(); });
                 dtypeName = "UInt64";
@@ -342,8 +354,7 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 break;
             }
             case db::ColumnVector<db::ValueType>::staticKind(): {
-                // Surface ValueType columns as their string names ("Int64", "String", …) so
-                // they match the HTTP path, which serializes them as strings server-side.
+                // Surface ValueType columns as their string names ("Int64", "String", …).
                 const auto& src = static_cast<const db::ColumnVector<db::ValueType>*>(col)->getRaw();
                 nb::list lst;
                 for (db::ValueType v : src) {
@@ -676,7 +687,7 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 throw TuringException(std::string("dataframeToNumpy: unhandled column kind: ") + std::string(col->getTypeName()));
         }
 
-        const nb::object key = nb::cast(keyStr);
+        const nb::object key = toPyString(keyStr);
         data[key] = value;
         dtypes[key] = nb::cast(dtypeName);
     }

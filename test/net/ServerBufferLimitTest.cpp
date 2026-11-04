@@ -21,7 +21,6 @@ protected:
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
     }
 
-    ProtoEnvScope _protoScope;
     std::unique_ptr<TuringTestEnv> _env;
 };
 

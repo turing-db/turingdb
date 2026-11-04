@@ -64,28 +64,6 @@ public:
         _header.endLine();
     }
 
-    void addContentLength(size_t length) {
-        if (errorOccured()) {
-            return;
-        }
-
-        static constexpr std::string_view contentLength = "Content-Length: ";
-        const std::string lengthStr = std::to_string(length);
-
-        if (contentLength.size() + lengthStr.size() + 2 > _header._remaining) {
-            _status = Status::HeaderTooLarge;
-            return;
-        }
-
-        memcpy(_header._content.data() + _header._position, contentLength.data(), contentLength.size());
-        _header.increment(contentLength.size());
-
-        memcpy(_header._content.data() + _header._position, lengthStr.data(), lengthStr.size());
-        _header.increment(lengthStr.size());
-
-        _header.endLine();
-    }
-
     void addChunkedTransferEncoding() {
         if (errorOccured()) {
             return;
@@ -108,17 +86,12 @@ public:
         }
 
         static constexpr std::string_view text = "Content-type: text/plain\r\n";
-        static constexpr std::string_view json = "Content-type: application/json\r\n";
 
         std::string_view data;
 
         switch (contentType) {
             case net::ContentType::TEXT: {
                 data = text;
-            }
-            break;
-            case ContentType::JSON: {
-                data = json;
             }
             break;
         }
@@ -223,124 +196,22 @@ public:
         }
     }
 
-    void write(char c) {
-        if (errorOccured()) {
-            return;
-        }
-
-        if (_chunk._remaining == 0) {
-            flush();
-        }
-
-        _chunk._content[_chunk._position] = c;
-        _chunk.increment(1);
-    }
-
-    void write(std::floating_point auto value) {
-        const auto str = std::to_string(value);
-        write(str);
-    }
-
-    void write(std::signed_integral auto value) {
-        const auto str = std::to_string(value);
-        write(str);
-    }
-
-    void write(std::unsigned_integral auto value) {
-        if (errorOccured()) {
-            return;
-        }
-
-        static constexpr std::string_view maxValue = "18446744073709551615";
-        static constexpr size_t stringSize = maxValue.size();
-
-        if (stringSize > _chunk._remaining) {
-            flush();
-        }
-
-        static constexpr char digits[201] =
-            "0001020304050607080910111213141516171819"
-            "2021222324252627282930313233343536373839"
-            "4041424344454647484950515253545556575859"
-            "6061626364656667686970717273747576777879"
-            "8081828384858687888990919293949596979899";
-
-        uint8_t pos = stringSize - 1;
-        auto* first = &_chunk._content[_chunk._position];
-        auto num = value;
-        bool firstPath = false;
-
-        while (value >= 100) {
-            num = (value % 100) * 2;
-            value /= 100;
-            first[pos] = digits[num + 1];
-            first[pos - 1] = digits[num];
-            pos -= 2;
-        }
-
-        if (value >= 10) {
-            num = value * 2;
-            first[1] = digits[num + 1];
-            first[0] = digits[num];
-            firstPath = true;
-        } else {
-            first[0] = '0' + value;
-        }
-
-        const uint8_t actualSize = stringSize - pos + firstPath;
-        const uint8_t copyCount = stringSize - pos - 1;
-        memcpy(first + 1 + firstPath, first + stringSize - copyCount, copyCount);
-
-        _chunk.increment(actualSize);
-    }
-
     void writeAnalyzeError(int32_t error) override {
         const HTTP::Error httpError = static_cast<HTTP::Error>(error);
 
-        switch (httpError) {
-            case net::HTTP::Error::REQUEST_TOO_BIG:
-                setFirstLine(net::HTTP::Status::CONTENT_TOO_LARGE);
-            break;
-
-            case net::HTTP::Error::INVALID_CONTENT_LENGTH:
-            case net::HTTP::Error::HEADER_INCOMPLETE:
-                setFirstLine(net::HTTP::Status::BAD_REQUEST);
-            break;
-
-            case net::HTTP::Error::TOO_MANY_PARAMS:
-                setFirstLine(net::HTTP::Status::CONTENT_TOO_LARGE);
-            break;
-
-            case net::HTTP::Error::UNKNOWN_ENDPOINT:
-                setFirstLine(net::HTTP::Status::NOT_FOUND);
-            break;
-
-            case net::HTTP::Error::INVALID_METHOD:
-                setFirstLine(net::HTTP::Status::METHOD_NOT_ALLOWED);
-            break;
-
-            case net::HTTP::Error::NO_METHOD:
-            case net::HTTP::Error::NO_URI:
-            case net::HTTP::Error::UNKNOWN:
-            case net::HTTP::Error::INVALID_URI:
-            case net::HTTP::Error::_SIZE:
-                setFirstLine(net::HTTP::Status::BAD_REQUEST);
-            break;
-        }
+        setFirstLine(HTTP::errorToStatus(httpError));
 
         addConnection(net::getConnectionHeader(true));
         addChunkedTransferEncoding();
-        addContentType(net::ContentType::JSON);
+        addContentType(net::ContentType::TEXT);
         flushHeader();
 
         std::string details;
         HTTP::describeError(httpError, details);
 
-        write("{\"error\":\"");
         write(HTTP::ErrorName::value(httpError));
-        write("\",\"error_details\":\"");
+        write(": ");
         write(details);
-        write("\"}");
         flush();
         flush();
     }
@@ -366,10 +237,6 @@ public:
 
     bool errorOccured() const override {
         return _status != Status::Ok;
-    }
-
-    Status status() const {
-        return _status;
     }
 
 private:
@@ -484,7 +351,5 @@ private:
         }
     }
 };
-
-using NetWriter = HTTPWriter;
 
 }

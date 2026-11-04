@@ -39,8 +39,6 @@ constexpr std::string_view CRLF = "\r\n";
 constexpr std::string_view HEADER_KEY_VALUE_SEP = ": ";
 constexpr std::string_view CONTENT_LENGTH_KEY = "Content-Length: ";
 constexpr std::string_view CHUNKED_TRANSFER_ENCODING_LINE = "Transfer-Encoding: chunked\r\n";
-constexpr std::string_view CONTENT_TYPE_TEXT_LINE = "Content-type: text/plain\r\n";
-constexpr std::string_view CONTENT_TYPE_JSON_LINE = "Content-type: application/json\r\n";
 constexpr std::string_view CONNECTION_KEEP_ALIVE_LINE = "Connection: Keep-Alive\r\n";
 constexpr std::string_view CONNECTION_CLOSE_LINE = "Connection: close\r\n";
 
@@ -128,21 +126,6 @@ size_t net::http::writeChunkedTransferEncoding(char* dst, size_t dstSize) {
               "writeChunkedTransferEncoding: dst too small");
     memcpy(dst, CHUNKED_TRANSFER_ENCODING_LINE.data(), CHUNKED_TRANSFER_ENCODING_LINE.size());
     return CHUNKED_TRANSFER_ENCODING_LINE.size();
-}
-
-size_t net::http::writeContentType(net::ContentType contentType, char* dst, size_t dstSize) {
-    std::string_view line;
-    switch (contentType) {
-        case net::ContentType::TEXT:
-            line = CONTENT_TYPE_TEXT_LINE;
-        break;
-        case net::ContentType::JSON:
-            line = CONTENT_TYPE_JSON_LINE;
-        break;
-    }
-    bioassert(dstSize >= line.size(), "writeContentType: dst too small");
-    memcpy(dst, line.data(), line.size());
-    return line.size();
 }
 
 size_t net::http::writeConnection(net::ConnectionHeader connection, char* dst, size_t dstSize) {

@@ -1,9 +1,6 @@
 
 set(server_sources
     AuthGate.cpp
-    DBQueryRequest.cpp
-    DBServerNlSink.cpp
-    DBServerProcessor.cpp
     DBTransactionInfo.cpp
     TuringProtoQueryRequest.cpp
     TuringProtoServerNlSink.cpp
@@ -22,5 +19,4 @@ target_link_libraries(turing_db_server_s PRIVATE
     turing_db_turing_proto_server_s
     turing_db_decoders_s
     turing_db_memory_s
-    nlohmann_json
     CURL::libcurl)

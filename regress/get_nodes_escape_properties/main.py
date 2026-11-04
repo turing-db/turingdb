@@ -1,6 +1,7 @@
 """
 Regression test for GitHub issue #592:
-JSON API responses contain invalid escape sequences in string property values.
+the properties JSON that db.getNodes returns contained invalid escape sequences
+in string property values.
 
 TuringDB used to return \\' (backslash-apostrophe) in JSON strings, which is not
 a valid JSON escape sequence, plus unescaped double quotes inside string values.
@@ -10,26 +11,18 @@ Valid JSON escapes are: \\" \\\\ \\/ \\b \\f \\n \\r \\t \\uXXXX
 """
 
 import json
-import os
 import subprocess
 import sys
 
 from turingdb import TuringDB
 
-HOST = "http://localhost:6666"
+HOST = "localhost"
 GRAPH = "json_escape_test"
 
 
 def main():
-    print("=== json_escape_properties regression test ===")
+    print("=== get_nodes_escape_properties regression test ===")
     print()
-
-    # The properties blob is emitted identically over both wire protocols, but
-    # this test is about the JSON string the JSON-speaking clients consume, so
-    # keep it scoped to type='json' as before.
-    if os.environ.get("TURINGDB_TYPE") == "native":
-        print("Skipping under type='native' (json-specific test)")
-        sys.exit(0)
 
     client = TuringDB(host=HOST)
 
@@ -133,6 +126,20 @@ def main():
     assert found_apostrophe, "Did not find node with apostrophe property"
     assert found_quote, "Did not find node with double-quote property"
     assert found_backslash, "Did not find node with backslash property"
+    print()
+
+    # 6. The same strings must come back unchanged as plain string columns
+    print("6. Validating string columns against the properties JSON...")
+    blob_values = {key: value for props in parsed_props for key, value in props.items()}
+    expected_values = [
+        ("MATCH (n:Company) RETURN n.name AS v", blob_values["name"]),
+        ("MATCH (n:Equipment) RETURN n.description AS v", blob_values["description"]),
+        ("MATCH (n:Path) RETURN n.value AS v", blob_values["value"]),
+    ]
+    for query, expected in expected_values:
+        values = client.query(query)["v"].tolist()
+        assert values == [expected], f"{query}: expected {[expected]!r}, got {values!r}"
+        print(f"   {repr(expected)}")
 
     print()
     print("TEST PASSED: All property JSON is valid and property values are correct")

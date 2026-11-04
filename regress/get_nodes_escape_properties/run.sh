@@ -1,10 +1,8 @@
 #!/bin/bash
-# Regression test: json_escape_properties (GitHub issue #592)
+# Regression test: get_nodes_escape_properties (GitHub issue #592)
 #
-# Verifies that /get_nodes returns valid JSON when node properties contain
-# special characters: single quotes, double quotes, backslashes.
-#
-# Expected: This test FAILS until the JSON serializer properly escapes strings.
+# Verifies that db.getNodes returns valid properties JSON when node properties
+# contain special characters: single quotes, double quotes, backslashes.
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
@@ -33,7 +31,6 @@ fi
 
 uv init
 uv add $PYTURINGDB
-uv add httpx
 
 uv run main.py
 testres=$?

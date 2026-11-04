@@ -56,7 +56,7 @@ TEST(ProtoAnalyzeErrorTest, MalformedRequestGetsProtocolErrorNotCrash) {
     const std::string response = drainSocket(sockets[1]);
     close(sockets[1]);
 
-    ASSERT_TRUE(response.starts_with("HTTP/1.1 200 OK\r\n"));
+    ASSERT_TRUE(response.starts_with("HTTP/1.1 405 Method Not Allowed\r\n")) << response;
 
     const size_t headerEnd = response.find("\r\n\r\n");
     ASSERT_NE(headerEnd, std::string::npos);

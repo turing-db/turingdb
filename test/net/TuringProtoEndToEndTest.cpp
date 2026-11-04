@@ -67,7 +67,6 @@ EndToEndResult runEndToEnd(const std::string& outDir,
     serverConfig.setMaxConnections(16);
     serverConfig.setProtoBufferCapacity(bufferCapacity);
 
-    ProtoEnvScope protoScope;
     db::TuringServer server(serverConfig, env->getDB());
     server.start();
 

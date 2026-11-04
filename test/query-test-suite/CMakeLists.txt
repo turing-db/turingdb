@@ -1,8 +1,15 @@
+# Renders a result as the text the fixtures expect, for this suite and the tests
+# that read results over the binary protocol.
+add_library(turing_query_result_formatter_s STATIC QueryResultFormatter.cpp)
+target_link_libraries(turing_query_result_formatter_s
+    PUBLIC  turing_db_storage_s
+            turing_db_query_common_s)
+target_include_directories(turing_query_result_formatter_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_executable(test_query_v3_test_suite
     V3QueryTestSuite.cpp
     V3QueryTestRunner.cpp
-    QueryTestRunner.cpp
-    QueryResultFormatter.cpp)
+    QueryTestRunner.cpp)
 
 target_link_libraries(test_query_v3_test_suite
     PRIVATE turing_test_libs)
@@ -21,8 +28,7 @@ target_compile_definitions(test_query_v3_test_suite
 add_executable(query_test_suite_cli
     QueryTestSuiteCLI.cpp
     QueryTestRunner.cpp
-    V3QueryTestRunner.cpp
-    QueryResultFormatter.cpp)
+    V3QueryTestRunner.cpp)
 
 target_link_libraries(query_test_suite_cli
     PRIVATE turing_test_libs)

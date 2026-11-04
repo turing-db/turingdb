@@ -12,9 +12,9 @@ Each query is written to fuzz/corpus/cypher/q_<md5[:8]>.cypher. The hand-written
 seeds (files not matching q_*.cypher) are left alone.
 
 The hand-written seeds are also written to fuzz/corpus/http/cypher_<name>.raw for
-fuzz_http_parser, each wrapped in the POST /query request the Python HTTP client
-sends. The parser never reads inside the body, so the generated queries are not
-wrapped: they would add thousands of seeds that differ only in Content-Length.
+fuzz_http_parser, each wrapped in the POST /query request net::proto::TuringClient
+sends. The generated queries are not wrapped: they would add thousands of seeds
+that differ only in Content-Length.
 
 Usage:
     python3 fuzz/make_corpus.py [--prune] [--dry-run]
@@ -31,6 +31,7 @@ import hashlib
 import json
 import os
 import re
+import struct
 import sys
 
 
@@ -66,17 +67,14 @@ CPP_TOKEN = re.compile(
 
 CPP_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "0": "\0"}
 
-# Header for header what python/turingdb/http_client.py sends through httpx 0.28.
+# Header for header what net/turing_proto_client/TuringClient.cpp sends.
 HTTP_REQUEST = (
     "POST /query?{params} HTTP/1.1\r\n"
     "Host: localhost:6666\r\n"
-    "Accept-Encoding: gzip, deflate\r\n"
-    "Connection: keep-alive\r\n"
-    "User-Agent: python-httpx/0.28.1\r\n"
-    "Accept: application/json\r\n"
-    "Content-Type: application/json\r\n"
-    "{authorization}"
+    "Content-type: application/turing-proto\r\n"
     "Content-Length: {length}\r\n"
+    "{authorization}"
+    "Connection: Keep-Alive\r\n"
     "\r\n"
 )
 
@@ -205,8 +203,8 @@ def seed_name(query):
 
 
 def requests_from_seeds(template, states):
-    """Every hand-written Cypher seed as a /query request with a JSON body, the client states
-    taken in turn."""
+    """Every hand-written Cypher seed as a /query request with a binary body, the client states
+    taken in turn. The body is [queryLen][query][paramLen], with an empty parameter map."""
     seeds = sorted(p for p in glob.glob(os.path.join(CORPUS_DIR, "*.cypher"))
                    if not os.path.basename(p).startswith("q_"))
 
@@ -215,7 +213,7 @@ def requests_from_seeds(template, states):
         with open(path, "rb") as handle:
             query = handle.read()
 
-        body = json.dumps({"query": query.decode("utf-8")}, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        body = struct.pack("<I", len(query)) + query + struct.pack("<I", 0)
         params, authorization = states[index % len(states)]
         header = template.format(params=params, authorization=authorization, length=len(body))
         name = "cypher_" + os.path.splitext(os.path.basename(path))[0] + ".raw"

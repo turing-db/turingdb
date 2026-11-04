@@ -1,8 +1,11 @@
 #pragma once
 
 #include <stdint.h>
+#include <sys/socket.h>
 #include <array>
+#include <chrono>
 #include <string>
+#include <string_view>
 
 #include "ChunkedBuffer.h"
 #include "LocalMemory.h"
@@ -53,6 +56,9 @@ public:
     void setCommitHash(db::CommitHash commitHash) { _commitHash = commitHash; }
     void setChangeID(db::ChangeID changeID) { _changeID = changeID; }
 
+    // Bounds connect and every send and receive; zero waits without a limit.
+    void setTimeout(std::chrono::milliseconds timeout);
+
     bool isConnected() const { return _socket >= 0; }
 
     std::string_view getRemoteAddress() const { return _remoteAddress; }
@@ -75,6 +81,7 @@ private:
     db::CommitHash _commitHash {db::CommitHash::head()};
     db::ChangeID _changeID {db::ChangeID::head()};
     int _socket {-1};
+    std::chrono::milliseconds _timeout {0};
     db::LocalMemory* _localMem {nullptr};
 
     // HTTP framing scratch buffer used to store the variable length http headers that
@@ -98,6 +105,10 @@ private:
     db::MapBuffer<> _mapBuffer;
 
     net::proto::TuringProtoRequestBody _requestBody;
+
+    [[nodiscard]] bool connectSocket(int socket, const sockaddr* address, socklen_t addressSize);
+    void applySocketTimeout();
+    [[noreturn]] void throwSocketError(std::string_view action);
 
     void sendRequest(const std::string& query);
     void receiveResponse(const db::QueryCallbacks::OnOutputData& callback, db::QueryStatus& queryStatus);

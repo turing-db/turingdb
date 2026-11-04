@@ -40,10 +40,9 @@ public:
     explicit TuringProtoWriter(size_t bufferCapacity = net::proto::DEFAULT_BUFFER_CAPACITY);
     ~TuringProtoWriter() override;
 
-    // Sends the HTTP/1.1 200 OK status line and response headers. Must be
-    // called exactly once before any write* call. Throws NetException on
-    // socket failure.
-    void startResponse(net::ConnectionHeader connection = net::ConnectionHeader::KEEP_ALIVE);
+    // Sends the HTTP/1.1 status line and response headers. Must be called
+    // exactly once before any write* call. Throws NetException on socket failure.
+    void startResponse(net::HTTP::Status status, net::ConnectionHeader connection);
 
     void flush() override;
     void reset() override;
@@ -57,7 +56,7 @@ public:
     void writeColumns(std::span<const db::Column* const> columns, size_t offset, size_t rowCount);
     void writeError(const db::QueryStatus* status);
     void writeProtocolError(std::string_view message);
-    void writeProtocolErrorResponse(std::string_view message);
+    void writeProtocolErrorResponse(net::HTTP::Status status, std::string_view message);
     void writeEndPacket(db::QueryCallbacks::ExecTimeMilliseconds milliseconds);
     void writeAnalyzeError(int32_t) override;
 

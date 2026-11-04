@@ -23,9 +23,8 @@ Remy stopped such a run with "do not run regress yet because not supported in v3
 `ctest` is the whole verification story for this work. See [[feedback_test_on_simpledb]]
 and [[feedback_separate_test_file]].
 
-**This machine cannot run the native pass anyway.** `run_regress.sh` runs most tests
-once under the binary protocol (`TURINGDB_TYPE=native USE_TURING_PROTO=1`) against the
-first wheel in `wheel/` - currently `turingdb-1.32.1.dev20`, several versions behind the
-built server. Every `[native]` test then fails or hangs on an established but silent
-socket while every `json` test passes; two concurrent runs also fight over port 6666 and
-leave a daemon holding it. None of that says anything about the change under test.
+**This machine cannot run regress anyway.** `run_regress.sh` runs every test over the
+binary protocol against the first wheel in `wheel/` - currently `turingdb-1.32.1.dev20`,
+several versions behind the built server. The tests then fail or hang on an established
+but silent socket; two concurrent runs also fight over port 6666 and leave a daemon
+holding it. None of that says anything about the change under test.

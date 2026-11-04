@@ -13,8 +13,7 @@ target_link_libraries(turing_testutils_s
             GTest::gmock
             turing_common_s
             turing_db_jobs_s
-            spdlog
-    PRIVATE nlohmann_json)
+            spdlog)
 
 target_include_directories(turing_testutils_s
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR})
@@ -27,6 +26,8 @@ set(TURING_TEST_LIBS
     turing_ir_test_rows_s
     turing_ir_test_write_query_s
     turing_ir_test_hash_join_s
+    turing_query_result_formatter_s
+    turing_net_test_proto_s
     turing_common_s
     turing_db_s
     turing_db_analyzer_s
