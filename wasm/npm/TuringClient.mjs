@@ -186,6 +186,193 @@ class PacketAssembler {
     }
 }
 
+const INT64_MIN = -(2n ** 63n);
+const INT64_MAX = 2n ** 63n - 1n;
+
+// A little-endian byte sink that grows as it is written to.
+class ByteWriter {
+    constructor() {
+        this._bytes = new Uint8Array(256);
+        this._view = new DataView(this._bytes.buffer);
+        this._length = 0;
+    }
+
+    u8(value) {
+        this._reserve(1);
+        this._view.setUint8(this._length, value);
+        this._length += 1;
+    }
+
+    u32(value) {
+        this._reserve(4);
+        this._view.setUint32(this._length, value, true);
+        this._length += 4;
+    }
+
+    i64(value) {
+        this._reserve(8);
+        this._view.setBigInt64(this._length, value, true);
+        this._length += 8;
+    }
+
+    f64(value) {
+        this._reserve(8);
+        this._view.setFloat64(this._length, value, true);
+        this._length += 8;
+    }
+
+    bytes(value) {
+        this._reserve(value.length);
+        this._bytes.set(value, this._length);
+        this._length += value.length;
+    }
+
+    toUint8Array() {
+        return this._bytes.subarray(0, this._length);
+    }
+
+    _reserve(count) {
+        if (this._length + count <= this._bytes.length) {
+            return;
+        }
+
+        let capacity = this._bytes.length * 2;
+        while (capacity < this._length + count) {
+            capacity *= 2;
+        }
+
+        const grown = new Uint8Array(capacity);
+        grown.set(this.toUint8Array());
+        this._bytes = grown;
+        this._view = new DataView(grown.buffer);
+    }
+}
+
+// A number sent as a Double whatever its value: an integral number otherwise goes as an Int64
+export class DoubleValue {
+    constructor(value) {
+        if (typeof value !== "number") {
+            throw new TypeError(`double() takes a number, not ${describeKind(value)}`);
+        }
+
+        this.value = value;
+        Object.freeze(this);
+    }
+}
+
+export function double(value) {
+    return new DoubleValue(value);
+}
+
+function throwParameterError(path, message) {
+    throw new TuringQueryError("PARAMETER_ERROR", `Parameter ${path} ${message}`);
+}
+
+function isPlainObject(value) {
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+}
+
+function describeKind(value) {
+    if (value === undefined) {
+        return "undefined";
+    } else if (typeof value === "object") {
+        return `a ${value.constructor.name}`;
+    }
+    return `a ${typeof value}`;
+}
+
+function compareBytes(left, right) {
+    const length = Math.min(left.length, right.length);
+    for (let index = 0; index < length; index++) {
+        if (left[index] !== right[index]) {
+            return left[index] - right[index];
+        }
+    }
+    return left.length - right.length;
+}
+
+// A container is its count, then the byte size a result decoder reserves for it, which the
+// server's parameter reader does not read. A map's keys go in the order of their UTF-8
+// bytes, the order the server holds them in.
+function writeMap(writer, map, pathOf) {
+    const entries = Object.entries(map).map(([key, value]) => ({ key, bytes: utf8Encoder.encode(key), value }));
+    entries.sort((left, right) => compareBytes(left.bytes, right.bytes));
+
+    writer.u32(entries.length);
+    writer.u32(0);
+
+    for (const { key, bytes, value } of entries) {
+        writer.u32(bytes.length);
+        writer.bytes(bytes);
+        writeParameterValue(writer, value, pathOf(key));
+    }
+}
+
+// An integral number goes as an Int64, as Cypher reads 470, and any other number as a Double
+function writeParameterValue(writer, value, path) {
+    if (value === null) {
+        writer.u8(CELL_TAG_NULL);
+        writer.u8(0);
+    } else if (typeof value === "boolean") {
+        writer.u8(CELL_TAG_BOOL);
+        writer.u8(value ? 1 : 0);
+    } else if (typeof value === "bigint") {
+        if (value < INT64_MIN || value > INT64_MAX) {
+            throwParameterError(path, `is ${value}, outside the 64-bit integer range`);
+        }
+        writer.u8(CELL_TAG_INT);
+        writer.i64(value);
+    } else if (typeof value === "number") {
+        if (Number.isInteger(value) && value >= -(2 ** 63) && value < 2 ** 63) {
+            writer.u8(CELL_TAG_INT);
+            writer.i64(BigInt(value));
+        } else {
+            writer.u8(CELL_TAG_DOUBLE);
+            writer.f64(value);
+        }
+    } else if (value instanceof DoubleValue) {
+        writer.u8(CELL_TAG_DOUBLE);
+        writer.f64(value.value);
+    } else if (typeof value === "string") {
+        const bytes = utf8Encoder.encode(value);
+        writer.u8(CELL_TAG_STRING);
+        writer.u32(bytes.length);
+        writer.bytes(bytes);
+    } else if (Array.isArray(value)) {
+        writer.u8(CELL_TAG_LIST_VIEW);
+        writer.u32(value.length);
+        writer.u32(0);
+        for (let index = 0; index < value.length; index++) {
+            writeParameterValue(writer, value[index], `${path}[${index}]`);
+        }
+    } else if (typeof value === "object" && isPlainObject(value)) {
+        writer.u8(CELL_TAG_MAP_VIEW);
+        writeMap(writer, value, (key) => `${path}.${key}`);
+    } else {
+        throwParameterError(path, `is ${describeKind(value)}, which a query parameter cannot hold`);
+    }
+}
+
+// No parameter at all is an empty map, which goes as no byte
+function encodeParameters(parameters) {
+    if (parameters === undefined || parameters === null) {
+        return new Uint8Array(0);
+    }
+
+    if (typeof parameters !== "object" || Array.isArray(parameters) || !isPlainObject(parameters)) {
+        throw new TuringQueryError("PARAMETER_ERROR", "The parameters must be a plain object of names to values");
+    }
+
+    if (Object.keys(parameters).length === 0) {
+        return new Uint8Array(0);
+    }
+
+    const writer = new ByteWriter();
+    writeMap(writer, parameters, (key) => `$${key}`);
+    return writer.toUint8Array();
+}
+
 // 'main'/'head'/'HEAD' select the tip; a number, BigInt or string selects a specific
 // change/commit. The server reads a change ID in decimal and a commit hash in hex.
 function normalizeRef(value, radix) {
@@ -525,13 +712,15 @@ function readExecTime(packet) {
 
 // Request body, read by TuringProtoQueryRequest on the server:
 // [queryLen u32le][query UTF-8][paramLen u32le][param bytes]. No parameters: paramLen 0.
-function encodeRequestBody(cypher) {
+function encodeRequestBody(cypher, parameters) {
     const query = utf8Encoder.encode(cypher);
-    const body = new Uint8Array(4 + query.length + 4);
+    const parameterMap = encodeParameters(parameters);
+    const body = new Uint8Array(4 + query.length + 4 + parameterMap.length);
     const view = new DataView(body.buffer);
     view.setUint32(0, query.length, true);
     body.set(query, 4);
-    view.setUint32(4 + query.length, 0, true);
+    view.setUint32(4 + query.length, parameterMap.length, true);
+    body.set(parameterMap, 8 + query.length);
     return body;
 }
 
@@ -612,7 +801,8 @@ export class TuringClient {
 
     // Runs one Cypher query. Resolves to { chunks, execTimeMs } where chunks holds one
     // entry per streamed dataframe: { names, columns }, every column a Column.
-    // options: { graph, change, commit, signal } override the client state for this call.
+    // options: { parameters } binds $name to parameters.name; { graph, change, commit,
+    // signal } override the client state for this call.
     async query(cypher, options = {}) {
         const graph = options.graph ?? this._graph;
         const change = options.change !== undefined ? normalizeRef(options.change, 10) : this._change;
@@ -629,7 +819,7 @@ export class TuringClient {
         const response = await this._fetch(url, {
             method: "POST",
             headers,
-            body: encodeRequestBody(cypher),
+            body: encodeRequestBody(cypher, options.parameters),
             signal: options.signal,
         });
         if (!response.ok) {
