@@ -150,9 +150,9 @@ TEST_F(HeldTypeErrorTest, readsTheIdOfAValueThatIsNoEntity) {
 }
 
 TEST_F(HeldTypeErrorTest, makesADurationOutOfAValueThatIsNeitherAnIntegerNorAMap) {
-    expectMessage("UNWIND [1, 'a'] AS x RETURN duration(x)", "duration() reads an integer or a map, not 'String'");
+    expectMessage("UNWIND [1, 'a'] AS x RETURN duration(x)", "duration() has no conversion for 'String'");
     expectMessage("UNWIND [1, " + std::string(DATETIME) + "] AS x RETURN duration(x)",
-                  "duration() reads an integer or a map, not 'DateTime'");
+                  "duration() has no conversion for 'DateTime'");
 }
 
 TEST_F(HeldTypeErrorTest, makesADurationOutOfAUnitThatIsNoNumber) {

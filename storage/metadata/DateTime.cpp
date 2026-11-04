@@ -76,6 +76,20 @@ void decompose(DateTimeFields& fields, DateTime value) {
     fields._microsecond = fraction;
 }
 
+int64_t compose(const DateTimeFields& fields) {
+    const std::chrono::year_month_day date {std::chrono::year {static_cast<int>(fields._year)},
+                                            std::chrono::month {static_cast<unsigned>(fields._month)},
+                                            std::chrono::day {static_cast<unsigned>(fields._day)}};
+    const int64_t epochDay = std::chrono::sys_days {date}.time_since_epoch().count();
+
+    const int64_t seconds = epochDay * SECONDS_PER_DAY
+                          + fields._hour * SECONDS_PER_HOUR
+                          + fields._minute * SECONDS_PER_MINUTE
+                          + fields._second;
+
+    return seconds * MICROSECONDS_PER_SECOND + fields._microsecond;
+}
+
 bool isDigit(char c) {
     return c >= '0' && c <= '9';
 }
@@ -400,20 +414,17 @@ int64_t calendarMicroseconds(const MapComponents& components) {
     const int64_t microseconds = componentIn(components, MapComponent::Microsecond, 0, lastMicrosecond, 0);
     const int64_t nanoseconds = componentIn(components, MapComponent::Nanosecond, 0, lastNanosecond, 0);
 
-    const std::chrono::year_month_day date {std::chrono::year {static_cast<int>(year)},
-                                            std::chrono::month {static_cast<unsigned>(month)},
-                                            std::chrono::day {static_cast<unsigned>(day)}};
-    const int64_t epochDay = std::chrono::sys_days {date}.time_since_epoch().count();
+    const DateTimeFields fields {
+        ._year = year,
+        ._month = month,
+        ._day = day,
+        ._hour = hour,
+        ._minute = minute,
+        ._second = second,
+        ._microsecond = milliseconds * MICROSECONDS_PER_MILLISECOND + microseconds + nanoseconds / NANOSECONDS_PER_MICROSECOND,
+    };
 
-    const int64_t seconds = epochDay * SECONDS_PER_DAY
-                          + hour * SECONDS_PER_HOUR
-                          + minute * SECONDS_PER_MINUTE
-                          + second;
-
-    return seconds * MICROSECONDS_PER_SECOND
-         + milliseconds * MICROSECONDS_PER_MILLISECOND
-         + microseconds
-         + nanoseconds / NANOSECONDS_PER_MICROSECOND;
+    return compose(fields);
 }
 
 }
@@ -443,10 +454,14 @@ std::optional<DateTime> DateTime::parse(std::string_view text) {
         return std::nullopt;
     }
 
-    const int64_t epochDay = std::chrono::sys_days {date}.time_since_epoch().count();
-
     if (offset == text.size()) {
-        return DateTime {epochDay * SECONDS_PER_DAY * MICROSECONDS_PER_SECOND};
+        const DateTimeFields midnight {
+            ._year = year,
+            ._month = month,
+            ._day = day,
+        };
+
+        return DateTime {compose(midnight)};
     }
 
     const char dateTimeSeparator = text[offset];
@@ -484,13 +499,17 @@ std::optional<DateTime> DateTime::parse(std::string_view text) {
         return std::nullopt;
     }
 
-    const int64_t seconds = epochDay * SECONDS_PER_DAY
-                          + hour * SECONDS_PER_HOUR
-                          + minute * SECONDS_PER_MINUTE
-                          + second
-                          - offsetSeconds;
+    const DateTimeFields fields {
+        ._year = year,
+        ._month = month,
+        ._day = day,
+        ._hour = hour,
+        ._minute = minute,
+        ._second = second,
+        ._microsecond = fraction,
+    };
 
-    return DateTime {seconds * MICROSECONDS_PER_SECOND + fraction};
+    return DateTime {compose(fields) - offsetSeconds * MICROSECONDS_PER_SECOND};
 }
 
 Duration DateTime::operator-(const DateTime& other) const {
