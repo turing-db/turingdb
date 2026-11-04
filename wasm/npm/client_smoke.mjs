@@ -8,7 +8,7 @@
 
 import assert from "assert";
 
-import { Column, TuringClient, TuringQueryError } from "./TuringClient.mjs";
+import { Column, TuringClient, TuringQueryError, double } from "./TuringClient.mjs";
 
 const MESSAGE_CHUNK_HEADER = 0;
 const MESSAGE_CHUNK = 1;
@@ -22,12 +22,14 @@ const TYPE_STRING = 3;
 const TYPE_LIST_VIEW = 6;
 const TYPE_CELL_VIEW = 8;
 const TYPE_NODE_ID = 9;
+const TYPE_PROPERTY_NULL = 17;
 const TYPE_MAP_VIEW = 18;
 const TYPE_GRAPH_PATH = 21;
 
 const ENCODING_VECTOR = 0;
 const ENCODING_OPTIONAL_VECTOR = 1;
 const ENCODING_CONSTANT = 2;
+const ENCODING_OPTIONAL_CONSTANT = 3;
 
 const TAG_INT = 0;
 const TAG_DOUBLE = 2;
@@ -119,12 +121,20 @@ function concatPackets(packets) {
 }
 
 // The framed request body the server reads, built byte by byte apart from the client.
-function requestBody(cypher) {
+function requestBody(cypher, parameters = null) {
     const query = encoder.encode(cypher);
     const body = new Writer();
     body.u32(query.length);
     body.raw(query);
-    body.u32(0);
+
+    if (parameters === null) {
+        body.u32(0);
+    } else {
+        const parameterBytes = parameters.toUint8Array();
+        body.u32(parameterBytes.length);
+        body.raw(parameterBytes);
+    }
+
     return body.toUint8Array();
 }
 
@@ -457,6 +467,120 @@ async function testMultiByteQueryBody() {
     assert.deepStrictEqual(body, requestBody("RETURN 'é😀'"));
 }
 
+// A map's keys go sorted, each value as [tag][payload], and a list or map as its count and
+// a byte size of 0, which the server's parameter reader does not read
+async function testParameters() {
+    const captured = {};
+    const client = new TuringClient({ fetch: makeFakeFetch(makeEnd(1.0), captured) });
+    const parameters = {
+        window: [470, 500.5],
+        name: "Oxford",
+        open: true,
+        none: null,
+        big: 2n ** 62n,
+        ratio: double(2),
+        stop: { rank: -1, crs: "PAD" },
+    };
+    await client.query("RETURN $window", { parameters });
+
+    const map = new Writer();
+    map.u32(7);
+    map.u32(0);
+    map.string("big");
+    map.u8(TAG_INT);
+    map.i64(2n ** 62n);
+    map.string("name");
+    map.u8(TAG_STRING);
+    map.string("Oxford");
+    map.string("none");
+    map.u8(TAG_NULL);
+    map.u8(0);
+    map.string("open");
+    map.u8(TAG_BOOL);
+    map.u8(1);
+    map.string("ratio");
+    map.u8(TAG_DOUBLE);
+    map.f64(2);
+    map.string("stop");
+    map.u8(TAG_MAP_VIEW);
+    map.u32(2);
+    map.u32(0);
+    map.string("crs");
+    map.u8(TAG_STRING);
+    map.string("PAD");
+    map.string("rank");
+    map.u8(TAG_INT);
+    map.i64(-1n);
+    map.string("window");
+    map.u8(TAG_LIST_VIEW);
+    map.u32(2);
+    map.u32(0);
+    map.u8(TAG_INT);
+    map.i64(470n);
+    map.u8(TAG_DOUBLE);
+    map.f64(500.5);
+
+    assert.deepStrictEqual(captured.init.body, requestBody("RETURN $window", map));
+}
+
+async function testRejectsParametersAQueryCannotHold() {
+    const client = new TuringClient({ fetch: makeFakeFetch(makeEnd(1.0), {}) });
+    const rejected = [
+        [{ when: new Date(0) }, "$when"],
+        [{ profile: new Float32Array(2) }, "$profile"],
+        [{ stop: { crs: undefined } }, "$stop.crs"],
+        [{ calls: [1, [2, Symbol("x")]] }, "$calls[1][1]"],
+        [{ big: 2n ** 63n }, "$big"],
+    ];
+
+    for (const [parameters, path] of rejected) {
+        await assert.rejects(client.query("RETURN 1", { parameters }), (raised) => {
+            assert.ok(raised instanceof TuringQueryError);
+            assert.strictEqual(raised.status, "PARAMETER_ERROR");
+            assert.ok(raised.message.includes(path), raised.message);
+            return true;
+        });
+    }
+
+    assert.throws(() => double("2"), TypeError);
+    assert.throws(() => double(2n), TypeError);
+}
+
+// A constant null has no bytes, so no CHUNK packet carries it: each END_CHUNK completes it
+async function testConstantNullInEveryChunk() {
+    const header = makeHeader([{ name: "absent", typeCode: TYPE_PROPERTY_NULL, encoding: ENCODING_CONSTANT }]);
+    const bytes = concatPackets([frame(MESSAGE_CHUNK_HEADER, header), makeEndChunk(2), makeEndChunk(3), makeEnd(1.0)]);
+
+    const { chunks } = await new TuringClient({ fetch: makeFakeFetch(bytes, {}) }).query("RETURN null");
+
+    assert.deepStrictEqual(chunks.map((chunk) => chunk.columns[0].toArray()), [[null, null], [null, null, null]]);
+}
+
+// What a slice of a constant list comes out as: a list, or no list
+async function testOptionalConstantLists() {
+    const header = makeHeader([
+        { name: "slice", typeCode: TYPE_LIST_VIEW, encoding: ENCODING_OPTIONAL_CONSTANT },
+        { name: "none", typeCode: TYPE_LIST_VIEW, encoding: ENCODING_OPTIONAL_CONSTANT },
+    ]);
+
+    const chunk = new Writer();
+    chunk.u8(1);
+    chunk.u32(2);
+    chunk.u32(16);
+    chunk.u8(TAG_INT);
+    chunk.i64(8n);
+    chunk.u8(TAG_INT);
+    chunk.i64(9n);
+    chunk.u8(0);
+
+    const bytes = concatPackets([frame(MESSAGE_CHUNK_HEADER, header), frame(MESSAGE_CHUNK, chunk), makeEndChunk(2), makeEnd(1.0)]);
+    const { chunks } = await new TuringClient({ fetch: makeFakeFetch(bytes, {}) }).query("RETURN [7, 8, 9][1..]");
+    const [slice, none] = chunks[0].columns;
+
+    assert.deepStrictEqual(slice.toArray(), [[8n, 9n], [8n, 9n]]);
+    assert.deepStrictEqual(none.toArray(), [null, null]);
+}
+
 async function testQueryData() {
     const bytes = concatPackets([
         ...makeFirstDataframe(),
@@ -589,6 +713,10 @@ async function testNullGraphPath() {
 }
 
 await testQuery();
+await testParameters();
+await testRejectsParametersAQueryCannotHold();
+await testConstantNullInEveryChunk();
+await testOptionalConstantLists();
 await testQueryData();
 await testMultiByteQueryBody();
 await testError();
@@ -598,4 +726,4 @@ await testRaggedQueryData();
 await testGraphPathIdsStayExact();
 await testNullGraphPath();
 
-console.log("wasm client smoke test passed: query, queryData, multi-byte body, error, maps, ragged, paths, null paths");
+console.log("wasm client smoke test passed: query, parameters, constant nulls, optional constant lists, queryData, multi-byte body, error, maps, ragged, paths, null paths");

@@ -46,6 +46,23 @@ A query resolves to one entry in `chunks` per streamed dataframe. Each is
 const data = await client.queryData("MATCH (n:Person) RETURN n.name");
 ```
 
+## Parameters
+
+`query(cypher, { parameters })` binds `$name` to `parameters.name`.
+
+```js
+await client.query("MATCH (n:Person) WHERE n.age >= $age RETURN n.name LIMIT $limit", {
+    parameters: { age: 30, limit: 10 },
+});
+```
+
+A number with no fraction is sent as an integer and any other number as a float, so
+`30` is an integer and `2.5` a float. `double(30)` sends `30` as a float, and a `BigInt`
+is sent as an integer. Strings, booleans, `null`, arrays and plain objects are sent as
+strings, booleans, null, lists and maps. Any other value, such as a `Date` or
+`undefined`, throws a `TuringQueryError` with status `PARAMETER_ERROR` before the query
+is sent.
+
 ## Column
 
 A `Column` holds the decoded buffers and builds JS values only when a row is read.

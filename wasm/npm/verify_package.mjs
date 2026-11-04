@@ -6,6 +6,7 @@
 // specifiers resolve from this file's own location, so it is copied next to the
 // installed package rather than run out of the source tree.
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 
 import { TuringClient, Column, TuringQueryError, ColumnType, ColumnEncoding } from "turingdb";
 
@@ -14,6 +15,7 @@ assert.equal(typeof Column, "function", "turingdb must export Column");
 assert.equal(typeof TuringQueryError, "function", "turingdb must export TuringQueryError");
 assert.equal(typeof ColumnEncoding, "object", "turingdb must export ColumnEncoding");
 assert.equal(ColumnType.NODE_ID, 9, "ColumnType must match the wire type codes");
+assert.ok(existsSync(new URL("./node_modules/turingdb/TuringClient.d.ts", import.meta.url)), "turingdb must ship TuringClient.d.ts");
 
 // The decoder is an implementation detail the client loads for itself. Reaching it would
 // couple a caller to the wasm ABI, so the package must refuse to hand it out.

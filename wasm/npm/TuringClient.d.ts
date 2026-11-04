@@ -26,7 +26,8 @@ export declare const ColumnType: Readonly<{
     GRAPH_PATH: 21;
 }>;
 
-export type ColumnTypeCode = (typeof ColumnType)[keyof typeof ColumnType];
+export type ColumnTypeName = keyof typeof ColumnType;
+export type ColumnTypeCode = (typeof ColumnType)[ColumnTypeName];
 
 export declare const ColumnEncoding: Readonly<{
     VECTOR: 0;
@@ -58,6 +59,30 @@ export type NumberValue =
     | NumberValue[]
     | { [key: string]: NumberValue };
 
+/** A number sent as a Double whatever its value. */
+export declare class DoubleValue {
+    constructor(value: number);
+    readonly value: number;
+}
+
+export declare function double(value: number): DoubleValue;
+
+/**
+ * A query parameter. A number with no fraction goes as an Int64 and any other number as a
+ * Double. A bigint goes as an Int64, and double(x) as a Double.
+ */
+export type ParameterValue =
+    | bigint
+    | number
+    | boolean
+    | string
+    | null
+    | DoubleValue
+    | ParameterValue[]
+    | { [key: string]: ParameterValue };
+
+export type Parameters = { [name: string]: ParameterValue };
+
 export type QueryStatus =
     | "GRAPH_NOT_FOUND"
     | "PARSE_ERROR"
@@ -69,7 +94,8 @@ export type QueryStatus =
     | "CHANGE_NOT_FOUND"
     | "HTTP_ERROR"
     | "PROTOCOL_ERROR"
-    | "DECODE_ERROR";
+    | "DECODE_ERROR"
+    | "PARAMETER_ERROR";
 
 export declare class TuringQueryError extends Error {
     constructor(status: string, message: string);
@@ -132,6 +158,8 @@ export interface QueryResult {
 export type VersionRef = "main" | "head" | number | bigint | string;
 
 export interface QueryOptions {
+    /** Binds `$name` to `parameters.name`. */
+    parameters?: Parameters;
     graph?: string;
     change?: VersionRef;
     commit?: VersionRef;
