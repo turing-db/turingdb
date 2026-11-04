@@ -15,17 +15,10 @@ namespace {
 
 constexpr size_t MAX_EXPECTED_ENTRIES = 4;
 
-bool opensBracket(CypherTokenKind kind) {
-    return kind == CypherTokenKind::OPAREN
-           || kind == CypherTokenKind::OBRACK
-           || kind == CypherTokenKind::OBRACE;
-}
-
-bool closesBracket(CypherTokenKind kind) {
-    return kind == CypherTokenKind::CPAREN
-           || kind == CypherTokenKind::CBRACK
-           || kind == CypherTokenKind::CBRACE;
-}
+struct OpenBracket {
+    size_t _index {0};
+    CypherTokenKind _closer {CypherTokenKind::PROG_END};
+};
 
 }
 
@@ -103,14 +96,14 @@ void CypherGrammar::consume() {
     const CypherTokenKind kind = token._kind;
     bioassert(kind != CypherTokenKind::LEXER_ERROR, "A token that failed to lex was consumed");
 
-    if (opensBracket(kind)) {
+    if (CypherToken::opensBracket(kind)) {
         enterNesting(token._location);
-    } else if (closesBracket(kind)) {
+    } else if (CypherToken::closesBracket(kind)) {
         leaveNesting();
     }
 
     _previous = token;
-    _consumedAny = true;
+    _consumedCount++;
     _window.pop_front();
 
     _expected = _pending;
@@ -150,7 +143,7 @@ void CypherGrammar::locate(const void* object, const SourcePosition& start) {
 }
 
 SourceLocation CypherGrammar::emptyLocation() const {
-    if (!_consumedAny) {
+    if (_consumedCount == 0) {
         return SourceLocation {};
     }
 
@@ -179,7 +172,7 @@ void CypherGrammar::throwUnexpectedTokenAt(size_t offset, const TokenKinds& kind
     throwUnexpected(token, offset == 1 ? kinds | _pending : kinds);
 }
 
-void CypherGrammar::throwSemanticError(const SourceLocation& location, std::string_view message) {
+void CypherGrammar::reportSemanticError(const SourceLocation& location, std::string_view message) {
     if (!_examined) {
         _lexer->throwSyntaxError(location, message);
     } else if (!_holdsError) {
@@ -189,12 +182,12 @@ void CypherGrammar::throwSemanticError(const SourceLocation& location, std::stri
     }
 }
 
-void CypherGrammar::throwNotImplemented(const SourceLocation& location, std::string_view what) {
+void CypherGrammar::reportNotImplemented(const SourceLocation& location, std::string_view what) {
     if (!_examined) {
         _lexer->throwNotImplemented(location, what);
     }
 
-    throwSemanticError(location, fmt::format("Not implemented: {}", what));
+    reportSemanticError(location, fmt::format("Not implemented: {}", what));
 }
 
 void CypherGrammar::throwUnexpected(const CypherToken& token, const TokenKinds& kinds) {
@@ -233,8 +226,12 @@ void CypherGrammar::throwUnexpected(const CypherToken& token, const TokenKinds& 
 }
 
 void CypherGrammar::enterNesting(const SourceLocation& location) {
+    const uintptr_t stackInUse = _stackBase - reinterpret_cast<uintptr_t>(__builtin_frame_address(0));
+
     if (_depth == CypherParser::MAX_NESTING_DEPTH) {
         _lexer->throwSyntaxError(location, fmt::format("Query nested deeper than {} levels", CypherParser::MAX_NESTING_DEPTH));
+    } else if (stackInUse > CypherParser::MAX_STACK_BYTES) {
+        _lexer->throwSyntaxError(location, "Query nested too deeply");
     }
 
     _depth++;
@@ -247,6 +244,54 @@ void CypherGrammar::leaveNesting() {
 
 bool CypherGrammar::isFollowedBy(ExprFollower follower) const {
     return _follower == follower && _followerDepth == _depth;
+}
+
+size_t CypherGrammar::skipBalanced(size_t offset) {
+    bioassert(CypherToken::opensBracket(peek(offset)._kind), "A bracket is skipped from its opener");
+
+    const size_t opener = _consumedCount + offset;
+    if (!_closerEnds.contains(opener)) {
+        matchBrackets(offset);
+    }
+
+    const size_t end = _closerEnds.find(opener)->second;
+
+    return end == 0 ? 0 : end - _consumedCount;
+}
+
+void CypherGrammar::matchBrackets(size_t offset) {
+    std::vector<OpenBracket> openBrackets;
+    size_t position = offset;
+
+    do {
+        const CypherTokenKind kind = peek(position)._kind;
+        const size_t index = _consumedCount + position;
+
+        if (CypherToken::opensBracket(kind)) {
+            const auto known = _closerEnds.find(index);
+
+            if (known == _closerEnds.end()) {
+                openBrackets.push_back(OpenBracket {._index = index, ._closer = CypherToken::closerOf(kind)});
+                position++;
+            } else if (known->second != 0) {
+                position = known->second - _consumedCount;
+            } else {
+                break;
+            }
+        } else if (!openBrackets.empty() && kind == openBrackets.back()._closer) {
+            _closerEnds.emplace(openBrackets.back()._index, index + 1);
+            openBrackets.pop_back();
+            position++;
+        } else if (CypherToken::closesBracket(kind) || kind == CypherTokenKind::PROG_END || kind == CypherTokenKind::LEXER_ERROR) {
+            break;
+        } else {
+            position++;
+        }
+    } while (!openBrackets.empty());
+
+    for (const OpenBracket& bracket : openBrackets) {
+        _closerEnds.emplace(bracket._index, 0);
+    }
 }
 
 const CypherGrammar::TokenKinds& CypherGrammar::getNameKinds() {

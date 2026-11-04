@@ -152,17 +152,11 @@ FunctionInvocation* createNormalFormInvocation(CypherAST* ast,
                                                std::string_view functionName,
                                                Expr* string,
                                                UnicodeNormalForm form) {
-    QualifiedName* name = QualifiedName::create(ast);
-    name->addName(Symbol::create(ast, functionName));
-
     ExprChain* arguments = ExprChain::create(ast);
     arguments->add(string);
     arguments->add(LiteralExpr::create(ast, NormalFormLiteral::create(ast, form)));
 
-    FunctionInvocation* invocation = FunctionInvocation::create(ast, name);
-    invocation->setArguments(arguments);
-
-    return invocation;
+    return ParserUtils::createInvocation(ast, functionName, arguments);
 }
 
 }
@@ -555,6 +549,16 @@ Expr* ParserUtils::createSubtraction(CypherAST* ast,
     ast->getSourceManager()->setLocation(subtraction, location);
 
     return subtraction;
+}
+
+FunctionInvocation* ParserUtils::createInvocation(CypherAST* ast, std::string_view functionName, ExprChain* arguments) {
+    QualifiedName* name = QualifiedName::create(ast);
+    name->addName(Symbol::create(ast, functionName));
+
+    FunctionInvocation* invocation = FunctionInvocation::create(ast, name);
+    invocation->setArguments(arguments);
+
+    return invocation;
 }
 
 FunctionInvocation* ParserUtils::createNormalizeInvocation(CypherAST* ast, Expr* string, UnicodeNormalForm form) {

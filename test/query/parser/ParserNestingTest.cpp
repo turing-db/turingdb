@@ -1,26 +1,15 @@
 #include <gtest/gtest.h>
 
-#include <pthread.h>
 #include <stddef.h>
-#include <exception>
 #include <string>
-#include <string_view>
 
-#include "CypherAST.h"
 #include "CypherParser.h"
+#include "ParseOnStack.h"
 
 using namespace db;
+using namespace turing::test;
 
 namespace {
-
-struct Nesting {
-    std::string_view _prefix;
-    std::string_view _open;
-    std::string_view _core;
-    std::string_view _close;
-    size_t _openingOffset {0};
-    size_t _openingLength {1};
-};
 
 constexpr Nesting PARENTHESES {"RETURN ", "(", "1", ")"};
 constexpr Nesting LISTS {"RETURN ", "[", "1", "]"};
@@ -39,60 +28,14 @@ protected:
     static constexpr size_t STACK_BYTES = 512 * 1024;
     static constexpr size_t MAX_DEPTH = CypherParser::MAX_NESTING_DEPTH;
 
-    static void buildQuery(const Nesting& nesting, size_t levels, std::string& query) {
-        query = nesting._prefix;
-        for (size_t level = 0; level < levels; level++) {
-            query += nesting._open;
-        }
-
-        query += nesting._core;
-
-        for (size_t level = 0; level < levels; level++) {
-            query += nesting._close;
-        }
-    }
-
-    static void parseOnSmallStack(const std::string& query, std::string& error) {
-        struct ParseRun {
-            const std::string* _query {nullptr};
-            std::string* _error {nullptr};
-        };
-
-        ParseRun run {&query, &error};
-
-        const auto parseOnThread = [](void* argument) -> void* {
-            ParseRun* const run = static_cast<ParseRun*>(argument);
-
-            CypherAST ast(nullptr, *run->_query);
-            CypherParser parser(&ast);
-
-            try {
-                parser.parse(*run->_query);
-            } catch (const std::exception& exception) {
-                *run->_error = exception.what();
-            }
-
-            return nullptr;
-        };
-
-        pthread_attr_t attributes;
-        ASSERT_EQ(pthread_attr_init(&attributes), 0);
-        ASSERT_EQ(pthread_attr_setstacksize(&attributes, STACK_BYTES), 0);
-
-        pthread_t thread;
-        ASSERT_EQ(pthread_create(&thread, &attributes, parseOnThread, &run), 0);
-        ASSERT_EQ(pthread_join(thread, nullptr), 0);
-        pthread_attr_destroy(&attributes);
-    }
-
     // At the deepest level allowed, a query parses, or fails only the expression depth check
     // that follows the parse
     static void expectNoNestingError(const Nesting& nesting) {
         std::string query;
-        buildQuery(nesting, MAX_DEPTH, query);
+        buildNestedQuery(nesting, MAX_DEPTH, query);
 
         std::string error;
-        parseOnSmallStack(query, error);
+        parseOnStack(query, STACK_BYTES, error);
 
         EXPECT_EQ(error.find("Query nested deeper than"), std::string::npos) << error;
         if (!error.empty()) {
@@ -102,10 +45,10 @@ protected:
 
     static void expectNestingErrorAtTheLevelPast(const Nesting& nesting) {
         std::string query;
-        buildQuery(nesting, MAX_DEPTH + 1, query);
+        buildNestedQuery(nesting, MAX_DEPTH + 1, query);
 
         std::string error;
-        parseOnSmallStack(query, error);
+        parseOnStack(query, STACK_BYTES, error);
 
         const size_t opening = nesting._prefix.size() + MAX_DEPTH * nesting._open.size() + nesting._openingOffset;
 

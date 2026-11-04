@@ -31,75 +31,6 @@ enum class AtomicValue : uint8_t {
     LABEL_TEST,
 };
 
-bool isReservedWord(CypherTokenKind kind) {
-    switch (kind) {
-        case CypherTokenKind::DESCENDING:
-        case CypherTokenKind::CONSTRAINT:
-        case CypherTokenKind::MANDATORY:
-        case CypherTokenKind::ASCENDING:
-        case CypherTokenKind::OPTIONAL:
-        case CypherTokenKind::CONTAINS:
-        case CypherTokenKind::DISTINCT:
-        case CypherTokenKind::REQUIRE:
-        case CypherTokenKind::COLLECT:
-        case CypherTokenKind::STARTS:
-        case CypherTokenKind::UNIQUE:
-        case CypherTokenKind::SINGLE:
-        case CypherTokenKind::SCALAR:
-        case CypherTokenKind::UNWIND:
-        case CypherTokenKind::REMOVE:
-        case CypherTokenKind::RETURN:
-        case CypherTokenKind::CREATE:
-        case CypherTokenKind::DELETE:
-        case CypherTokenKind::DETACH:
-        case CypherTokenKind::EXISTS:
-        case CypherTokenKind::REDUCE:
-        case CypherTokenKind::ALLREDUCE:
-        case CypherTokenKind::LIMIT:
-        case CypherTokenKind::MATCH:
-        case CypherTokenKind::MERGE:
-        case CypherTokenKind::ORDER:
-        case CypherTokenKind::WHERE:
-        case CypherTokenKind::UNION:
-        case CypherTokenKind::COUNT:
-        case CypherTokenKind::NORMALIZE:
-        case CypherTokenKind::NORMALIZED:
-        case CypherTokenKind::DESC:
-        case CypherTokenKind::WHEN:
-        case CypherTokenKind::NONE:
-        case CypherTokenKind::THEN:
-        case CypherTokenKind::ELSE:
-        case CypherTokenKind::CASE:
-        case CypherTokenKind::ENDS:
-        case CypherTokenKind::DROP:
-        case CypherTokenKind::SKIP:
-        case CypherTokenKind::WITH:
-        case CypherTokenKind::ANY:
-        case CypherTokenKind::SET:
-        case CypherTokenKind::ALL:
-        case CypherTokenKind::ASC:
-        case CypherTokenKind::NOT:
-        case CypherTokenKind::END:
-        case CypherTokenKind::XOR:
-        case CypherTokenKind::FOR:
-        case CypherTokenKind::ADD:
-        case CypherTokenKind::AND:
-        case CypherTokenKind::OR:
-        case CypherTokenKind::IN:
-        case CypherTokenKind::IS:
-        case CypherTokenKind::BY:
-        case CypherTokenKind::DO:
-        case CypherTokenKind::OF:
-        case CypherTokenKind::ON:
-        case CypherTokenKind::AS:
-            return true;
-        break;
-        default:
-            return false;
-        break;
-    }
-}
-
 bool isComparisonSign(CypherTokenKind kind) {
     return kind == CypherTokenKind::ASSIGN
            || kind == CypherTokenKind::LE
@@ -413,7 +344,7 @@ ParserUtils::IsTest CypherGrammar::parseIsTest(SourceLocation& testLocation) {
                          || check(CypherTokenKind::NFD)
                          || check(CypherTokenKind::NFKC)
                          || check(CypherTokenKind::NFKD);
-    const UnicodeNormalForm form = parseOptionalNormalForm();
+    const UnicodeNormalForm form = hasForm ? parseNormalForm() : UnicodeNormalForm::NFC;
     const bool consumedAToken = negated || hasForm;
 
     if (!check(CypherTokenKind::NORMALIZED)) {
@@ -427,18 +358,6 @@ ParserUtils::IsTest CypherGrammar::parseIsTest(SourceLocation& testLocation) {
     testLocation = consumedAToken ? locationFrom(start) : SourceLocation::join(formlessStart, _previous._location);
 
     return ParserUtils::IsTest {._normalForm = form, ._negated = negated};
-}
-
-UnicodeNormalForm CypherGrammar::parseOptionalNormalForm() {
-    const bool hasForm = check(CypherTokenKind::NFC)
-                         || check(CypherTokenKind::NFD)
-                         || check(CypherTokenKind::NFKC)
-                         || check(CypherTokenKind::NFKD);
-    if (hasForm) {
-        return parseNormalForm();
-    }
-
-    return UnicodeNormalForm::NFC;
 }
 
 UnicodeNormalForm CypherGrammar::parseNormalForm() {
@@ -596,7 +515,7 @@ PropertyExpr* CypherGrammar::parseVariablePropertyExpr() {
 
         PropertyExpr* property = ParserUtils::createParenthesizedPropertyAccess(_ast, base, name);
         if (!property) {
-            throwSemanticError(baseLocation, "Invalid property access. Only a variable can be parenthesized on the left of '.'");
+            reportSemanticError(baseLocation, "Invalid property access. Only a variable can be parenthesized on the left of '.'");
             return nullptr;
         }
 
@@ -756,7 +675,7 @@ FunctionInvocation* CypherGrammar::parseFunctionInvocation(QualifiedName* name, 
         consume();
 
         if (accept(CypherTokenKind::CPAREN)) {
-            throwSemanticError(locationFrom(nameStart), "DISTINCT requires an argument");
+            reportSemanticError(locationFrom(nameStart), "DISTINCT requires an argument");
             return nullptr;
         }
     }
@@ -784,19 +703,15 @@ FunctionInvocation* CypherGrammar::parseCountFunc() {
     if (accept(CypherTokenKind::MULT)) {
         expect(CypherTokenKind::CPAREN);
 
-        Symbol* symbol = Symbol::create(_ast, "count");
-        QualifiedName* name = QualifiedName::create(_ast);
-        name->addName(symbol);
-
-        FunctionInvocation* invocation = FunctionInvocation::create(_ast, name);
         ExprChain* arguments = ExprChain::create(_ast);
         arguments->add(LiteralExpr::create(_ast, WildcardLiteral::create(_ast)));
-        invocation->setArguments(arguments);
+
+        FunctionInvocation* invocation = ParserUtils::createInvocation(_ast, "count", arguments);
         locate(invocation, start);
 
         return invocation;
     } else if (accept(CypherTokenKind::CPAREN)) {
-        throwNotImplemented(locationFrom(start), "count()");
+        reportNotImplemented(locationFrom(start), "count()");
         return nullptr;
     }
 
@@ -805,7 +720,7 @@ FunctionInvocation* CypherGrammar::parseCountFunc() {
         consume();
 
         if (accept(CypherTokenKind::CPAREN)) {
-            throwNotImplemented(locationFrom(start), "count(DISTINCT)");
+            reportNotImplemented(locationFrom(start), "count(DISTINCT)");
             return nullptr;
         }
     }
@@ -813,12 +728,7 @@ FunctionInvocation* CypherGrammar::parseCountFunc() {
     ExprChain* arguments = parseExprChain();
     expect(CypherTokenKind::CPAREN);
 
-    Symbol* symbol = Symbol::create(_ast, "count");
-    QualifiedName* name = QualifiedName::create(_ast);
-    name->addName(symbol);
-
-    FunctionInvocation* invocation = FunctionInvocation::create(_ast, name);
-    invocation->setArguments(arguments);
+    FunctionInvocation* invocation = ParserUtils::createInvocation(_ast, "count", arguments);
 
     if (distinct) {
         invocation->setDistinct(true);
@@ -873,14 +783,10 @@ Expr* CypherGrammar::parseCollectExpr() {
     Expr* argument = parseExpr(ExprFollower::NONE);
     expect(CypherTokenKind::CPAREN);
 
-    Symbol* symbol = Symbol::create(_ast, "collect");
-    QualifiedName* name = QualifiedName::create(_ast);
-    name->addName(symbol);
-
-    FunctionInvocation* invocation = FunctionInvocation::create(_ast, name);
     ExprChain* arguments = ExprChain::create(_ast);
     arguments->add(argument);
-    invocation->setArguments(arguments);
+
+    FunctionInvocation* invocation = ParserUtils::createInvocation(_ast, "collect", arguments);
 
     if (distinct) {
         invocation->setDistinct(true);
@@ -920,7 +826,7 @@ Expr* CypherGrammar::parseExistsPredicate(const SourcePosition& start) {
 
     ExistsExpr* exists = ParserUtils::findPatternPredicate(argument);
     if (!exists) {
-        throwSemanticError(argumentLocation, "exists() takes a pattern: test a property with IS NOT NULL");
+        reportSemanticError(argumentLocation, "exists() takes a pattern: test a property with IS NOT NULL");
         return argument;
     }
 
@@ -1124,7 +1030,8 @@ Expr* CypherGrammar::parseBracketExpr() {
     }
 
     const SourcePosition firstStart = currentPosition();
-    Expr* first = parseExpr(ExprFollower::PIPE);
+    const bool opensListComprehension = CypherToken::isSymbol(peek(0)._kind) && peek(1)._kind == CypherTokenKind::IN;
+    Expr* first = parseExpr(opensListComprehension ? ExprFollower::PIPE_OR_COMMA : ExprFollower::NONE);
     const SourceLocation firstLocation = locationFrom(firstStart);
 
     if (check(CypherTokenKind::WHERE) || check(CypherTokenKind::PIPE)) {
@@ -1133,8 +1040,8 @@ Expr* CypherGrammar::parseBracketExpr() {
 
         Expr* comprehension = ParserUtils::createComprehension(_ast, first, tail.first, tail.second, firstLocation);
         if (!comprehension) {
-            throwSemanticError(firstLocation,
-                               "Invalid comprehension. Expected 'variable IN list', or a path '(...)-[...]-(...)' followed by '|'");
+            reportSemanticError(firstLocation,
+                                "Invalid comprehension. Expected 'variable IN list', or a path '(...)-[...]-(...)' followed by '|'");
             return first;
         }
 
@@ -1229,29 +1136,28 @@ CaseExpr* CypherGrammar::parseCaseExpr() {
 }
 
 CaseExpr* CypherGrammar::parseWhenThenChain() {
-    const std::pair<CaseExpr::Tests, Expr*> first = parseWhenThen();
+    CaseExpr::Tests tests;
+    Expr* value = parseWhenThen(tests);
 
     CaseExpr* caseExpr = CaseExpr::create(_ast);
-    caseExpr->addBranch(first.first, first.second);
+    caseExpr->addBranch(tests, value);
 
     while (check(CypherTokenKind::WHEN)) {
-        const std::pair<CaseExpr::Tests, Expr*> branch = parseWhenThen();
-        caseExpr->addBranch(branch.first, branch.second);
+        tests.clear();
+        value = parseWhenThen(tests);
+        caseExpr->addBranch(tests, value);
     }
 
     return caseExpr;
 }
 
-std::pair<CaseExpr::Tests, Expr*> CypherGrammar::parseWhenThen() {
+Expr* CypherGrammar::parseWhenThen(CaseExpr::Tests& tests) {
     expect(CypherTokenKind::WHEN);
-
-    CaseExpr::Tests tests;
     parseCaseTests(tests);
 
     expect(CypherTokenKind::THEN);
-    Expr* value = parseExpr(ExprFollower::NONE);
 
-    return std::make_pair(tests, value);
+    return parseExpr(ExprFollower::NONE);
 }
 
 void CypherGrammar::parseCaseTests(CaseExpr::Tests& tests) {
@@ -1272,40 +1178,14 @@ CaseExpr::Test CypherGrammar::parseCaseTest() {
         expect(CypherTokenKind::NULL_);
 
         return CaseExpr::Test {._kind = CaseExpr::TestKind::IsNull};
-    }
-
-    const bool compares = check(CypherTokenKind::ASSIGN)
-                          || check(CypherTokenKind::LE)
-                          || check(CypherTokenKind::GE)
-                          || check(CypherTokenKind::GT)
-                          || check(CypherTokenKind::LT)
-                          || check(CypherTokenKind::NOT_EQUAL);
-    if (compares) {
-        const BinaryOperator comparison = parseCaseComparisonSign();
+    } else if (startsComparison()) {
+        const BinaryOperator comparison = parseComparisonSign();
         Expr* value = parseExpr(ExprFollower::NONE);
 
         return CaseExpr::Test {._value = value, ._operator = comparison, ._kind = CaseExpr::TestKind::Comparison};
     }
 
     return CaseExpr::Test {._value = parseExpr(ExprFollower::NONE)};
-}
-
-BinaryOperator CypherGrammar::parseCaseComparisonSign() {
-    if (accept(CypherTokenKind::ASSIGN)) {
-        return BinaryOperator::Equal;
-    } else if (accept(CypherTokenKind::LE)) {
-        return BinaryOperator::LessThanOrEqual;
-    } else if (accept(CypherTokenKind::GE)) {
-        return BinaryOperator::GreaterThanOrEqual;
-    } else if (accept(CypherTokenKind::GT)) {
-        return BinaryOperator::GreaterThan;
-    } else if (accept(CypherTokenKind::LT)) {
-        return BinaryOperator::LessThan;
-    }
-
-    expect(CypherTokenKind::NOT_EQUAL);
-
-    return BinaryOperator::NotEqual;
 }
 
 Literal* CypherGrammar::parseLiteral() {
@@ -1457,8 +1337,6 @@ Parameter* CypherGrammar::parseParameter() {
 Symbol* CypherGrammar::parseName() {
     if (!checkName()) {
         throwUnexpectedToken();
-    } else if (CypherToken::isSymbol(examineKind())) {
-        return parseSymbol();
     }
 
     consume();
@@ -1468,18 +1346,6 @@ Symbol* CypherGrammar::parseName() {
 
 Symbol* CypherGrammar::parseSymbol() {
     if (!checkSymbol()) {
-        throwUnexpectedToken();
-    } else if (isReservedWord(examineKind())) {
-        return parseReservedWord();
-    }
-
-    consume();
-
-    return Symbol::create(_ast, _previous._text);
-}
-
-Symbol* CypherGrammar::parseReservedWord() {
-    if (!isReservedWord(examineKind())) {
         throwUnexpectedToken();
     }
 
@@ -1595,31 +1461,51 @@ bool CypherGrammar::isOpensDetailLabels(size_t offset) {
     return startsLabelAtom(next) && next != CypherTokenKind::IS;
 }
 
-// Both readings of [x IN l WHERE x:A|B] parse. Neo4j's grammar reads the bar there, so a
-// `|` disjoins labels only when another `|` at its depth can still close the expression
+// Both readings of [x IN l WHERE x:A|B] parse. Neo4j's grammar reads the bar there, so a `|`
+// disjoins labels only when an operator or the end of the expression follows the labels after it,
+// and at its depth, outside a CASE, another `|` can close the expression or a `,` ends a list item
 bool CypherGrammar::pipeDisjoinsLabels() {
-    if (!isFollowedBy(ExprFollower::PIPE)) {
+    const bool commaEndsAnItem = isFollowedBy(ExprFollower::PIPE_OR_COMMA);
+
+    if (!isFollowedBy(ExprFollower::PIPE) && !commaEndsAnItem) {
         return true;
     } else if (peek(0)._kind != CypherTokenKind::PIPE) {
         return false;
     }
 
-    size_t position = 1;
+    const size_t labels = peek(1)._kind == CypherTokenKind::COLON ? 2 : 1;
+    size_t position = skipLabelConjunction(labels);
+    if (position == 0 || !canFollowLabels(peek(position)._kind)) {
+        return false;
+    }
+
+    size_t openCases = 0;
     while (true) {
         const CypherTokenKind kind = peek(position)._kind;
+        const CypherTokenKind previous = peek(position - 1)._kind;
+        const bool isAName = previous == CypherTokenKind::DOT
+                             || previous == CypherTokenKind::COLON
+                             || previous == CypherTokenKind::DOLLAR
+                             || previous == CypherTokenKind::PIPE
+                             || previous == CypherTokenKind::AMPERSAND
+                             || previous == CypherTokenKind::EXCLAMATION
+                             || previous == CypherTokenKind::IS;
+        const bool endsTheOperand = kind == CypherTokenKind::PIPE || (kind == CypherTokenKind::COMMA && commaEndsAnItem);
 
-        if (kind == CypherTokenKind::PIPE) {
+        if (endsTheOperand && openCases == 0) {
             return true;
-        } else if (kind == CypherTokenKind::OPAREN || kind == CypherTokenKind::OBRACK || kind == CypherTokenKind::OBRACE) {
+        } else if (CypherToken::opensBracket(kind)) {
             position = skipBalanced(position);
             if (position == 0) {
                 return false;
             }
-        } else if (kind == CypherTokenKind::CPAREN
-                   || kind == CypherTokenKind::CBRACK
-                   || kind == CypherTokenKind::CBRACE
-                   || kind == CypherTokenKind::PROG_END
-                   || kind == CypherTokenKind::LEXER_ERROR) {
+        } else if (kind == CypherTokenKind::CASE && !isAName && opensConstruct(position, false)) {
+            openCases++;
+            position++;
+        } else if (kind == CypherTokenKind::END && openCases > 0 && !isAName) {
+            openCases--;
+            position++;
+        } else if (CypherToken::closesBracket(kind) || kind == CypherTokenKind::PROG_END || kind == CypherTokenKind::LEXER_ERROR) {
             return false;
         } else {
             position++;
@@ -1695,74 +1581,55 @@ bool CypherGrammar::startsComparison() {
            || check(CypherTokenKind::NOT_EQUAL);
 }
 
-size_t CypherGrammar::skipBalanced(size_t offset) {
-    std::vector<CypherTokenKind> closers;
-    size_t position = offset;
+size_t CypherGrammar::skipLabelExpression(size_t offset) {
+    size_t position = skipLabelConjunction(offset + 1);
 
-    do {
-        const CypherTokenKind kind = peek(position)._kind;
-
-        if (kind == CypherTokenKind::OPAREN) {
-            closers.push_back(CypherTokenKind::CPAREN);
-        } else if (kind == CypherTokenKind::OBRACK) {
-            closers.push_back(CypherTokenKind::CBRACK);
-        } else if (kind == CypherTokenKind::OBRACE) {
-            closers.push_back(CypherTokenKind::CBRACE);
-        } else if (kind == CypherTokenKind::CPAREN || kind == CypherTokenKind::CBRACK || kind == CypherTokenKind::CBRACE) {
-            if (closers.back() != kind) {
-                return 0;
-            }
-
-            closers.pop_back();
-        } else if (kind == CypherTokenKind::PROG_END || kind == CypherTokenKind::LEXER_ERROR) {
-            return 0;
+    while (position != 0 && peek(position)._kind == CypherTokenKind::PIPE) {
+        position++;
+        if (peek(position)._kind == CypherTokenKind::COLON) {
+            position++;
         }
 
-        position++;
-    } while (!closers.empty());
+        position = skipLabelConjunction(position);
+    }
 
     return position;
 }
 
-size_t CypherGrammar::skipLabelExpression(size_t offset) {
-    size_t position = offset + 1;
+size_t CypherGrammar::skipLabelConjunction(size_t offset) {
+    size_t position = skipLabelAtom(offset);
 
-    while (true) {
-        while (peek(position)._kind == CypherTokenKind::EXCLAMATION) {
-            position++;
-        }
-
-        const CypherTokenKind atom = peek(position)._kind;
-        if (CypherToken::isName(atom)) {
-            position++;
-        } else if (atom == CypherTokenKind::DOLLAR) {
-            const CypherTokenKind parameter = peek(position + 1)._kind;
-            if (!CypherToken::isName(parameter) && parameter != CypherTokenKind::DIGIT) {
-                return 0;
-            }
-
-            position += 2;
-        } else if (atom == CypherTokenKind::OPAREN) {
-            position = skipBalanced(position);
-            if (position == 0) {
-                return 0;
-            }
-        } else {
-            return 0;
-        }
-
+    while (position != 0) {
         const CypherTokenKind joint = peek(position)._kind;
-        if (joint == CypherTokenKind::PIPE) {
-            position++;
-            if (peek(position)._kind == CypherTokenKind::COLON) {
-                position++;
-            }
-        } else if (joint == CypherTokenKind::AMPERSAND || joint == CypherTokenKind::COLON) {
-            position++;
-        } else {
+        if (joint != CypherTokenKind::AMPERSAND && joint != CypherTokenKind::COLON) {
             return position;
         }
+
+        position = skipLabelAtom(position + 1);
     }
+
+    return 0;
+}
+
+size_t CypherGrammar::skipLabelAtom(size_t offset) {
+    size_t position = offset;
+    while (peek(position)._kind == CypherTokenKind::EXCLAMATION) {
+        position++;
+    }
+
+    const CypherTokenKind atom = peek(position)._kind;
+    if (CypherToken::isName(atom)) {
+        return position + 1;
+    } else if (atom == CypherTokenKind::DOLLAR) {
+        const CypherTokenKind parameter = peek(position + 1)._kind;
+        const bool namesAParameter = CypherToken::isName(parameter) || parameter == CypherTokenKind::DIGIT;
+
+        return namesAParameter ? position + 2 : 0;
+    } else if (atom == CypherTokenKind::OPAREN) {
+        return skipBalanced(position);
+    }
+
+    return 0;
 }
 
 bool CypherGrammar::startsExpr(CypherTokenKind kind) {
@@ -1794,6 +1661,23 @@ bool CypherGrammar::isInfixWord(CypherTokenKind kind) {
            || kind == CypherTokenKind::STARTS
            || kind == CypherTokenKind::ENDS
            || kind == CypherTokenKind::CONTAINS;
+}
+
+bool CypherGrammar::canFollowLabels(CypherTokenKind kind) {
+    return isInfixWord(kind)
+           || isComparisonSign(kind)
+           || kind == CypherTokenKind::IS_VALUE_TEST
+           || kind == CypherTokenKind::PLUS
+           || kind == CypherTokenKind::SUB
+           || kind == CypherTokenKind::MULT
+           || kind == CypherTokenKind::DIV
+           || kind == CypherTokenKind::MOD
+           || kind == CypherTokenKind::CARET
+           || kind == CypherTokenKind::CONCAT
+           || kind == CypherTokenKind::PIPE
+           || kind == CypherTokenKind::COMMA
+           || kind == CypherTokenKind::WHERE
+           || CypherToken::closesBracket(kind);
 }
 
 bool CypherGrammar::startsOperandOfKeyword(CypherTokenKind next, bool aliasMayFollow) {
