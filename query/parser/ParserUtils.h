@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <string_view>
 #include <vector>
 
 #include "expr/Operators.h"
@@ -16,6 +17,7 @@ class EmbeddingLiteral;
 class EntityTypeExpr;
 class ExistsExpr;
 class Expr;
+class ExprChain;
 class FunctionInvocation;
 class LabelExpr;
 class ListLiteral;
@@ -140,6 +142,8 @@ public:
                                    Expr* lhs,
                                    Expr* rhs,
                                    const SourceLocation& location);
+
+    static FunctionInvocation* createInvocation(CypherAST* ast, std::string_view functionName, ExprChain* arguments);
 
     // `normalize(s)` is `normalize(s, NFC)`
     static FunctionInvocation* createNormalizeInvocation(CypherAST* ast, Expr* string, UnicodeNormalForm form);

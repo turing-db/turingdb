@@ -115,7 +115,7 @@ std::pair<EdgePattern*, NodePattern*> CypherGrammar::parsePatternElemChain() {
 
         if (quantifier) {
             if (edge->getQuantifiedPath()) {
-                throwSemanticError(quantifierLocation, QUANTIFIER_TWICE_MESSAGE);
+                reportSemanticError(quantifierLocation, QUANTIFIER_TWICE_MESSAGE);
             }
 
             edge->setQuantifiedPath(quantifier);
@@ -140,13 +140,13 @@ std::pair<EdgePattern*, NodePattern*> CypherGrammar::parsePatternElemChain() {
     const size_t hopCount = entities.size() / 2;
 
     if (hopCount == 0) {
-        throwSemanticError(bodyLocation, HOPLESS_QUANTIFIER_MESSAGE);
+        reportSemanticError(bodyLocation, HOPLESS_QUANTIFIER_MESSAGE);
     }
 
     for (auto [hop, hopNode] : body->getElementChain()) {
         if (hop->getQuantifiedPath()) {
             const bool quantifiesOneRelationshipTwice = hopCount == 1 && !hop->getHopNode(0);
-            throwSemanticError(bodyLocation, quantifiesOneRelationshipTwice ? QUANTIFIER_TWICE_MESSAGE : NESTED_QUANTIFIER_MESSAGE);
+            reportSemanticError(bodyLocation, quantifiesOneRelationshipTwice ? QUANTIFIER_TWICE_MESSAGE : NESTED_QUANTIFIER_MESSAGE);
         }
     }
 
@@ -553,7 +553,7 @@ std::pair<EdgePattern*, NodePattern*> CypherGrammar::parseExprPatternElemChain()
 
     if (quantifier) {
         if (edge->getQuantifiedPath()) {
-            throwSemanticError(quantifierLocation, QUANTIFIER_TWICE_MESSAGE);
+            reportSemanticError(quantifierLocation, QUANTIFIER_TWICE_MESSAGE);
         }
 
         edge->setQuantifiedPath(quantifier);
@@ -598,7 +598,7 @@ Expr* CypherGrammar::parsePathExpr() {
 
     NodePattern* root = NodePattern::fromExpr(_ast, inner);
     if (!root) {
-        throwSemanticError(opening, "Invalid path expr. Root must be a valid node pattern '(symbol? nodeLabels? properties?)'");
+        reportSemanticError(opening, "Invalid path expr. Root must be a valid node pattern '(symbol? nodeLabels? properties?)'");
         return inner;
     }
 
@@ -656,7 +656,7 @@ NodePattern* CypherGrammar::parsePredicateRoot() {
 
             MapLiteral* properties = NodePattern::createProperties(_ast, items);
             if (!properties) {
-                throwSemanticError(bodyLocation, "Invalid node pattern. Its properties are 'key: value' entries");
+                reportSemanticError(bodyLocation, "Invalid node pattern. Its properties are 'key: value' entries");
             }
 
             root = ParserUtils::createNodePattern(_ast, symbol, nullptr, properties, where);
@@ -702,7 +702,7 @@ bool CypherGrammar::startsExprPatternElemChain() {
         return false;
     }
 
-    return skipEntityDetail(afterQuantifier + 1, CypherTokenKind::CPAREN) != 0;
+    return skipEntityDetail(afterQuantifier) != 0;
 }
 
 bool CypherGrammar::startsQuantifiedPath() {
@@ -738,7 +738,7 @@ size_t CypherGrammar::skipExprEdgePattern(size_t offset) {
         return 0;
     }
 
-    position = skipEntityDetail(position + 1, CypherTokenKind::CBRACK);
+    position = skipEntityDetail(position);
     if (position == 0 || peek(position)._kind != CypherTokenKind::SUB) {
         return 0;
     }
@@ -784,12 +784,13 @@ size_t CypherGrammar::skipQuantifiedPath(size_t offset) {
     return position + 1;
 }
 
-size_t CypherGrammar::skipEntityDetail(size_t offset, CypherTokenKind closer) {
-    size_t position = offset;
+size_t CypherGrammar::skipEntityDetail(size_t opener) {
+    const CypherTokenKind closer = peek(opener)._kind == CypherTokenKind::OPAREN ? CypherTokenKind::CPAREN : CypherTokenKind::CBRACK;
+    size_t position = opener + 1;
     CypherTokenKind kind = peek(position)._kind;
 
     if (kind == CypherTokenKind::WHERE && whereOpensDetailPredicate(position)) {
-        return skipToCloser(position + 1, closer);
+        return skipBalanced(opener);
     }
 
     const bool opensLabels = kind == CypherTokenKind::COLON
@@ -823,7 +824,7 @@ size_t CypherGrammar::skipEntityDetail(size_t offset, CypherTokenKind closer) {
     }
 
     if (kind == CypherTokenKind::WHERE) {
-        return skipToCloser(position + 1, closer);
+        return skipBalanced(opener);
     }
 
     return kind == closer ? position + 1 : 0;
@@ -845,30 +846,4 @@ size_t CypherGrammar::skipEdgeRange(size_t offset) {
     }
 
     return position;
-}
-
-size_t CypherGrammar::skipToCloser(size_t offset, CypherTokenKind closer) {
-    std::vector<CypherTokenKind> closers;
-
-    for (size_t position = offset;; position++) {
-        const CypherTokenKind kind = peek(position)._kind;
-
-        if (closers.empty() && kind == closer) {
-            return position + 1;
-        } else if (kind == CypherTokenKind::OPAREN) {
-            closers.push_back(CypherTokenKind::CPAREN);
-        } else if (kind == CypherTokenKind::OBRACK) {
-            closers.push_back(CypherTokenKind::CBRACK);
-        } else if (kind == CypherTokenKind::OBRACE) {
-            closers.push_back(CypherTokenKind::CBRACE);
-        } else if (kind == CypherTokenKind::CPAREN || kind == CypherTokenKind::CBRACK || kind == CypherTokenKind::CBRACE) {
-            if (closers.empty() || closers.back() != kind) {
-                return 0;
-            }
-
-            closers.pop_back();
-        } else if (kind == CypherTokenKind::PROG_END || kind == CypherTokenKind::LEXER_ERROR) {
-            return 0;
-        }
-    }
 }

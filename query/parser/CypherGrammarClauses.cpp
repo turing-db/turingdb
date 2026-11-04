@@ -939,7 +939,7 @@ PropertyExpr* CypherGrammar::parseRemoveItem() {
         return parsePropertyExpr(name, start);
     } else if (check(CypherTokenKind::COLON) || check(CypherTokenKind::IS)) {
         parseEntityTypeExpr(symbol, start);
-        throwNotImplemented(locationFrom(start), "REMOVE of a label");
+        reportNotImplemented(locationFrom(start), "REMOVE of a label");
 
         return nullptr;
     }

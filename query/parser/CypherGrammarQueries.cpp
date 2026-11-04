@@ -41,6 +41,8 @@
 using namespace db;
 
 void CypherGrammar::parseScript() {
+    _stackBase = reinterpret_cast<uintptr_t>(__builtin_frame_address(0));
+
     parseQueries();
     expect(CypherTokenKind::PROG_END);
 }
@@ -146,7 +148,7 @@ RegularQuery* CypherGrammar::parseSegmentBeforeNext(RegularQuery* segment, const
     expect(CypherTokenKind::NEXT);
 
     if (ParserUtils::returnsUnaliasedItem(segment)) {
-        throwSemanticError(location, "Expression in a RETURN followed by NEXT must be aliased (use AS)");
+        reportSemanticError(location, "Expression in a RETURN followed by NEXT must be aliased (use AS)");
     }
 
     return segment;
@@ -185,7 +187,9 @@ QueryCommand* CypherGrammar::parseExplainQuery() {
     }
 
     QueryCommand* query = parseRegularQuery();
-    _ast->explainRequest().requestDefaults();
+
+    ExplainRequest& explain = _ast->explainRequest();
+    explain.requestDefaults();
 
     return query;
 }
@@ -199,8 +203,10 @@ void CypherGrammar::parseExplainOptions() {
 }
 
 void CypherGrammar::parseExplainOption() {
+    ExplainRequest& explain = _ast->explainRequest();
+
     if (accept(CypherTokenKind::ALL)) {
-        _ast->explainRequest().requestAll();
+        explain.requestAll();
         return;
     }
 
@@ -208,29 +214,21 @@ void CypherGrammar::parseExplainOption() {
     const std::string_view word = parseExplainWord();
 
     if (accept(CypherTokenKind::ID)) {
-        if (!_ast->explainRequest().requestPass(word, _previous._text)) {
-            std::string message;
-            ExplainRequest::describeOptions(word, message);
-            throwSemanticError(wordLocation, message);
+        if (!explain.requestPass(word, _previous._text)) {
+            reportUnknownExplainOption(wordLocation, word);
         }
     } else if (accept(CypherTokenKind::OBRACK)) {
         std::vector<std::string_view> passNames;
         parseExplainPassNames(passNames);
         expect(CypherTokenKind::CBRACK);
 
-        ExplainRequest& explain = _ast->explainRequest();
-
         for (const std::string_view passName : passNames) {
             if (!explain.requestPass(word, passName)) {
-                std::string message;
-                ExplainRequest::describeOptions(word, message);
-                throwSemanticError(wordLocation, message);
+                reportUnknownExplainOption(wordLocation, word);
             }
         }
-    } else if (!_ast->explainRequest().requestStage(word)) {
-        std::string message;
-        ExplainRequest::describeOptions(word, message);
-        throwSemanticError(wordLocation, message);
+    } else if (!explain.requestStage(word)) {
+        reportUnknownExplainOption(wordLocation, word);
     }
 }
 
@@ -240,12 +238,17 @@ std::string_view CypherGrammar::parseExplainWord() {
 
     const std::string_view word = _previous._text;
     if (!ExplainRequest::isOptionWord(word)) {
-        std::string message;
-        ExplainRequest::describeOptions(word, message);
-        throwSemanticError(location, message);
+        reportUnknownExplainOption(location, word);
     }
 
     return word;
+}
+
+void CypherGrammar::reportUnknownExplainOption(const SourceLocation& location, std::string_view word) {
+    std::string message;
+    ExplainRequest::describeOptions(word, message);
+
+    reportSemanticError(location, message);
 }
 
 void CypherGrammar::parseExplainPassNames(std::vector<std::string_view>& names) {
@@ -295,12 +298,12 @@ QueryCommand* CypherGrammar::parseSingleQuery(AdminQuery admin) {
     switch (admin) {
         case AdminQuery::CREATE_CONSTRAINT:
             parseCreateConstraint();
-            throwNotImplemented(locationFrom(start), "CREATE CONSTRAINT");
+            reportNotImplemented(locationFrom(start), "CREATE CONSTRAINT");
             return nullptr;
         break;
         case AdminQuery::DROP_CONSTRAINT:
             parseDropConstraint();
-            throwNotImplemented(locationFrom(start), "DROP CONSTRAINT");
+            reportNotImplemented(locationFrom(start), "DROP CONSTRAINT");
             return nullptr;
         break;
         case AdminQuery::CREATE_GRAPH:
@@ -567,28 +570,19 @@ void CypherGrammar::parseJsonlOption(JsonlImportSpecs& specs) {
         expect(CypherTokenKind::CBRACK);
     } else if (accept(CypherTokenKind::DATETIMES)) {
         expect(CypherTokenKind::OBRACK);
-        parseDateTimeSpecs(specs._dateTimes);
+        parseSpecNames(specs._dateTimes);
         expect(CypherTokenKind::CBRACK);
     } else if (accept(CypherTokenKind::DURATIONS)) {
         expect(CypherTokenKind::OBRACK);
-        parseDurationSpecs(specs._durations);
+        parseSpecNames(specs._durations);
         expect(CypherTokenKind::CBRACK);
     } else {
         throwUnexpectedToken();
     }
 }
 
-void CypherGrammar::parseDateTimeSpecs(DateTimeSpec& specs) {
-    do {
-        if (accept(CypherTokenKind::STRING_LITERAL)) {
-            specs.emplace(_previous._text);
-        } else {
-            specs.emplace(parseName()->getName());
-        }
-    } while (accept(CypherTokenKind::COMMA));
-}
-
-void CypherGrammar::parseDurationSpecs(DurationSpec& specs) {
+template <typename Spec>
+void CypherGrammar::parseSpecNames(Spec& specs) {
     do {
         if (accept(CypherTokenKind::STRING_LITERAL)) {
             specs.emplace(_previous._text);
@@ -733,7 +727,7 @@ CreateNodePropertyIndexQuery* CypherGrammar::parseCreateNodePropertyIndexQuery()
     PropertyExpr* property = parseVariablePropertyExpr();
 
     if (pattern->getWhere()) {
-        throwSemanticError(patternLocation, "WHERE is not allowed in an index pattern");
+        reportSemanticError(patternLocation, "WHERE is not allowed in an index pattern");
     }
 
     CreateNodePropertyIndexQuery* query = CreateNodePropertyIndexQuery::create(_ast, name->getName(), pattern, property);
@@ -761,9 +755,9 @@ CreateEdgePropertyIndexQuery* CypherGrammar::parseCreateEdgePropertyIndexQuery()
     PropertyExpr* property = parseVariablePropertyExpr();
 
     if (edge->getWhere()) {
-        throwSemanticError(detailLocation, "WHERE is not allowed in an index pattern");
+        reportSemanticError(detailLocation, "WHERE is not allowed in an index pattern");
     } else if (edge->getQuantifiedPath()) {
-        throwSemanticError(detailLocation, "An edge property index takes no length quantifier");
+        reportSemanticError(detailLocation, "An edge property index takes no length quantifier");
     }
 
     CreateEdgePropertyIndexQuery* query = CreateEdgePropertyIndexQuery::create(_ast, name->getName(), edge, property);
@@ -924,7 +918,7 @@ LoadParquetQuery* CypherGrammar::parseLoadParquet() {
     if (hasDurations) {
         expect(CypherTokenKind::DURATIONS);
         expect(CypherTokenKind::OBRACK);
-        parseDurationSpecs(durations);
+        parseSpecNames(durations);
         expect(CypherTokenKind::CBRACK);
     }
 

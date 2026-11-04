@@ -17,6 +17,10 @@ public:
     // turned away before it can exhaust the stack
     static constexpr size_t MAX_NESTING_DEPTH = 256;
 
+    // The frames between two levels depend on the clauses between them, so a level also stops
+    // the parse past this much stack, leaving a 512 KB macOS thread room for its callers and the throw
+    static constexpr size_t MAX_STACK_BYTES = 384 * 1024;
+
     explicit CypherParser(CypherAST* ast);
     ~CypherParser() = default;
 

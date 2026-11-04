@@ -179,6 +179,9 @@ struct CypherToken {
     static std::string_view toString(CypherTokenKind kind);
     static bool isName(CypherTokenKind kind);
     static bool isSymbol(CypherTokenKind kind);
+    static bool opensBracket(CypherTokenKind kind);
+    static bool closesBracket(CypherTokenKind kind);
+    static CypherTokenKind closerOf(CypherTokenKind opener);
 };
 
 }

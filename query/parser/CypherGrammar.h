@@ -7,6 +7,7 @@
 #include <initializer_list>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -122,6 +123,7 @@ private:
         NONE,
         AS,
         PIPE,
+        PIPE_OR_COMMA,
     };
 
     enum class AdminQuery : uint8_t {
@@ -207,10 +209,14 @@ private:
     // The last consumed token, where the location of the node being built ends
     CypherToken _previous;
 
-    // True once the parser consumes a token; emptyLocation() reads _previous only then
-    bool _consumedAny {false};
+    // Number of tokens consumed, the index in the query of the front of _window; emptyLocation()
+    // reads _previous only once it is not 0
+    size_t _consumedCount {0};
 
-    // True if a check read the current token; throwSemanticError() then holds the error
+    // Index one past the closer of each bracket a lookahead has skipped, 0 if it has none
+    std::unordered_map<size_t, size_t> _closerEnds;
+
+    // True if a check read the current token; reportSemanticError() then holds the error
     bool _examined {false};
 
     // Token kinds checked at the current token, for the "expecting" list of a syntax error
@@ -222,7 +228,11 @@ private:
     // Number of open brackets and CASE, at most MAX_NESTING_DEPTH
     size_t _depth {0};
 
-    // What may follow the current expression: AS before an alias, or a PIPE that ends it
+    // Frame address of parseScript(), from which enterNesting() measures the stack in use
+    uintptr_t _stackBase {0};
+
+    // What may follow the current expression: AS before an alias, a PIPE that ends it, or in the
+    // first item of a bracket, the PIPE of a comprehension or the COMMA of a list
     ExprFollower _follower {ExprFollower::NONE};
 
     // Nesting depth where _follower was set; _follower applies only at that depth
@@ -262,8 +272,8 @@ private:
 
     [[noreturn]] void throwUnexpectedToken();
     [[noreturn]] void throwUnexpectedTokenAt(size_t offset, const TokenKinds& kinds);
-    void throwSemanticError(const SourceLocation& location, std::string_view message);
-    void throwNotImplemented(const SourceLocation& location, std::string_view what);
+    void reportSemanticError(const SourceLocation& location, std::string_view message);
+    void reportNotImplemented(const SourceLocation& location, std::string_view what);
     [[noreturn]] void throwUnexpected(const CypherToken& token, const TokenKinds& kinds);
 
     void enterNesting(const SourceLocation& location);
@@ -287,6 +297,7 @@ private:
     void parseExplainOptions();
     void parseExplainOption();
     std::string_view parseExplainWord();
+    void reportUnknownExplainOption(const SourceLocation& location, std::string_view word);
     void parseExplainPassNames(std::vector<std::string_view>& names);
     void parseUnionList(UnionQuery::Branches& branches);
     UnionQuery::Branch parseUnionStmt();
@@ -298,8 +309,8 @@ private:
     LoadJsonlQuery* parseLoadJsonl();
     void parseJsonlOptions(JsonlImportSpecs& specs);
     void parseJsonlOption(JsonlImportSpecs& specs);
-    void parseDateTimeSpecs(DateTimeSpec& specs);
-    void parseDurationSpecs(DurationSpec& specs);
+    template <typename Spec>
+    void parseSpecNames(Spec& specs);
     void parseEmbeddingSpecs(EmbeddingsSpec& specs);
     std::pair<std::string_view, size_t> parseEmbeddingSpec();
     ListGraphQuery* parseListGraphQuery();
@@ -423,9 +434,8 @@ private:
     bool startsQuantifiedPath();
     size_t skipExprEdgePattern(size_t offset);
     size_t skipQuantifiedPath(size_t offset);
-    size_t skipEntityDetail(size_t offset, CypherTokenKind closer);
+    size_t skipEntityDetail(size_t opener);
     size_t skipEdgeRange(size_t offset);
-    size_t skipToCloser(size_t offset, CypherTokenKind closer);
 
     Expr* parseExpr(ExprFollower follower);
     void parseOperand(size_t operatorBase);
@@ -443,7 +453,6 @@ private:
     [[gnu::noinline]] Expr* popOperand();
     BinaryOperator parseComparisonSign();
     ParserUtils::IsTest parseIsTest(SourceLocation& testLocation);
-    UnicodeNormalForm parseOptionalNormalForm();
     UnicodeNormalForm parseNormalForm();
     StringOperator parseStringExprPrefix();
     Expr* parseAtomicExpr();
@@ -481,10 +490,9 @@ private:
     Expr* parseListLiteralItem();
     CaseExpr* parseCaseExpr();
     CaseExpr* parseWhenThenChain();
-    std::pair<CaseExpr::Tests, Expr*> parseWhenThen();
+    Expr* parseWhenThen(CaseExpr::Tests& tests);
     void parseCaseTests(CaseExpr::Tests& tests);
     CaseExpr::Test parseCaseTest();
-    BinaryOperator parseCaseComparisonSign();
 
     Literal* parseLiteral();
     BoolLiteral* parseBoolLiteral();
@@ -499,7 +507,6 @@ private:
     Parameter* parseParameter();
     Symbol* parseName();
     Symbol* parseSymbol();
-    Symbol* parseReservedWord();
 
     bool opensConstruct(size_t offset, bool aliasMayFollow);
     bool braceOpensMapProjection(size_t offset);
@@ -516,11 +523,15 @@ private:
     bool startsPredicate();
     bool startsComparison();
     size_t skipBalanced(size_t offset);
+    void matchBrackets(size_t offset);
     size_t skipLabelExpression(size_t offset);
+    size_t skipLabelConjunction(size_t offset);
+    size_t skipLabelAtom(size_t offset);
 
     static bool startsExpr(CypherTokenKind kind);
     static bool startsLabelAtom(CypherTokenKind kind);
     static bool isInfixWord(CypherTokenKind kind);
+    static bool canFollowLabels(CypherTokenKind kind);
     static bool startsOperandOfKeyword(CypherTokenKind next, bool aliasMayFollow);
     static Expr* getExpr(const PendingOperand& operand);
 };

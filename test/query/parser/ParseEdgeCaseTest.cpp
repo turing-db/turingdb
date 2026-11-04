@@ -2938,10 +2938,8 @@ TEST_F(ParseEdgeCaseTest, parsesLabelExpressionsAndComprehensions) {
                                                     entityType("x", labels({"A"})),
                                                     symbol("B"))}))});
 
-    expectError("RETURN [n:A|B]",
-                "     1 | RETURN [n:A|B]\n"
-                "       |         ^^^\n"
-                "-------* Invalid comprehension. Expected 'variable IN list', or a path '(...)-[...]-(...)' followed by '|'");
+    expectParse("RETURN [n:A|B]",
+                {query({}, returning({list({entityType("n", labelOr({labels({"A"}), labels({"B"})}))})}))});
 
     expectParse("RETURN [1, n:A|B]",
                 {query({}, returning({list({integer(1), entityType("n", labelOr({labels({"A"}), labels({"B"})}))})}))});
