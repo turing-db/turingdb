@@ -1,0 +1,1 @@
+add_turing_test(test_query_ir_doom DoomTest.cpp)
