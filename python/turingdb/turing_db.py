@@ -10,7 +10,6 @@ from .binary_client import BinaryClient
 from .embedded_client import EmbeddedClient
 from .exceptions import TuringDBException
 from .http_client import HTTPClient
-from .protocol import DEFAULT_HOST, DEFAULT_PORT
 
 
 ClientType = Literal["json", "native", "embedded"]
@@ -62,14 +61,14 @@ class TuringDB:
                 raise TuringDBException(
                     "data_dir is not valid for type='json'; pass host instead"
                 )
-            resolved_host = DEFAULT_HOST if host is _UNSET else host
+            resolved_host = "http://localhost:6666" if host is _UNSET else host
             self._impl = HTTPClient(host=resolved_host, token=token)
         elif resolved_type == "native":
             if data_dir is not _UNSET:
                 raise TuringDBException(
                     "data_dir is not valid for type='native'; pass host instead"
                 )
-            resolved_host = DEFAULT_HOST if host is _UNSET else host
+            resolved_host = "http://localhost:6666" if host is _UNSET else host
             binary_host, binary_port = _split_host_port(resolved_host, port)
             self._impl = BinaryClient(host=binary_host, port=binary_port, token=token)
         else:
@@ -186,4 +185,4 @@ def _split_host_port(host: str, port: Optional[Union[int, str]]) -> tuple[str, s
     else:
         resolved_host = host
         resolved_port = port
-    return resolved_host, str(resolved_port if resolved_port is not None else DEFAULT_PORT)
+    return resolved_host, str(resolved_port if resolved_port is not None else 6666)

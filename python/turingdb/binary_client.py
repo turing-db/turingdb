@@ -7,7 +7,6 @@ from pandas import DataFrame
 
 from ._cypher_helpers import CypherHelpersMixin
 from .exceptions import TuringDBException
-from .protocol import DEFAULT_PORT
 from .s3 import S3Client
 
 
@@ -25,7 +24,7 @@ class BinaryClient(CypherHelpersMixin):
     def __init__(
         self,
         host: str = "localhost",
-        port: int | str = DEFAULT_PORT,
+        port: int | str = 6666,
         token: Optional[str] = None,
     ):
         # Deferred import: the compiled .so may be absent on systems that

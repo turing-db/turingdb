@@ -72,7 +72,7 @@ printf 'cd simpledb\nMATCH (n) RETURN count(n)\nquit\n' \
   | stdbuf -oL -eL ./build/tools/turingdb/turingdb -turing-dir <scratch>/qa/turing -load simpledb -p 71NN
 ```
 
-Give each concurrent shell its own port (`-p 7101`, `7102`, …) — the default 6686
+Give each concurrent shell its own port (`-p 7101`, `7102`, …) — the default 6666
 collides.
 
 Prefix a query with `EXPLAIN` for its db and lowered nl IR when triaging a hit. When

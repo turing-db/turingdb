@@ -1,6 +1,6 @@
 from turingdb import TuringDB
 
-client = TuringDB(host="http://localhost:6686")
+client = TuringDB(host="http://localhost:6666")
 graph = "test_graph4"
 client.query(f"CREATE GRAPH {graph}")
 client.set_graph(graph)

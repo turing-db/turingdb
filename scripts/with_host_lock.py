@@ -2,7 +2,7 @@
 """Run a command while holding an exclusive, host-global lock.
 
 The regress suite assumes exclusive use of the machine: every test binds the fixed
-port 6686 and runs a host-wide `pkill -9 turingdb`. Several self-hosted runner
+port 6666 and runs a host-wide `pkill -9 turingdb`. Several self-hosted runner
 instances share one physical host, so concurrent regress jobs would kill each
 other's servers and collide on the port. This serializes them with a kernel flock
 on a shared lock file. The lock is held only while this process lives and the OS

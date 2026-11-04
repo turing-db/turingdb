@@ -338,7 +338,7 @@ jobs:
         name: turingdb-npm-package
         path: npm
 
-    # The regress suite assumes exclusive use of the host (fixed port 6686 and a
+    # The regress suite assumes exclusive use of the host (fixed port 6666 and a
     # host-wide `pkill -9 turingdb`), but several self-hosted runner instances share
     # one physical machine. Serialize regress per host with a kernel flock that the OS
     # releases automatically when the job ends, however it ends.

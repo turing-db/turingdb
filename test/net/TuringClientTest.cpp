@@ -23,7 +23,7 @@ protected:
     }
 
     db::LocalMemory _localMem;
-    net::proto::TuringClient _client {"127.0.0.1", "6686", &_localMem};
+    net::proto::TuringClient _client {"127.0.0.1", "6666", &_localMem};
 };
 
 }
