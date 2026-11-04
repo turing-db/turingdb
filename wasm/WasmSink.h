@@ -120,6 +120,9 @@ public:
     template <typename ColumnT>
     Column* alloc() { return new ColumnT(wireCodeOfElement<typename ColumnT::ValueType>()); }
 
+    template <typename ColumnT>
+    static consteval bool holds() { return true; }
+
     float* allocEmbedding(size_t numFloats);
     std::span<const float> getEmbeddingView(float* data, size_t numFloats);
 

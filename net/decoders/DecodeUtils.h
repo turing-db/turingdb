@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdint.h>
 #include <string>
 
 #include "DecodeContext.h"
@@ -9,6 +10,13 @@
 #include "TuringProtoInBuf.h"
 
 namespace net::proto {
+
+inline void throwIfPathTooLong(WireSize nodeCount) {
+    constexpr size_t MAX_NODE_COUNT = (MAX_WIRE_SIZE / sizeof(uint64_t) + 1) / 2;
+    if (nodeCount > MAX_NODE_COUNT) {
+        throw TuringException("Invalid path node count " + std::to_string(nodeCount));
+    }
+}
 
 template <typename T>
 inline size_t checkedElementCount(WireSize numBytes, const char* valueType) {

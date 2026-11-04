@@ -225,11 +225,7 @@ struct VectorColumnDecoder<db::GraphPath, Sink> {
 
             WireSize nodeCount = 0;
             context->_inBuf->readData(&nodeCount, sizeof(nodeCount));
-
-            constexpr size_t MAX_NODE_COUNT = (MAX_WIRE_SIZE / sizeof(uint64_t) + 1) / 2;
-            if (nodeCount > MAX_NODE_COUNT) {
-                throw TuringException("Invalid path node count " + std::to_string(nodeCount));
-            }
+            throwIfPathTooLong(nodeCount);
 
             db::GraphPath& path = (*typedColumn)[context->_rowIndex + i];
             path.setNodeCount(nodeCount);
@@ -674,12 +670,44 @@ struct ConstColumnDecoder<SinkMapView<Sink>, Sink> {
     }
 };
 
+// The path moves into the column before its IDs arrive: the move hands the column the path's
+// ID buffer, so IDs split across packets still land in the column
+template <ProtoDecodeSink Sink>
+struct ConstColumnDecoder<db::GraphPath, Sink> {
+    using T = db::GraphPath;
+
+    template <ConstColumnOf<T, Sink> Column>
+    static bool decode(DecodeContext* context, Sink* sink, Column* typedColumn) {
+        if (context->_inBuf->readable() < sizeof(WireSize)) {
+            return false;
+        }
+
+        WireSize nodeCount = 0;
+        context->_inBuf->readData(&nodeCount, sizeof(nodeCount));
+        throwIfPathTooLong(nodeCount);
+
+        db::GraphPath path;
+        path.setNodeCount(nodeCount);
+        const std::span<uint64_t> ids = path.getIDs();
+        typedColumn->set(std::move(path));
+
+        if (!readVarLenPayload(context, reinterpret_cast<char*>(ids.data()), ids.size_bytes())) {
+            // See the string branch: completing the resume completes the column.
+            ++context->_columnIndex;
+            context->_rowIndex = 0;
+            return false;
+        }
+        return true;
+    }
+};
+
 template <ProtoDecodeSink Sink>
 struct ConstColumnDecoder<db::PropertyNull, Sink> {
     using T = db::PropertyNull;
 
     template <ConstColumnOf<T, Sink> Column>
     static bool decode(DecodeContext* context, Sink* sink, Column* typedColumn) {
+        typedColumn->set(db::PropertyNull {});
         return true;
     }
 };

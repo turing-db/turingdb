@@ -62,6 +62,11 @@ public:
     template <typename T>
     Column* alloc() { return _localMemory->alloc<T>(); }
 
+    // The server allocates its results from the same pools, so this sink holds every column
+    // the server can send
+    template <typename ColumnT>
+    static consteval bool holds() { return db::LocalMemory::MemoryPools::contains<ColumnT>(); }
+
     // Container builder surface: the decoder reports list and map structure as it comes off
     // the wire. Both kinds are reserved up front and filled through a write cursor, so a
     // container's view is valid from the moment it opens and the parent can be given it

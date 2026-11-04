@@ -352,6 +352,16 @@ void TuringProtoDecoder<Sink>::decodeChunkFooter(SinkColumnContainer<Sink>* cont
     _context._inBuf->readData(&rowCount, sizeof(rowCount));
 
     container->setRowCount(rowCount);
+
+    // A constant null has no bytes, so no CHUNK packet reaches it and it completes here. Any
+    // other column still open has lost bytes.
+    if (rowCount > 0) {
+        decodeIncomingData(container);
+
+        if (_context._columnIndex < container->size()) {
+            throw TuringException("The chunk ended before its columns did");
+        }
+    }
 }
 
 template <ProtoDecodeSink Sink>
