@@ -17,6 +17,8 @@
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Verifier.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
+#include "mlir/Transforms/RegionUtils.h"
+#include "llvm/ADT/SetVector.h"
 
 #include "NLOps.h"
 
@@ -2034,7 +2036,10 @@ void DBLowering::lowerUnwindComputed(mlir::db::UnwindComputed unwind) {
     buildLoopForSource(rows.getResult(), unwind.getOperation());
 }
 
-void DBLowering::lowerElementOperands(mlir::Value source, mlir::OperandRange carried, ElementOperands& operands) {
+void DBLowering::lowerElementOperands(mlir::Operation* op,
+                                      mlir::Value source,
+                                      mlir::OperandRange carried,
+                                      ElementOperands& operands) {
     const mlir::Location loc = _builder.getUnknownLoc();
     mlir::MLIRContext* const context = _builder.getContext();
 
@@ -2060,8 +2065,16 @@ void DBLowering::lowerElementOperands(mlir::Value source, mlir::OperandRange car
         operands._argumentLocations.push_back(loc);
     }
 
+    llvm::SetVector<mlir::Value> readAbove;
+    mlir::getUsedValuesDefinedAbove(op->getRegions(), readAbove);
+
+    for (const mlir::Value value : readAbove) {
+        operands._readAboveChunks.push_back(mapValue(value));
+    }
+
     llvm::SmallVector<mlir::Value, 8> operandChunks {operands._sourceChunk};
     operandChunks.append(operands._carriedChunks.begin(), operands._carriedChunks.end());
+    operandChunks.append(operands._readAboveChunks.begin(), operands._readAboveChunks.end());
 
     setInsertionForNaryOp(operandChunks);
 }
@@ -2128,7 +2141,7 @@ void DBLowering::lowerListComprehension(mlir::db::ListComprehension comprehensio
     mlir::MLIRContext* const context = _builder.getContext();
 
     ElementOperands operands;
-    lowerElementOperands(comprehension.getSource(), comprehension.getColumnsToFilter(), operands);
+    lowerElementOperands(comprehension, comprehension.getSource(), comprehension.getColumnsToFilter(), operands);
 
     // What the body yields names the type of the lists, and that is only known once the
     // body is lowered. The op is created before it all the same, with the source's type
@@ -2171,7 +2184,7 @@ void DBLowering::lowerListPredicate(mlir::db::ListPredicate predicate) {
     mlir::MLIRContext* const context = _builder.getContext();
 
     ElementOperands operands;
-    lowerElementOperands(predicate.getSource(), predicate.getColumnsToFilter(), operands);
+    lowerElementOperands(predicate, predicate.getSource(), predicate.getColumnsToFilter(), operands);
 
     const nl::ChunkType resultType =
         nl::ChunkType::get(context, storage::NullableType::get(context, _builder.getI1Type()));
@@ -2238,7 +2251,7 @@ NLFoldOp DBLowering::lowerFold(DBFoldOp fold, FoldResultType resultTypeOf) {
     const mlir::Location loc = _builder.getUnknownLoc();
 
     ElementOperands operands;
-    lowerElementOperands(fold.getSource(), fold.getColumnsToFilter(), operands);
+    lowerElementOperands(fold, fold.getSource(), fold.getColumnsToFilter(), operands);
 
     const mlir::Value initialChunk = rowAlignedChunk(mapValue(fold.getInitialValue()), operands._sourceChunk);
 
@@ -2253,6 +2266,7 @@ NLFoldOp DBLowering::lowerFold(DBFoldOp fold, FoldResultType resultTypeOf) {
 
         llvm::SmallVector<mlir::Value, 8> operandChunks {operands._sourceChunk, initialAccumulator};
         operandChunks.append(operands._carriedChunks.begin(), operands._carriedChunks.end());
+        operandChunks.append(operands._readAboveChunks.begin(), operands._readAboveChunks.end());
         setInsertionForNaryOp(operandChunks);
 
         NLFoldOp folded = _builder.create<NLFoldOp>(loc,

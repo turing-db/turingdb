@@ -319,14 +319,20 @@ private:
     // What the two share: the chunks an op over the elements of one row's list reads.
     // The source is laid out over the carried chunks where it is a constant, and the
     // body's arguments are the element, the row tag and one chunk per carried column.
+    // _readAboveChunks are the values the body reads from above the op, which the op has to
+    // follow as it follows its operands.
     struct ElementOperands {
         mlir::Value _sourceChunk;
         llvm::SmallVector<mlir::Value, 4> _carriedChunks;
+        llvm::SmallVector<mlir::Value, 4> _readAboveChunks;
         llvm::SmallVector<mlir::Type, 4> _argumentTypes;
         llvm::SmallVector<mlir::Location, 4> _argumentLocations;
     };
 
-    void lowerElementOperands(mlir::Value source, mlir::OperandRange carried, ElementOperands& operands);
+    void lowerElementOperands(mlir::Operation* op,
+                              mlir::Value source,
+                              mlir::OperandRange carried,
+                              ElementOperands& operands);
 
     // Lowers the body of such an op into @param nlBody, whose arguments are already bound,
     // and hands back the chunks its yield names. The nl yield is the caller's to create,
