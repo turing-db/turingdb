@@ -1351,15 +1351,17 @@ LogicalResult Output::verify() {
     return success();
 }
 
-// avg and stdev accumulate as f64, so their accumulator state must be an f64;
-// sum/min/max accumulate in the value's own type, so any value element type is
-// fine here (the update and result ops check the input/output against it).
+// stdev and avg of numbers accumulate as f64, so their accumulator state must be an f64;
+// sum/min/max and avg of durations or of tagged cells accumulate in the value's own type,
+// so any value element type is fine there (the update and result ops check the
+// input/output against it).
 LogicalResult Aggregate::verify() {
-    if (storage::reducesToADouble(getKind())) {
-        const auto stateType = cast<AggregateStateType>(getState().getType());
-        if (!isa<Float64Type>(stateType.getElementType())) {
-            return emitOpError("avg and stdev must produce an f64 accumulator state");
-        }
+    const Type stateElement = cast<AggregateStateType>(getState().getType()).getElementType();
+    const bool foldsIntoDouble = storage::reducesToADouble(getKind(), stateElement);
+    const bool holdsADouble = isa<Float64Type>(stateElement);
+
+    if (foldsIntoDouble && !holdsADouble) {
+        return emitOpError("avg of numbers and stdev must produce an f64 accumulator state");
     }
 
     return success();
@@ -1371,24 +1373,24 @@ LogicalResult Aggregate::verify() {
 // rather than folding into a wrongly-typed or wrongly-initialized accumulator.
 LogicalResult AggregateUpdate::verify() {
     const storage::AggregateKind kind = getKind();
-    const bool foldsIntoDouble = storage::reducesToADouble(kind);
     const Type accumulatorType = cast<AggregateStateType>(getState().getType()).getElementType();
 
     // A type-erased column of tagged cells has no one value type: every cell is read
-    // through its own tag. avg and stdev fold one into an f64, sum into a tagged cell
-    // holding an integer until a float joins it, and min/max into a tagged cell holding
+    // through its own tag. stdev folds one into an f64, sum and avg into a tagged cell
+    // holding an integer, a float or a duration, and min/max into a tagged cell holding
     // the winning one.
     const auto rowsChunk = cast<ChunkType>(getRows().getType());
     const Type rowsElement = rowsChunk.getElementType();
     const auto rowsNullable = dyn_cast<storage::NullableType>(rowsElement);
     const Type reducedElement = rowsNullable ? rowsNullable.getValueType() : rowsElement;
+    const bool foldsIntoDouble = storage::reducesToADouble(kind, reducedElement);
     const bool taggedCells = isa<storage::AnyType>(reducedElement);
     if (taggedCells && !foldsIntoDouble && !isa<storage::AnyType>(accumulatorType)) {
-        return emitOpError("a sum, min or max over type-erased cells must fold into a tagged cell accumulator state");
+        return emitOpError("a sum, avg, min or max over type-erased cells must fold into a tagged cell accumulator state");
     }
 
     // Every other input is a property value chunk; its value type is what the fold
-    // reads, and sum/min/max fold into an accumulator of that type.
+    // reads, and sum/min/max and avg of durations fold into an accumulator of that type.
     if (!taggedCells) {
         const Type declaredValueType = aggregateValueType(getRows().getType());
         if (!declaredValueType) {
@@ -1401,13 +1403,14 @@ LogicalResult AggregateUpdate::verify() {
         const Type inputValueType = untypedNull ? IntegerType::get(getContext(), 64) : declaredValueType;
 
         if (!foldsIntoDouble && inputValueType != accumulatorType) {
-            return emitOpError("sum/min/max must fold into an accumulator of the input's value type");
+            return emitOpError("sum/min/max and avg of durations must fold into an accumulator of the input's value type");
         }
     }
 
-    // avg and stdev fold any numeric input into an f64 accumulator, tagged cells included.
+    // stdev folds any numeric input into an f64 accumulator, tagged cells included, and
+    // avg folds numbers into one.
     if (foldsIntoDouble && !isa<Float64Type>(accumulatorType)) {
-        return emitOpError("avg and stdev must fold into an f64 accumulator state");
+        return emitOpError("avg of numbers and stdev must fold into an f64 accumulator state");
     }
 
     // The accumulator's reset depends on the producer's kind (a present zero for
@@ -1433,16 +1436,17 @@ LogicalResult AggregateResult::verify() {
         return emitOpError("result must be a nullable value chunk");
     }
 
-    // avg and stdev emit an f64 result from an f64 accumulator; sum/min/max emit a
-    // result of the accumulator's own value type.
+    // stdev and avg of numbers emit an f64 result from an f64 accumulator; sum/min/max
+    // and avg of durations or of tagged cells emit a result of the accumulator's own
+    // value type.
     const Type accumulatorType = cast<AggregateStateType>(getState().getType()).getElementType();
-    if (storage::reducesToADouble(kind)) {
+    if (storage::reducesToADouble(kind, accumulatorType)) {
         const bool bothF64 = isa<Float64Type>(accumulatorType) && isa<Float64Type>(resultValueType);
         if (!bothF64) {
-            return emitOpError("avg and stdev must emit an f64 result from an f64 accumulator state");
+            return emitOpError("avg of numbers and stdev must emit an f64 result from an f64 accumulator state");
         }
     } else if (resultValueType != accumulatorType) {
-        return emitOpError("sum/min/max must emit a result of the accumulator's value type");
+        return emitOpError("sum/min/max and avg of durations must emit a result of the accumulator's value type");
     }
 
     if (Aggregate producer = producingAggregate(getState())) {

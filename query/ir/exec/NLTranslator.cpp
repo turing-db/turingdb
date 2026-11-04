@@ -16,6 +16,7 @@
 #include "ParameterMap.h"
 #include "ParameterValue.h"
 #include "StorageAttributes.h"
+#include "StorageEnums.h"
 
 #include "IRConstantColumn.h"
 #include "IRRowAlignment.h"
@@ -3869,11 +3870,15 @@ void NLTranslator::translatePercentile(mlir::Operation* operation, NLStmtContain
 
     const Column* const list = getColumn(operation->getOperand(0));
     const Column* const percentile = getColumn(percentileValue);
+    const mlir::Type percentileType = percentileValue.getType();
+    const NLPercentileReadFunction percentileRead = isAnyChunk(percentileType)
+                                                      ? NLExecutor::selectCellPercentileRead(percentile)
+                                                      : NLExecutor::selectPercentileRead(nullableChunkValueType(percentileType));
 
     NLPercentileData* data = _program->allocFunctionData<NLPercentileData>(list,
                                                                            NLExecutor::selectListRead(list),
                                                                            percentile,
-                                                                           NLExecutor::selectPercentileRead(nullableChunkValueType(percentileValue.getType())),
+                                                                           percentileRead,
                                                                            result);
 
     if (mlir::isa<nl::PercentileCont>(operation)) {
@@ -5700,21 +5705,22 @@ void NLTranslator::translateAggregateState(nl::Aggregate aggregate, NLStmtContai
     _aggregateStates[aggregate.getState()] = state;
 
     // The state handle's element type is the accumulator's value type (f64 for an
-    // avg, the input type otherwise), baked during lowering. Allocate the single-row
-    // nullable value column the reduction folds into, and the reset that
+    // avg of numbers, the input type otherwise), baked during lowering. Allocate the
+    // single-row nullable value column the reduction folds into, and the reset that
     // re-initializes it each time the block holding this nl.aggregate runs (once at
-    // function scope for a top-level aggregate): a present zero for sum/avg, null for
-    // min/max.
+    // function scope for a top-level aggregate): a present zero for a typed sum/avg, null
+    // for min/max and for a tagged cell.
     const auto stateType = mlir::cast<nl::AggregateStateType>(aggregate.getState().getType());
     const mlir::Type accumulatorElement = stateType.getElementType();
     const AggregateKind kind = toRuntimeAggregateKind(aggregate.getKind());
 
-    // A sum or a min/max over type-erased cells keeps a cell, which names no value type
+    // A sum, an avg or a min/max over type-erased cells keeps a cell, which names no value
+    // type
     Column* accumulator = nullptr;
     NLAggregateResetFunction reset = nullptr;
     if (mlir::isa<storage::AnyType>(accumulatorElement)) {
         accumulator = allocOptCellColumn();
-        reset = NLExecutor::selectTaggedAggregateReset(kind);
+        reset = NLExecutor::selectTaggedAggregateReset();
     } else {
         const ValueType accumulatorType = valueTypeFromElementType(accumulatorElement);
         accumulator = allocSingleRowOptColumnForValueType(accumulatorType);
@@ -5760,7 +5766,7 @@ void NLTranslator::translateAggregateResult(nl::AggregateResult result, NLStmtCo
     NLAggregateResultFunction emit = nullptr;
     if (isNullableAny(resultElement)) {
         output = allocOptCellColumn();
-        emit = NLExecutor::selectTaggedAggregateResult();
+        emit = NLExecutor::selectTaggedAggregateResult(kind);
     } else {
         const ValueType resultType = nullableChunkValueType(resultChunk.getType());
         output = allocOptColumnForValueType(resultType);
@@ -5769,7 +5775,10 @@ void NLTranslator::translateAggregateResult(nl::AggregateResult result, NLStmtCo
 
     _valueSlots[resultChunk] = output;
 
-    NLAggregateResultData* data = _program->allocFunctionData<NLAggregateResultData>(state, output, emit);
+    NLAggregateResultData* data = _program->allocFunctionData<NLAggregateResultData>(state,
+                                                                                    output,
+                                                                                    emit,
+                                                                                    _program->allocStepBuffers());
     body->emplaceStmt(&NLExecutor::runAggregateResult, data);
 }
 
@@ -5900,14 +5909,14 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
         case GroupAggregateKind::StDevPDistinct:
         case GroupAggregateKind::First: {
             // sum/min/max/avg/stdev/first reduce the values themselves, so the input must be
-            // a nullable value chunk; avg and stdev accumulate as f64, the rest in the input's
-            // own type. nullableChunkValueType rejects an ID chunk here. The distinct
-            // kinds keep the shape of the kind they mirror and differ only in the
+            // a nullable value chunk; stdev and avg of numbers accumulate as f64, the rest in
+            // the input's own type. nullableChunkValueType rejects an ID chunk here. The
+            // distinct kinds keep the shape of the kind they mirror and differ only in the
             // fold, which charges each of a group's values once.
             //
-            // A type-erased input carries a type per cell, so avg and stdev reduce it by tag
-            // into an f64, and sum and min/max/first keep a cell: sum's is an integer until a
-            // float joins it.
+            // A type-erased input carries a type per cell, so stdev reduces it by tag into an
+            // f64, and sum, avg and min/max/first keep a cell: the sum of sum and avg is an
+            // integer until a float joins it, or a duration.
             const mlir::Type reducedElement = mlir::cast<nl::ChunkType>(chunkType).getElementType();
             const bool reducesNullableTaggedCells = isNullableAny(reducedElement);
             const bool reducesTaggedCells = mlir::isa<storage::AnyType>(reducedElement)
@@ -5917,13 +5926,12 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
                                   || (kind == GroupAggregateKind::Max)
                                   || (kind == GroupAggregateKind::First);
             const bool sums = (kind == GroupAggregateKind::Sum) || (kind == GroupAggregateKind::SumDistinct);
-            const bool keepsTaggedCells = reducesTaggedCells && (keepsAValue || sums);
             const bool averages = (kind == GroupAggregateKind::Avg) || (kind == GroupAggregateKind::AvgDistinct);
-            const bool deviates = (kind == GroupAggregateKind::StDev)
-                               || (kind == GroupAggregateKind::StDevP)
-                               || (kind == GroupAggregateKind::StDevDistinct)
-                               || (kind == GroupAggregateKind::StDevPDistinct);
-            const bool accumulatesAsDouble = averages || deviates;
+            const bool keepsTaggedCells = reducesTaggedCells && (keepsAValue || sums || averages);
+
+            const auto nullableReduced = mlir::dyn_cast<storage::NullableType>(reducedElement);
+            const mlir::Type reducedValue = nullableReduced ? nullableReduced.getValueType() : reducedElement;
+            const bool accumulatesAsDouble = storage::reducesToADouble(mlirKind, reducedValue);
 
             const ValueType inputType = reducesTaggedCells ? ValueType::Double
                                                            : nullableChunkValueType(chunkType);
@@ -5932,7 +5940,7 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
             if (keepsTaggedCells) {
                 aggregate._accumulator = allocOptCellColumn();
                 aggregate._grow = NLExecutor::selectTaggedGroupAggregateGrow(kind);
-                aggregate._emit = NLExecutor::selectTaggedGroupAggregateEmit();
+                aggregate._emit = NLExecutor::selectTaggedGroupAggregateEmit(kind);
             } else {
                 aggregate._accumulator = allocOptColumnForValueType(accumulatorType);
                 aggregate._grow = NLExecutor::selectGroupAggregateGrow(kind, accumulatorType);
@@ -6034,7 +6042,8 @@ void NLTranslator::translateGroupAggregateLoop(const IteratorConfig& config,
         throw IRException("nl.group_aggregate loop must bind one variable per output column");
     }
 
-    NLGroupAggregateLoopData* loopData = _program->allocFunctionData<NLGroupAggregateLoopData>(state);
+    NLGroupAggregateLoopData* loopData = _program->allocFunctionData<NLGroupAggregateLoopData>(state,
+                                                                                          _program->allocStepBuffers());
     loopData->setLimit(limit);
 
     // Each loop variable is the emit output of one column: the first keyCount are the
@@ -6471,7 +6480,7 @@ void NLTranslator::translateCollectLoop(const IteratorConfig& config,
         throw IRException("nl.collect loop must bind one variable per grouping key, one per list, and one per aggregate");
     }
 
-    NLCollectLoopData* loopData = _program->allocFunctionData<NLCollectLoopData>(state);
+    NLCollectLoopData* loopData = _program->allocFunctionData<NLCollectLoopData>(state, _program->allocStepBuffers());
 
     // The first keyCount loop variables are the grouping keys (filled by slicing their
     // key buffers, one row per group); wire each into its key column's output slot.

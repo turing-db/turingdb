@@ -2438,12 +2438,14 @@ private:
 // Handlers of one aggregate, selected during translation from the reduction and
 // the column value type (as the count / gather / append families are), so the
 // per-type fan-out lives in one place. Reset re-initializes the accumulator (a
-// present zero for sum/avg, null for min/max) and zeroes the count; update folds
+// present zero for a typed sum/avg, null for min/max and a tagged cell) and zeroes the
+// count; update folds
 // a chunk's non-null values into the accumulator; result writes the single
-// reduced row into the output column.
+// reduced row into the output column, building a value it computes - the average of
+// tagged cells - in the step buffers.
 using NLAggregateResetFunction = void (*)(NLAggregateState* state);
 using NLAggregateUpdateFunction = void (*)(NLAggregateState* state, const Column* input);
-using NLAggregateResultFunction = void (*)(const NLAggregateState* state, Column* output);
+using NLAggregateResultFunction = void (*)(const NLAggregateState* state, Column* output, NLStepBuffers* stepBuffers);
 
 // nl.aggregate data: re-initializes an accumulator each time the block it lives in
 // runs - once at function scope for a top-level aggregate. The value sibling of
@@ -2494,21 +2496,27 @@ private:
 // of NLCountResultData.
 class NLAggregateResultData : public NLFunctionData {
 public:
-    NLAggregateResultData(NLAggregateState* state, Column* output, NLAggregateResultFunction result)
+    NLAggregateResultData(NLAggregateState* state,
+                          Column* output,
+                          NLAggregateResultFunction result,
+                          NLStepBuffers* stepBuffers)
         : _state(state),
         _output(output),
-        _result(result)
+        _result(result),
+        _stepBuffers(stepBuffers)
     {
     }
 
     NLAggregateState* getState() const { return _state; }
     Column* getOutput() const { return _output; }
     NLAggregateResultFunction getResult() const { return _result; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
 private:
     NLAggregateState* _state {nullptr};
     Column* _output {nullptr};
     NLAggregateResultFunction _result {nullptr};
+    NLStepBuffers* _stepBuffers {nullptr};
 };
 
 // The reduction one function of a grouped aggregation applies. The runtime
@@ -2607,13 +2615,15 @@ using NLReownRowsFunction = void (*)(Column* column, const std::vector<size_t>& 
 
 // Materialize the reduction of groups [begin, begin + count) into an emit output
 // column: a copy of the accumulator slice (sum/min/max), a per-group divide
-// (avg), or the tally slice (count). Runs once per emit chunk. One per kind /
+// (avg), or the tally slice (count). A value it computes - the average of tagged
+// cells - is built in the step buffers. Runs once per emit chunk. One per kind /
 // value type.
 using NLGroupAggregateEmitFunction = void (*)(const Column* accumulator,
                                               const std::vector<uint64_t>& counts,
                                               size_t begin,
                                               size_t count,
-                                              Column* output);
+                                              Column* output,
+                                              NLStepBuffers* stepBuffers);
 
 // The group table of one grouped aggregation: it maps a serialized grouping-key
 // tuple to a dense group index (0, 1, 2, ... in first-seen order). Each distinct
@@ -2778,12 +2788,14 @@ private:
 // chunk. The grouped sibling of NLSortLoopData.
 class NLGroupAggregateLoopData : public NLFunctionData {
 public:
-    NLGroupAggregateLoopData(NLGroupAggregateState* state)
-        : _state(state)
+    NLGroupAggregateLoopData(NLGroupAggregateState* state, NLStepBuffers* stepBuffers)
+        : _state(state),
+        _stepBuffers(stepBuffers)
     {
     }
 
     NLGroupAggregateState* getState() const { return _state; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
     NLLimitState* getLimit() const { return _limit; }
     void setLimit(NLLimitState* limit) { _limit = limit; }
@@ -2793,6 +2805,7 @@ public:
 
 private:
     NLGroupAggregateState* _state {nullptr};
+    NLStepBuffers* _stepBuffers {nullptr};
     NLLimitState* _limit {nullptr};
     NLStmtContainer _stmts;
 };
@@ -3148,18 +3161,21 @@ private:
 // NLGroupAggregateLoopData.
 class NLCollectLoopData : public NLFunctionData {
 public:
-    NLCollectLoopData(NLCollectState* state)
-        : _state(state)
+    NLCollectLoopData(NLCollectState* state, NLStepBuffers* stepBuffers)
+        : _state(state),
+        _stepBuffers(stepBuffers)
     {
     }
 
     NLCollectState* getState() const { return _state; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
 
 private:
     NLCollectState* _state {nullptr};
+    NLStepBuffers* _stepBuffers {nullptr};
     NLStmtContainer _stmts;
 };
 

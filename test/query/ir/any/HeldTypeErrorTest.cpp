@@ -56,8 +56,8 @@ TEST_F(HeldTypeErrorTest, testsAConditionThatIsNoBoolean) {
 }
 
 TEST_F(HeldTypeErrorTest, aggregatesAValueThatIsNoNumber) {
-    expectMessage("UNWIND [1, 'a'] AS x RETURN sum(x)", "sum(), avg() and stdev() read numbers, not 'String'");
-    expectMessage("UNWIND [1, true] AS x RETURN avg(x)", "sum(), avg() and stdev() read numbers, not 'Bool'");
+    expectMessage("UNWIND [1, 'a'] AS x RETURN sum(x)", "sum() and avg() read numbers or durations, not 'String'");
+    expectMessage("UNWIND [1, true] AS x RETURN avg(x)", "sum() and avg() read numbers or durations, not 'Bool'");
 }
 
 TEST_F(HeldTypeErrorTest, takesThePercentileOfAValueThatIsNoNumber) {

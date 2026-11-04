@@ -403,15 +403,10 @@ nl::ChunkType procedureChunkType(mlir::OpBuilder& builder, const NamedProcedureT
     return nl::ChunkType::get(context, elementType);
 }
 
-// The accumulator (and result) element type of an aggregate over a column whose
-// nullable value chunk wraps inputElement - or over a type-erased column, whose
-// inputElement is the tagged cell itself. avg and stdev always reduce to an f64; sum,
-// min and max keep the input's own type. Throws for a value type the reduction
-// cannot handle: sum/avg/stdev need a numeric column, min/max an orderable one (so a
-// string sum, a bool sum or an embedding min is rejected, matching Cypher). A tagged
-// cell is numeric only once read, so sum, avg and stdev accept one. Its sum is an
-// integer or a float depending on the cells it reads, so it stays a tagged cell, as a
-// min/max of tagged cells does.
+// The accumulator (and result) element type of an aggregate over inputElement, the value
+// type its nullable chunk wraps or the tagged cell itself: stdev is an f64, avg is one over
+// numbers, and the rest keep the input's type. Throws for a value type the reduction cannot
+// take, so a string sum or an embedding min is rejected as Cypher rejects it.
 mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
                                       storage::AggregateKind kind,
                                       mlir::Type inputElement) {
@@ -431,7 +426,7 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
     // answer rides the integer column an untyped null is laid out over anywhere else,
     // except avg's and stdev's, which are floats whatever they reduced.
     if (mlir::isa<mlir::NoneType>(inputElement)) {
-        if (storage::reducesToADouble(kind)) {
+        if (storage::reducesToADouble(kind, inputElement)) {
             return builder.getF64Type();
         }
 
@@ -440,18 +435,18 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
 
     switch (kind) {
         case storage::AggregateKind::Sum: {
-            if (!isNumeric && !isTaggedCell) {
-                throw IRException("db.sum requires a numeric column");
+            if (!isNumeric && !isDuration && !isTaggedCell) {
+                throw IRException("db.sum requires a numeric or a duration column");
             }
             return inputElement;
         }
         break;
 
         case storage::AggregateKind::Avg: {
-            if (!isNumeric && !isTaggedCell) {
-                throw IRException("db.avg requires a numeric column");
+            if (!isNumeric && !isDuration && !isTaggedCell) {
+                throw IRException("db.avg requires a numeric or a duration column");
             }
-            return builder.getF64Type();
+            return storage::reducesToADouble(kind, inputElement) ? builder.getF64Type() : inputElement;
         }
         break;
 
@@ -875,7 +870,7 @@ bool reducesValues(storage::GroupAggregateKind kind) {
 // path: count and count_distinct are a single non-null unsigned i64 per group;
 // sum/min/max/avg reduce the input's values, so they require a nullable value column
 // (an ID column is rejected) and follow aggregateResultElementType - sum/min/max keep
-// the value type, avg widens to f64.
+// the value type, avg widens numbers to f64.
 nl::ChunkType groupAggregateResultChunkType(mlir::OpBuilder& builder,
                                             storage::GroupAggregateKind kind,
                                             mlir::Value inputChunk,
@@ -1926,7 +1921,7 @@ void DBLowering::lowerUnwindRange(mlir::db::UnwindRange unwindRange) {
     const mlir::Value cardinality = cardinalityDriver(operandChunks);
 
     for (mlir::Value& bound : bounds) {
-        bound = integerBoundChunk(rowAlignedChunk(bound, cardinality));
+        bound = numberOperandChunk(rowAlignedChunk(bound, cardinality));
     }
 
     operandChunks.assign(bounds.begin(), bounds.end());
@@ -2628,11 +2623,11 @@ void DBLowering::lowerListSlice(mlir::db::ListSlice slice) {
     listChunk = rowAlignedChunk(listChunk, cardinality);
 
     if (fromChunk) {
-        fromChunk = integerBoundChunk(rowAlignedChunk(fromChunk, cardinality));
+        fromChunk = numberOperandChunk(rowAlignedChunk(fromChunk, cardinality));
     }
 
     if (toChunk) {
-        toChunk = integerBoundChunk(rowAlignedChunk(toChunk, cardinality));
+        toChunk = numberOperandChunk(rowAlignedChunk(toChunk, cardinality));
     }
 
     // The slice holds the elements the sliced value holds, and is read as nullable: a row
@@ -2678,7 +2673,7 @@ void DBLowering::lowerPercentile(mlir::Operation* operation) {
 
     const mlir::Value cardinality = cardinalityDriver({listChunk, percentileChunk});
     listChunk = rowAlignedChunk(listChunk, cardinality);
-    percentileChunk = nullableValueChunk(rowAlignedChunk(percentileChunk, cardinality));
+    percentileChunk = numberOperandChunk(rowAlignedChunk(percentileChunk, cardinality));
 
     // percentileDisc answers one of the values, which keeps the number type a list of
     // numbers names; a list of tagged cells - or of untyped nulls - answers the tagged
@@ -2766,7 +2761,7 @@ void DBLowering::lowerRange(mlir::db::Range range) {
     const mlir::Value cardinality = cardinalityDriver(bounds);
 
     for (mlir::Value& bound : bounds) {
-        bound = integerBoundChunk(rowAlignedChunk(bound, cardinality));
+        bound = numberOperandChunk(rowAlignedChunk(bound, cardinality));
     }
 
     mlir::MLIRContext* const context = _builder.getContext();
@@ -4917,8 +4912,8 @@ void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::
         ? inputChunkElement
         : mlir::cast<storage::NullableType>(inputChunkElement).getValueType();
 
-    // The accumulator (and result) element type: avg widens to f64, the rest keep
-    // the input type. This also validates the reduction against the value type.
+    // The accumulator (and result) element type: avg widens numbers to f64, the rest
+    // keep the input type. This also validates the reduction against the value type.
     const mlir::Type resultElement = aggregateResultElementType(_builder, kind, inputElement);
 
     // The accumulator is hoisted to the top of the root block, above every loop of
@@ -5035,8 +5030,8 @@ void DBLowering::lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate) {
     // The emit iterator yields one chunk per output column: the grouping-key columns
     // (same chunk types as the key inputs) followed by the aggregate results. A count
     // result is a single non-null unsigned i64 per group; sum/min/max keep the
-    // input's value type and avg widens to f64 - all resolved here from each kind and
-    // its input chunk.
+    // input's value type and avg widens numbers to f64 - all resolved here from each
+    // kind and its input chunk.
     llvm::SmallVector<mlir::Type, 4> chunkTypes;
     for (size_t keyIndex = 0; keyIndex < keyCount; keyIndex++) {
         chunkTypes.push_back(chunks[keyIndex].getType());
@@ -7626,7 +7621,7 @@ mlir::Value DBLowering::nullableValueChunk(mlir::Value chunk) {
     return toNullableChunk(chunk, valueElement);
 }
 
-mlir::Value DBLowering::integerBoundChunk(mlir::Value chunk) {
+mlir::Value DBLowering::numberOperandChunk(mlir::Value chunk) {
     if (holdsTaggedCells(chunk.getType())) {
         return chunk;
     }

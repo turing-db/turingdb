@@ -195,3 +195,7 @@ add_ir_tests(test_query_ir_constant_key_write ConstantKeyWriteTest.cpp)
 add_ir_tests(test_query_ir_collect_beside_aggregates CollectBesideAggregatesTest.cpp)
 
 add_turing_test(test_query_ir_limit_past_a_collect LimitPastACollectTest.cpp)
+
+add_turing_test(test_query_ir_duration_sum_average DurationSumAverageTest.cpp)
+
+add_turing_test(test_query_ir_percentile_held_in_a_cell PercentileHeldInACellTest.cpp)

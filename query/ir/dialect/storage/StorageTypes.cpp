@@ -10,10 +10,41 @@ using namespace mlir::storage;
 
 #include "StorageEnums.cpp.inc"
 
-bool mlir::storage::reducesToADouble(AggregateKind kind) {
-    return kind == AggregateKind::Avg
+bool mlir::storage::reducesToADouble(AggregateKind kind, Type values) {
+    const bool averagesNumbers = kind == AggregateKind::Avg && !isa<DurationType, AnyType>(values);
+
+    return averagesNumbers
         || kind == AggregateKind::StDev
         || kind == AggregateKind::StDevP;
+}
+
+bool mlir::storage::reducesToADouble(GroupAggregateKind kind, Type values) {
+    switch (kind) {
+        case GroupAggregateKind::Avg:
+        case GroupAggregateKind::AvgDistinct:
+            return reducesToADouble(AggregateKind::Avg, values);
+        break;
+
+        case GroupAggregateKind::StDev:
+        case GroupAggregateKind::StDevP:
+        case GroupAggregateKind::StDevDistinct:
+        case GroupAggregateKind::StDevPDistinct:
+            return true;
+        break;
+
+        case GroupAggregateKind::Count:
+        case GroupAggregateKind::CountDistinct:
+        case GroupAggregateKind::CountRows:
+        case GroupAggregateKind::Sum:
+        case GroupAggregateKind::SumDistinct:
+        case GroupAggregateKind::Min:
+        case GroupAggregateKind::Max:
+        case GroupAggregateKind::First:
+            return false;
+        break;
+    }
+
+    return false;
 }
 
 mlir::Type mlir::storage::joinedElementType(Type lhs, Type rhs) {

@@ -3482,15 +3482,59 @@ void aggregateResetNull(NLAggregateState* state) {
 
 // Add two aggregate values with defined overflow. A signed integer sum wraps in
 // two's complement (matching Cypher's Java-long integer sum) rather than invoking
-// C++ signed-overflow undefined behavior; unsigned integers already wrap by the
-// language, and doubles use the built-in +.
+// C++ signed-overflow undefined behavior, and a duration sum wraps its count of
+// microseconds the same way; unsigned integers already wrap by the language, and
+// doubles use the built-in +.
 template <typename Primitive>
 Primitive numericAdd(Primitive accumulator, Primitive value) {
     if constexpr (std::is_integral_v<Primitive> && std::is_signed_v<Primitive>) {
         using Unsigned = std::make_unsigned_t<Primitive>;
         return static_cast<Primitive>(static_cast<Unsigned>(accumulator) + static_cast<Unsigned>(value));
+    } else if constexpr (std::is_same_v<Primitive, types::Duration::Primitive>) {
+        return Primitive(numericAdd(accumulator.getMicroseconds(), value.getMicroseconds()));
     } else {
         return accumulator + value;
+    }
+}
+
+template <typename Primitive>
+using AverageTotal = std::conditional_t<std::is_same_v<Primitive, types::Duration::Primitive>,
+                                        types::Duration::Primitive,
+                                        types::Double::Primitive>;
+
+template <typename Primitive>
+AverageTotal<Primitive> addToAverageTotal(AverageTotal<Primitive> total, Primitive value) {
+    if constexpr (std::is_same_v<Primitive, types::Duration::Primitive>) {
+        return numericAdd(total, value);
+    } else {
+        return total + static_cast<types::Double::Primitive>(value);
+    }
+}
+
+types::Double::Primitive averageOf(types::Double::Primitive total, uint64_t count) {
+    return total / static_cast<types::Double::Primitive>(count);
+}
+
+// A mean finer than a microsecond truncates toward zero, as a duration divided by an
+// integer does
+types::Duration::Primitive averageOf(types::Duration::Primitive total, uint64_t count) {
+    return total / static_cast<int64_t>(count);
+}
+
+template <typename Select>
+void dispatchAverageTotal(ValueType totalType, Select&& select) {
+    switch (totalType) {
+        case ValueType::Double:
+            select.template operator()<types::Double::Primitive>();
+        break;
+
+        case ValueType::Duration:
+            select.template operator()<types::Duration::Primitive>();
+        break;
+
+        default:
+            throw IRException("avg answers a double or a duration");
+        break;
     }
 }
 
@@ -3572,7 +3616,7 @@ void aggregateUpdateMinMax(NLAggregateState* state, const Column* input) {
     }
 }
 
-// The number a tagged cell holds, whatever numeric type its tag names. A reduction over
+// The number a tagged cell holds, whatever numeric type its tag names. A deviation over
 // a type-erased column is defined over numbers only, so any other tag is a query error -
 // the check the static column types make for a typed column, made per row here.
 double taggedNumericValue(const CellView element) {
@@ -3592,7 +3636,7 @@ double taggedNumericValue(const CellView element) {
         break;
 
         default:
-            throw IRException(fmt::format("sum(), avg() and stdev() read numbers, not '{}'", queryTypeName(tag)));
+            throw IRException(fmt::format("stDev() and stDevP() read numbers, not '{}'", queryTypeName(tag)));
         break;
     }
 }
@@ -3666,7 +3710,7 @@ void aggregateUpdateDeviation(NLAggregateState* state, const Column* input) {
 }
 
 template <bool Population>
-void aggregateResultDeviation(const NLAggregateState* state, Column* output) {
+void aggregateResultDeviation(const NLAggregateState* state, Column* output, NLStepBuffers* stepBuffers) {
     const auto& slots = static_cast<const ColumnOptVector<double>*>(state->getAccumulator())->getRaw();
     auto& outputRaw = static_cast<ColumnOptVector<double>*>(output)->getRaw();
 
@@ -3731,7 +3775,8 @@ void groupEmitDeviation(const Column* accumulator,
                         const std::vector<uint64_t>& counts,
                         size_t begin,
                         size_t count,
-                        Column* output) {
+                        Column* output,
+                        NLStepBuffers* stepBuffers) {
     const auto& raw = static_cast<const ColumnOptVector<double>*>(accumulator)->getRaw();
     auto& outputRaw = static_cast<ColumnOptVector<double>*>(output)->getRaw();
     outputRaw.resize(count);
@@ -3791,131 +3836,193 @@ NLAggregateUpdateFunction selectDeviationUpdate(ValueType inputType) {
     return nullptr;
 }
 
-// Fold a chunk of tagged cells into avg's running f64 sum, counting the ones folded. A
-// cell tagged null is skipped, as a null value column row is.
-template <typename Cell>
-void aggregateUpdateTaggedAvg(NLAggregateState* state, const Column* input) {
-    auto* accumulator = static_cast<ColumnOptVector<double>*>(state->getAccumulator());
-    std::optional<double>& current = accumulator->getRaw().front();
-    const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
-
-    double running = current.value();
-    size_t seen = 0;
-
-    for (const Cell& cell : inputRaw) {
-        const std::optional<CellView> element = presentCell(cell);
-        if (!element) {
-            continue;
-        }
-
-        running += taggedNumericValue(*element);
-        seen++;
-    }
-
-    current = running;
-    state->addCount(seen);
-}
-
 constexpr std::byte INTEGER_ZERO_CELL[sizeof(CellTag) + sizeof(types::Int64::Primitive)] {
     static_cast<std::byte>(CellTag::Int),
 };
 
-// The running sum of tagged cells: an integer while every number summed is one, and a
-// float from the first float on, as Cypher sums mixed numbers. Integers wrap as an integer
-// column's sum does.
+// The running sum of tagged cells, as Cypher adds them: an integer while every number
+// summed is one, a float from the first float on, and a duration over durations. A null
+// sum has summed nothing yet. Integers and durations wrap as a typed column's sum does.
 class NLTaggedSum {
 public:
-    explicit NLTaggedSum(CellView sum) {
-        add(sum);
-    }
-
-    void add(CellView number) {
-        const CellTag tag = number.getTag();
-
-        if (tag == CellTag::Int) {
-            addInteger(number.getAs<types::Int64::Primitive>());
-        } else if (tag == CellTag::UInt) {
-            addInteger(static_cast<types::Int64::Primitive>(number.getAs<types::UInt64::Primitive>()));
-        } else {
-            addReal(taggedNumericValue(number));
+    explicit NLTaggedSum(const std::optional<CellView>& sum) {
+        if (sum.has_value()) {
+            add(*sum);
         }
     }
 
-    CellView own(NLValueStore& values) const {
-        ListBuffer<>::ListItemVariant item = _isReal ? ListBuffer<>::ListItemVariant {_real}
-                                                     : ListBuffer<>::ListItemVariant {_integer};
+    void add(CellView value) {
+        const CellTag tag = value.getTag();
+
+        switch (tag) {
+            case CellTag::Int:
+                addInteger(tag, value.getAs<types::Int64::Primitive>());
+            break;
+
+            case CellTag::UInt:
+                addInteger(tag, static_cast<types::Int64::Primitive>(value.getAs<types::UInt64::Primitive>()));
+            break;
+
+            case CellTag::Double:
+                addReal(tag, value.getAs<types::Double::Primitive>());
+            break;
+
+            case CellTag::Duration:
+                addDuration(value.getAs<types::Duration::Primitive>());
+            break;
+
+            default:
+                throw IRException(fmt::format("sum() and avg() read numbers or durations, not '{}'", queryTypeName(tag)));
+            break;
+        }
+    }
+
+    // An average reads every number as a float, as it does over a typed column
+    void addToAverage(CellView value) {
+        const CellTag tag = value.getTag();
+        const bool isNumber = tag == CellTag::Int || tag == CellTag::UInt || tag == CellTag::Double;
+
+        if (isNumber) {
+            addReal(tag, taggedNumericValue(value));
+        } else {
+            add(value);
+        }
+    }
+
+    std::optional<CellView> own(NLValueStore& values) const {
+        ListBuffer<>::ListItemVariant item {_integer};
+
+        if (_tag == CellTag::Null) {
+            return std::nullopt;
+        } else if (_tag == CellTag::Double) {
+            item = _real;
+        } else if (_tag == CellTag::Duration) {
+            item = _duration;
+        }
 
         return values.ownCell(item);
     }
 
+    std::optional<CellView> average(uint64_t count, QueryListBuffer& cells) const {
+        if (_tag == CellTag::Null) {
+            return std::nullopt;
+        } else if (_tag == CellTag::Duration) {
+            return stagedCell(&cells, averageOf(_duration, count));
+        }
+
+        bioassert(_tag == CellTag::Double, "An average sums its numbers as floats");
+
+        return stagedCell(&cells, averageOf(_real, count));
+    }
+
 private:
-    bool _isReal {false};
+    CellTag _tag {CellTag::Null};
     types::Int64::Primitive _integer {0};
     types::Double::Primitive _real {0.0};
+    types::Duration::Primitive _duration {0};
 
-    void addInteger(types::Int64::Primitive value) {
-        if (_isReal) {
+    void throwIfMixing(CellTag tag) const {
+        const bool summedAny = _tag != CellTag::Null;
+        const bool mixes = (_tag == CellTag::Duration) != (tag == CellTag::Duration);
+
+        if (summedAny && mixes) {
+            throw IRException(fmt::format("sum() and avg() cannot add '{}' to a sum of '{}'",
+                                          queryTypeName(tag),
+                                          queryTypeName(_tag)));
+        }
+    }
+
+    void addInteger(CellTag tag, types::Int64::Primitive value) {
+        throwIfMixing(tag);
+
+        if (_tag == CellTag::Double) {
             _real += static_cast<types::Double::Primitive>(value);
         } else {
+            _tag = CellTag::Int;
             _integer = numericAdd(_integer, value);
         }
     }
 
-    void addReal(types::Double::Primitive value) {
-        if (!_isReal) {
-            _isReal = true;
+    void addReal(CellTag tag, types::Double::Primitive value) {
+        throwIfMixing(tag);
+
+        if (_tag != CellTag::Double) {
+            _tag = CellTag::Double;
             _real = static_cast<types::Double::Primitive>(_integer);
         }
 
         _real += value;
     }
+
+    void addDuration(types::Duration::Primitive value) {
+        throwIfMixing(CellTag::Duration);
+
+        _tag = CellTag::Duration;
+        _duration = numericAdd(_duration, value);
+    }
 };
 
-void aggregateResetTaggedSum(NLAggregateState* state) {
-    auto* accumulator = static_cast<ColumnOptVector<CellView>*>(state->getAccumulator());
-    accumulator->getRaw().assign(1, std::optional<CellView>(CellView {INTEGER_ZERO_CELL}));
-    state->setCount(0);
-    state->accumulatorValues().clear();
-}
-
-// Fold a chunk of tagged cells into the running sum, which is copied into the spare store
-// once per chunk, as a min/max extreme is. A cell tagged null is skipped, as a null value
-// column row is.
-template <typename Cell>
+// Fold a chunk of tagged cells into the running sum of a sum or an average, which is
+// copied into the spare store once per chunk, as a min/max extreme is, and count the
+// cells folded. A cell tagged null is skipped, as a null value column row is.
+template <typename Cell, bool Averages>
 void aggregateUpdateTaggedSum(NLAggregateState* state, const Column* input) {
     auto* accumulator = static_cast<ColumnOptVector<CellView>*>(state->getAccumulator());
     std::optional<CellView>& current = accumulator->getRaw().front();
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
-    NLTaggedSum sum(current.value());
-    bool added = false;
+    NLTaggedSum sum(current);
+    size_t added = 0;
 
     for (const Cell& cell : inputRaw) {
-        const std::optional<CellView> number = presentCell(cell);
-        if (!number) {
+        const std::optional<CellView> value = presentCell(cell);
+        if (!value) {
             continue;
         }
 
-        sum.add(*number);
-        added = true;
+        if constexpr (Averages) {
+            sum.addToAverage(*value);
+        } else {
+            sum.add(*value);
+        }
+
+        added++;
     }
 
-    if (added) {
+    if (added > 0) {
         NLCompactingValueStore& values = state->accumulatorValues();
         current = sum.own(values.getSpare());
         values.flip();
+
+        state->addCount(added);
     }
+}
+
+void aggregateResultTaggedSum(const NLAggregateState* state, Column* output, NLStepBuffers* stepBuffers) {
+    const auto* accumulator = static_cast<const ColumnOptVector<CellView>*>(state->getAccumulator());
+    const std::optional<CellView>& sum = accumulator->getRaw().front();
+    auto& outputRaw = static_cast<ColumnOptVector<CellView>*>(output)->getRaw();
+
+    outputRaw.assign(1, sum.value_or(CellView {INTEGER_ZERO_CELL}));
+}
+
+void aggregateResultTaggedAvg(const NLAggregateState* state, Column* output, NLStepBuffers* stepBuffers) {
+    const auto* accumulator = static_cast<const ColumnOptVector<CellView>*>(state->getAccumulator());
+    const NLTaggedSum sum(accumulator->getRaw().front());
+    auto& outputRaw = static_cast<ColumnOptVector<CellView>*>(output)->getRaw();
+
+    outputRaw.assign(1, sum.average(state->getCount(), stepBuffers->listBuffer()));
 }
 
 template <typename Cell>
 NLAggregateUpdateFunction taggedAggregateUpdateFor(AggregateKind kind) {
     switch (kind) {
         case AggregateKind::Sum:
-            return &aggregateUpdateTaggedSum<Cell>;
+            return &aggregateUpdateTaggedSum<Cell, /*Averages=*/false>;
         break;
 
         case AggregateKind::Avg:
-            return &aggregateUpdateTaggedAvg<Cell>;
+            return &aggregateUpdateTaggedSum<Cell, /*Averages=*/true>;
         break;
 
         case AggregateKind::StDev:
@@ -3936,20 +4043,22 @@ NLAggregateUpdateFunction taggedAggregateUpdateFor(AggregateKind kind) {
     return nullptr;
 }
 
-// Fold a chunk's present values into an avg accumulator: a running f64 sum plus a
-// count of the non-null rows (the input primitive is widened to f64). avg divides
-// the two at the emit step, so both are accumulated here.
+// Fold a chunk's present values into an avg accumulator: a running total plus a
+// count of the non-null rows (a number is widened to f64, a duration summed as one).
+// avg divides the two at the emit step, so both are accumulated here.
 template <typename Primitive>
 void aggregateUpdateAvg(NLAggregateState* state, const Column* input) {
-    auto* accumulator = static_cast<ColumnOptVector<double>*>(state->getAccumulator());
-    std::optional<double>& current = accumulator->getRaw().front();
+    using Total = AverageTotal<Primitive>;
+
+    auto* accumulator = static_cast<ColumnOptVector<Total>*>(state->getAccumulator());
+    std::optional<Total>& current = accumulator->getRaw().front();
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
-    double running = current.value();
+    Total running = current.value();
     size_t seen = 0;
     for (const std::optional<Primitive>& value : inputRaw) {
         if (value.has_value()) {
-            running += static_cast<double>(*value);
+            running = addToAverageTotal(running, *value);
             seen++;
         }
     }
@@ -3962,32 +4071,32 @@ void aggregateUpdateAvg(NLAggregateState* state, const Column* input) {
 // the result's own type, so copy its single row into the output (a present sum,
 // or the extreme / null for min/max).
 template <typename Primitive>
-void aggregateResultCopy(const NLAggregateState* state, Column* output) {
+void aggregateResultCopy(const NLAggregateState* state, Column* output, NLStepBuffers* stepBuffers) {
     const auto* accumulator = static_cast<const ColumnOptVector<Primitive>*>(state->getAccumulator());
     auto* typedOutput = static_cast<ColumnOptVector<Primitive>*>(output);
     typedOutput->getRaw().assign(1, accumulator->getRaw().front());
 }
 
-// Emit an avg result: divide the running f64 sum by the non-null count. With no
+// Emit an avg result: divide the running total by the non-null count. With no
 // non-null row the average is null (division is undefined), matching Cypher.
-void aggregateResultAvg(const NLAggregateState* state, Column* output) {
-    const auto* accumulator = static_cast<const ColumnOptVector<double>*>(state->getAccumulator());
-    auto* typedOutput = static_cast<ColumnOptVector<double>*>(output);
-    std::vector<std::optional<double>>& outputRaw = typedOutput->getRaw();
+template <typename Total>
+void aggregateResultAvg(const NLAggregateState* state, Column* output, NLStepBuffers* stepBuffers) {
+    const auto* accumulator = static_cast<const ColumnOptVector<Total>*>(state->getAccumulator());
+    auto* typedOutput = static_cast<ColumnOptVector<Total>*>(output);
+    std::vector<std::optional<Total>>& outputRaw = typedOutput->getRaw();
     const size_t count = state->getCount();
 
     if (count == 0) {
         outputRaw.assign(1, std::nullopt);
     } else {
-        const double average = accumulator->getRaw().front().value() / static_cast<double>(count);
-        outputRaw.assign(1, std::optional<double>(average));
+        outputRaw.assign(1, std::optional<Total>(averageOf(accumulator->getRaw().front().value(), count)));
     }
 }
 
 // The fold handler for a sum over a column of this value type. sum adds the
-// values, so only a numeric column is valid - a string or bool sum is rejected
-// (which also keeps aggregateUpdateSum from being instantiated for a type whose
-// operator+= would not compile).
+// values, so only a numeric or a duration column is valid - a string or bool sum is
+// rejected (which also keeps aggregateUpdateSum from being instantiated for a type
+// whose operator+= would not compile).
 NLAggregateUpdateFunction selectSumUpdate(ValueType inputType) {
     switch (inputType) {
         case ValueType::Int64:
@@ -4002,8 +4111,12 @@ NLAggregateUpdateFunction selectSumUpdate(ValueType inputType) {
             return &aggregateUpdateSum<types::Double::Primitive>;
         break;
 
+        case ValueType::Duration:
+            return &aggregateUpdateSum<types::Duration::Primitive>;
+        break;
+
         default:
-            throw IRException("sum requires a numeric column");
+            throw IRException("sum requires a numeric or a duration column");
         break;
     }
 
@@ -4011,7 +4124,8 @@ NLAggregateUpdateFunction selectSumUpdate(ValueType inputType) {
 }
 
 // The fold handler for an avg over a column of this value type. avg widens each
-// value to f64, so - like sum - only a numeric column is valid.
+// number to f64 and sums durations as durations, so - like sum - only a numeric or a
+// duration column is valid.
 NLAggregateUpdateFunction selectAvgUpdate(ValueType inputType) {
     switch (inputType) {
         case ValueType::Int64:
@@ -4026,8 +4140,12 @@ NLAggregateUpdateFunction selectAvgUpdate(ValueType inputType) {
             return &aggregateUpdateAvg<types::Double::Primitive>;
         break;
 
+        case ValueType::Duration:
+            return &aggregateUpdateAvg<types::Duration::Primitive>;
+        break;
+
         default:
-            throw IRException("avg requires a numeric column");
+            throw IRException("avg requires a numeric or a duration column");
         break;
     }
 
@@ -4140,15 +4258,16 @@ void groupGrowNull(Column* accumulator,
     raw.resize(groupCount);
 }
 
-// Grow an avg accumulator to groupCount groups: a running f64 sum initialized to a
+// Grow an avg accumulator to groupCount groups: a running total initialized to a
 // present zero plus the per-group non-null tally zeroed for new groups. avg is the
 // only value reduction carried as (sum, count), so it is the only one that grows the
 // counts vector besides count itself.
+template <typename Total>
 void groupGrowAvg(Column* accumulator,
                   std::vector<uint64_t>& counts,
                   size_t groupCount) {
-    auto& raw = static_cast<ColumnOptVector<double>*>(accumulator)->getRaw();
-    raw.resize(groupCount, std::optional<double>(0.0));
+    auto& raw = static_cast<ColumnOptVector<Total>*>(accumulator)->getRaw();
+    raw.resize(groupCount, std::optional<Total>(Total {}));
     counts.resize(groupCount, 0);
 }
 
@@ -4214,53 +4333,18 @@ void groupFoldSumDistinct(Column* accumulator,
     }
 }
 
-// Fold a group's tagged cells into its running f64 sum, tallying the ones folded so avg
-// divides by the same count. The type-erased sibling of groupFoldAvg: the cells carry a
-// type each, so the number each holds is read by its tag.
-template <typename Cell, bool Distinct>
-void groupFoldTaggedAvg(Column* accumulator,
-                        std::vector<uint64_t>& counts,
-                        const Column* input,
-                        const std::vector<size_t>& groups,
-                        NLGroupDistinctTally& distinct,
-                        NLValueStore& values) {
-    auto& raw = static_cast<ColumnOptVector<double>*>(accumulator)->getRaw();
-    const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
-
-    for (size_t row = 0; row < inputRaw.size(); row++) {
-        const std::optional<CellView> element = presentCell(inputRaw[row]);
-        if (!element) {
-            continue;
-        }
-
-        const size_t group = groups[row];
-
-        if constexpr (Distinct) {
-            distinct.beginKey(group);
-            distinctAppendElementBytes(distinct.getKey(), *element);
-
-            if (!distinct.insertIfNew()) {
-                continue;
-            }
-        }
-
-        std::optional<double>& running = raw[group];
-        running = running.value() + taggedNumericValue(*element);
-        counts[group]++;
-    }
-}
-
-void groupGrowTaggedSum(Column* accumulator,
+void groupGrowTaggedAvg(Column* accumulator,
                         std::vector<uint64_t>& counts,
                         size_t groupCount) {
     auto& raw = static_cast<ColumnOptVector<CellView>*>(accumulator)->getRaw();
-    raw.resize(groupCount, std::optional<CellView>(CellView {INTEGER_ZERO_CELL}));
+    raw.resize(groupCount);
+    counts.resize(groupCount, 0);
 }
 
-// Fold a group's tagged cells into its running sum. The type-erased sibling of groupFoldSum
-// and groupFoldSumDistinct: a group's sum is a cell copied into @param values at each cell
-// it folds, compacted as the min/max extremes are.
-template <typename Cell, bool Distinct>
+// Fold a group's tagged cells into its running sum, tallying the ones an average folds.
+// The type-erased sibling of groupFoldSum and groupFoldAvg: a group's sum is a cell copied
+// into @param values at each cell it folds, compacted as the min/max extremes are.
+template <typename Cell, bool Distinct, bool Averages>
 void groupFoldTaggedSum(Column* accumulator,
                         std::vector<uint64_t>& counts,
                         const Column* input,
@@ -4271,8 +4355,8 @@ void groupFoldTaggedSum(Column* accumulator,
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
-        const std::optional<CellView> number = presentCell(inputRaw[row]);
-        if (!number) {
+        const std::optional<CellView> value = presentCell(inputRaw[row]);
+        if (!value) {
             continue;
         }
 
@@ -4280,7 +4364,7 @@ void groupFoldTaggedSum(Column* accumulator,
 
         if constexpr (Distinct) {
             distinct.beginKey(group);
-            distinctAppendElementBytes(distinct.getKey(), *number);
+            distinctAppendElementBytes(distinct.getKey(), *value);
 
             if (!distinct.insertIfNew()) {
                 continue;
@@ -4288,9 +4372,15 @@ void groupFoldTaggedSum(Column* accumulator,
         }
 
         std::optional<CellView>& running = raw[group];
+        NLTaggedSum sum(running);
 
-        NLTaggedSum sum(running.value());
-        sum.add(*number);
+        if constexpr (Averages) {
+            sum.addToAverage(*value);
+            counts[group]++;
+        } else {
+            sum.add(*value);
+        }
+
         running = sum.own(values);
     }
 }
@@ -4350,19 +4440,19 @@ template <typename Cell>
 NLGroupAggregateFoldFunction taggedGroupAggregateFoldFor(GroupAggregateKind kind) {
     switch (kind) {
         case GroupAggregateKind::Sum:
-            return &groupFoldTaggedSum<Cell, /*Distinct=*/false>;
+            return &groupFoldTaggedSum<Cell, /*Distinct=*/false, /*Averages=*/false>;
         break;
 
         case GroupAggregateKind::SumDistinct:
-            return &groupFoldTaggedSum<Cell, /*Distinct=*/true>;
+            return &groupFoldTaggedSum<Cell, /*Distinct=*/true, /*Averages=*/false>;
         break;
 
         case GroupAggregateKind::Avg:
-            return &groupFoldTaggedAvg<Cell, /*Distinct=*/false>;
+            return &groupFoldTaggedSum<Cell, /*Distinct=*/false, /*Averages=*/true>;
         break;
 
         case GroupAggregateKind::AvgDistinct:
-            return &groupFoldTaggedAvg<Cell, /*Distinct=*/true>;
+            return &groupFoldTaggedSum<Cell, /*Distinct=*/true, /*Averages=*/true>;
         break;
 
         case GroupAggregateKind::StDev:
@@ -4398,9 +4488,9 @@ NLGroupAggregateFoldFunction taggedGroupAggregateFoldFor(GroupAggregateKind kind
     return nullptr;
 }
 
-// Fold a chunk's present values into per-group avg accumulators: a running f64 sum
-// (the accumulator, widened from the input) plus the per-group non-null count. avg
-// divides the two at the emit step.
+// Fold a chunk's present values into per-group avg accumulators: a running total
+// (the accumulator, a number widened to f64 or a duration) plus the per-group non-null
+// count. avg divides the two at the emit step.
 template <typename Primitive>
 void groupFoldAvg(Column* accumulator,
                   std::vector<uint64_t>& counts,
@@ -4408,15 +4498,17 @@ void groupFoldAvg(Column* accumulator,
                   const std::vector<size_t>& groups,
                   NLGroupDistinctTally& distinct,
                   NLValueStore& values) {
-    auto& raw = static_cast<ColumnOptVector<double>*>(accumulator)->getRaw();
+    using Total = AverageTotal<Primitive>;
+
+    auto& raw = static_cast<ColumnOptVector<Total>*>(accumulator)->getRaw();
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
         const std::optional<Primitive>& value = inputRaw[row];
         if (value.has_value()) {
             const size_t group = groups[row];
-            std::optional<double>& running = raw[group];
-            running = running.value() + static_cast<double>(*value);
+            std::optional<Total>& running = raw[group];
+            running = addToAverageTotal(running.value(), *value);
             counts[group]++;
         }
     }
@@ -4432,7 +4524,9 @@ void groupFoldAvgDistinct(Column* accumulator,
                           const std::vector<size_t>& groups,
                           NLGroupDistinctTally& distinct,
                           NLValueStore& values) {
-    auto& raw = static_cast<ColumnOptVector<double>*>(accumulator)->getRaw();
+    using Total = AverageTotal<Primitive>;
+
+    auto& raw = static_cast<ColumnOptVector<Total>*>(accumulator)->getRaw();
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
@@ -4450,8 +4544,8 @@ void groupFoldAvgDistinct(Column* accumulator,
             continue;
         }
 
-        std::optional<double>& running = raw[group];
-        running = running.value() + static_cast<double>(*value);
+        std::optional<Total>& running = raw[group];
+        running = addToAverageTotal(running.value(), *value);
         counts[group]++;
     }
 }
@@ -5708,14 +5802,36 @@ std::optional<types::Int64::Primitive> cellBound(const std::optional<CellView>& 
     throw IRException(fmt::format("A range or a list slice reads an integer bound, not '{}'", queryTypeName(cell->getTag())));
 }
 
-template <typename ColumnT>
-std::optional<types::Int64::Primitive> cellRowBound(const Column* input, size_t row) {
-    return cellBound((*static_cast<const ColumnT*>(input))[row]);
+template <typename Result, Result (*ReadCell)(const std::optional<CellView>&), typename ColumnT>
+Result readCellRow(const Column* input, size_t row) {
+    return ReadCell((*static_cast<const ColumnT*>(input))[row]);
 }
 
-template <typename ColumnT>
-std::optional<types::Int64::Primitive> constCellBound(const Column* input, size_t) {
-    return cellBound(static_cast<const ColumnT*>(input)->getRaw());
+template <typename Result, Result (*ReadCell)(const std::optional<CellView>&), typename ColumnT>
+Result readConstCell(const Column* input, size_t) {
+    return ReadCell(static_cast<const ColumnT*>(input)->getRaw());
+}
+
+template <typename Result>
+using CellRowRead = Result (*)(const Column* input, size_t row);
+
+// The read @param ReadCell makes of a row of a column of type-erased cells, in whichever of
+// the four layouts the column holds them; null for a column of another kind
+template <typename Result, Result (*ReadCell)(const std::optional<CellView>&)>
+CellRowRead<Result> selectCellRowRead(const Column* input) {
+    const ColumnKind::Code kind = input->getKind();
+
+    if (kind == ColumnVector<CellView>::staticKind()) {
+        return &readCellRow<Result, ReadCell, ColumnVector<CellView>>;
+    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
+        return &readCellRow<Result, ReadCell, ColumnOptVector<CellView>>;
+    } else if (kind == ColumnConst<CellView>::staticKind()) {
+        return &readConstCell<Result, ReadCell, ColumnConst<CellView>>;
+    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
+        return &readConstCell<Result, ReadCell, ColumnConst<std::optional<CellView>>>;
+    }
+
+    return nullptr;
 }
 
 template <typename Primitive>
@@ -5726,6 +5842,20 @@ std::optional<types::Double::Primitive> percentileArgument(const Column* input, 
     }
 
     return static_cast<types::Double::Primitive>(*cell);
+}
+
+std::optional<types::Double::Primitive> cellPercentile(const std::optional<CellView>& cell) {
+    if (!cell.has_value() || cell->getTag() == CellTag::Null) {
+        return std::nullopt;
+    }
+
+    const std::optional<types::Double::Primitive> number = cellNumber(*cell);
+    if (!number) {
+        throw IRException(fmt::format("percentileCont() and percentileDisc() take a percentile between 0.0 and 1.0, not '{}'",
+                                      queryTypeName(cell->getTag())));
+    }
+
+    return number;
 }
 
 // The numbers one row's list holds, sorted. A percentile is taken of numbers alone, so any
@@ -5930,21 +6060,24 @@ void groupEmitCopy(const Column* accumulator,
                    const std::vector<uint64_t>& counts,
                    size_t begin,
                    size_t count,
-                   Column* output) {
+                   Column* output,
+                   NLStepBuffers* stepBuffers) {
     const auto& raw = static_cast<const ColumnOptVector<Primitive>*>(accumulator)->getRaw();
     auto& outputRaw = static_cast<ColumnOptVector<Primitive>*>(output)->getRaw();
     outputRaw.assign(raw.begin() + begin, raw.begin() + begin + count);
 }
 
-// Emit an avg slice: divide each group's running f64 sum by its non-null count. A
+// Emit an avg slice: divide each group's running total by its non-null count. A
 // group with no non-null row (count zero) averages to null, matching Cypher.
+template <typename Total>
 void groupEmitAvg(const Column* accumulator,
                   const std::vector<uint64_t>& counts,
                   size_t begin,
                   size_t count,
-                  Column* output) {
-    const auto& raw = static_cast<const ColumnOptVector<double>*>(accumulator)->getRaw();
-    auto& outputRaw = static_cast<ColumnOptVector<double>*>(output)->getRaw();
+                  Column* output,
+                  NLStepBuffers* stepBuffers) {
+    const auto& raw = static_cast<const ColumnOptVector<Total>*>(accumulator)->getRaw();
+    auto& outputRaw = static_cast<ColumnOptVector<Total>*>(output)->getRaw();
     outputRaw.resize(count);
 
     for (size_t index = 0; index < count; index++) {
@@ -5952,8 +6085,45 @@ void groupEmitAvg(const Column* accumulator,
         if (counts[group] == 0) {
             outputRaw[index] = std::nullopt;
         } else {
-            outputRaw[index] = std::optional<double>(raw[group].value() / static_cast<double>(counts[group]));
+            outputRaw[index] = std::optional<Total>(averageOf(raw[group].value(), counts[group]));
         }
+    }
+}
+
+void groupEmitTaggedSum(const Column* accumulator,
+                        const std::vector<uint64_t>& counts,
+                        size_t begin,
+                        size_t count,
+                        Column* output,
+                        NLStepBuffers* stepBuffers) {
+    const auto& raw = static_cast<const ColumnOptVector<CellView>*>(accumulator)->getRaw();
+    auto& outputRaw = static_cast<ColumnOptVector<CellView>*>(output)->getRaw();
+    outputRaw.resize(count);
+
+    std::transform(raw.begin() + begin,
+                   raw.begin() + begin + count,
+                   outputRaw.begin(),
+                   [](const std::optional<CellView>& sum) {
+                       return std::optional<CellView>(sum.value_or(CellView {INTEGER_ZERO_CELL}));
+                   });
+}
+
+void groupEmitTaggedAvg(const Column* accumulator,
+                        const std::vector<uint64_t>& counts,
+                        size_t begin,
+                        size_t count,
+                        Column* output,
+                        NLStepBuffers* stepBuffers) {
+    const auto& raw = static_cast<const ColumnOptVector<CellView>*>(accumulator)->getRaw();
+    auto& outputRaw = static_cast<ColumnOptVector<CellView>*>(output)->getRaw();
+    QueryListBuffer& cells = stepBuffers->listBuffer();
+    outputRaw.resize(count);
+
+    for (size_t index = 0; index < count; index++) {
+        const size_t group = begin + index;
+        const NLTaggedSum sum(raw[group]);
+
+        outputRaw[index] = sum.average(counts[group], cells);
     }
 }
 
@@ -5963,13 +6133,15 @@ void groupEmitCount(const Column* accumulator,
                     const std::vector<uint64_t>& counts,
                     size_t begin,
                     size_t count,
-                    Column* output) {
+                    Column* output,
+                    NLStepBuffers* stepBuffers) {
     auto& outputRaw = static_cast<ColumnVector<uint64_t>*>(output)->getRaw();
     outputRaw.assign(counts.begin() + begin, counts.begin() + begin + count);
 }
 
 // The grouped sum fold for a column of this value type. sum adds the values, so
-// only a numeric column is valid - the same restriction as the scalar selectSumUpdate.
+// only a numeric or a duration column is valid - the same restriction as the scalar
+// selectSumUpdate.
 NLGroupAggregateFoldFunction selectGroupSumFold(ValueType inputType) {
     switch (inputType) {
         case ValueType::Int64:
@@ -5984,16 +6156,20 @@ NLGroupAggregateFoldFunction selectGroupSumFold(ValueType inputType) {
             return &groupFoldSum<types::Double::Primitive>;
         break;
 
+        case ValueType::Duration:
+            return &groupFoldSum<types::Duration::Primitive>;
+        break;
+
         default:
-            throw IRException("sum requires a numeric column");
+            throw IRException("sum requires a numeric or a duration column");
         break;
     }
 
     return nullptr;
 }
 
-// The grouped sum(DISTINCT x) fold for a column of this value type: sum's numeric
-// domain, reduced over each group's distinct values.
+// The grouped sum(DISTINCT x) fold for a column of this value type: sum's domain,
+// reduced over each group's distinct values.
 NLGroupAggregateFoldFunction selectGroupSumDistinctFold(ValueType inputType) {
     switch (inputType) {
         case ValueType::Int64:
@@ -6008,16 +6184,21 @@ NLGroupAggregateFoldFunction selectGroupSumDistinctFold(ValueType inputType) {
             return &groupFoldSumDistinct<types::Double::Primitive>;
         break;
 
+        case ValueType::Duration:
+            return &groupFoldSumDistinct<types::Duration::Primitive>;
+        break;
+
         default:
-            throw IRException("sum requires a numeric column");
+            throw IRException("sum requires a numeric or a duration column");
         break;
     }
 
     return nullptr;
 }
 
-// The grouped avg fold for a column of this value type. avg widens each value to
-// f64, so - like sum - only a numeric column is valid.
+// The grouped avg fold for a column of this value type. avg widens each number to
+// f64 and sums durations as durations, so - like sum - only a numeric or a duration
+// column is valid.
 NLGroupAggregateFoldFunction selectGroupAvgFold(ValueType inputType) {
     switch (inputType) {
         case ValueType::Int64:
@@ -6032,16 +6213,20 @@ NLGroupAggregateFoldFunction selectGroupAvgFold(ValueType inputType) {
             return &groupFoldAvg<types::Double::Primitive>;
         break;
 
+        case ValueType::Duration:
+            return &groupFoldAvg<types::Duration::Primitive>;
+        break;
+
         default:
-            throw IRException("avg requires a numeric column");
+            throw IRException("avg requires a numeric or a duration column");
         break;
     }
 
     return nullptr;
 }
 
-// The grouped avg(DISTINCT x) fold for a column of this value type: avg's numeric
-// domain, averaged over each group's distinct values.
+// The grouped avg(DISTINCT x) fold for a column of this value type: avg's domain,
+// averaged over each group's distinct values.
 NLGroupAggregateFoldFunction selectGroupAvgDistinctFold(ValueType inputType) {
     switch (inputType) {
         case ValueType::Int64:
@@ -6056,8 +6241,12 @@ NLGroupAggregateFoldFunction selectGroupAvgDistinctFold(ValueType inputType) {
             return &groupFoldAvgDistinct<types::Double::Primitive>;
         break;
 
+        case ValueType::Duration:
+            return &groupFoldAvgDistinct<types::Duration::Primitive>;
+        break;
+
         default:
-            throw IRException("avg requires a numeric column");
+            throw IRException("avg requires a numeric or a duration column");
         break;
     }
 
@@ -10096,19 +10285,12 @@ NLRangeBoundReadFunction NLExecutor::selectRangeBoundRead(ValueType valueType) {
 }
 
 NLRangeBoundReadFunction NLExecutor::selectCellBoundRead(const Column* input) {
-    const ColumnKind::Code kind = input->getKind();
-
-    if (kind == ColumnVector<CellView>::staticKind()) {
-        return &cellRowBound<ColumnVector<CellView>>;
-    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
-        return &cellRowBound<ColumnOptVector<CellView>>;
-    } else if (kind == ColumnConst<CellView>::staticKind()) {
-        return &constCellBound<ColumnConst<CellView>>;
-    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
-        return &constCellBound<ColumnConst<std::optional<CellView>>>;
+    const NLRangeBoundReadFunction read = selectCellRowRead<std::optional<types::Int64::Primitive>, &cellBound>(input);
+    if (!read) {
+        throw IRException("a bound held in type-erased cells is read out of a column of them");
     }
 
-    throw IRException("a bound held in type-erased cells is read out of a column of them");
+    return read;
 }
 
 NLPercentileReadFunction NLExecutor::selectPercentileRead(ValueType valueType) {
@@ -10129,6 +10311,15 @@ NLPercentileReadFunction NLExecutor::selectPercentileRead(ValueType valueType) {
             throw IRException("a percentile is read out of a number column");
         break;
     }
+}
+
+NLPercentileReadFunction NLExecutor::selectCellPercentileRead(const Column* input) {
+    const NLPercentileReadFunction read = selectCellRowRead<std::optional<types::Double::Primitive>, &cellPercentile>(input);
+    if (!read) {
+        throw IRException("a percentile held in type-erased cells is read out of a column of them");
+    }
+
+    return read;
 }
 
 NLListItemReadFunction NLExecutor::selectNodeListItemRead() {
@@ -11521,7 +11712,10 @@ void NLExecutor::runAggregateResult(NLExecutionContext* context, NLFunctionData*
     // reduced value into the output chunk's one nullable row. Runs after the
     // producing loop, so the accumulator holds the whole dataflow's reduction;
     // nl.output emits this chunk at function scope.
-    result->getResult()(result->getState(), result->getOutput());
+    NLStepBuffers* const stepBuffers = result->getStepBuffers();
+    stepBuffers->clear();
+
+    result->getResult()(result->getState(), result->getOutput(), stepBuffers);
 }
 
 void NLExecutor::runGroupAggregateReset(NLExecutionContext* context, NLFunctionData* data) {
@@ -11624,6 +11818,7 @@ void NLExecutor::runGroupAggregateLoop(NLExecutionContext* context, NLFunctionDa
     std::vector<NLGroupAggregateState::Aggregate>& aggregates = state->aggregates();
 
     const NLLimitState* limit = loopData->getLimit();
+    NLStepBuffers* const stepBuffers = loopData->getStepBuffers();
 
     // Re-chunk the accumulated groups: each step materializes the next chunk of
     // group rows - the key values sliced from the buffers and each aggregate
@@ -11637,8 +11832,15 @@ void NLExecutor::runGroupAggregateLoop(NLExecutionContext* context, NLFunctionDa
             keyColumn._emitCopy(keyColumn._buffer, offset, stepGroups, keyColumn._output);
         }
 
+        stepBuffers->clear();
+
         for (const NLGroupAggregateState::Aggregate& aggregate : aggregates) {
-            aggregate._emit(aggregate._accumulator, aggregate._counts, offset, stepGroups, aggregate._output);
+            aggregate._emit(aggregate._accumulator,
+                            aggregate._counts,
+                            offset,
+                            stepGroups,
+                            aggregate._output,
+                            stepBuffers);
         }
 
         runBody(context, loopBody);
@@ -12168,6 +12370,7 @@ void NLExecutor::runCollectLoop(NLExecutionContext* context, NLFunctionData* dat
     const NLStmtContainer* loopBody = loopData->getStmts();
 
     std::vector<NLCollectState::KeyColumn>& keyColumns = state->keyColumns();
+    NLStepBuffers* const stepBuffers = loopData->getStepBuffers();
 
     // Re-chunk the groups: each step slices the next chunk of key values from the key
     // buffers and materializes one list cell per group (a ListView over that group's
@@ -12191,8 +12394,15 @@ void NLExecutor::runCollectLoop(NLExecutionContext* context, NLFunctionData* dat
                                   valueColumn._output);
         }
 
+        stepBuffers->clear();
+
         for (const NLGroupAggregateState::Aggregate& aggregate : state->aggregates()) {
-            aggregate._emit(aggregate._accumulator, aggregate._counts, offset, stepGroups, aggregate._output);
+            aggregate._emit(aggregate._accumulator,
+                            aggregate._counts,
+                            offset,
+                            stepGroups,
+                            aggregate._output,
+                            stepBuffers);
         }
 
         runBody(context, loopBody);
@@ -13244,23 +13454,32 @@ NLAggregateUpdateFunction NLExecutor::selectOptTaggedAggregateUpdate(AggregateKi
     return taggedAggregateUpdateFor<std::optional<CellView>>(kind);
 }
 
-NLAggregateResetFunction NLExecutor::selectTaggedAggregateReset(AggregateKind kind) {
-    if (kind == AggregateKind::Sum) {
-        return &aggregateResetTaggedSum;
-    }
-
+// A tagged accumulator holds no value until a cell is folded, so a duration can start a
+// sum that a number then cannot join
+NLAggregateResetFunction NLExecutor::selectTaggedAggregateReset() {
     return &aggregateResetNull<CellView>;
 }
 
-NLAggregateResultFunction NLExecutor::selectTaggedAggregateResult() {
+NLAggregateResultFunction NLExecutor::selectTaggedAggregateResult(AggregateKind kind) {
+    if (kind == AggregateKind::Sum) {
+        return &aggregateResultTaggedSum;
+    } else if (kind == AggregateKind::Avg) {
+        return &aggregateResultTaggedAvg;
+    }
+
     return &aggregateResultCopy<CellView>;
 }
 
 NLAggregateResultFunction NLExecutor::selectAggregateResult(AggregateKind kind, ValueType resultType) {
     if (kind == AggregateKind::Avg) {
-        // avg always emits an f64 (the running sum divided by the count), whatever
-        // the input type was.
-        return &aggregateResultAvg;
+        // avg emits the running total divided by the count: a double over numbers and a
+        // duration over durations
+        NLAggregateResultFunction average = nullptr;
+        dispatchAverageTotal(resultType, [&]<typename Total>() {
+            average = &aggregateResultAvg<Total>;
+        });
+
+        return average;
     } else if (kind == AggregateKind::StDev) {
         return &aggregateResultDeviation</*Population=*/false>;
     } else if (kind == AggregateKind::StDevP) {
@@ -13280,10 +13499,10 @@ NLAggregateResultFunction NLExecutor::selectAggregateResult(AggregateKind kind, 
 
 NLGroupAggregateGrowFunction NLExecutor::selectGroupAggregateGrow(GroupAggregateKind kind, ValueType accumulatorType) {
     // count keeps only a per-group tally, so its grow ignores the accumulator type;
-    // avg carries a running f64 sum plus that tally, so its grow is always f64-typed
-    // and is the only value reduction besides count that grows the counts vector. A
-    // switch (not an if/else) over every kind so a new one is a compile error here
-    // rather than silently taking the sum/min/max path.
+    // avg carries a running total - an f64 over numbers, a duration over durations -
+    // plus that tally, and is the only value reduction besides count that grows the
+    // counts vector. A switch (not an if/else) over every kind so a new one is a compile
+    // error here rather than silently taking the sum/min/max path.
     switch (kind) {
         case GroupAggregateKind::Count:
         case GroupAggregateKind::CountDistinct:
@@ -13292,8 +13511,14 @@ NLGroupAggregateGrowFunction NLExecutor::selectGroupAggregateGrow(GroupAggregate
         break;
 
         case GroupAggregateKind::Avg:
-        case GroupAggregateKind::AvgDistinct:
-            return &groupGrowAvg;
+        case GroupAggregateKind::AvgDistinct: {
+            NLGroupAggregateGrowFunction grow = nullptr;
+            dispatchAverageTotal(accumulatorType, [&]<typename Total>() {
+                grow = &groupGrowAvg<Total>;
+            });
+
+            return grow;
+        }
         break;
 
         case GroupAggregateKind::StDev:
@@ -13341,15 +13566,24 @@ NLGroupAggregateFoldFunction NLExecutor::selectOptTaggedGroupAggregateFold(Group
 }
 
 NLGroupAggregateGrowFunction NLExecutor::selectTaggedGroupAggregateGrow(GroupAggregateKind kind) {
-    const bool sums = (kind == GroupAggregateKind::Sum) || (kind == GroupAggregateKind::SumDistinct);
-    if (sums) {
-        return &groupGrowTaggedSum;
+    const bool averages = (kind == GroupAggregateKind::Avg) || (kind == GroupAggregateKind::AvgDistinct);
+    if (averages) {
+        return &groupGrowTaggedAvg;
     }
 
     return &groupGrowNull<CellView>;
 }
 
-NLGroupAggregateEmitFunction NLExecutor::selectTaggedGroupAggregateEmit() {
+NLGroupAggregateEmitFunction NLExecutor::selectTaggedGroupAggregateEmit(GroupAggregateKind kind) {
+    const bool sums = (kind == GroupAggregateKind::Sum) || (kind == GroupAggregateKind::SumDistinct);
+    const bool averages = (kind == GroupAggregateKind::Avg) || (kind == GroupAggregateKind::AvgDistinct);
+
+    if (sums) {
+        return &groupEmitTaggedSum;
+    } else if (averages) {
+        return &groupEmitTaggedAvg;
+    }
+
     return &groupEmitCopy<CellView>;
 }
 
@@ -13515,9 +13749,16 @@ NLGroupAggregateEmitFunction NLExecutor::selectGroupAggregateEmit(GroupAggregate
         break;
 
         case GroupAggregateKind::Avg:
-        case GroupAggregateKind::AvgDistinct:
-            // avg emits the running f64 sum divided by the count, per group.
-            return &groupEmitAvg;
+        case GroupAggregateKind::AvgDistinct: {
+            // avg emits the running total divided by the count, per group: a double over
+            // numbers and a duration over durations
+            NLGroupAggregateEmitFunction emit = nullptr;
+            dispatchAverageTotal(resultType, [&]<typename Total>() {
+                emit = &groupEmitAvg<Total>;
+            });
+
+            return emit;
+        }
         break;
 
         case GroupAggregateKind::StDev:

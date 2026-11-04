@@ -836,24 +836,25 @@ public:
     // The reset / fold / emit handlers for one aggregate, selected from the
     // reduction and a value type (the accumulator's for reset/result, the input's
     // for update). Throw for a value type the reduction cannot handle: sum/avg need
-    // a numeric type, min/max an orderable one. Used by the nl.aggregate ops.
+    // a numeric or a duration type, min/max an orderable one. Used by the nl.aggregate
+    // ops.
     static NLAggregateResetFunction selectAggregateReset(AggregateKind kind, ValueType accumulatorType);
     static NLAggregateUpdateFunction selectAggregateUpdate(AggregateKind kind, ValueType inputType);
 
-    // The siblings reading a type-erased input column. avg reduces its numeric cells into
-    // the f64 accumulator. sum and min/max keep a tagged cell accumulator, which the reset
-    // and result below handle: sum's holds an integer until a float joins it.
+    // The siblings reading a type-erased input column. stdev reduces its numeric cells into
+    // the f64 accumulator. sum, avg and min/max keep a tagged cell accumulator, which the
+    // reset and result below handle.
     static NLAggregateUpdateFunction selectTaggedAggregateUpdate(AggregateKind kind);
     static NLAggregateUpdateFunction selectOptTaggedAggregateUpdate(AggregateKind kind);
-    static NLAggregateResetFunction selectTaggedAggregateReset(AggregateKind kind);
-    static NLAggregateResultFunction selectTaggedAggregateResult();
+    static NLAggregateResetFunction selectTaggedAggregateReset();
+    static NLAggregateResultFunction selectTaggedAggregateResult(AggregateKind kind);
     static NLAggregateResultFunction selectAggregateResult(AggregateKind kind, ValueType resultType);
 
     // The grouped counterparts, selected for one aggregate of a grouped
     // aggregation. grow initializes a new group to the reduction's identity; fold
     // reduces a chunk's rows into their groups; emit materializes a slice of groups.
     // They throw for a value type the reduction cannot handle, exactly as the scalar
-    // selectors do (sum/avg need numeric, min/max orderable). count and
+    // selectors do (sum/avg need numeric or duration, min/max orderable). count and
     // count_distinct use only the per-group tally, so their grow/emit ignore the
     // value type. count's fold has an all-rows form (count(*) over an ID chunk) and a
     // present-values form (count(x) over a nullable value chunk); count_distinct's
@@ -866,7 +867,7 @@ public:
     static NLGroupAggregateFoldFunction selectTaggedGroupAggregateFold(GroupAggregateKind kind);
     static NLGroupAggregateFoldFunction selectOptTaggedGroupAggregateFold(GroupAggregateKind kind);
     static NLGroupAggregateGrowFunction selectTaggedGroupAggregateGrow(GroupAggregateKind kind);
-    static NLGroupAggregateEmitFunction selectTaggedGroupAggregateEmit();
+    static NLGroupAggregateEmitFunction selectTaggedGroupAggregateEmit(GroupAggregateKind kind);
     static NLGroupAggregateFoldFunction selectGroupCountAllFold();
     static NLGroupAggregateFoldFunction selectGroupCountDistinctFold(ValueType inputType);
     static NLGroupAggregateFoldFunction selectGroupCountDistinctChunkFold(NLChunkKind kind);
@@ -956,6 +957,10 @@ public:
     static NLRangeBoundReadFunction selectCellBoundRead(const Column* input);
 
     static NLPercentileReadFunction selectPercentileRead(ValueType valueType);
+
+    // The read taking a percentile out of a column of type-erased cells, which raises on a
+    // row whose cell holds no number
+    static NLPercentileReadFunction selectCellPercentileRead(const Column* input);
 
     // Whether a cell of a list comprehension's source holds no list: a null one where a
     // column carries nulls, a cell tagged null where it carries tagged scalars, and never

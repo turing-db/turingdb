@@ -428,12 +428,18 @@ void FunctionDecls::initDefault() {
     avgDouble->setReturnTypes({{EvaluatedType::Double}});
     avgDouble->setIsAggregate(true);
 
+    FunctionSignature* avgDuration = createFunction("avg");
+    avgDuration->setArguments({EvaluatedType::Duration});
+    avgDuration->setReturnTypes({{EvaluatedType::Duration}});
+    avgDuration->setIsAggregate(true);
+
     // avg over a type-erased column of tagged cells - what a list mixing numeric types,
-    // holding a null or holding nothing unwinds into. Each cell is read through its tag,
-    // and an average is a double whatever those tags were.
+    // holding a null or holding nothing unwinds into. Each cell is read through its tag:
+    // the mean of numbers is a double and the mean of durations a duration, so the
+    // average is a cell too.
     FunctionSignature* avgAnyValues = createFunction("avg");
     avgAnyValues->setArguments({EvaluatedType::Any});
-    avgAnyValues->setReturnTypes({{EvaluatedType::Double}});
+    avgAnyValues->setReturnTypes({{EvaluatedType::Any}});
     avgAnyValues->setIsAggregate(true);
 
     FunctionSignature* avgNulls = createFunction("avg");
@@ -451,6 +457,11 @@ void FunctionDecls::initDefault() {
     sumDouble->setReturnTypes({{EvaluatedType::Double}});
     sumDouble->setIsAggregate(true);
 
+    FunctionSignature* sumDuration = createFunction("sum");
+    sumDuration->setArguments({EvaluatedType::Duration});
+    sumDuration->setReturnTypes({{EvaluatedType::Duration}});
+    sumDuration->setIsAggregate(true);
+
     // A sum of no value is 0 rather than null, so this one answers an integer where the
     // extremums above answer null
     FunctionSignature* sumNulls = createFunction("sum");
@@ -458,9 +469,9 @@ void FunctionDecls::initDefault() {
     sumNulls->setReturnTypes({{EvaluatedType::Integer}});
     sumNulls->setIsAggregate(true);
 
-    // A type-erased cell carries its number's type per row, so the sum is an integer or a
-    // float depending on the rows: a float once any float is summed. It errors on a cell
-    // that is no number at all.
+    // A type-erased cell carries its value's type per row, so the sum is an integer, a
+    // float or a duration depending on the rows: a float once any float is summed. It
+    // errors on a cell holding neither a number nor a duration, and on a mix of the two.
     FunctionSignature* sumAnyValues = createFunction("sum");
     sumAnyValues->setArguments({EvaluatedType::Any});
     sumAnyValues->setReturnTypes({{EvaluatedType::Any}});
@@ -486,8 +497,9 @@ void FunctionDecls::initDefault() {
     }
 
     // percentileCont interpolates between two values, which makes a double of them;
-    // percentileDisc answers one of the values as it is.
-    for (const EvaluatedType percentileType : {EvaluatedType::Double, EvaluatedType::Integer}) {
+    // percentileDisc answers one of the values as it is. A percentile held in a type-erased
+    // cell is read per row, as a range bound is.
+    for (const EvaluatedType percentileType : {EvaluatedType::Double, EvaluatedType::Integer, EvaluatedType::Any}) {
         FunctionArgumentType percentile(percentileType);
         percentile.setName("percentile");
 

@@ -2904,7 +2904,7 @@ def CountScanRows : TuringOp<"count_scan_rows", [Pure]> {
 // Unlike count(*), which tallies rows regardless of value and so accepts an ID
 // column, these reduce the values themselves, so the input must be a property
 // value column. The result value type follows Cypher and is resolved during
-// lowering: sum and min/max keep the input's type, avg is always a float, and the
+// lowering: sum and min/max keep the input's type, avg is a float over numbers, and the
 // result is null when no non-null row was seen (except sum, which is 0). Like
 // db.count the input and result types are unrelated, so there is no verifier.
 //
@@ -4095,7 +4095,7 @@ def GroupAggregate : TuringOp<"group_aggregate", [Pure]> {
 
     The results are the grouping-key columns (in operand order, same types) then
     one column per aggregate: count and count_distinct are ui64 counts, sum/min/max
-    keep the input's value type and avg widens to f64 - all resolved during lowering,
+    keep the input's value type and avg widens numbers to f64 - all resolved during lowering,
     the distinct kinds exactly as the kinds they mirror,
     so - like db.count - the aggregate result types are unconstrained here. count(*)
     is expressed by a count over a never-null column (node IDs).
