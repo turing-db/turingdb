@@ -179,3 +179,5 @@ add_turing_test(test_query_ir_iterate_a_cell_as_a_list_of_one IterateACellAsALis
 
 add_ir_tests(test_query_ir_membership_lowering MembershipLoweringTest.cpp)
 target_sources(test_query_ir_membership_lowering PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+
+add_turing_test(test_query_ir_list_out_of_bounds ListOutOfBoundsTest.cpp)
