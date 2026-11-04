@@ -29,7 +29,7 @@ QUERY_VECTORS = [
 
 def port_is_open():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        return s.connect_ex(("127.0.0.1", 6686)) == 0
+        return s.connect_ex(("127.0.0.1", 6666)) == 0
 
 
 def spawn_turingdb():
@@ -41,7 +41,7 @@ def spawn_turingdb():
             return
         time.sleep(0.1)
 
-    raise RuntimeError("turingdb did not start listening on port 6686")
+    raise RuntimeError("turingdb did not start listening on port 6666")
 
 
 def read_server_pid():
@@ -68,7 +68,7 @@ def sigkill_turingdb():
             return
         time.sleep(0.1)
 
-    raise RuntimeError("Port 6686 still open after SIGKILL")
+    raise RuntimeError("Port 6666 still open after SIGKILL")
 
 
 def stop_turingdb():
@@ -171,7 +171,7 @@ if __name__ == "__main__":
 
         spawn_turingdb()
 
-        client = TuringDB(host="http://localhost:6686")
+        client = TuringDB(host="http://localhost:6666")
         wait_ready(client)
 
         create_indexes(client)

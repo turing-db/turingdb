@@ -16,7 +16,7 @@ import sys
 
 from turingdb import TuringDB
 
-HOST = "http://localhost:6686"
+HOST = "http://localhost:6666"
 GRAPH = "json_escape_test"
 
 

@@ -392,7 +392,7 @@ added a **small consensus layer for metadata** because pure-gossip schema/topolo
 |---|---|---|---|---|
 | **SWIM membership** | node ↔ node | own listener: UDP probes + TCP state sync | continuous, tiny | source of truth for liveness / membership |
 | **Data anti-entropy** | node ↔ node | TCP (bulk part pulls) | periodic | exchange part-hash digests, pull missing parts |
-| **`/cluster/*` HTTP** | operator / CLI ↔ a node | the existing 6686 REST listener | on-demand, request/response | *observe and command* the cluster |
+| **`/cluster/*` HTTP** | operator / CLI ↔ a node | the existing 6666 REST listener | on-demand, request/response | *observe and command* the cluster |
 
 The HTTP `/cluster/*` endpoints sit **on top of** SWIM: `status`/`members` *read* the
 membership table SWIM maintains; `join`/`drain` are *admin triggers* (hand a node its seeds and
@@ -419,20 +419,20 @@ routing is locality/load, never correctness, unlike Neo4j's leader routing).
 
 ### 10.5 Starting tool (phased)
 
-The `/cluster/*` HTTP endpoints are the **operator/CLI control surface** (on the 6686
+The `/cluster/*` HTTP endpoints are the **operator/CLI control surface** (on the 6666
 listener) — a *stable façade* over a membership backend that evolves underneath. They are
 distinct from the SWIM transport (§10.3); building them first does **not** mean HTTP is doing
 membership.
 
 `turingctl` is a **local control tool**: it talks only to the **co-located** turingdb server on
-that host (e.g. `POST localhost:6686/cluster/join`). It does **not** reach into other nodes — it
+that host (e.g. `POST localhost:6666/cluster/join`). It does **not** reach into other nodes — it
 commands the *local* node, which then performs the actual join (SWIM gossip with the seeds,
 CP-metadata read, writer-ID allocation, anti-entropy catch-up). This mirrors `cockroach` /
 `nodetool` / `etcdctl`, where the CLI drives the node it sits next to.
 
 1. Add `/cluster/{join,members,status}` endpoints to the existing HTTP server
    (`server/DBServerProcessor`, `server/Endpoints.h`) — they **read out** the membership view
-   + frontier VVs and **trigger** lifecycle actions. On the existing 6686 listener; no new
+   + frontier VVs and **trigger** lifecycle actions. On the existing 6666 listener; no new
    transport *for the API*.
 2. Thin `turingctl` CLI driving them (`cluster init`, `node add --join`, `cluster status`,
    `node drain`). Test with Docker Compose / multi-process local. *MVP membership backend:*
@@ -464,7 +464,7 @@ The bundle (assembled from the seed's SWIM state-sync + a read of the CP metadat
 - **A target frontier VV** — "current head," so the node knows what to catch up to.
 
 ```json
-POST localhost:6686/cluster/join   { "seeds": ["seedA:7900"], "role": "writer" }
+POST localhost:6666/cluster/join   { "seeds": ["seedA:7900"], "role": "writer" }
 → {
     "nodeId": "…", "writerId": "w4",                    // w4 allocated via the CP store
     "members":  [ { "id": "…", "addr": "…", "status": "alive", "frontierVV": {…} }, … ],

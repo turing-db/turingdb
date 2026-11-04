@@ -6,15 +6,15 @@ cd $SCRIPT_DIR
 
 # Kill any existing turingdb processes (SIGKILL for reliability)
 pkill -9 turingdb 2>/dev/null || true
-# Wait for ports 6686 and 6676 to be free (nc -z returns 0 if open, 1 if closed)
-for port in 6686 6676; do
+# Wait for ports 6666 and 6676 to be free (nc -z returns 0 if open, 1 if closed)
+for port in 6666 6676; do
     for i in $(seq 1 100); do nc -z localhost $port 2>/dev/null || break; sleep 0.1; done
 done
 
 rm -rf $SCRIPT_DIR/.turing-native $SCRIPT_DIR/.turing-json $SCRIPT_DIR/.turing-embedded
 
 # One server for each wire protocol, so main.py checks the native and the json client
-USE_TURING_PROTO=1 turingdb -demon -turing-dir $SCRIPT_DIR/.turing-native -p 6686
+USE_TURING_PROTO=1 turingdb -demon -turing-dir $SCRIPT_DIR/.turing-native -p 6666
 env -u USE_TURING_PROTO turingdb -demon -turing-dir $SCRIPT_DIR/.turing-json -p 6676
 
 rm -f pyproject.toml

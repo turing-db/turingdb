@@ -84,7 +84,7 @@ def test_wrong_embedding_dimension(client: turingdb.TuringDB) -> None:
 
 
 def main() -> None:
-    client = turingdb.TuringDB(host="http://localhost:6686")
+    client = turingdb.TuringDB(host="http://localhost:6666")
     client.try_reach()
     print("Connected to TuringDB")
 

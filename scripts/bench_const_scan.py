@@ -7,7 +7,7 @@ sys.path.insert(0, "/home/ubuntu/turingdb2/python")
 
 from turingdb import TuringDB
 
-HOST = "http://localhost:6686"
+HOST = "http://localhost:6666"
 GRAPH = "reactome"
 LIMIT = 209500
 

@@ -20,8 +20,8 @@ uv add $PYTURINGDB
 pkill -9 turingdb 2>/dev/null || true
 # Brief sleep to ensure process dies and port is released
 sleep 0.5
-# Wait for port 6686 to be free (nc -z returns 0 if open, 1 if closed)
-for i in $(seq 1 100); do nc -z localhost 6686 2>/dev/null || break; sleep 0.1; done
+# Wait for port 6666 to be free (nc -z returns 0 if open, 1 if closed)
+for i in $(seq 1 100); do nc -z localhost 6666 2>/dev/null || break; sleep 0.1; done
 
 rm -rf $SCRIPT_DIR/.turing
 
@@ -41,10 +41,10 @@ else
   echo "SUCCESS: turingdb failed to start with invalid 'default' graph"
 fi
 
-for i in $(seq 1 100); do nc -z localhost 6686 2>/dev/null || break; sleep 0.1; done
+for i in $(seq 1 100); do nc -z localhost 6666 2>/dev/null || break; sleep 0.1; done
 turingdb -turing-dir $SCRIPT_DIR/.turing -reset-default &> /dev/null
 # Wait for turingdb to be ready
-for i in $(seq 1 100); do nc -z localhost 6686 2>/dev/null && break; sleep 0.1; done
+for i in $(seq 1 100); do nc -z localhost 6666 2>/dev/null && break; sleep 0.1; done
 uv run check_db_status.py &> /dev/null
 startres=$?
 if [ "$startres" -ne 0 ]; then # turingdb should succeed in starting
@@ -57,10 +57,10 @@ fi
 
 # Have no default graph, without trying to reset it
 rm -rf ~/.turing/graphs/default/
-for i in $(seq 1 100); do nc -z localhost 6686 2>/dev/null || break; sleep 0.1; done
+for i in $(seq 1 100); do nc -z localhost 6666 2>/dev/null || break; sleep 0.1; done
 turingdb -turing-dir $SCRIPT_DIR/.turing &> /dev/null
 # Wait for turingdb to be ready
-for i in $(seq 1 100); do nc -z localhost 6686 2>/dev/null && break; sleep 0.1; done
+for i in $(seq 1 100); do nc -z localhost 6666 2>/dev/null && break; sleep 0.1; done
 uv run check_db_status.py &> /dev/null
 startres=$?
 if [ "$startres" -ne 0 ]; then # turingdb should succeed in starting
@@ -73,10 +73,10 @@ fi
 
 # Have no default graph, and try to reset it
 rm -rf ~/.turing/graphs/default/
-for i in $(seq 1 100); do nc -z localhost 6686 2>/dev/null || break; sleep 0.1; done
+for i in $(seq 1 100); do nc -z localhost 6666 2>/dev/null || break; sleep 0.1; done
 turingdb -turing-dir $SCRIPT_DIR/.turing -reset-default &> /dev/null
 # Wait for turingdb to be ready
-for i in $(seq 1 100); do nc -z localhost 6686 2>/dev/null && break; sleep 0.1; done
+for i in $(seq 1 100); do nc -z localhost 6666 2>/dev/null && break; sleep 0.1; done
 uv run check_db_status.py &> /dev/null
 startres=$?
 if [ "$startres" -ne 0 ]; then # turingdb should succeed in starting

@@ -16,15 +16,15 @@ VECTORS_FILE = os.path.join(SCRIPT_DIR, "vectors.csv")
 def spawn_turingdb():
     print(f"- {GREEN}Starting turingdb{NC}")
     proc = subprocess.Popen("exec turingdb -demon -turing-dir .turing", shell=True)
-    # Wait for the daemon to accept TCP connections on 6686 before returning,
+    # Wait for the daemon to accept TCP connections on 6666 before returning,
     # so clients constructed immediately after don't race the startup.
     import socket
     for _ in range(100):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            if s.connect_ex(("127.0.0.1", 6686)) == 0:
+            if s.connect_ex(("127.0.0.1", 6666)) == 0:
                 return proc
         time.sleep(0.1)
-    raise RuntimeError("turingdb did not start listening on port 6686")
+    raise RuntimeError("turingdb did not start listening on port 6666")
 
 
 def stop_turingdb(proc):
@@ -35,7 +35,7 @@ def stop_turingdb(proc):
 
     for _ in range(100):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            if s.connect_ex(("127.0.0.1", 6686)) != 0:
+            if s.connect_ex(("127.0.0.1", 6666)) != 0:
                 break
         time.sleep(0.1)
 
@@ -93,7 +93,7 @@ if __name__ == "__main__":
         proc = spawn_turingdb()
 
         # Connect to turingdb
-        client = TuringDB(host="http://localhost:6686")
+        client = TuringDB(host="http://localhost:6666")
         wait_ready(client)
 
         # Create vector index

@@ -7,7 +7,7 @@ import sys
 from turingdb import TuringDB
 from turingdb.exceptions import TuringDBException
 
-HOST = "http://localhost:6686"
+HOST = "http://localhost:6666"
 
 
 def main():

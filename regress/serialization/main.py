@@ -30,7 +30,7 @@ if __name__ == "__main__":
     assert spawn_turingdb()
 
     # Connect to turingdb
-    client = TuringDB(host="http://localhost:6686")
+    client = TuringDB(host="http://localhost:6666")
 
     print(f"- {BLUE}Creating graph{NC}")
     print(client.query("CREATE GRAPH mygraph"))

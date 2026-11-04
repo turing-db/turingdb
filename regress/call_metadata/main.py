@@ -1,6 +1,6 @@
 import turingdb
 
-t = turingdb.TuringDB(host="http://localhost:6686")
+t = turingdb.TuringDB(host="http://localhost:6666")
 
 # Create a graph
 res = t.query("CREATE GRAPH mygraph")

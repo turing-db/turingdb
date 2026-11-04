@@ -8,8 +8,8 @@ cd $SCRIPT_DIR
 pkill -9 turingdb 2>/dev/null || true
 # Brief sleep to ensure process dies and port is released
 sleep 0.5
-# Wait for port 6686 to be free (nc -z returns 0 if open, 1 if closed)
-for i in $(seq 1 100); do nc -z localhost 6686 2>/dev/null || break; sleep 0.1; done
+# Wait for port 6666 to be free (nc -z returns 0 if open, 1 if closed)
+for i in $(seq 1 100); do nc -z localhost 6666 2>/dev/null || break; sleep 0.1; done
 
 rm -rf $SCRIPT_DIR/.turing
 
@@ -30,7 +30,7 @@ cp $SCRIPT_DIR/stations.csv $SCRIPT_DIR/.turing/data/
 # Now start daemon to run LOAD CSV tests via Python SDK
 turingdb -demon -turing-dir $SCRIPT_DIR/.turing
 # Wait for turingdb to be ready
-for i in $(seq 1 100); do nc -z localhost 6686 2>/dev/null && break; sleep 0.1; done
+for i in $(seq 1 100); do nc -z localhost 6666 2>/dev/null && break; sleep 0.1; done
 
 # Setup Python environment
 rm -f pyproject.toml

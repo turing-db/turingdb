@@ -10,10 +10,6 @@ class DBServerConfig {
 public:
     static constexpr std::string_view GRAPHS_FOLDER = "graphs_v2";
 
-    // Off the Fetch standard's bad ports (6665-6669 among them), which browsers and Node's
-    // fetch() refuse to connect to
-    static constexpr uint32_t DEFAULT_PORT = 6686;
-
     DBServerConfig() = default;
 
     std::string getURL() const {
@@ -42,7 +38,7 @@ public:
 
 private:
     std::string _address {"127.0.0.1"};
-    uint32_t _port {DEFAULT_PORT};
+    uint32_t _port {6666};
     uint32_t _workerCount {8};
     uint32_t _maxConnections {1024};
     size_t _protoBufferCapacity {net::proto::DEFAULT_BUFFER_CAPACITY};
