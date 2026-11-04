@@ -111,6 +111,10 @@ bool isComparisonSign(CypherTokenKind kind) {
 
 }
 
+// Each bracket and CASE adds one level of recursion. MAX_NESTING_DEPTH (256) levels must
+// fit in half of a 512 KB macOS thread stack. A parser with one function per operator
+// level uses 12 stack frames per parenthesis and 483 KB for 256 parentheses. parseExpr
+// keeps operators and operands in vectors, so only brackets and CASE grow the stack.
 Expr* CypherGrammar::parseExpr(ExprFollower follower) {
     const ExprFollower outerFollower = _follower;
     const size_t outerFollowerDepth = _followerDepth;
