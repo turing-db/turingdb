@@ -30,6 +30,7 @@ CLANG_BUILD=1 ./dependencies.sh
 | Flag | Harness | What it tests |
 |------|---------|---------------|
 | `--cypher` | `fuzz_query_engine` | Query engine: parse, analyze, generate the db program, lower and execute against SimpleGraph data |
+| `--parser` | `fuzz_cypher_parser` | Cypher parser alone: lex, parse and render the syntax error |
 | `--http` | `fuzz_http_parser` | HTTP server: the request path of `TCPConnectionManager` after `recv()`, `DBServerProcessor` running the query against SimpleGraph data, and the chunked JSON response |
 | `--proto` | `fuzz_proto_parser` | Binary protocol end to end: a real `TuringServer` in-process, `net::proto::TuringClient` sends the fuzzed query and decodes the response. The input is the query string |
 | `--csv` | `fuzz_csv_parser` | CSV parser: `parseCSVLine()` and `peekFileStructure()` |

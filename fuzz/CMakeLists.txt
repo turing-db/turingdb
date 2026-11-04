@@ -21,6 +21,14 @@ target_link_libraries(fuzz_query_engine PRIVATE
     turing_db_query_common_s)
 target_include_directories(fuzz_query_engine PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 
+add_executable(fuzz_cypher_parser fuzz_cypher_parser.cpp)
+target_link_libraries(fuzz_cypher_parser PRIVATE
+    turing_db_parser_s
+    turing_db_ast_s
+    turing_db_procedures_s
+    turing_db_query_common_s
+    turing_common_s)
+
 add_executable(fuzz_csv_parser fuzz_csv_parser.cpp)
 target_link_libraries(fuzz_csv_parser PRIVATE
     turing_db_io_csv_s

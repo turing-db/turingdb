@@ -7,7 +7,7 @@
 #
 # Usage: ./fuzz/run_afl.sh [OPTIONS] [HARNESS...]
 #
-# Harnesses: --cypher  --csv  --http  --proto  (default: all)
+# Harnesses: --cypher  --parser  --csv  --http  --proto  (default: all)
 #
 # Options:
 #   --time SECS      Time per harness (default: 300)
@@ -34,6 +34,7 @@ SKIP_BUILD=0
 NOSTOP=0
 REBUILD_AFL=0
 RUN_CYPHER=0
+RUN_PARSER=0
 RUN_CSV=0
 RUN_HTTP=0
 RUN_PROTO=0
@@ -42,6 +43,7 @@ ANY_SELECTED=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --cypher)      RUN_CYPHER=1; ANY_SELECTED=1; shift ;;
+        --parser)      RUN_PARSER=1; ANY_SELECTED=1; shift ;;
         --csv)         RUN_CSV=1; ANY_SELECTED=1; shift ;;
         --http)        RUN_HTTP=1; ANY_SELECTED=1; shift ;;
         --proto)       RUN_PROTO=1; ANY_SELECTED=1; shift ;;
@@ -51,9 +53,10 @@ while [[ $# -gt 0 ]]; do
         --skip-build)  SKIP_BUILD=1; shift ;;
         --rebuild-afl) REBUILD_AFL=1; shift ;;
         -h|--help)
-            echo "Usage: $0 [--cypher] [--csv] [--http] [--proto] [--time SECS] [--nostop] [--build-only] [--skip-build] [--rebuild-afl]"
+            echo "Usage: $0 [--cypher] [--parser] [--csv] [--http] [--proto] [--time SECS] [--nostop] [--build-only] [--skip-build] [--rebuild-afl]"
             echo ""
-            echo "  --cypher       Fuzz the Cypher parser"
+            echo "  --cypher       Fuzz the query engine"
+            echo "  --parser       Fuzz the Cypher parser alone"
             echo "  --csv          Fuzz the CSV parser"
             echo "  --http         Fuzz the HTTP server"
             echo "  --proto        Fuzz the binary-protocol server"
@@ -72,13 +75,14 @@ done
 
 # Default: run all
 if [[ $ANY_SELECTED -eq 0 ]]; then
-    RUN_CYPHER=1; RUN_CSV=1; RUN_HTTP=1; RUN_PROTO=1
+    RUN_CYPHER=1; RUN_PARSER=1; RUN_CSV=1; RUN_HTTP=1; RUN_PROTO=1
 fi
 
 # Build harness list
 HARNESSES=()
 CORPORA=()
 if [[ $RUN_CYPHER -eq 1 ]]; then HARNESSES+=(fuzz_query_engine); CORPORA+=("$FUZZ_DIR/corpus/cypher"); fi
+if [[ $RUN_PARSER -eq 1 ]]; then HARNESSES+=(fuzz_cypher_parser); CORPORA+=("$FUZZ_DIR/corpus/cypher"); fi
 if [[ $RUN_CSV -eq 1 ]];    then HARNESSES+=(fuzz_csv_parser);    CORPORA+=("$FUZZ_DIR/corpus/csv"); fi
 if [[ $RUN_HTTP -eq 1 ]];   then HARNESSES+=(fuzz_http_parser);   CORPORA+=("$FUZZ_DIR/corpus/http"); fi
 if [[ $RUN_PROTO -eq 1 ]];  then HARNESSES+=(fuzz_proto_parser);  CORPORA+=("$FUZZ_DIR/corpus/proto"); fi
@@ -268,7 +272,7 @@ run_one() {
 
     # Dictionary for token-aware fuzzing (major coverage improvement for parsers).
     local DICT_FLAG=""
-    if [[ "$HARNESS" == "fuzz_query_engine" ]] && [[ -f "$FUZZ_DIR/cypher.dict" ]]; then
+    if [[ "$HARNESS" == "fuzz_query_engine" || "$HARNESS" == "fuzz_cypher_parser" ]] && [[ -f "$FUZZ_DIR/cypher.dict" ]]; then
         DICT_FLAG="-x $FUZZ_DIR/cypher.dict"
     elif [[ "$HARNESS" == "fuzz_http_parser" ]] && [[ -f "$FUZZ_DIR/http.dict" ]]; then
         DICT_FLAG="-x $FUZZ_DIR/http.dict"
