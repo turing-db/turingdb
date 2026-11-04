@@ -1,0 +1,10 @@
+regress_test(journey_planner_npm
+             run.sh
+             package.json
+             tsconfig.json
+             harness.ts
+             timetable.ts
+             journey.ts
+             cypher.ts
+             versions.ts
+             main.ts)

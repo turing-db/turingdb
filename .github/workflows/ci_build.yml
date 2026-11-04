@@ -36,6 +36,8 @@ jobs:
     # GitHub runs pull_request workflows for every PR of a stack as if it targeted main. The
     # top PR's tree holds every commit below it, so only the top one builds.
     if: github.event.pull_request.stack == null || github.event.pull_request.stack.position == github.event.pull_request.stack.size
+    # Regress drives the npm package build-wasm packs, so the build waits for it
+    needs: build-wasm
     strategy:
       # Don't cancel the whole matrix when one job fails: on the shared
       # self-hosted runners a single transient flake would otherwise cancel the
@@ -320,15 +322,21 @@ jobs:
     - name: Disk usage (before regress)
       run: df -h
 
-    # The json_escape_properties regress test shells out to `node`, which the
-    # GitHub-hosted ubuntu ARM images don't ship (the x86/turing runners do).
-    # Installed here (not in install_build_tools.sh) to keep node out of the
-    # dependency cache key, since it is only a regress-runtime dependency.
-    - name: Install Node.js (GitHub-hosted ARM)
-      if: contains(matrix.os, 'arm')
+    # The journey_planner_npm regress test runs the npm client on node. Installed here
+    # (not in install_build_tools.sh) to keep node out of the dependency cache key, since
+    # it is only a regress-runtime dependency.
+    - name: Install Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: 'lts/*'
+        node-version: '22'
+
+    # The npm package build-wasm packed from this commit, which journey_planner_npm
+    # finds in npm/ as the other tests find the wheel in wheel/.
+    - name: Download npm package
+      uses: actions/download-artifact@v4
+      with:
+        name: turingdb-npm-package
+        path: npm
 
     # The regress suite assumes exclusive use of the host (fixed port 6686 and a
     # host-wide `pkill -9 turingdb`), but several self-hosted runner instances share
