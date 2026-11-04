@@ -1,0 +1,9 @@
+{
+  "name": "turingdb-regress-journey-planner-npm",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "6.0.3"
+  }
+}

@@ -1,0 +1,40 @@
+#!/bin/bash
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+cd $SCRIPT_DIR
+
+if ! command -v npm > /dev/null; then
+    echo "journey_planner_npm needs node and npm on PATH" >&2
+    exit 1
+fi
+
+# The npm package built from this tree, as the other tests take the wheel: TURINGDB_NPM, or
+# the one ./build_npm.sh leaves in $SOURCE_DIR/npm
+if [[ -z "$TURINGDB_NPM" && -n "$SOURCE_DIR" ]]; then
+    TURINGDB_NPM=$(ls "$SOURCE_DIR"/npm/turingdb-*.tgz 2>/dev/null | head -1)
+fi
+if [[ -z "$TURINGDB_NPM" || ! -f "$TURINGDB_NPM" ]]; then
+    echo "journey_planner_npm needs the npm package: build it with ./build_npm.sh or set TURINGDB_NPM" >&2
+    exit 1
+fi
+echo "- Using turingdb npm package: $TURINGDB_NPM"
+
+# Kill any existing turingdb processes (SIGKILL for reliability)
+pkill -9 turingdb 2>/dev/null || true
+# Wait for port 6686 to be free (nc -z returns 0 if open, 1 if closed)
+for i in $(seq 1 100); do nc -z localhost 6686 2>/dev/null || break; sleep 0.1; done
+
+rm -rf $SCRIPT_DIR/.turing $SCRIPT_DIR/node_modules $SCRIPT_DIR/dist
+
+# The npm client speaks only the binary protocol
+USE_TURING_PROTO=1 turingdb -demon -turing-dir $SCRIPT_DIR/.turing
+
+npm install --no-audit --no-fund --no-package-lock --no-save "$TURINGDB_NPM"
+
+npx tsc -p . && TURINGDB_URL=http://localhost:6686/query node dist/main.js
+testres=$?
+
+turingdb stop -turing-dir $SCRIPT_DIR/.turing
+
+exit $testres
