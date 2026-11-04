@@ -28,7 +28,7 @@ class BinaryClient(CypherHelpersMixin):
         token: Optional[str] = None,
     ):
         # Deferred import: the compiled .so may be absent on systems that
-        # only use the HTTP transport, in which case the facade should still
+        # only use the embedded engine, in which case the facade should still
         # load.
         import os
 
@@ -84,13 +84,20 @@ class BinaryClient(CypherHelpersMixin):
         self._call(self._inner.clear_change_id)
         self._call(self._inner.clear_commit_hash)
 
-    # `timeout` is ignored: the binary protocol client has no socket-timeout API yet.
-    def try_reach(self, timeout: int = 5) -> None:
-        self.query("LIST GRAPH")
+    def try_reach(self, timeout: float = 5) -> None:
+        self._query_within(timeout, "LIST GRAPH")
 
-    # Same caveat as try_reach: `timeout` is ignored.
-    def warmup(self, timeout: int = 5) -> None:
-        self.query("LIST GRAPH")
+    def warmup(self, timeout: float = 5) -> None:
+        self._query_within(timeout, "LIST GRAPH")
+
+    def _query_within(self, timeout: float, cypher: str) -> None:
+        self._call(self._inner.set_timeout, int(timeout * 1000))
+        try:
+            if not self._inner.is_connected():
+                self._call(self._inner.connect)
+            self.query(cypher)
+        finally:
+            self._call(self._inner.set_timeout, 0)
 
     def set_graph(self, name: str) -> None:
         self._call(self._inner.set_graph_name, name)
@@ -126,12 +133,6 @@ class BinaryClient(CypherHelpersMixin):
         if commit != "HEAD":
             self.query(f"LOAD COMMIT '{commit}'")
         self.set_commit(commit)
-
-    def list_available_graphs(self) -> list[str]:
-        raise TuringDBException(
-            "list_available_graphs is not supported by the binary protocol; "
-            "use the HTTP TuringDB client to enumerate on-disk graphs"
-        )
 
     def query(self, cypher: str, query_parameters: Optional[dict] = None) -> DataFrame:
         import pandas as pd

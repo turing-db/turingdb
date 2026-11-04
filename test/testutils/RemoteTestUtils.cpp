@@ -9,8 +9,6 @@
 #include <thread>
 #include <unistd.h>
 
-#include <nlohmann/json.hpp>
-
 #include "FatalException.h"
 #include "TuringTime.h"
 
@@ -174,23 +172,6 @@ bool waitUntilListening(uint16_t port, std::chrono::milliseconds timeout) {
     return false;
 }
 
-ProtoEnvScope::ProtoEnvScope() {
-    const char* existing = ::getenv("USE_TURING_PROTO");
-    _hadPrior = existing != nullptr;
-    if (_hadPrior) {
-        _prior = existing;
-    }
-    ::setenv("USE_TURING_PROTO", "1", 1);
-}
-
-ProtoEnvScope::~ProtoEnvScope() {
-    if (_hadPrior) {
-        ::setenv("USE_TURING_PROTO", _prior.c_str(), 1);
-    } else {
-        ::unsetenv("USE_TURING_PROTO");
-    }
-}
-
 void postHttpBody(uint16_t port, const std::string& uri, const std::string& body, HttpResponse& response) {
     std::vector<HttpResponse> responses;
     postHttpBodies(port, {HttpRequest {uri, body}}, responses);
@@ -202,7 +183,6 @@ void postHttpBodies(uint16_t port, const std::vector<HttpRequest>& requests, std
 
     std::string received;
     size_t position = 0;
-
     try {
         for (const HttpRequest& request : requests) {
             sendPost(socket, request);
@@ -216,9 +196,20 @@ void postHttpBodies(uint16_t port, const std::vector<HttpRequest>& requests, std
     ::close(socket);
 }
 
-void postHttpQuery(uint16_t port, const std::string& uri, const std::string& query, HttpResponse& response) {
-    const nlohmann::json body = {{"query", query}};
-    postHttpBody(port, uri, body.dump(), response);
+void sendHttpRequest(uint16_t port, const std::string& request, HttpResponse& response) {
+    const int socket = connectTo(port);
+
+    std::string received;
+    size_t position = 0;
+    try {
+        sendAll(socket, request);
+        receiveChunkedResponse(socket, received, position, response);
+    } catch (...) {
+        ::close(socket);
+        throw;
+    }
+
+    ::close(socket);
 }
 
 }

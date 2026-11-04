@@ -16,12 +16,11 @@ npm install turingdb
 
 ## Use
 
-The server speaks the binary protocol when it is launched with `USE_TURING_PROTO=1`, and
-takes queries on `/query`. Browsers and Node's `fetch` refuse its default port, 6666, so
-start it on another one:
+The server speaks the binary protocol and takes queries on `/query`. Browsers and Node's
+`fetch` refuse its default port, 6666, so start it on another one:
 
 ```sh
-USE_TURING_PROTO=1 turingdb -p 6686
+turingdb -p 6686
 ```
 
 ```js

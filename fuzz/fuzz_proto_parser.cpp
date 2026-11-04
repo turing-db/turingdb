@@ -1,5 +1,5 @@
 // AFL++ / stdin fuzzing harness for the TuringDB binary protocol. The input is a Cypher query
-// string. A real TuringServer runs in-process in binary-protocol mode over SimpleGraph data, and
+// string. A real TuringServer runs in-process over SimpleGraph data, and
 // net::proto::TuringClient sends the query and decodes the response — the harness does no framing
 // or decoding of its own. An internal error the server reports in the decoded status aborts, and
 // any exception the client raises on an unreadable response crashes the process for AFL to report.
@@ -92,8 +92,6 @@ void initOnce() {
     db::SimpleGraph::createSimpleGraph(system.getGraph("default"));
 
     const uint16_t port = reserveFreePort();
-
-    setenv("USE_TURING_PROTO", "1", 1);
 
     db::DBServerConfig serverConfig;
     serverConfig.setAddress("127.0.0.1");

@@ -2,23 +2,28 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #include <chrono>
 #include <memory>
 #include <string>
+#include <string_view>
 
-#include <nlohmann/json.hpp>
 #include <spdlog/fmt/fmt.h>
 
 #include "DBServerConfig.h"
 #include "Graph.h"
+#include "ProtoTestUtils.h"
+#include "QueryStatus.h"
 #include "RemoteTestUtils.h"
 #include "SimpleGraph.h"
 #include "SystemAccessor.h"
 #include "SystemManager.h"
+#include "TuringClient.h"
 #include "TuringProtoHeaders.h"
 #include "TuringServer.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
+#include "versioning/CommitHash.h"
 
 using namespace db;
 using namespace turing::test;
@@ -27,11 +32,7 @@ namespace {
 
 constexpr const char* GRAPH_NAME = "simpledb";
 constexpr const char* COUNT_QUERY = "MATCH (n) RETURN count(n)";
-constexpr uint64_t SIMPLEDB_NODE_COUNT = 18;
-
-std::string toHex(CommitHash hash) {
-    return fmt::format("{}", hash);
-}
+constexpr const char* SIMPLEDB_NODE_COUNT = "18";
 
 std::string commitError(std::string_view value) {
     return fmt::format("The commit parameter '{}' is not a hexadecimal commit hash or 'head'", value);
@@ -55,16 +56,22 @@ protected:
             graph = system.createGraph(GRAPH_NAME);
         }
 
-        _emptyCommit = toHex(graph->getHeadHash());
+        _emptyCommit = graph->getHeadHash();
         SimpleGraph::createSimpleGraph(graph);
-        _headCommit = toHex(graph->getHeadHash());
+        _headCommit = graph->getHeadHash();
 
         _port = reserveFreePort();
 
-        _serverConfig.setAddress("127.0.0.1");
-        _serverConfig.setPort(_port);
-        _serverConfig.setWorkerCount(1);
-        _serverConfig.setMaxConnections(16);
+        DBServerConfig serverConfig;
+        serverConfig.setAddress("127.0.0.1");
+        serverConfig.setPort(_port);
+        serverConfig.setWorkerCount(1);
+        serverConfig.setMaxConnections(16);
+
+        _server = std::make_unique<TuringServer>(serverConfig, _env->getDB());
+        _server->start();
+
+        ASSERT_TRUE(waitUntilListening(_port, std::chrono::milliseconds(2000)));
     }
 
     void terminate() override {
@@ -74,106 +81,132 @@ protected:
         }
     }
 
-    void startServer() {
-        _server = std::make_unique<TuringServer>(_serverConfig, _env->getDB());
-        _server->start();
+    void expectCount(CommitHash commit, const std::string& expectedCount) {
+        net::proto::TuringClient client("127.0.0.1", std::to_string(_port), &_env->getMem());
+        client.setGraphName(GRAPH_NAME);
+        client.setCommitHash(commit);
+        client.connect();
 
-        ASSERT_TRUE(waitUntilListening(_port, std::chrono::milliseconds(2000)));
+        ResultRows rows;
+        QueryStatus status;
+        runProtoQuery(&client, COUNT_QUERY, nullptr, rows, status);
+
+        client.disconnect();
+
+        const std::string commitText = fmt::format("{}", commit);
+        ASSERT_TRUE(status.isOk()) << commitText << ": " << status.getError();
+        EXPECT_EQ(rows, (ResultRows {{expectedCount}})) << commitText;
     }
 
-    void expectCount(const std::string& params, uint64_t expectedCount) {
+    void post(const std::string& params, HttpResponse& response) {
+        std::string body;
+        makeProtoRequestBody(COUNT_QUERY, body);
+        postHttpBody(_port, "/query?" + params, body, response);
+    }
+
+    void expectNoError(const std::string& params) {
         HttpResponse response;
-        postHttpQuery(_port, "/query?" + params, COUNT_QUERY, response);
+        post(params, response);
 
         EXPECT_EQ(response.statusLine, "HTTP/1.1 200 OK") << params;
-        const nlohmann::json json = nlohmann::json::parse(response.body);
-        ASSERT_FALSE(json.contains("error")) << params << ": " << response.body;
-        EXPECT_EQ(json["data"][0][0][0], expectedCount) << params << ": " << response.body;
+
+        net::proto::ProtoHeader header;
+        size_t position = 0;
+        while (position < response.body.size()) {
+            header = net::proto::ProtoHeader::decode(response.body.data() + position,
+                                                     response.body.size() - position);
+            EXPECT_NE(header._type, net::proto::MessageTypes::ERROR) << params;
+            EXPECT_NE(header._type, net::proto::MessageTypes::PROTOCOL_ERROR) << params;
+
+            position += net::proto::ProtoHeader::wireSize() + header._dataLen;
+        }
+
+        EXPECT_EQ(header._type, net::proto::MessageTypes::END) << params;
     }
 
     void expectError(const std::string& params,
-                     const std::string& expectedError,
+                     QueryStatus::Status expectedStatus,
                      const std::string& expectedDetails) {
         HttpResponse response;
-        postHttpQuery(_port, "/query?" + params, COUNT_QUERY, response);
+        post(params, response);
 
-        const nlohmann::json json = nlohmann::json::parse(response.body);
-        ASSERT_TRUE(json.contains("error")) << params << ": " << response.body;
-        EXPECT_FALSE(json.contains("data")) << params << ": " << response.body;
-        EXPECT_EQ(json["error"], expectedError) << params;
-        EXPECT_EQ(json["error_details"], expectedDetails) << params;
+        EXPECT_EQ(response.statusLine, "HTTP/1.1 200 OK") << params;
+
+        const size_t headerSize = net::proto::ProtoHeader::wireSize();
+        ASSERT_GE(response.body.size(), headerSize + sizeof(QueryStatus::Status)) << params;
+
+        const net::proto::ProtoHeader header = net::proto::ProtoHeader::decode(response.body.data(),
+                                                                              response.body.size());
+        ASSERT_EQ(header._type, net::proto::MessageTypes::ERROR) << params;
+
+        QueryStatus::Status status {};
+        memcpy(&status, response.body.data() + headerSize, sizeof(status));
+        EXPECT_EQ(status, expectedStatus) << params;
+
+        const size_t detailsBegin = headerSize + sizeof(status);
+        const std::string details = response.body.substr(detailsBegin, header._dataLen - sizeof(status));
+        EXPECT_EQ(details, expectedDetails) << params;
     }
 
     std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<TuringServer> _server;
-    DBServerConfig _serverConfig;
-    std::string _emptyCommit;
-    std::string _headCommit;
+    CommitHash _emptyCommit;
+    CommitHash _headCommit;
     uint16_t _port {0};
 };
 
 TEST_F(VersionParamTest, wellFormedCommitsReadTheirVersion) {
-    startServer();
+    expectCount(CommitHash::head(), SIMPLEDB_NODE_COUNT);
+    expectCount(_headCommit, SIMPLEDB_NODE_COUNT);
+    expectCount(_emptyCommit, "0");
+}
 
-    expectCount("graph=simpledb", SIMPLEDB_NODE_COUNT);
-    expectCount("graph=simpledb&commit=head&change=head", SIMPLEDB_NODE_COUNT);
-    expectCount("graph=simpledb&commit=" + _headCommit, SIMPLEDB_NODE_COUNT);
-    expectCount("graph=simpledb&commit=" + _emptyCommit, 0);
+TEST_F(VersionParamTest, absentAndHeadVersionsRunTheQuery) {
+    expectNoError("graph=simpledb");
+    expectNoError("graph=simpledb&commit=head&change=head");
+    expectNoError(fmt::format("graph=simpledb&commit={}", _headCommit));
 }
 
 TEST_F(VersionParamTest, unparseableCommitIsRejected) {
-    startServer();
+    using enum QueryStatus::Status;
 
-    expectError("graph=simpledb&commit=zzz", "COMMIT_NOT_FOUND", commitError("zzz"));
-    expectError("graph=simpledb&commit=xyz123", "COMMIT_NOT_FOUND", commitError("xyz123"));
-    expectError("graph=simpledb&commit=" + _emptyCommit + "zz",
-                "COMMIT_NOT_FOUND",
-                commitError(_emptyCommit + "zz"));
-    expectError("graph=simpledb&commit=" + _emptyCommit + "=1",
-                "COMMIT_NOT_FOUND",
-                commitError(_emptyCommit + "=1"));
+    const std::string emptyCommit = fmt::format("{}", _emptyCommit);
+
+    expectError("graph=simpledb&commit=zzz", COMMIT_NOT_FOUND, commitError("zzz"));
+    expectError("graph=simpledb&commit=xyz123", COMMIT_NOT_FOUND, commitError("xyz123"));
+    expectError("graph=simpledb&commit=" + emptyCommit + "zz", COMMIT_NOT_FOUND, commitError(emptyCommit + "zz"));
+    expectError("graph=simpledb&commit=" + emptyCommit + "=1", COMMIT_NOT_FOUND, commitError(emptyCommit + "=1"));
 }
 
 TEST_F(VersionParamTest, emptyCommitIsRejected) {
-    startServer();
+    using enum QueryStatus::Status;
 
-    expectError("graph=simpledb&commit=", "COMMIT_NOT_FOUND", commitError(""));
-    expectError("commit=&graph=simpledb", "COMMIT_NOT_FOUND", commitError(""));
-    expectError("graph=simpledb&commit", "COMMIT_NOT_FOUND", commitError(""));
+    expectError("graph=simpledb&commit=", COMMIT_NOT_FOUND, commitError(""));
+    expectError("commit=&graph=simpledb", COMMIT_NOT_FOUND, commitError(""));
+    expectError("graph=simpledb&commit", COMMIT_NOT_FOUND, commitError(""));
 }
 
 TEST_F(VersionParamTest, unparseableChangeIsRejected) {
-    startServer();
+    using enum QueryStatus::Status;
 
-    expectError("graph=simpledb&change=zzz", "CHANGE_NOT_FOUND", changeError("zzz"));
-    expectError("graph=simpledb&change=", "CHANGE_NOT_FOUND", changeError(""));
-    expectError("change=&graph=simpledb", "CHANGE_NOT_FOUND", changeError(""));
+    expectError("graph=simpledb&change=zzz", CHANGE_NOT_FOUND, changeError("zzz"));
+    expectError("graph=simpledb&change=", CHANGE_NOT_FOUND, changeError(""));
+    expectError("change=&graph=simpledb", CHANGE_NOT_FOUND, changeError(""));
+
+    for (const std::string value : {"a", "1f", "0x10", "-1"}) {
+        expectError("graph=simpledb&change=" + value, CHANGE_NOT_FOUND, changeError(value));
+    }
 }
 
-TEST_F(VersionParamTest, headSuffixGetsAJsonError) {
-    startServer();
-
+TEST_F(VersionParamTest, headSuffixIsAProtocolError) {
     HttpResponse response;
-    postHttpQuery(_port, "/query?graph=simpledb&commit=" + _headCommit + "(HEAD)", COUNT_QUERY, response);
+    post(fmt::format("graph=simpledb&commit={}(HEAD)", _headCommit), response);
 
     EXPECT_EQ(response.statusLine, "HTTP/1.1 400 Bad Request");
-    const nlohmann::json json = nlohmann::json::parse(response.body);
-    EXPECT_EQ(json["error"], "INVALID_URI") << response.body;
-    EXPECT_TRUE(json.contains("error_details")) << response.body;
-}
-
-TEST_F(VersionParamTest, binaryProtocolRejectsAnUnparseableCommit) {
-    ProtoEnvScope protoScope;
-    startServer();
-
-    HttpResponse response;
-    postHttpBody(_port, "/query?graph=simpledb&commit=zzz", COUNT_QUERY, response);
-
-    EXPECT_EQ(response.statusLine, "HTTP/1.1 200 OK");
     ASSERT_GE(response.body.size(), net::proto::ProtoHeader::wireSize());
 
     const net::proto::ProtoHeader header = net::proto::ProtoHeader::decode(response.body.data(),
                                                                           response.body.size());
-    EXPECT_EQ(header._type, net::proto::MessageTypes::ERROR);
-    EXPECT_NE(response.body.find(commitError("zzz")), std::string::npos) << response.body;
+    EXPECT_EQ(header._type, net::proto::MessageTypes::PROTOCOL_ERROR);
+    EXPECT_NE(response.body.find("The request URI is invalid."), std::string::npos) << response.body;
 }

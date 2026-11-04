@@ -8,7 +8,6 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/fmt/fmt.h>
 
-#include "ParameterMap.h"
 #include "ParameterValue.h"
 
 #include "TuringException.h"
@@ -55,22 +54,5 @@ void db::readJsonParameter(const nlohmann::json& json, ParameterValue& value) {
                 worklist.emplace_back(&entry, &map[key]);
             }
         }
-    }
-}
-
-void db::readJsonParameters(const nlohmann::json& json, ParameterMap& parameters) {
-    if (!json.is_object()) {
-        throw TuringException("The parameters must be a JSON object");
-    }
-
-    for (const auto& [name, entry] : json.items()) {
-        ParameterValue value;
-        try {
-            readJsonParameter(entry, value);
-        } catch (const TuringException& e) {
-            throw TuringException(fmt::format("Invalid value for parameter ${}: {}", name, e.what()));
-        }
-
-        parameters.set(name, value);
     }
 }

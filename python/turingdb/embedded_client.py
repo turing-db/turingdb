@@ -113,22 +113,16 @@ class EmbeddedClient(CypherHelpersMixin):
         self._query_exec_time = result.get("time")
         return result
 
-    def list_available_graphs(self) -> list[str]:
-        raise TuringDBException(
-            "list_available_graphs is not supported by the embedded engine; "
-            "use type='json' to enumerate on-disk graphs"
-        )
-
     def s3_connect(self, *args, **kwargs) -> None:
         raise TuringDBException(
             "S3 operations are not supported by the embedded engine; "
-            "use type='json' or type='native' to connect to a daemon"
+            "use type='native' to connect to a daemon"
         )
 
     def transfer(self, *args, **kwargs) -> None:
         raise TuringDBException(
             "S3 operations are not supported by the embedded engine; "
-            "use type='json' or type='native' to connect to a daemon"
+            "use type='native' to connect to a daemon"
         )
 
     def get_query_exec_time(self) -> Optional[float]:

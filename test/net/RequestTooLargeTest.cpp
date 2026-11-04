@@ -5,18 +5,20 @@
 #include <chrono>
 #include <memory>
 #include <string>
-
-#include <nlohmann/json.hpp>
+#include <string_view>
 
 #include "DBServerConfig.h"
 #include "Graph.h"
 #include "NetBuffer.h"
+#include "ProtoTestUtils.h"
+#include "QueryStatus.h"
 #include "RemoteTestUtils.h"
 #include "SimpleGraph.h"
 #include "SystemAccessor.h"
 #include "SystemManager.h"
 #include "TuringClient.h"
 #include "TuringException.h"
+#include "TuringProtoHeaders.h"
 #include "TuringServer.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
@@ -27,6 +29,11 @@ using namespace turing::test;
 namespace {
 
 constexpr const char* GRAPH_NAME = "simpledb";
+constexpr const char* REMY_QUERY = "MATCH (n) WHERE n.name = 'Remy' RETURN n.name";
+
+constexpr std::string_view LIMIT_MESSAGE = "The request is over the server limit of 1048576 bytes for the request "
+                                           "line, headers and body together. Split the query, or load bulk data "
+                                           "from a file with LOAD JSONL or LOAD PARQUET.";
 
 void makeCreateQuery(size_t minimumSize, std::string& query) {
     query = "CREATE ";
@@ -59,10 +66,16 @@ protected:
 
         _port = reserveFreePort();
 
-        _serverConfig.setAddress("127.0.0.1");
-        _serverConfig.setPort(_port);
-        _serverConfig.setWorkerCount(1);
-        _serverConfig.setMaxConnections(16);
+        DBServerConfig serverConfig;
+        serverConfig.setAddress("127.0.0.1");
+        serverConfig.setPort(_port);
+        serverConfig.setWorkerCount(1);
+        serverConfig.setMaxConnections(16);
+
+        _server = std::make_unique<TuringServer>(serverConfig, _env->getDB());
+        _server->start();
+
+        ASSERT_TRUE(waitUntilListening(_port, std::chrono::milliseconds(2000)));
     }
 
     void terminate() override {
@@ -72,99 +85,90 @@ protected:
         }
     }
 
-    void startServer() {
-        _server = std::make_unique<TuringServer>(_serverConfig, _env->getDB());
-        _server->start();
-
-        ASSERT_TRUE(waitUntilListening(_port, std::chrono::milliseconds(2000)));
-    }
-
     void expectRequestTooLarge(const std::string& query) {
+        std::string body;
+        makeProtoRequestBody(query, body);
+
         HttpResponse response;
-        postHttpQuery(_port, "/query?graph=simpledb", query, response);
+        postHttpBody(_port, "/query?graph=simpledb", body, response);
 
         EXPECT_EQ(response.statusLine, "HTTP/1.1 413 Content Too Large");
 
-        const nlohmann::json json = nlohmann::json::parse(response.body);
-        ASSERT_TRUE(json.contains("error")) << response.body;
-        ASSERT_TRUE(json.contains("error_details")) << response.body;
-        EXPECT_EQ(json["error"], "REQUEST_TOO_BIG");
+        const size_t headerSize = net::proto::ProtoHeader::wireSize();
+        ASSERT_GE(response.body.size(), headerSize);
 
-        const std::string details = json["error_details"];
-        const std::string limit = std::to_string(net::NetBuffer::BUFFER_SIZE);
-        EXPECT_NE(details.find(limit), std::string::npos) << details;
+        const net::proto::ProtoHeader header = net::proto::ProtoHeader::decode(response.body.data(),
+                                                                              response.body.size());
+        EXPECT_EQ(header._type, net::proto::MessageTypes::PROTOCOL_ERROR);
+
+        EXPECT_EQ(response.body.substr(headerSize), LIMIT_MESSAGE);
+    }
+
+    void expectRemy(const std::string& query) {
+        net::proto::TuringClient client("127.0.0.1", std::to_string(_port), &_env->getMem());
+        client.setGraphName(GRAPH_NAME);
+        client.connect();
+
+        ResultRows rows;
+        QueryStatus status;
+        runProtoQuery(&client, query, nullptr, rows, status);
+
+        client.disconnect();
+
+        ASSERT_TRUE(status.isOk()) << status.getError();
+        EXPECT_EQ(rows, (ResultRows {{"Remy"}}));
     }
 
     std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<TuringServer> _server;
-    DBServerConfig _serverConfig;
     uint16_t _port {0};
 };
 
-TEST_F(RequestTooLargeTest, BodyOverTheLimitGetsAJsonError) {
-    startServer();
-
+TEST_F(RequestTooLargeTest, BodyOverTheLimitIsAProtocolError) {
     std::string query;
     makeCreateQuery(1177786, query);
     expectRequestTooLarge(query);
 }
 
 TEST_F(RequestTooLargeTest, BodyFarOverTheLimitIsReadBeforeTheError) {
-    startServer();
-
     std::string query;
     makeCreateQuery(16 * net::NetBuffer::BUFFER_SIZE, query);
     expectRequestTooLarge(query);
 }
 
 TEST_F(RequestTooLargeTest, ServerAnswersTheNextRequestAfterTheError) {
-    startServer();
-
     std::string query;
     makeCreateQuery(2 * net::NetBuffer::BUFFER_SIZE, query);
     expectRequestTooLarge(query);
 
-    HttpResponse response;
-    postHttpQuery(_port, "/query?graph=simpledb", "MATCH (n) WHERE n.name = 'Remy' RETURN n.name", response);
-
-    EXPECT_EQ(response.statusLine, "HTTP/1.1 200 OK");
-    const nlohmann::json json = nlohmann::json::parse(response.body);
-    EXPECT_FALSE(json.contains("error")) << response.body;
+    expectRemy(REMY_QUERY);
 }
 
 TEST_F(RequestTooLargeTest, BodyUnderTheLimitRuns) {
-    startServer();
-
-    std::string query = "MATCH (n) WHERE n.name = 'Remy' RETURN n.name";
+    std::string query = REMY_QUERY;
     query.resize(1000000, ' ');
 
-    HttpResponse response;
-    postHttpQuery(_port, "/query?graph=simpledb", query, response);
-
-    EXPECT_EQ(response.statusLine, "HTTP/1.1 200 OK");
-    const nlohmann::json json = nlohmann::json::parse(response.body);
-    EXPECT_FALSE(json.contains("error")) << response.body;
-    EXPECT_EQ(json["data"][0][0][0], "Remy") << response.body;
+    expectRemy(query);
 }
 
-TEST_F(RequestTooLargeTest, BinaryProtocolNamesTheLimit) {
-    ProtoEnvScope protoScope;
-    startServer();
+TEST_F(RequestTooLargeTest, TheClientReportsTheLimit) {
+    std::string query;
+    makeCreateQuery(2 * net::NetBuffer::BUFFER_SIZE, query);
 
     net::proto::TuringClient client("127.0.0.1", std::to_string(_port), &_env->getMem());
     client.setGraphName(GRAPH_NAME);
     client.connect();
 
-    std::string query;
-    makeCreateQuery(1177786, query);
-
     std::string message;
     try {
-        client.sendQuery(query, [](const Dataframe*) {});
-    } catch (const TuringException& exception) {
-        message = exception.what();
+        ResultRows rows;
+        QueryStatus status;
+        runProtoQuery(&client, query, nullptr, rows, status);
+    } catch (const TuringException& e) {
+        message = e.what();
     }
 
-    const std::string limit = std::to_string(net::NetBuffer::BUFFER_SIZE);
-    EXPECT_NE(message.find(limit), std::string::npos) << message;
+    client.disconnect();
+
+    EXPECT_NE(message.find(LIMIT_MESSAGE), std::string::npos) << message;
 }

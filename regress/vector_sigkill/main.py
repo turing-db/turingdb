@@ -171,7 +171,7 @@ if __name__ == "__main__":
 
         spawn_turingdb()
 
-        client = TuringDB(host="http://localhost:6666")
+        client = TuringDB(host="localhost")
         wait_ready(client)
 
         create_indexes(client)

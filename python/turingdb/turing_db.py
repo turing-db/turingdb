@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-import urllib.parse
 from typing import Literal, Optional, Union
 
 from pandas import DataFrame
@@ -9,10 +7,9 @@ from pandas import DataFrame
 from .binary_client import BinaryClient
 from .embedded_client import EmbeddedClient
 from .exceptions import TuringDBException
-from .http_client import HTTPClient
 
 
-ClientType = Literal["json", "native", "embedded"]
+ClientType = Literal["native", "embedded"]
 
 _UNSET = object()
 
@@ -21,29 +18,22 @@ class TuringDB:
     """Unified TuringDB client.
 
     Pick the backend with ``type``:
-      - ``"json"`` (default): REST/HTTP to a daemon. Uses ``host``.
-      - ``"native"``: binary protocol to a daemon. Uses ``host``.
+      - ``"native"`` (default): binary protocol to a daemon. Uses ``host`` and ``port``.
       - ``"embedded"``: in-process engine. Uses ``data_dir``.
 
-    The ``TURINGDB_TYPE`` environment variable picks the default when
-    ``type`` is omitted (used by the regress runner to exercise multiple
-    backends without modifying every test).
-
-    For backend-specific functionality (e.g. ``list_available_graphs`` on
-    the JSON client) reach the underlying impl via ``client.impl``.
+    For backend-specific functionality reach the underlying impl via
+    ``client.impl``.
     """
 
     def __init__(
         self,
-        type: Optional[ClientType] = None,
+        type: ClientType = "native",
         host=_UNSET,
         data_dir=_UNSET,
         port: Optional[Union[int, str]] = None,
         token: Optional[str] = None,
     ):
-        resolved_type = type if type is not None else _default_type()
-
-        if resolved_type == "embedded":
+        if type == "embedded":
             if host is not _UNSET:
                 raise TuringDBException(
                     "host is not valid for type='embedded'; pass data_dir instead"
@@ -53,43 +43,47 @@ class TuringDB:
                     "token is not valid for type='embedded'; embedded access is in-process and unauthenticated"
                 )
             resolved_data_dir = None if data_dir is _UNSET else data_dir
-            self._impl: Union[HTTPClient, BinaryClient, EmbeddedClient] = EmbeddedClient(
+            self._impl: Union[BinaryClient, EmbeddedClient] = EmbeddedClient(
                 data_dir=resolved_data_dir
             )
-        elif resolved_type == "json":
-            if data_dir is not _UNSET:
-                raise TuringDBException(
-                    "data_dir is not valid for type='json'; pass host instead"
-                )
-            resolved_host = "http://localhost:6666" if host is _UNSET else host
-            self._impl = HTTPClient(host=resolved_host, token=token)
-        elif resolved_type == "native":
+        elif type == "native":
             if data_dir is not _UNSET:
                 raise TuringDBException(
                     "data_dir is not valid for type='native'; pass host instead"
                 )
-            resolved_host = "http://localhost:6666" if host is _UNSET else host
-            binary_host, binary_port = _split_host_port(resolved_host, port)
-            self._impl = BinaryClient(host=binary_host, port=binary_port, token=token)
+            resolved_host = "localhost" if host is _UNSET else host
+            if "://" in resolved_host:
+                raise TuringDBException(
+                    f"host must be a host name or IP address, not a URL: {resolved_host!r}; "
+                    "pass the port with port="
+                )
+            resolved_port = 6666 if port is None else port
+            self._impl = BinaryClient(host=resolved_host, port=resolved_port, token=token)
         else:
             raise TuringDBException(
-                f"Unknown type: {resolved_type!r} (expected 'json', 'native', or 'embedded')"
+                f"Unknown type: {type!r} (expected 'native' or 'embedded')"
             )
 
-        self._type: ClientType = resolved_type
+        self._type: ClientType = type
 
     @property
     def type(self) -> ClientType:
         return self._type
 
     @property
-    def impl(self) -> Union[HTTPClient, BinaryClient, EmbeddedClient]:
+    def impl(self) -> Union[BinaryClient, EmbeddedClient]:
         return self._impl
 
     def query(self, query: str, query_parameters: Optional[dict] = None) -> DataFrame:
         return self._impl.query(query, query_parameters)
 
     def query_raw(self, query: str, query_parameters: Optional[dict] = None) -> dict:
+        """Run the query and return the columns without building a DataFrame.
+
+        The result is ``{"data": {column: values}, "dtypes": {column: type name},
+        "time": milliseconds}``. Each ``values`` is a numpy array, or a list for
+        strings, nullable columns, lists and maps.
+        """
         return self._impl.query_raw(query, query_parameters)
 
     def set_graph(self, graph_name: str) -> None:
@@ -164,25 +158,3 @@ class TuringDB:
     @property
     def current_change(self) -> str:
         return self._impl.current_change
-
-
-def _default_type() -> ClientType:
-    env = os.environ.get("TURINGDB_TYPE", "").strip().lower()
-    if env in ("json", "native", "embedded"):
-        return env  # type: ignore[return-value]
-    if env:
-        raise TuringDBException(
-            f"Invalid TURINGDB_TYPE={env!r}; expected 'json', 'native', or 'embedded'"
-        )
-    return "json"
-
-
-def _split_host_port(host: str, port: Optional[Union[int, str]]) -> tuple[str, str]:
-    if "://" in host:
-        parsed = urllib.parse.urlparse(host)
-        resolved_host = parsed.hostname or "localhost"
-        resolved_port = parsed.port if parsed.port is not None else port
-    else:
-        resolved_host = host
-        resolved_port = port
-    return resolved_host, str(resolved_port if resolved_port is not None else 6666)

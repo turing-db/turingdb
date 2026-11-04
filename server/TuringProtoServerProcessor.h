@@ -1,5 +1,8 @@
 #pragma once
 
+#include <string_view>
+
+#include "HTTP.h"
 #include "TuringProtoServerNlSink.h"
 
 namespace net {
@@ -33,7 +36,7 @@ private:
     TuringProtoServerNlSink _protoNLSink;
 
     void handleQuery();
-    void writeQueryError(std::string_view message);
+    void rejectRequest(net::HTTP::Status status, std::string_view message);
 };
 
 }

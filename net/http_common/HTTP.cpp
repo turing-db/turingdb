@@ -16,6 +16,32 @@ HTTP::Status HTTP::codeToStatus(size_t httpCode) {
     return (Status)((size_t)Status::OK+pos);
 }
 
+HTTP::Status HTTP::errorToStatus(HTTP::Error error) {
+    switch (error) {
+        case Error::REQUEST_TOO_BIG:
+        case Error::TOO_MANY_PARAMS:
+            return Status::CONTENT_TOO_LARGE;
+        break;
+        case Error::UNKNOWN_ENDPOINT:
+            return Status::NOT_FOUND;
+        break;
+        case Error::INVALID_METHOD:
+            return Status::METHOD_NOT_ALLOWED;
+        break;
+        case Error::UNKNOWN:
+        case Error::HEADER_INCOMPLETE:
+        case Error::NO_METHOD:
+        case Error::NO_URI:
+        case Error::INVALID_CONTENT_LENGTH:
+        case Error::INVALID_URI:
+        case Error::_SIZE:
+            return Status::BAD_REQUEST;
+        break;
+    }
+
+    return Status::BAD_REQUEST;
+}
+
 void HTTP::describeError(HTTP::Error error, std::string& details) {
     switch (error) {
         case Error::REQUEST_TOO_BIG:

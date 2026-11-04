@@ -3,8 +3,11 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
 #include <netdb.h>
+#include <poll.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <sys/uio.h>
 #include <unistd.h>
 #include <algorithm>
@@ -21,6 +24,7 @@
 #include "HTTPUtils.h"
 #include "TuringProtoDecoder.h"
 #include "TuringProtoHeaders.h"
+#include "TuringResponseHead.h"
 #include "TuringException.h"
 #include "TuringSink.h"
 #include "TuringSinkColumnContainer.h"
@@ -35,28 +39,6 @@ namespace {
 
 // Length of the "\r\n\r\n" sentinel that terminates an HTTP/1.1 header block.
 constexpr size_t HEADERS_END_SIZE = 4;
-
-// Parses the integer status code from an HTTP/1.1 status line —
-// "HTTP/1.1 200 OK" -> 200. Throws TuringException on malformed input.
-int parseStatusCode(std::string_view statusLine) {
-    const size_t space1 = statusLine.find(' ');
-    if (space1 == std::string_view::npos) {
-        throw TuringException("Malformed HTTP response status line");
-    }
-    const std::string_view afterVersion = statusLine.substr(space1 + 1);
-    const size_t space2 = afterVersion.find(' ');
-    const std::string_view codeStr = (space2 == std::string_view::npos)
-                                       ? afterVersion
-                                       : afterVersion.substr(0, space2);
-    int statusCode = 0;
-    for (const char c : codeStr) {
-        if (c < '0' || c > '9') {
-            throw TuringException("Malformed HTTP status code");
-        }
-        statusCode = statusCode * 10 + (c - '0');
-    }
-    return statusCode;
-}
 
 // Inverse of net::http::writeHexU32. Lowercases each digit first so the a-f
 // and A-F cases collapse into one branch.
@@ -153,7 +135,7 @@ void TuringClient::connect() {
             continue;
         }
 
-        if (::connect(sock, addr->ai_addr, addr->ai_addrlen) != 0) {
+        if (!connectSocket(sock, addr->ai_addr, addr->ai_addrlen)) {
             lastErrno = errno;
             ::close(sock);
             continue;
@@ -161,6 +143,7 @@ void TuringClient::connect() {
 
         _socket = sock;
         ::freeaddrinfo(result);
+        applySocketTimeout();
         return;
     }
 
@@ -168,6 +151,72 @@ void TuringClient::connect() {
     throw TuringException(std::string("Failed to connect to ")
                           + _remoteAddress + ":" + _remotePort + ": "
                           + strerror(lastErrno));
+}
+
+void TuringClient::setTimeout(std::chrono::milliseconds timeout) {
+    _timeout = timeout;
+
+    if (_socket >= 0) {
+        applySocketTimeout();
+    }
+}
+
+bool TuringClient::connectSocket(int socket, const sockaddr* address, socklen_t addressSize) {
+    if (_timeout.count() == 0) {
+        return ::connect(socket, address, addressSize) == 0;
+    }
+
+    const int flags = ::fcntl(socket, F_GETFL, 0);
+    ::fcntl(socket, F_SETFL, flags | O_NONBLOCK);
+
+    const bool connectedAtOnce = ::connect(socket, address, addressSize) == 0;
+    if (!connectedAtOnce) {
+        if (errno != EINPROGRESS) {
+            return false;
+        }
+
+        pollfd target {.fd = socket, .events = POLLOUT, .revents = 0};
+        const int ready = ::poll(&target, 1, static_cast<int>(_timeout.count()));
+        if (ready < 0) {
+            return false;
+        } else if (ready == 0) {
+            errno = ETIMEDOUT;
+            return false;
+        }
+
+        int connectError = 0;
+        socklen_t connectErrorSize = sizeof(connectError);
+        ::getsockopt(socket, SOL_SOCKET, SO_ERROR, &connectError, &connectErrorSize);
+        if (connectError != 0) {
+            errno = connectError;
+            return false;
+        }
+    }
+
+    ::fcntl(socket, F_SETFL, flags);
+    return true;
+}
+
+void TuringClient::applySocketTimeout() {
+    const std::chrono::seconds seconds = std::chrono::duration_cast<std::chrono::seconds>(_timeout);
+    const std::chrono::microseconds microseconds = std::chrono::duration_cast<std::chrono::microseconds>(_timeout - seconds);
+
+    const timeval limit {.tv_sec = static_cast<time_t>(seconds.count()),
+                         .tv_usec = static_cast<suseconds_t>(microseconds.count())};
+    ::setsockopt(_socket, SOL_SOCKET, SO_RCVTIMEO, &limit, sizeof(limit));
+    ::setsockopt(_socket, SOL_SOCKET, SO_SNDTIMEO, &limit, sizeof(limit));
+}
+
+void TuringClient::throwSocketError(std::string_view action) {
+    const int error = errno;
+    disconnect();
+
+    const bool timedOut = error == EAGAIN || error == EWOULDBLOCK;
+    if (timedOut) {
+        throw TuringException(fmt::format("{}: timed out after {} ms", action, _timeout.count()));
+    }
+
+    throw TuringException(fmt::format("{}: {}", action, strerror(error)));
 }
 
 void TuringClient::disconnect() {
@@ -201,7 +250,8 @@ void TuringClient::sendRequest(const std::string& query) {
     headers += _remotePort;
     headers += "\r\n";
 
-    headers += "Content-type: application/turing-proto\r\n";
+    headers += CONTENT_TYPE_HEADER;
+    headers += "\r\n";
     headers += "Content-Length: ";
     headers += std::to_string(prefix.size() + query.size() + suffix.size());
     headers += "\r\n";
@@ -234,10 +284,10 @@ void TuringClient::sendRequest(const std::string& query) {
         const ssize_t bytesSent = ::sendmsg(_socket, &msg, MSG_NOSIGNAL);
 
         if (bytesSent < 0) {
-            if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
+            if (errno == EINTR) {
                 continue;
             }
-            throw TuringException(std::string("Failed to send HTTP request: ") + strerror(errno));
+            throwSocketError("Failed to send HTTP request");
         }
 
         if (bytesSent == 0) {
@@ -271,7 +321,7 @@ void TuringClient::fillScratch() {
             if (errno == EINTR) {
                 continue;
             }
-            throw TuringException(std::string("Failed to read HTTP response: ") + strerror(errno));
+            throwSocketError("Failed to read HTTP response");
         }
         if (bytesRead == 0) {
             throw TuringException("Connection closed during HTTP read");
@@ -301,7 +351,7 @@ void TuringClient::recvExactly(void* dst, size_t len) {
             if (errno == EINTR) {
                 continue;
             }
-            throw TuringException(std::string("Failed to read response body: ") + strerror(errno));
+            throwSocketError("Failed to read response body");
         }
         if (bytesRead == 0) {
             throw TuringException("Connection closed mid-response");
@@ -333,14 +383,9 @@ void TuringClient::recvHttpResponseHeaders() {
             }
 
             const std::string_view headerBlock(_httpScratch.data(), i);
-            const size_t crlf = headerBlock.find("\r\n");
-            const std::string_view statusLine = (crlf == std::string_view::npos)
-                                                  ? headerBlock
-                                                  : headerBlock.substr(0, crlf);
-            const int statusCode = parseStatusCode(statusLine);
-            if (statusCode != 200) {
-                throw TuringException("Server returned HTTP " + std::to_string(statusCode));
-            }
+            TuringResponseHead head;
+            TuringResponseHead::parse(headerBlock, head);
+            head.throwIfNoPackets();
 
             _scratchHead = i + HEADERS_END_SIZE;
             return;

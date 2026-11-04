@@ -17,7 +17,7 @@ DTYPE_MAP = {
 
 
 def parse_result_json(json_str: str) -> pd.DataFrame:
-    """Parse a resultJson string into a DataFrame using the same logic as TuringDB._parse_chunks."""
+    """Parse a resultJson string into a DataFrame shaped like a client query result."""
     data = json.loads(json_str)
 
     header = data["header"]
@@ -25,7 +25,7 @@ def parse_result_json(json_str: str) -> pd.DataFrame:
     column_types = header["column_types"]
 
     # Seed with empty typed columns from the header so that zero-row results
-    # still carry their schema — matches the HTTP and binary client behavior.
+    # still carry their schema — matches the client behavior.
     df = pd.DataFrame(
         {
             cname: pd.Series([], dtype=DTYPE_MAP.get(ctype, "object"))
@@ -71,7 +71,7 @@ def main() -> None:
         print(f"ERROR: Tests directory not found: {tests_dir}")
         sys.exit(1)
 
-    client = TuringDB(host="http://localhost:6666")
+    client = TuringDB(host="localhost")
     client.try_reach()
     print("Connected to DB")
 
@@ -81,8 +81,6 @@ def main() -> None:
 
     tests = load_test_files(tests_dir)
     print(f"Loaded {len(tests)} tests")
-
-    client_type = os.environ.get("TURINGDB_TYPE", "json")
 
     passed = 0
     failed = 0
@@ -97,7 +95,7 @@ def main() -> None:
             skipped += 1
             continue
 
-        if client_type == "native" and not test.get("remote-enabled", True):
+        if not test.get("remote-enabled", True):
             skipped += 1
             continue
 

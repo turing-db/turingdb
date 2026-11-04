@@ -2,7 +2,7 @@
 # Regression test: get_nodes_invalid_id
 #
 # This test demonstrates a crash (segfault) when requesting a non-existent node ID
-# via the /get_nodes endpoint.
+# via the db.getNodes procedure.
 #
 #
 # Expected behavior: This test should FAIL (server crash) until the bug is fixed.

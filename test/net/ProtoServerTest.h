@@ -24,7 +24,6 @@ protected:
     void initialize() override;
     void terminate() override;
 
-    ProtoEnvScope _protoScope;
     std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<db::TuringServer> _server;
     db::DBServerConfig _serverConfig;

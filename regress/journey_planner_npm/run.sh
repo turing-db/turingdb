@@ -35,9 +35,8 @@ done
 
 rm -rf $SCRIPT_DIR/.turing $SCRIPT_DIR/.turing-auth $SCRIPT_DIR/node_modules $SCRIPT_DIR/dist
 
-# The npm client speaks only the binary protocol
-USE_TURING_PROTO=1 turingdb -demon -turing-dir $SCRIPT_DIR/.turing -p $PORT
-TURINGDB_AUTH_TOKEN=$AUTH_TOKEN USE_TURING_PROTO=1 turingdb -demon -turing-dir $SCRIPT_DIR/.turing-auth -p $AUTH_PORT -auth-on
+turingdb -demon -turing-dir $SCRIPT_DIR/.turing -p $PORT
+TURINGDB_AUTH_TOKEN=$AUTH_TOKEN turingdb -demon -turing-dir $SCRIPT_DIR/.turing-auth -p $AUTH_PORT -auth-on
 
 npm install --no-audit --no-fund --no-package-lock --no-save "$TURINGDB_NPM"
 

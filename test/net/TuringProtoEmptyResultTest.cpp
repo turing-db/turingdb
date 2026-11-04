@@ -84,7 +84,6 @@ protected:
         ASSERT_TRUE(status.isOk()) << status.getError();
     }
 
-    ProtoEnvScope _protoScope;
     std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<TuringServer> _server;
     uint16_t _port {0};

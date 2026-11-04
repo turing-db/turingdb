@@ -1,7 +1,7 @@
 from turingdb import TuringDB
 
 def main() -> None:
-  client = TuringDB(host="http://localhost:6666")
+  client = TuringDB(host="localhost")
   try:
     client.query("list graph") # Check the DB is running and listening
   except Exception:

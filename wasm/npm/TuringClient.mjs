@@ -4,9 +4,8 @@
 // Browser/Node client for the TuringDB binary protocol: sends Cypher over HTTP and
 // decodes the streamed Turing Proto packets with the wasm decoder module.
 //
-// The server speaks the protocol when launched with USE_TURING_PROTO=1: the response is
-// HTTP/1.1 chunked transfer with one proto packet per chunk. fetch() strips the HTTP
-// chunk framing, so the packet stream is re-framed here from each packet's own
+// The server answers with HTTP/1.1 chunked transfer, one proto packet per chunk. fetch()
+// strips the HTTP chunk framing, so the packet stream is re-framed here from each packet's own
 // [type u8][dataLen u32le] header before being fed to the wasm decoder.
 //
 // The decoder hands each column back as flat buffers (values, offsets, validity) copied
@@ -844,7 +843,9 @@ export class TuringClient {
         });
         const reader = response.body?.getReader();
         try {
-            if (!response.ok) {
+            const contentType = response.headers?.get("content-type") ?? "";
+            const carriesPackets = contentType.toLowerCase().startsWith("application/turing-proto");
+            if (!response.ok && !carriesPackets) {
                 throw new TuringQueryError("HTTP_ERROR", `Server returned HTTP ${response.status}`);
             }
 

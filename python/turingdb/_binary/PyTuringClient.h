@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <chrono>
 #include <memory>
 #include <string>
 
@@ -29,6 +30,7 @@ public:
     void setRemotePort(const std::string& port) { _client->setRemotePort(port); }
     void setGraphName(const std::string& name) { _client->setGraphName(name); }
     void setAuthToken(const std::string& token) { _client->setAuthToken(token); }
+    void setTimeout(uint64_t milliseconds) { _client->setTimeout(std::chrono::milliseconds(milliseconds)); }
 
     void setChangeID(uint64_t value) { _client->setChangeID(db::ChangeID(value)); }
     void clearChangeID() { _client->setChangeID(db::ChangeID::head()); }

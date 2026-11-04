@@ -5,6 +5,7 @@
 #include <string>
 
 #include "PyTuringEmbedded.h"
+#include "NanobindUtils.h"
 #include "TuringException.h"
 
 namespace nb = nanobind;
@@ -30,9 +31,9 @@ NB_MODULE(_turingembedded, m) {
             try {
                 std::rethrow_exception(p);
             } catch (const TuringException& e) {
-                PyErr_SetString(PyExc_RuntimeError, e.what());
+                pybindings::setRuntimeError(e.what());
             } catch (const std::exception& e) {
-                PyErr_SetString(PyExc_RuntimeError, e.what());
+                pybindings::setRuntimeError(e.what());
             }
         });
 }

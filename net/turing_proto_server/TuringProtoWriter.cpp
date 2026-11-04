@@ -59,15 +59,15 @@ void TuringProtoWriter::sendRaw(const char* data, size_t size) {
     }
 }
 
-void TuringProtoWriter::startResponse(net::ConnectionHeader connection) {
+void TuringProtoWriter::startResponse(net::HTTP::Status status, net::ConnectionHeader connection) {
     if (errorOccured()) {
         return;
     }
 
     std::array<char, net::http::RESPONSE_HEADER_BUFFER_SIZE> buffer;
     size_t offset = 0;
-    offset += net::http::writeStatusLine(net::HTTP::Status::OK, buffer.data() + offset, buffer.size() - offset);
-    offset += net::http::writeRawHeader("Content-type: application/turing-proto", buffer.data() + offset, buffer.size() - offset);
+    offset += net::http::writeStatusLine(status, buffer.data() + offset, buffer.size() - offset);
+    offset += net::http::writeRawHeader(CONTENT_TYPE_HEADER, buffer.data() + offset, buffer.size() - offset);
     offset += net::http::writeChunkedTransferEncoding(buffer.data() + offset, buffer.size() - offset);
     offset += net::http::writeConnection(connection, buffer.data() + offset, buffer.size() - offset);
     offset += net::http::writeHeadersEnd(buffer.data() + offset, buffer.size() - offset);
@@ -129,21 +129,23 @@ void TuringProtoWriter::writeProtocolError(std::string_view message) {
 
 // No response has been started yet. A send failure is swallowed: the connection is closed
 // right after.
-void TuringProtoWriter::writeProtocolErrorResponse(std::string_view message) {
+void TuringProtoWriter::writeProtocolErrorResponse(net::HTTP::Status status, std::string_view message) {
     try {
-        startResponse(net::ConnectionHeader::CLOSE);
+        startResponse(status, net::ConnectionHeader::CLOSE);
         writeProtocolError(message);
     } catch (const NetException&) {
     }
 }
 
 void TuringProtoWriter::writeAnalyzeError(int32_t error) {
+    const net::HTTP::Error httpError = static_cast<net::HTTP::Error>(error);
+
     std::string details;
-    net::HTTP::describeError(static_cast<net::HTTP::Error>(error), details);
+    net::HTTP::describeError(httpError, details);
 
     // The request failed HTTP framing analysis before dispatch and the connection is closed
     // without the end-of-request flush, so the terminator is sent here.
-    writeProtocolErrorResponse(details);
+    writeProtocolErrorResponse(net::HTTP::errorToStatus(httpError), details);
     try {
         flush();
     } catch (const NetException&) {

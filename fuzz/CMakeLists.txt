@@ -42,9 +42,8 @@ target_link_libraries(fuzz_http_parser PRIVATE
     turing_db_server_s
     turing_db_tcp_server_s
     turing_testenv_s
-    turing_db_http_common_s
     turing_db_http_parser_s
-    nlohmann_json
+    turing_db_turing_proto_server_s
     turing_common_s)
 
 add_executable(fuzz_proto_parser fuzz_proto_parser.cpp)

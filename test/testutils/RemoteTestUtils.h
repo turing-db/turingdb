@@ -36,26 +36,7 @@ void postHttpBody(uint16_t port, const std::string& uri, const std::string& body
 // before sending the next.
 void postHttpBodies(uint16_t port, const std::vector<HttpRequest>& requests, std::vector<HttpResponse>& responses);
 
-// Posts the query in the JSON body the REST server reads.
-void postHttpQuery(uint16_t port, const std::string& uri, const std::string& query, HttpResponse& response);
-
-// USE_TURING_PROTO is read once during TuringServer::start() to choose the
-// binary protocol over HTTP. RAII scope that sets it for the lifetime of the
-// scope and restores any prior value on destruction so tests don't leak the
-// setting to whatever runs next in the same process.
-class ProtoEnvScope {
-public:
-    ProtoEnvScope();
-    ~ProtoEnvScope();
-
-    ProtoEnvScope(const ProtoEnvScope&) = delete;
-    ProtoEnvScope(ProtoEnvScope&&) = delete;
-    ProtoEnvScope& operator=(const ProtoEnvScope&) = delete;
-    ProtoEnvScope& operator=(ProtoEnvScope&&) = delete;
-
-private:
-    bool _hadPrior {false};
-    std::string _prior;
-};
+// Sends a whole request, as written, on a fresh connection and reads a chunked response.
+void sendHttpRequest(uint16_t port, const std::string& request, HttpResponse& response);
 
 }

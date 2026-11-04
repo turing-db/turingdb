@@ -6,7 +6,7 @@
 #include "AbstractTCPParser.h"
 #include "UriParser.h"
 #include "NetBuffer.h"
-#include "HTTPWriter.h"
+#include "AbstractTCPWriter.h"
 #include "HTTPUtils.h"
 
 namespace net {

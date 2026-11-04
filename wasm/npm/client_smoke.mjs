@@ -15,6 +15,7 @@ const MESSAGE_CHUNK = 1;
 const MESSAGE_END_CHUNK = 2;
 const MESSAGE_END = 3;
 const MESSAGE_ERROR = 4;
+const MESSAGE_PROTOCOL_ERROR = 5;
 
 const TYPE_UINT64 = 0;
 const TYPE_DOUBLE = 2;
@@ -139,7 +140,7 @@ function requestBody(cypher, parameters = null) {
 }
 
 // Fake fetch: streams the response bytes in small slices so packets straddle reads.
-function makeFakeFetch(bytes, captured) {
+function makeFakeFetch(bytes, captured, status = 200, contentType = "application/turing-proto") {
     return async (url, init) => {
         captured.url = url;
         captured.init = init;
@@ -152,7 +153,8 @@ function makeFakeFetch(bytes, captured) {
                 controller.close();
             },
         });
-        return { ok: true, status: 200, body: stream };
+        const headers = new Headers({ "Content-Type": contentType });
+        return { ok: status === 200, status, headers, body: stream };
     };
 }
 
@@ -625,6 +627,33 @@ async function testError() {
     });
 }
 
+// A bad request gets its own status with a PROTOCOL_ERROR packet as the body.
+async function testRejectedRequest() {
+    const message = new Writer();
+    message.raw(encoder.encode("Unauthorized: missing or invalid authentication token"));
+    const bytes = concatPackets([frame(MESSAGE_PROTOCOL_ERROR, message)]);
+
+    const client = new TuringClient({ fetch: makeFakeFetch(bytes, {}, 401) });
+
+    await assert.rejects(client.query("RETURN 1"), (raised) => {
+        assert.ok(raised instanceof TuringQueryError);
+        assert.strictEqual(raised.status, "PROTOCOL_ERROR");
+        assert.strictEqual(raised.message, "Unauthorized: missing or invalid authentication token");
+        return true;
+    });
+}
+
+async function testErrorWithoutPackets() {
+    const bytes = encoder.encode("Bad Gateway");
+    const client = new TuringClient({ fetch: makeFakeFetch(bytes, {}, 502, "text/plain") });
+
+    await assert.rejects(client.query("RETURN 1"), (raised) => {
+        assert.strictEqual(raised.status, "HTTP_ERROR");
+        assert.strictEqual(raised.message, "Server returned HTTP 502");
+        return true;
+    });
+}
+
 async function testMaps(split) {
     const bytes = concatPackets([...makeMapDataframe(split), makeEndChunk(3), makeEnd(1.0)]);
 
@@ -731,10 +760,12 @@ await testOptionalConstantLists();
 await testQueryData();
 await testMultiByteQueryBody();
 await testError();
+await testRejectedRequest();
+await testErrorWithoutPackets();
 await testMaps(false);
 await testMaps(true);
 await testRaggedQueryData();
 await testGraphPathIdsStayExact();
 await testNullGraphPath();
 
-console.log("wasm client smoke test passed: query, parameters, buffer growth, constant nulls, optional constant lists, queryData, multi-byte body, error, maps, ragged, paths, null paths");
+console.log("wasm client smoke test passed: query, parameters, buffer growth, constant nulls, optional constant lists, queryData, multi-byte body, error, rejected request, error without packets, maps, ragged, paths, null paths");

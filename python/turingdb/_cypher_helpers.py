@@ -11,11 +11,17 @@ class CypherHelpersMixin:
     """Pure-Cypher operations shared across every TuringDB-style class.
 
     Anything implementable as ``self.query(<cypher>)`` lives here so the
-    network clients (HTTP / binary) and the in-process engine present the
+    network client and the in-process engine present the
     same convenience API without duplicated bodies. Implementing classes
     must provide ``query``, ``set_change``, ``current_change``, and
     ``current_commit``.
     """
+
+    def list_available_graphs(self) -> list[str]:
+        df = self.query("LIST AVAILABLE GRAPHS")
+        if df.empty:
+            return []
+        return df["graphName"].tolist()
 
     def list_loaded_graphs(self) -> list[str]:
         df = self.query("LIST GRAPH")

@@ -5,7 +5,7 @@ import turingdb
 
 
 GRAPH_NAME = "reload_submit_edge"
-HOST = "http://localhost:6666"
+HOST = "localhost"
 TURING_DIR = ".turing"
 
 
@@ -14,7 +14,7 @@ def wait_until_reachable(client: turingdb.TuringDB, timeout_s: float = 10.0) -> 
     while time.time() < deadline:
         try:
             # Drop any stale socket left over from a previous daemon and
-            # open a fresh one. No-op on the HTTP transport.
+            # open a fresh one.
             client.reconnect()
             client.try_reach()
             return

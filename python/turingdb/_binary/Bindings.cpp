@@ -6,6 +6,7 @@
 
 #include "PyTuringClient.h"
 
+#include "NanobindUtils.h"
 #include "TuringException.h"
 
 namespace nb = nanobind;
@@ -25,6 +26,7 @@ NB_MODULE(_turingproto, m) {
         .def("set_remote_port", &PyTuringClient::setRemotePort, nb::arg("port"))
         .def("set_graph_name", &PyTuringClient::setGraphName, nb::arg("name"))
         .def("set_auth_token", &PyTuringClient::setAuthToken, nb::arg("token"))
+        .def("set_timeout", &PyTuringClient::setTimeout, nb::arg("milliseconds"))
         .def("set_change_id", &PyTuringClient::setChangeID, nb::arg("change_id"))
         .def("clear_change_id", &PyTuringClient::clearChangeID)
         .def("set_commit_hash", &PyTuringClient::setCommitHash, nb::arg("commit_hash"))
@@ -36,9 +38,9 @@ NB_MODULE(_turingproto, m) {
             try {
                 std::rethrow_exception(p);
             } catch (const TuringException& e) {
-                PyErr_SetString(PyExc_RuntimeError, e.what());
+                pybindings::setRuntimeError(e.what());
             } catch (const std::exception& e) {
-                PyErr_SetString(PyExc_RuntimeError, e.what());
+                pybindings::setRuntimeError(e.what());
             }
         });
 }

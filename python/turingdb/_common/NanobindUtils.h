@@ -32,6 +32,12 @@ namespace nb = nanobind;
 
 using PyObj = nb::object;
 
+// Engine strings are bytes that need not be valid UTF-8: a lone surrogate escape or
+// imported data. Invalid sequences become U+FFFD, as errors="replace" does.
+nb::str toPyString(std::string_view text);
+
+void setRuntimeError(std::string_view message);
+
 // Trivial scalar conversions to Python objects. Inline here so the templates
 // below can pick them up via overload resolution.
 inline PyObj toPy(uint64_t v) {
@@ -47,10 +53,10 @@ inline PyObj toPy(db::CustomBool v) {
     return nb::cast(v._boolean);
 }
 inline PyObj toPy(std::string_view v) {
-    return nb::cast(std::string(v));
+    return toPyString(v);
 }
 inline PyObj toPy(const std::string& v) {
-    return nb::cast(v);
+    return toPyString(v);
 }
 
 template <typename T, int I>
@@ -198,8 +204,8 @@ nb::object embeddingToNdarray(std::span<const float> s);
 // Top-level dispatcher: walks every column of the dataframe and picks the
 // right converter based on the column's runtime kind. The output is a
 // `{"data": {col: ndarray|list}, "dtypes": {col: type_name}}` envelope. The
-// dtype names match the HTTP server's vocabulary ("Int64", "UInt64", "Double",
-// "Bool", "String") so the Python wrapper can reuse the same dtype_map; ID
+// dtype names are the engine's type names ("Int64", "UInt64", "Double", "Bool",
+// "String"), which the Python wrapper maps through DTYPE_MAP; ID
 // types report their underlying integer ("UInt64" for NodeID/EdgeID/etc.)
 // while embeddings and uncommon scalar types report their C++ name and fall
 // back to object dtype on the Python side. Anonymous columns get a synthetic

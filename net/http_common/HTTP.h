@@ -117,6 +117,8 @@ static constexpr size_t getCode(HTTP::Status status) {
 
 HTTP::Status codeToStatus(size_t httpCode);
 
+HTTP::Status errorToStatus(HTTP::Error error);
+
 void describeError(HTTP::Error error, std::string& details);
 
 }

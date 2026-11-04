@@ -45,7 +45,6 @@ def wait_ready(client):
     while time.time() - t0 < 6:
         try:
             # Drop any stale socket from a previous daemon and open fresh.
-            # No-op on the HTTP transport.
             client.reconnect()
             client.try_reach(timeout=1)
             return
@@ -93,7 +92,7 @@ if __name__ == "__main__":
         proc = spawn_turingdb()
 
         # Connect to turingdb
-        client = TuringDB(host="http://localhost:6666")
+        client = TuringDB(host="localhost")
         wait_ready(client)
 
         # Create vector index
