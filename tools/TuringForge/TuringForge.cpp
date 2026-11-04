@@ -428,7 +428,7 @@ int main(int argc, const char** argv) {
 
     parser.add_argument("--buffer-capacity")
         .metavar("BYTES")
-        .help("Per-connection proto buffer capacity; should match the server (default: 1 MiB)")
+        .help("Starting size of each connection's input buffer, which grows to any packet up to 64 MiB (default: 1 MiB)")
         .scan<'u', size_t>()
         .store_into(bufferCapacity);
 

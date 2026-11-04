@@ -1,5 +1,7 @@
 #include "TuringProtoInBuf.h"
 
+#include <algorithm>
+
 #include "TuringProtoHeaders.h"
 #include "TuringException.h"
 
@@ -10,9 +12,18 @@ TuringProtoInBuf::TuringProtoInBuf(size_t capacity)
 {
 }
 
-void TuringProtoInBuf::ensureCapacity(size_t capacity) {
+void TuringProtoInBuf::reset(size_t capacity) {
+    if (capacity > MAX_PAYLOAD_SIZE) {
+        throw TuringException("A packet payload of " + std::to_string(capacity) + " bytes is more than the "
+                              + std::to_string(MAX_PAYLOAD_SIZE) + " bytes the binary protocol allows");
+    }
+
+    reset();
+
     if (capacity > _data.size()) {
-        _data.resize(capacity);
+        const size_t grownCapacity = std::min(std::max(capacity, 2 * _data.size()), MAX_PAYLOAD_SIZE);
+        _data.clear();
+        _data.resize(grownCapacity);
     }
 }
 

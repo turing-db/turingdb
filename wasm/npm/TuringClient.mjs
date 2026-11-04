@@ -24,6 +24,8 @@
 //     // chunks x columns x rows with BigInt converted to Number
 
 const PROTO_HEADER_SIZE = 5;
+// Mirrors net::proto::MAX_PAYLOAD_SIZE (TuringProtoHeaders.h).
+const MAX_PAYLOAD_SIZE = 64 * 1024 * 1024;
 
 const MESSAGE_CHUNK_HEADER = 0;
 const MESSAGE_CHUNK = 1;
@@ -177,6 +179,10 @@ class PacketAssembler {
 
         const header = this.peek(PROTO_HEADER_SIZE);
         const dataLen = (header[1] | (header[2] << 8) | (header[3] << 16) | (header[4] << 24)) >>> 0;
+        if (dataLen > MAX_PAYLOAD_SIZE) {
+            throw new TuringQueryError("PROTOCOL_ERROR", `A packet payload of ${dataLen} bytes is more than the ${MAX_PAYLOAD_SIZE} bytes the binary protocol allows`);
+        }
+
         const packetSize = PROTO_HEADER_SIZE + dataLen;
         if (this.size < packetSize) {
             return null;
@@ -274,10 +280,11 @@ function isPlainObject(value) {
 }
 
 function describeKind(value) {
-    if (value === undefined) {
-        return "undefined";
+    if (value === undefined || value === null) {
+        return String(value);
     } else if (typeof value === "object") {
-        return `a ${value.constructor.name}`;
+        const name = value.constructor?.name;
+        return name ? `a ${name}` : "an object with no constructor";
     }
     return `a ${typeof value}`;
 }
@@ -295,7 +302,7 @@ function compareBytes(left, right) {
 // A container is its count, then the byte size a result decoder reserves for it, which the
 // server's parameter reader does not read. A map's keys go in the order of their UTF-8
 // bytes, the order the server holds them in.
-function writeMap(writer, map, pathOf) {
+function writeMap(writer, map, pathOf, ancestors) {
     const entries = Object.entries(map).map(([key, value]) => ({ key, bytes: utf8Encoder.encode(key), value }));
     entries.sort((left, right) => compareBytes(left.bytes, right.bytes));
 
@@ -305,12 +312,12 @@ function writeMap(writer, map, pathOf) {
     for (const { key, bytes, value } of entries) {
         writer.u32(bytes.length);
         writer.bytes(bytes);
-        writeParameterValue(writer, value, pathOf(key));
+        writeParameterValue(writer, value, pathOf(key), ancestors);
     }
 }
 
 // An integral number goes as an Int64, as Cypher reads 470, and any other number as a Double
-function writeParameterValue(writer, value, path) {
+function writeParameterValue(writer, value, path, ancestors) {
     if (value === null) {
         writer.u8(CELL_TAG_NULL);
         writer.u8(0);
@@ -339,16 +346,22 @@ function writeParameterValue(writer, value, path) {
         writer.u8(CELL_TAG_STRING);
         writer.u32(bytes.length);
         writer.bytes(bytes);
+    } else if (ancestors.has(value)) {
+        throwParameterError(path, "refers back to a value that contains it");
     } else if (Array.isArray(value)) {
+        ancestors.add(value);
         writer.u8(CELL_TAG_LIST_VIEW);
         writer.u32(value.length);
         writer.u32(0);
         for (let index = 0; index < value.length; index++) {
-            writeParameterValue(writer, value[index], `${path}[${index}]`);
+            writeParameterValue(writer, value[index], `${path}[${index}]`, ancestors);
         }
+        ancestors.delete(value);
     } else if (typeof value === "object" && isPlainObject(value)) {
+        ancestors.add(value);
         writer.u8(CELL_TAG_MAP_VIEW);
-        writeMap(writer, value, (key) => `${path}.${key}`);
+        writeMap(writer, value, (key) => `${path}.${key}`, ancestors);
+        ancestors.delete(value);
     } else {
         throwParameterError(path, `is ${describeKind(value)}, which a query parameter cannot hold`);
     }
@@ -369,7 +382,7 @@ function encodeParameters(parameters) {
     }
 
     const writer = new ByteWriter();
-    writeMap(writer, parameters, (key) => `$${key}`);
+    writeMap(writer, parameters, (key) => `$${key}`, new Set([parameters]));
     return writer.toUint8Array();
 }
 
@@ -725,11 +738,18 @@ function encodeRequestBody(cypher, parameters) {
 }
 
 // ERROR packet payload: one QueryStatus byte followed by the UTF-8 message.
-function readError(packet) {
+function addErrorPacket(error, packet) {
     const payload = packet.subarray(PROTO_HEADER_SIZE);
+    if (error !== null) {
+        error.message.bytes(payload);
+        return error;
+    }
+
     const statusCode = payload.length > 0 ? payload[0] : 0;
     const status = QUERY_STATUS_NAMES[statusCode] ?? `STATUS_${statusCode}`;
-    return { status, message: utf8Decoder.decode(payload.subarray(1)) };
+    const message = new ByteWriter();
+    message.bytes(payload.subarray(1));
+    return { status, message };
 }
 
 // A C++ TuringException crossing the embind boundary is not a JS Error; recover its
@@ -822,16 +842,22 @@ export class TuringClient {
             body: encodeRequestBody(cypher, options.parameters),
             signal: options.signal,
         });
-        if (!response.ok) {
-            throw new TuringQueryError("HTTP_ERROR", `Server returned HTTP ${response.status}`);
-        }
-
-        const module = await this._decoderModule();
-        const decoder = new module.TuringDecoder(this._bufferCapacity);
+        const reader = response.body?.getReader();
         try {
-            return await this._decodeResponse(decoder, response.body.getReader());
-        } finally {
-            decoder.delete();
+            if (!response.ok) {
+                throw new TuringQueryError("HTTP_ERROR", `Server returned HTTP ${response.status}`);
+            }
+
+            const module = await this._decoderModule();
+            const decoder = new module.TuringDecoder(this._bufferCapacity);
+            try {
+                return await this._decodeResponse(decoder, reader);
+            } finally {
+                decoder.delete();
+            }
+        } catch (raised) {
+            reader?.cancel().catch(() => {});
+            throw raised;
         }
     }
 
@@ -858,6 +884,7 @@ export class TuringClient {
         let sawEnd = false;
         let execTimeMs = null;
         let error = null;
+        let protocolError = null;
 
         while (true) {
             const packet = assembler.nextPacket();
@@ -870,11 +897,12 @@ export class TuringClient {
                 continue;
             }
 
-            if (sawEnd) {
+            const type = packet[0];
+            const continuesProtocolError = protocolError !== null && type === MESSAGE_PROTOCOL_ERROR;
+            if ((sawEnd || protocolError !== null) && !continuesProtocolError) {
                 throw new TuringQueryError("PROTOCOL_ERROR", "Unexpected packet after END");
             }
 
-            const type = packet[0];
             if (type === MESSAGE_CHUNK_HEADER || type === MESSAGE_CHUNK) {
                 this._decodePacket(decoder, packet);
             } else if (type === MESSAGE_END_CHUNK) {
@@ -893,19 +921,21 @@ export class TuringClient {
                 execTimeMs = readExecTime(packet);
                 sawEnd = true;
             } else if (type === MESSAGE_ERROR) {
-                error = readError(packet);
+                error = addErrorPacket(error, packet);
             } else if (type === MESSAGE_PROTOCOL_ERROR) {
-                throw new TuringQueryError("PROTOCOL_ERROR", utf8Decoder.decode(packet.subarray(PROTO_HEADER_SIZE)));
+                protocolError ??= new ByteWriter();
+                protocolError.bytes(packet.subarray(PROTO_HEADER_SIZE));
             } else {
                 throw new TuringQueryError("PROTOCOL_ERROR", `Unknown packet type ${type}`);
             }
         }
 
-        if (error !== null) {
-            throw new TuringQueryError(error.status, error.message);
-        }
-        if (!sawEnd) {
+        if (protocolError !== null) {
+            throw new TuringQueryError("PROTOCOL_ERROR", utf8Decoder.decode(protocolError.toUint8Array()));
+        } else if (!sawEnd) {
             throw new TuringQueryError("PROTOCOL_ERROR", "Response ended before the END packet");
+        } else if (error !== null) {
+            throw new TuringQueryError(error.status, utf8Decoder.decode(error.message.toUint8Array()));
         }
 
         return { chunks, execTimeMs };

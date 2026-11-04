@@ -31,7 +31,9 @@ struct Total {
 };
 
 void addRows(const Dataframe* dataframe, Total& total) {
-    const auto* values = dataframe->cols().front()->as<ColumnVector<std::optional<int64_t>>>();
+    const Dataframe::NamedColumns& columns = dataframe->cols();
+    const NamedColumn* first = columns.front();
+    const ColumnVector<std::optional<int64_t>>* values = first->as<ColumnVector<std::optional<int64_t>>>();
     ASSERT_NE(values, nullptr);
 
     for (const std::optional<int64_t>& value : values->getRaw()) {

@@ -382,8 +382,7 @@ private:
     // Copies the packet payload straight into the decode buffer through a heap view —
     // one JS set() call, not a per-byte conversion.
     void loadPayload(val packet, size_t dataLen) {
-        _inBuf.reset();
-        _inBuf.ensureCapacity(dataLen);
+        _inBuf.reset(dataLen);
 
         if (dataLen > 0) {
             val payloadView = val(emscripten::typed_memory_view(dataLen, reinterpret_cast<uint8_t*>(_inBuf.data())));

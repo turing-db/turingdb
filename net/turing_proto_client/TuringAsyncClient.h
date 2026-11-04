@@ -4,6 +4,7 @@
 #include <sys/uio.h>
 #include <array>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -161,6 +162,8 @@ private:
     db::QueryStatus _res;
     bool _callbackFired {false};
     bool _sawTerminalPacket {false};
+    std::optional<std::string> _errorMessage;
+    std::optional<std::string> _protocolError;
 
     // Completes a connect() that returned EINPROGRESS: WouldBlock until the socket is
     // writable, then throws if the handshake failed.
@@ -168,6 +171,8 @@ private:
     [[noreturn]] void throwConnectError(int error) const;
 
     void buildRequest(const std::string& query, const db::ParameterMap* parameters);
+    void continueSend();
+    void continueRecv();
 
     // Copies up to (need - filled) buffered bytes from _httpScratch into dst, advancing
     // _scratchHead and filled. Any remaining bytes are read from the socket by the caller.

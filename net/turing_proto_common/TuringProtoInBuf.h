@@ -31,7 +31,7 @@ public:
         _writeOffset = 0;
         _readOffset = 0;
     }
-    void ensureCapacity(size_t capacity);
+    void reset(size_t capacity);
     void increaseWriteOffset(size_t increase) { _writeOffset += increase; }
     void increaseReadOffset(size_t increase) {
         ensureReadable(increase);

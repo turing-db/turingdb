@@ -26,6 +26,9 @@ namespace net::proto {
 template <ProtoDecodeSink Sink>
 class TuringProtoDecoder {
 public:
+    static_assert(requires { Sink::template holds<typename Sink::template ColumnVector<uint64_t>>(); },
+                  "A sink that decodes columns says which column types it holds");
+
     TuringProtoDecoder(TuringProtoInBuf* inBuf,
                        Sink* sink,
                        std::vector<DecodedColumnSchema>& columnSchemas);
@@ -354,13 +357,15 @@ void TuringProtoDecoder<Sink>::decodeChunkFooter(SinkColumnContainer<Sink>* cont
     container->setRowCount(rowCount);
 
     // A constant null has no bytes, so no CHUNK packet reaches it and it completes here. Any
-    // other column still open has lost bytes.
+    // other column still open, or value still waiting for bytes, has lost bytes.
     if (rowCount > 0) {
         decodeIncomingData(container);
+    }
 
-        if (_context._columnIndex < container->size()) {
-            throw TuringException("The chunk ended before its columns did");
-        }
+    const bool columnOpen = rowCount > 0 && _context._columnIndex < container->size();
+    const bool valueOpen = _context._bufferState._start != nullptr;
+    if (columnOpen || valueOpen) {
+        throw TuringException("The chunk ended before its columns did");
     }
 }
 

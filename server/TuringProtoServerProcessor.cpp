@@ -33,12 +33,6 @@ void TuringProtoServerProcessor::process(net::AbstractThreadContext* threadConte
     auto& writer = _connection.getWriter<net::proto::TuringProtoWriter>();
 
     try {
-        // Emit HTTP/1.1 200 OK + chunked headers up front so the catch block
-        // below can write a PROTOCOL_ERROR chunk for validation failures
-        // without first sending the response headers (Option A from the
-        // design note — every request, valid or not, opens with 200 OK).
-        writer.startResponse();
-
         const auto& httpInfo = parser.getHttpInfo();
 
         if (httpInfo.getMethod() != net::HTTP::Method::POST) {
@@ -62,9 +56,10 @@ void TuringProtoServerProcessor::process(net::AbstractThreadContext* threadConte
         _threadContext->getLocalMemory().clear();
     } catch (const ProtocolException& e) {
         // Protocol exceptions are errors that occur at the protocol level: e.g invalid
-        // method, unknown endpoint. The request was read whole and the error packet ends the
-        // response, so the connection stays open, as the Keep-Alive already sent promised.
-        writer.writeProtocolError(e.what());
+        // method, unknown endpoint. A client from before this one stops reading at the
+        // PROTOCOL_ERROR packet, so the connection closes rather than leave it out of step.
+        writer.writeProtocolErrorResponse(e.what());
+        _connection.setCloseRequired(true);
     } catch (const NetException&) {
         // Net Exceptions have to do with errors that occur during networking syscalls
         _connection.setCloseRequired(true);
@@ -88,6 +83,8 @@ void TuringProtoServerProcessor::handleQuery() {
     if (status.isOk()) {
         TuringProtoQueryRequest::read(httpInfo, request, status);
     }
+
+    writer.startResponse();
 
     if (status.isOk()) {
         const QueryState state(transactionInfo.graphName, &mem, &compilerContext, &queryConfig, &_protoNLSink, transactionInfo.commit, transactionInfo.change, &request.getParameters());

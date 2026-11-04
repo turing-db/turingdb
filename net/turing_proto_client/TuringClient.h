@@ -99,7 +99,8 @@ private:
 
     net::proto::TuringProtoRequestBody _requestBody;
 
-    void sendRequest(const std::string& query, const db::ParameterMap* parameters);
+    void sendRequest(const std::string& query);
+    void receiveResponse(const db::QueryCallbacks::OnOutputData& callback, db::QueryStatus& queryStatus);
     void recvHttpResponseHeaders();
     size_t recvChunkSizeLine();
     void recvChunkBody(size_t chunkSize, net::proto::ProtoHeader* outHeader);
