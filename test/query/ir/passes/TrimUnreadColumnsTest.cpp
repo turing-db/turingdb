@@ -904,3 +904,82 @@ TEST_F(TrimUnreadColumnsTest, dropsTheVariablesOfAnOptionalMatchNothingReads) {
     ASSERT_EQ(outputs.size(), 1u);
     EXPECT_EQ(outputs.front().getColumns().front(), optional->getResult(0));
 }
+
+// MATCH (a)-->(b) WITH DISTINCT a, b RETURN b
+const char* const dedupedPair = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %s, %e, %et, %t = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %ds, %dt = db.remove_duplicates(%s, %t) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%dt) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+TEST_F(TrimUnreadColumnsTest, leavesTheCarrySetOfADedupAlone) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(dedupedPair);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runTrim(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::RemoveDuplicates> dedups = collect<mlir::db::RemoveDuplicates>(*module);
+    ASSERT_EQ(dedups.size(), 1u);
+    EXPECT_EQ(dedups.front().getColumns().size(), 2u);
+}
+
+// MATCH (a)-->(b) UNWIND range(0, 3)[1..2] AS x RETURN x
+const char* const unwoundRangeBesideAHop = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %s, %e, %et, %t = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %zero = db.constant(0 : i64)
+  %one = db.constant(1 : i64)
+  %two = db.constant(2 : i64)
+  %three = db.constant(3 : i64)
+  %x, %sc, %tc = db.unwind_range(%zero, %three, %one, from %one, to %two, {%s, %t}) : (!db.column<i64>, !db.column<i64>, !db.column<i64>, !db.column<i64>, !db.column<i64>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.nullable<i64>>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%x, %tc) : !db.column<!storage.nullable<i64>>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+TEST_F(TrimUnreadColumnsTest, dropsTheUnreadCarriedColumnsOfAnUnwoundRange) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(unwoundRangeBesideAHop);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runTrim(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::UnwindRange> unwinds = collect<mlir::db::UnwindRange>(*module);
+    ASSERT_EQ(unwinds.size(), 1u);
+    mlir::db::UnwindRange unwind = unwinds.front();
+
+    ASSERT_EQ(unwind.getColumnsToFilter().size(), 1u);
+    EXPECT_TRUE(unwind.getFrom());
+    EXPECT_TRUE(unwind.getTo());
+    EXPECT_TRUE(mlir::isa<mlir::db::GetOutEdges>(unwind.getColumnsToFilter().front().getDefiningOp()));
+}
+
+// MATCH (a) UNWIND [a.name] AS x RETURN x
+const char* const unwindComputedReadingItsCarrySet = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %x, %ac = db.unwind_computed({%a}) {
+  ^bb0(%in: !db.column<!storage.node_id>):
+    %name = db.get_node_properties(%in, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+    %names = db.make_list(%name) : (!db.column<!storage.nullable<!storage.string>>) -> !db.column<!storage.list<!storage.nullable<!storage.string>>>
+    db.unwind_yield %names : !db.column<!storage.list<!storage.nullable<!storage.string>>>
+  } : (!db.column<!storage.node_id>) -> (!db.column<!storage.any>, !db.column<!storage.node_id>)
+  db.output(%x) : !db.column<!storage.any>
+  return
+}
+)mlir";
+
+TEST_F(TrimUnreadColumnsTest, leavesACarrySetAnUnwindReadsInItsRegionAlone) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(unwindComputedReadingItsCarrySet);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runTrim(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::UnwindComputed> unwinds = collect<mlir::db::UnwindComputed>(*module);
+    ASSERT_EQ(unwinds.size(), 1u);
+    EXPECT_EQ(unwinds.front().getColumnsToFilter().size(), 1u);
+}

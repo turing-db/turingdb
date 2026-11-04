@@ -187,14 +187,18 @@ void collectCarriedArgument(Value value, ValueRange carriedColumns, llvm::SmallV
     }
 }
 
+bool fillHopCarrySet(Operation* hop, CarrySet& carrySet) {
+    carrySet = CarrySet {._operandOffset = 1, ._resultOffset = HOP_FIXED_RESULT_COUNT, ._count = hop->getNumOperands() - 1};
+    return true;
+}
+
 // A hop hands the node it walks from back as one of its fixed results, @param inputResult
-void collectHopCarriedColumns(Operation* hop, size_t inputResult, Value value, llvm::SmallVectorImpl<Value>& carried) {
-    const OpResult result = dyn_cast<OpResult>(value);
-    if (result && result.getResultNumber() == inputResult) {
-        carried.push_back(hop->getOperand(0));
+Value hopRowSource(Operation* hop, size_t inputResult, OpResult result) {
+    if (result.getResultNumber() == inputResult) {
+        return hop->getOperand(0);
     }
 
-    collectCarriedResult(value, HOP_FIXED_RESULT_COUNT, hop->getOperands().drop_front(), carried);
+    return carrySetRowSource(hop, result);
 }
 
 void collectBranchYields(Value value, MutableArrayRef<Region> branches, llvm::SmallVectorImpl<Value>& carried) {
@@ -2771,113 +2775,167 @@ Speculation::Speculatability CheckedCast::getSpeculatability() {
     return speculatableOverKnownTypes(getOperation()->getOperands());
 }
 
-void FilterOp::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectCarriedResult(value, 0, getColumnsToFilter(), carried);
+bool FilterOp::getCarrySet(CarrySet& carrySet) {
+    carrySet = CarrySet {._operandOffset = 1, ._count = getColumnsToFilter().size()};
+    return true;
 }
 
-void Limit::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectCarriedResult(value, 0, getColumns(), carried);
+bool Limit::getCarrySet(CarrySet& carrySet) {
+    carrySet = CarrySet {._count = getColumns().size()};
+    return true;
 }
 
-void Skip::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectCarriedResult(value, 0, getColumns(), carried);
+bool Skip::getCarrySet(CarrySet& carrySet) {
+    carrySet = CarrySet {._count = getColumns().size()};
+    return true;
 }
 
-void Sort::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectCarriedResult(value, 0, getColumns(), carried);
+bool Sort::getCarrySet(CarrySet& carrySet) {
+    carrySet = CarrySet {._count = getColumns().size()};
+    return true;
 }
 
-void RemoveDuplicates::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectCarriedResult(value, 0, getColumns(), carried);
+bool RemoveDuplicates::getCarrySet(CarrySet& carrySet) {
+    carrySet = CarrySet {._count = getColumns().size()};
+    return true;
 }
 
-void GroupAggregate::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectCarriedResult(value, 0, getColumns().take_front(getKeyCount()), carried);
+bool GroupAggregate::getCarrySet(CarrySet& carrySet) {
+    carrySet = CarrySet {._count = getKeyCount()};
+    return true;
 }
 
-void Collect::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectCarriedResult(value, 0, getColumns().take_front(getKeyCount()), carried);
+bool Collect::getCarrySet(CarrySet& carrySet) {
+    carrySet = CarrySet {._count = getKeyCount()};
+    return true;
 }
 
-void FetchNodes::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectCarriedResult(value, 1, getColumnsToFilter(), carried);
+bool FetchNodes::getCarrySet(CarrySet& carrySet) {
+    carrySet = CarrySet {._operandOffset = 1, ._resultOffset = 1, ._count = getColumnsToFilter().size()};
+    return true;
 }
 
-void Unwind::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectCarriedResult(value, 1, getColumnsToFilter(), carried);
+bool Unwind::getCarrySet(CarrySet& carrySet) {
+    carrySet = CarrySet {._operandOffset = 1, ._resultOffset = 1, ._count = getColumnsToFilter().size()};
+    return true;
 }
 
-void UnwindRange::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectCarriedResult(value, 1, getColumnsToFilter(), carried);
+bool UnwindRange::getCarrySet(CarrySet& carrySet) {
+    const size_t count = getColumnsToFilter().size();
+    carrySet = CarrySet {._operandOffset = getNumOperands() - count, ._resultOffset = 1, ._count = count};
+    return true;
+}
+
+bool UnwindComputed::getCarrySet(CarrySet& carrySet) {
+    carrySet = CarrySet {._resultOffset = 1, ._count = getColumnsToFilter().size()};
+    return true;
 }
 
 void UnwindComputed::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectCarriedResult(value, 1, getColumnsToFilter(), carried);
+    collectRowSource(value, carried);
     collectCarriedArgument(value, getColumnsToFilter(), carried);
 }
 
-void CallProcedure::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectCarriedResult(value, getYields().size(), getCarriedColumns(), carried);
+bool CallProcedure::getCarrySet(CarrySet& carrySet) {
+    carrySet = CarrySet {._operandOffset = getInputs().size(),
+                         ._resultOffset = getYields().size(),
+                         ._count = getCarriedColumns().size()};
+    return true;
 }
 
-void GetOutEdges::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectHopCarriedColumns(getOperation(), 0, value, carried);
+bool GetOutEdges::getCarrySet(CarrySet& carrySet) {
+    return fillHopCarrySet(getOperation(), carrySet);
 }
 
-void GetInEdges::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectHopCarriedColumns(getOperation(), 3, value, carried);
+Value GetOutEdges::getRowSource(OpResult result) {
+    return hopRowSource(getOperation(), 0, result);
 }
 
-void GetEdges::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectHopCarriedColumns(getOperation(), 0, value, carried);
+bool GetInEdges::getCarrySet(CarrySet& carrySet) {
+    return fillHopCarrySet(getOperation(), carrySet);
 }
 
-void GetOutEdgesByType::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectHopCarriedColumns(getOperation(), 0, value, carried);
+Value GetInEdges::getRowSource(OpResult result) {
+    return hopRowSource(getOperation(), 3, result);
 }
 
-void GetInEdgesByType::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectHopCarriedColumns(getOperation(), 3, value, carried);
+bool GetEdges::getCarrySet(CarrySet& carrySet) {
+    return fillHopCarrySet(getOperation(), carrySet);
 }
 
-void GetOutEdgesByLabel::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectHopCarriedColumns(getOperation(), 0, value, carried);
+Value GetEdges::getRowSource(OpResult result) {
+    return hopRowSource(getOperation(), 0, result);
 }
 
-void GetInEdgesByLabel::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectHopCarriedColumns(getOperation(), 3, value, carried);
+bool GetOutEdgesByType::getCarrySet(CarrySet& carrySet) {
+    return fillHopCarrySet(getOperation(), carrySet);
 }
 
-void GetOutEdgesByTypeAndLabel::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectHopCarriedColumns(getOperation(), 0, value, carried);
+Value GetOutEdgesByType::getRowSource(OpResult result) {
+    return hopRowSource(getOperation(), 0, result);
 }
 
-void GetInEdgesByTypeAndLabel::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectHopCarriedColumns(getOperation(), 3, value, carried);
+bool GetInEdgesByType::getCarrySet(CarrySet& carrySet) {
+    return fillHopCarrySet(getOperation(), carrySet);
+}
+
+Value GetInEdgesByType::getRowSource(OpResult result) {
+    return hopRowSource(getOperation(), 3, result);
+}
+
+bool GetOutEdgesByLabel::getCarrySet(CarrySet& carrySet) {
+    return fillHopCarrySet(getOperation(), carrySet);
+}
+
+Value GetOutEdgesByLabel::getRowSource(OpResult result) {
+    return hopRowSource(getOperation(), 0, result);
+}
+
+bool GetInEdgesByLabel::getCarrySet(CarrySet& carrySet) {
+    return fillHopCarrySet(getOperation(), carrySet);
+}
+
+Value GetInEdgesByLabel::getRowSource(OpResult result) {
+    return hopRowSource(getOperation(), 3, result);
+}
+
+bool GetOutEdgesByTypeAndLabel::getCarrySet(CarrySet& carrySet) {
+    return fillHopCarrySet(getOperation(), carrySet);
+}
+
+Value GetOutEdgesByTypeAndLabel::getRowSource(OpResult result) {
+    return hopRowSource(getOperation(), 0, result);
+}
+
+bool GetInEdgesByTypeAndLabel::getCarrySet(CarrySet& carrySet) {
+    return fillHopCarrySet(getOperation(), carrySet);
+}
+
+Value GetInEdgesByTypeAndLabel::getRowSource(OpResult result) {
+    return hopRowSource(getOperation(), 3, result);
+}
+
+bool ExplorePaths::getCarrySet(CarrySet& carrySet) {
+    carrySet = CarrySet {._operandOffset = 1, ._resultOffset = PATH_FIXED_RESULT_COUNT, ._count = getColumnsToFilter().size()};
+    return true;
 }
 
 // The seed comes back as srcids, and as tgtids too when the walk ends on it
-void ExplorePaths::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    const bool holdsTheSeed = value == getSrcids() || (value == getTgtids() && getEndsOnSeed());
+Value ExplorePaths::getRowSource(OpResult result) {
+    const bool holdsTheSeed = result == getSrcids() || (result == getTgtids() && getEndsOnSeed());
     if (holdsTheSeed) {
-        carried.push_back(getInputNodes());
+        return getInputNodes();
     }
 
-    collectCarriedResult(value, PATH_FIXED_RESULT_COUNT, getColumnsToFilter(), carried);
+    return carrySetRowSource(getOperation(), result);
 }
 
-void CrossProduct::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    const OpResult result = dyn_cast<OpResult>(value);
-    if (result) {
-        carried.push_back(yieldedFactorColumn(getLeftFactor(), getRightFactor(), result.getResultNumber()));
-    }
+Value CrossProduct::getRowSource(OpResult result) {
+    return yieldedFactorColumn(getLeftFactor(), getRightFactor(), result.getResultNumber());
 }
 
-void HashJoin::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    const OpResult result = dyn_cast<OpResult>(value);
-    if (result) {
-        carried.push_back(yieldedFactorColumn(getLeftFactor(), getRightFactor(), result.getResultNumber()));
-    }
+Value HashJoin::getRowSource(OpResult result) {
+    return yieldedFactorColumn(getLeftFactor(), getRightFactor(), result.getResultNumber());
 }
 
 void OptionalMatch::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {

@@ -373,77 +373,50 @@ void collectColumnEqualities(FilterOp filter, llvm::SmallVectorImpl<ColumnEquali
 }
 
 // One step of the climb from a column to the column its variable was bound at. It crosses a
-// producer where the op builds the rows - a hop or a cross product - rather than dropping them
+// row op where the op is not a filter: it builds, orders or groups the rows rather than only
+// dropping some
 struct LineageStep {
     Value _next;
     bool _isAnchor {false};
-    bool _crossesProducer {false};
+    bool _crossesRowOp {false};
 };
 
-// Sets _isAnchor where @param column is where its variable was bound, _next to the column
-// the climb goes on from, and neither where the climb cannot pass the op defining it
+// A filter over the rows an op hands on can run on the rows it takes instead, unless the op
+// has an effect a row it drops would miss, or keeps the rows at some positions
+bool letsAFilterAcross(Operation* op) {
+    return mlir::isMemoryEffectFree(op) && !op->hasTrait<OpTrait::KeepsRowsByPosition>();
+}
+
+// Sets _isAnchor where @param column is where its variable was bound: a node source, or an op
+// carrying the rows in flight that makes the column. Sets _next to the column the climb goes
+// on from, and neither where the climb cannot pass the op defining it
 void stepTowardLineageAnchor(Value column, LineageStep& step) {
     Operation* const def = column.getDefiningOp();
     if (!def) {
         return;
+    } else if (isNodeSource(def)) {
+        step._isAnchor = true;
+        return;
     }
 
-    const size_t resultIndex = cast<OpResult>(column).getResultNumber();
+    ColumnCarrierOpInterface carrier = dyn_cast<ColumnCarrierOpInterface>(def);
+    if (!carrier) {
+        return;
+    }
 
-    if (isNodeSource(def)) {
+    CarrySet carrySet;
+    const Value rowSource = carrier.getRowSource(cast<OpResult>(column));
+
+    if (rowSource && letsAFilterAcross(def)) {
+        step._next = rowSource;
+        step._crossesRowOp = !isa<FilterOp>(def);
+    } else if (!rowSource && carrier.getCarrySet(carrySet)) {
         step._isAnchor = true;
-    } else if (FilterOp filter = dyn_cast<FilterOp>(def)) {
-        step._next = filter.getColumnsToFilter()[resultIndex];
-    } else if (CrossProduct product = dyn_cast<CrossProduct>(def)) {
-        step._next = productFactorColumn(product, resultIndex);
-        step._crossesProducer = true;
-    } else if (isEdgeHop(def)) {
-        // The input node re-surfaces as srcids (forward) or tgtids (reverse) and each
-        // carried column passes through: those continue a variable that existed before
-        // the hop, so keep climbing. The opposite node end and the eids/etypes are
-        // bound here, so the variable is born at this hop - its earliest filter point.
-        if (resultIndex == hopInputResult(def)) {
-            step._next = def->getOperand(0);
-            step._crossesProducer = true;
-        } else if (resultIndex >= hopFixedResultCount) {
-            // Carried columns follow input_nodes (operand 0) in operand order.
-            step._next = def->getOperand(1 + (resultIndex - hopFixedResultCount));
-            step._crossesProducer = true;
-        } else {
-            step._isAnchor = true;
-        }
-    } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(def)) {
-        constexpr size_t tgtResultIndex = 1;
-
-        // The seed re-surfaces as srcids and each carried column passes through; the end
-        // node and the path are born here, whichever direction the exploration walks -
-        // except where the walk is one that comes back to its seed, which leaves the end
-        // holding that seed row for row, so a predicate on it is one on the seed.
-        const bool endHoldsTheSeed = resultIndex == tgtResultIndex && exploration.getEndsOnSeed();
-
-        if (resultIndex == 0 || endHoldsTheSeed) {
-            step._next = def->getOperand(0);
-            step._crossesProducer = true;
-        } else if (resultIndex >= pathFixedResultCount) {
-            step._next = def->getOperand(1 + (resultIndex - pathFixedResultCount));
-            step._crossesProducer = true;
-        } else {
-            step._isAnchor = true;
-        }
-    } else if (Unwind unwind = dyn_cast<Unwind>(def)) {
-        // The element is born at the unwind, and each carried column repeats the rows it
-        // carries once per element
-        if (resultIndex == 0) {
-            step._isAnchor = true;
-        } else {
-            step._next = unwind.getColumnsToFilter()[resultIndex - 1];
-            step._crossesProducer = true;
-        }
     }
 }
 
 // The climbs of one pass run, each built from the climb one step up. A push_down_filters push
-// moves a single-variable predicate, which changes no anchor and crosses no producer, so a
+// moves a single-variable predicate, which changes no anchor and crosses no row op, so a
 // climb stays true across pushes; its equalities are kept as their sides' anchors, which a
 // push never erases. A rewrite that replaces an anchor has to clear() them.
 class LineageClimbs {
@@ -453,11 +426,11 @@ public:
         return _climbs.at(column)._anchor;
     }
 
-    Value climb(Value column, bool& crossedProducer, llvm::SmallVectorImpl<ColumnEquality>& anchorEqualities) {
+    Value climb(Value column, bool& crossedRowOp, llvm::SmallVectorImpl<ColumnEquality>& anchorEqualities) {
         computeClimb(column);
 
         const Climb& climb = _climbs.at(column);
-        crossedProducer = crossedProducer || climb._crossedProducer;
+        crossedRowOp = crossedRowOp || climb._crossedRowOp;
 
         if (climb._equalities != NO_LIST) {
             llvm::append_range(anchorEqualities, _equalityLists[climb._equalities]);
@@ -482,7 +455,7 @@ private:
 
     struct Climb {
         Value _anchor;
-        bool _crossedProducer {false};
+        bool _crossedRowOp {false};
         size_t _equalities {NO_LIST};
     };
 
@@ -534,7 +507,7 @@ private:
             } else if (step._next) {
                 const Climb next = _climbs.at(step._next);
                 climb._anchor = next._anchor;
-                climb._crossedProducer = next._crossedProducer || step._crossesProducer;
+                climb._crossedRowOp = next._crossedRowOp || step._crossesRowOp;
                 climb._equalities = next._equalities;
 
                 for (const ColumnEquality& equality : llvm::reverse(filterEqualities)) {
@@ -750,10 +723,10 @@ bool matchPushablePredicate(FilterOp filter,
         return false;
     }
 
-    bool crossedProducer = false;
+    bool crossedRowOp = false;
     llvm::SmallVector<ColumnEquality, 4> anchorEqualities;
     for (const Value input : pushable._cone._inputs) {
-        const Value inputAnchor = climbs.climb(input, crossedProducer, anchorEqualities);
+        const Value inputAnchor = climbs.climb(input, crossedRowOp, anchorEqualities);
         if (!inputAnchor) {
             return false;
         }
@@ -769,13 +742,13 @@ bool matchPushablePredicate(FilterOp filter,
     const Value equatedAnchor = scannedAnchorEqualTo(pushable._anchor, anchorEqualities);
     if (equatedAnchor) {
         pushable._anchor = equatedAnchor;
-        crossedProducer = true;
+        crossedRowOp = true;
     }
 
     // Crossing only filters leaves the predicate over the rows the anchor produced already:
     // moving it would swap two filters over the same rows, or step between a constraint
     // filter and the op that is about to absorb it.
-    if (!crossedProducer) {
+    if (!crossedRowOp) {
         return false;
     }
 
@@ -6655,52 +6628,47 @@ struct CountPathRows : public impl::CountPathRowsBase<CountPathRows> {
     }
 };
 
-// Where an op's carry set sits: the carried operands start at _operandOffset and each comes
-// back as the result at the same position from _resultOffset. _trailingOperandCount is what
-// the op takes after its carry set, which a trim keeps as it found it.
-struct CarrySetLayout {
-    size_t _operandOffset {0};
-    size_t _resultOffset {0};
-    size_t _trailingOperandCount {0};
-};
+bool matchCarrySet(Operation* op, CarrySet& carrySet) {
+    ColumnCarrierOpInterface carrier = dyn_cast<ColumnCarrierOpInterface>(op);
 
-bool matchCarrySetLayout(Operation* op, CarrySetLayout& layout) {
-    if (isEdgeHop(op)) {
-        layout = CarrySetLayout {._operandOffset = 1, ._resultOffset = hopFixedResultCount};
-        return true;
-    } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op)) {
-        const size_t endNodeCount = exploration.getEndNodes() ? 1u : 0u;
-        layout = CarrySetLayout {._operandOffset = 1,
-                                 ._resultOffset = pathFixedResultCount,
-                                 ._trailingOperandCount = endNodeCount + exploration.getHopImports().size()};
-        return true;
-    } else if (isa<FilterOp>(op)) {
-        layout = CarrySetLayout {._operandOffset = 1, ._resultOffset = 0};
-        return true;
-    } else if (isa<Unwind, FetchNodes>(op)) {
-        layout = CarrySetLayout {._operandOffset = 1, ._resultOffset = 1};
-        return true;
-    } else if (isa<Limit, Skip, Sort, GroupAggregate, Collect>(op)) {
-        layout = CarrySetLayout {._operandOffset = 0, ._resultOffset = 0};
-        return true;
-    } else if (CallProcedure call = dyn_cast<CallProcedure>(op)) {
-        const size_t inputCount = call.getInputs().size();
-        const size_t yieldCount = call.getYields().size();
-        layout = CarrySetLayout {._operandOffset = inputCount, ._resultOffset = yieldCount};
-        return true;
+    return carrier && carrier.getCarrySet(carrySet);
+}
+
+bool carriesIntoItsRegions(Operation* op) {
+    ColumnCarrierOpInterface carrier = dyn_cast<ColumnCarrierOpInterface>(op);
+    if (!carrier) {
+        return false;
     }
 
-    return false;
+    llvm::SmallVector<Value, 1> carried;
+    for (Region& region : op->getRegions()) {
+        for (const BlockArgument argument : region.getArguments()) {
+            carrier.collectCarriedColumns(argument, carried);
+        }
+    }
+
+    return !carried.empty();
+}
+
+// The columns a trim drops in pairs, each operand with the result it comes back as: the carry
+// set, and a grouping op's aggregate inputs with the aggregates they reduce to. A dedup keeps
+// every column it carries, its key being all of them, and an op whose regions read its carry
+// set keeps it for them
+bool matchTrimmedColumns(Operation* op, CarrySet& carrySet) {
+    const bool keepsItsCarrySet = isa<RemoveDuplicates>(op) || carriesIntoItsRegions(op);
+    if (keepsItsCarrySet || !matchCarrySet(op, carrySet)) {
+        return false;
+    } else if (isa<GroupAggregate, Collect>(op)) {
+        carrySet._count = op->getNumOperands();
+    }
+
+    return true;
 }
 
 bool trimsColumns(Operation* op) {
-    CarrySetLayout layout;
+    CarrySet carrySet;
 
-    return matchCarrySetLayout(op, layout) || isa<CrossProduct, HashJoin, OptionalMatch>(op);
-}
-
-size_t carriedCount(Operation* op, const CarrySetLayout& layout) {
-    return op->getNumOperands() - layout._operandOffset - layout._trailingOperandCount;
+    return matchTrimmedColumns(op, carrySet) || isa<CrossProduct, HashJoin, OptionalMatch>(op);
 }
 
 void keepOneOf(llvm::SmallBitVector& keep, size_t begin, size_t end) {
@@ -6764,21 +6732,21 @@ void keepRowCarryingColumn(ValueRange columns, size_t firstIndex, llvm::SmallBit
     }
 }
 
-void selectKeptCarriedColumns(Operation* op, const CarrySetLayout& layout, llvm::SmallVectorImpl<size_t>& kept) {
-    const size_t count = carriedCount(op, layout);
+void selectKeptCarriedColumns(Operation* op, const CarrySet& carrySet, llvm::SmallVectorImpl<size_t>& kept) {
+    const size_t count = carrySet._count;
 
     llvm::SmallBitVector keep(count);
     for (size_t carriedIndex = 0; carriedIndex < count; carriedIndex++) {
-        if (!op->getResult(layout._resultOffset + carriedIndex).use_empty()) {
+        if (!op->getResult(carrySet._resultOffset + carriedIndex).use_empty()) {
             keep.set(carriedIndex);
         }
     }
 
     keepRequiredColumns(op, keep);
 
-    const bool standsForItsRows = layout._resultOffset == 0;
+    const bool standsForItsRows = carrySet._resultOffset == 0;
     if (standsForItsRows) {
-        keepRowCarryingColumn(op->getOperands().drop_front(layout._operandOffset), 0, keep);
+        keepRowCarryingColumn(op->getOperands().slice(carrySet._operandOffset, count), 0, keep);
     }
 
     for (size_t carriedIndex = 0; carriedIndex < count; carriedIndex++) {
@@ -6886,25 +6854,30 @@ void trimAttributes(Operation* op, llvm::ArrayRef<size_t> kept, OperationState& 
         const int32_t inputCount = static_cast<int32_t>(call.getInputs().size());
         const int32_t keptCount = static_cast<int32_t>(kept.size());
         state.attributes.set(call.getOperandSegmentSizesAttrName(), builder.getDenseI32ArrayAttr({inputCount, keptCount}));
+    } else if (UnwindRange unwind = dyn_cast<UnwindRange>(op)) {
+        const int32_t fromCount = unwind.getFrom() ? 1 : 0;
+        const int32_t toCount = unwind.getTo() ? 1 : 0;
+        const int32_t keptCount = static_cast<int32_t>(kept.size());
+        state.attributes.set(unwind.getOperandSegmentSizesAttrName(), builder.getDenseI32ArrayAttr({1, 1, 1, fromCount, toCount, keptCount}));
     }
 }
 
-void trimCarrySet(Operation* op, const CarrySetLayout& layout, llvm::ArrayRef<size_t> kept, mlir::OpBuilder& builder) {
+void trimCarrySet(Operation* op, const CarrySet& carrySet, llvm::ArrayRef<size_t> kept, mlir::OpBuilder& builder) {
     const Operation::operand_range operands = op->getOperands();
     const Operation::result_range results = op->getResults();
 
     llvm::SmallVector<Value> trimmedOperands;
-    llvm::append_range(trimmedOperands, operands.take_front(layout._operandOffset));
+    llvm::append_range(trimmedOperands, operands.take_front(carrySet._operandOffset));
 
     llvm::SmallVector<Type> trimmedTypes;
-    llvm::append_range(trimmedTypes, results.take_front(layout._resultOffset).getTypes());
+    llvm::append_range(trimmedTypes, results.take_front(carrySet._resultOffset).getTypes());
 
     for (const size_t carriedIndex : kept) {
-        trimmedOperands.push_back(operands[layout._operandOffset + carriedIndex]);
-        trimmedTypes.push_back(results[layout._resultOffset + carriedIndex].getType());
+        trimmedOperands.push_back(operands[carrySet._operandOffset + carriedIndex]);
+        trimmedTypes.push_back(results[carrySet._resultOffset + carriedIndex].getType());
     }
 
-    llvm::append_range(trimmedOperands, operands.take_back(layout._trailingOperandCount));
+    llvm::append_range(trimmedOperands, operands.drop_front(carrySet._operandOffset + carrySet._count));
 
     OperationState state(op->getLoc(), op->getName());
     state.addOperands(trimmedOperands);
@@ -6924,13 +6897,13 @@ void trimCarrySet(Operation* op, const CarrySetLayout& layout, llvm::ArrayRef<si
         trimmed->getRegion(regionIndex).takeBody(op->getRegion(regionIndex));
     }
 
-    for (size_t resultIndex = 0; resultIndex < layout._resultOffset; resultIndex++) {
+    for (size_t resultIndex = 0; resultIndex < carrySet._resultOffset; resultIndex++) {
         results[resultIndex].replaceAllUsesWith(trimmed->getResult(resultIndex));
     }
 
     for (size_t keptIndex = 0; keptIndex < kept.size(); keptIndex++) {
-        Value carried = results[layout._resultOffset + kept[keptIndex]];
-        carried.replaceAllUsesWith(trimmed->getResult(layout._resultOffset + keptIndex));
+        Value carried = results[carrySet._resultOffset + kept[keptIndex]];
+        carried.replaceAllUsesWith(trimmed->getResult(carrySet._resultOffset + keptIndex));
     }
 }
 
@@ -7287,18 +7260,18 @@ void collectTrimOrder(Operation* root, llvm::SmallVectorImpl<Operation*>& order)
 }
 
 void trimCarriedColumns(Operation* op, mlir::OpBuilder& builder) {
-    CarrySetLayout layout;
-    const bool carries = matchCarrySetLayout(op, layout);
+    CarrySet carrySet;
+    const bool carries = matchTrimmedColumns(op, carrySet);
     bioassert(carries, "A trimming op that is neither a cross product nor a join has a carry set");
 
     llvm::SmallVector<size_t> kept;
-    selectKeptCarriedColumns(op, layout, kept);
+    selectKeptCarriedColumns(op, carrySet, kept);
 
-    if (kept.size() == carriedCount(op, layout)) {
+    if (kept.size() == carrySet._count) {
         return;
     }
 
-    trimCarrySet(op, layout, kept, builder);
+    trimCarrySet(op, carrySet, kept, builder);
     op->erase();
 }
 
@@ -7728,23 +7701,6 @@ bool mapsRowsThrough(Operation* op) {
     return isEdgeHop(op) || isa<FilterOp, Unwind, Limit, Skip, Sort>(op);
 }
 
-// The operand whose rows a result's rows are drawn from, if any: each carried column comes
-// back at its own position, and a hop's input re-surfaces as srcids, or tgtids when it
-// walks backwards.
-bool matchRowSourceOperand(Operation* op, const CarrySetLayout& layout, size_t resultIndex, size_t& operandIndex) {
-    if (resultIndex >= layout._resultOffset) {
-        operandIndex = layout._operandOffset + (resultIndex - layout._resultOffset);
-        return true;
-    } else if (isEdgeHop(op)) {
-        if (resultIndex == hopInputResult(op)) {
-            operandIndex = 0;
-            return true;
-        }
-    }
-
-    return false;
-}
-
 bool matchPropertyRead(Operation* op, StringAttr& property, bool& nodeProperty) {
     if (GetNodeProperties read = dyn_cast<GetNodeProperties>(op)) {
         property = read.getPropertyAttr();
@@ -7811,14 +7767,13 @@ Value appendCarriedColumn(Operation* op, Value column, mlir::RewriterBase& rewri
 }
 
 Value carryThrough(Operation* op, Value column, mlir::RewriterBase& rewriter) {
-    CarrySetLayout layout;
-    const bool carries = matchCarrySetLayout(op, layout);
+    CarrySet carrySet;
+    const bool carries = matchCarrySet(op, carrySet);
     bioassert(carries, "A row-mapping op has a carry set");
 
-    const size_t carriedColumnCount = carriedCount(op, layout);
-    for (size_t carriedIndex = 0; carriedIndex < carriedColumnCount; carriedIndex++) {
-        if (op->getOperand(layout._operandOffset + carriedIndex) == column) {
-            return op->getResult(layout._resultOffset + carriedIndex);
+    for (size_t carriedIndex = 0; carriedIndex < carrySet._count; carriedIndex++) {
+        if (op->getOperand(carrySet._operandOffset + carriedIndex) == column) {
+            return op->getResult(carrySet._resultOffset + carriedIndex);
         }
     }
 
@@ -7941,17 +7896,12 @@ bool matchRowMappingStep(OpResult result, RowsStep& step) {
         return false;
     }
 
-    CarrySetLayout layout;
-    const bool carries = matchCarrySetLayout(carrier, layout);
-    bioassert(carries, "A row-mapping op has a carry set");
-
-    size_t sourceOperandIndex = 0;
-    const size_t resultIndex = result.getResultNumber();
-    if (!matchRowSourceOperand(carrier, layout, resultIndex, sourceOperandIndex)) {
+    const Value rowSource = cast<ColumnCarrierOpInterface>(carrier).getRowSource(result);
+    if (!rowSource) {
         return false;
     }
 
-    step = RowsStep {._op = carrier, ._position = resultIndex, ._outerRows = carrier->getOperand(sourceOperandIndex)};
+    step = RowsStep {._op = carrier, ._position = result.getResultNumber(), ._outerRows = rowSource};
 
     return true;
 }
@@ -9325,9 +9275,9 @@ Operation* soleValueReader(Value column) {
 Value siblingColumnOf(Value column, Operation* reader) {
     OperandRange candidates = reader->getOperands();
 
-    CarrySetLayout layout;
-    if (matchCarrySetLayout(reader, layout)) {
-        candidates = candidates.slice(layout._operandOffset, carriedCount(reader, layout));
+    CarrySet carrySet;
+    if (matchCarrySet(reader, carrySet)) {
+        candidates = candidates.slice(carrySet._operandOffset, carrySet._count);
     } else if (!isa<Yield>(reader)) {
         return {};
     }
@@ -9528,20 +9478,20 @@ CrossProduct dropProductColumn(CrossProduct product, size_t resultIndex, mlir::R
 }
 
 void dropCarriedColumn(Operation* op, size_t resultIndex, mlir::RewriterBase& rewriter) {
-    CarrySetLayout layout;
-    const bool carries = matchCarrySetLayout(op, layout);
+    CarrySet carrySet;
+    const bool carries = matchCarrySet(op, carrySet);
     bioassert(carries, "A fetch chain link without a carry set");
 
-    const size_t droppedIndex = resultIndex - layout._resultOffset;
+    const size_t droppedIndex = resultIndex - carrySet._resultOffset;
 
     llvm::SmallVector<size_t> kept;
-    for (size_t carriedIndex = 0; carriedIndex < carriedCount(op, layout); carriedIndex++) {
+    for (size_t carriedIndex = 0; carriedIndex < carrySet._count; carriedIndex++) {
         if (carriedIndex != droppedIndex) {
             kept.push_back(carriedIndex);
         }
     }
 
-    trimCarrySet(op, layout, kept, rewriter);
+    trimCarrySet(op, carrySet, kept, rewriter);
     rewriter.eraseOp(op);
 }
 

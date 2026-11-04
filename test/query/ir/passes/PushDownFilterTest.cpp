@@ -548,3 +548,100 @@ TEST_F(PushDownFilterTest, sinksRootPredicatePastAFilterAndASecondHop) {
     ASSERT_EQ(reads.size(), 1u);
     EXPECT_TRUE(mlir::isa<mlir::db::ScanNodesByLabel>(reads.front().getInputNodes().getDefiningOp()));
 }
+
+// MATCH (a)-->(b) WITH a, b ORDER BY a WHERE b.age > 30 RETURN a, b
+const char* const neighbourPredicateAfterASort = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %s, %e, %et, %t = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %ss, %ts = db.sort(%s, %t) keys [0] ascending [true] : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  %age = db.get_node_properties(%ts, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %lim = db.constant(30 : i64)
+  %mask = db.gt %age, %lim : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
+  %sf, %tf = db.filter(%mask, {%ss, %ts}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%sf, %tf) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+TEST_F(PushDownFilterTest, sinksANeighbourPredicateBelowASort) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(neighbourPredicateAfterASort);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runPushDown(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::FilterOp> filters = collect<mlir::db::FilterOp>(*module);
+    ASSERT_EQ(filters.size(), 1u);
+    mlir::db::FilterOp filter = filters.front();
+
+    llvm::SmallVector<mlir::db::Sort> sorts = collect<mlir::db::Sort>(*module);
+    ASSERT_EQ(sorts.size(), 1u);
+    mlir::db::Sort sort = sorts.front();
+
+    EXPECT_TRUE(filter.getOperation()->isBeforeInBlock(sort.getOperation()));
+    EXPECT_EQ(sort.getColumns().front().getDefiningOp(), filter.getOperation());
+    EXPECT_TRUE(mlir::isa<mlir::db::GetOutEdges>(filter.getColumnsToFilter().front().getDefiningOp()));
+}
+
+// MATCH (a)-->(b) WITH a, b, count(*) AS n WHERE b.age > 30 RETURN a, b, n
+const char* const neighbourPredicateAfterAGrouping = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %s, %e, %et, %t = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %gs, %gt, %n = db.group_aggregate(%s, %t, %t) keys 2 aggregates [count_rows] : (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<none>)
+  %age = db.get_node_properties(%gt, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %lim = db.constant(30 : i64)
+  %mask = db.gt %age, %lim : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
+  %sf, %tf, %nf = db.filter(%mask, {%gs, %gt, %n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<none>)
+  db.output(%sf, %tf, %nf) : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<none>
+  return
+}
+)mlir";
+
+TEST_F(PushDownFilterTest, sinksAGroupingKeyPredicateBelowTheGrouping) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(neighbourPredicateAfterAGrouping);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runPushDown(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::FilterOp> filters = collect<mlir::db::FilterOp>(*module);
+    ASSERT_EQ(filters.size(), 1u);
+    mlir::db::FilterOp filter = filters.front();
+
+    llvm::SmallVector<mlir::db::GroupAggregate> groupings = collect<mlir::db::GroupAggregate>(*module);
+    ASSERT_EQ(groupings.size(), 1u);
+
+    EXPECT_TRUE(filter.getOperation()->isBeforeInBlock(groupings.front().getOperation()));
+}
+
+// MATCH (a)-->(b) WITH a, b LIMIT 3 WHERE b.age > 30 RETURN a, b
+const char* const neighbourPredicateAfterALimit = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %s, %e, %et, %t = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %ss, %ts = db.limit(%s, %t) count 3 : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  %age = db.get_node_properties(%ts, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %lim = db.constant(30 : i64)
+  %mask = db.gt %age, %lim : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
+  %sf, %tf = db.filter(%mask, {%ss, %ts}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%sf, %tf) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// A filter below the limit would keep three rows that pass it, not the ones of the first three
+// that do
+TEST_F(PushDownFilterTest, leavesANeighbourPredicateAboveALimit) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(neighbourPredicateAfterALimit);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runPushDown(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::FilterOp> filters = collect<mlir::db::FilterOp>(*module);
+    ASSERT_EQ(filters.size(), 1u);
+
+    llvm::SmallVector<mlir::db::Limit> limits = collect<mlir::db::Limit>(*module);
+    ASSERT_EQ(limits.size(), 1u);
+
+    EXPECT_TRUE(limits.front().getOperation()->isBeforeInBlock(filters.front().getOperation()));
+}
