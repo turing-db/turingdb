@@ -370,10 +370,8 @@ TEST_F(DividedRoomTest, measuresTheDistanceToThePlayerAroundTheWall) {
 }
 
 TEST_F(DividedRoomTest, enemiesWalkAroundTheWallToThePlayer) {
-    printFrame(0);
-
     bool passedTheGap = false;
-    for (size_t tickIndex = 1; tickIndex <= 240; tickIndex++) {
+    for (size_t tickIndex = 0; tickIndex < 240; tickIndex++) {
         tick(STAND_STILL);
         ASSERT_FALSE(HasFatalFailure());
 
@@ -381,10 +379,6 @@ TEST_F(DividedRoomTest, enemiesWalkAroundTheWallToThePlayer) {
         read("MATCH (:Enemy {id: 1})-[:AT]->(c:Cell) RETURN c.x, c.y", cell);
         if (cell == Rows {{"5", "6"}}) {
             passedTheGap = true;
-        }
-
-        if (tickIndex % 40 == 0) {
-            printFrame(tickIndex);
         }
     }
 
