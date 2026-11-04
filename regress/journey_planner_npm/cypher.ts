@@ -197,6 +197,78 @@ export const VALUE_CASES: Case[] = [
         rows: [[1n, "two", 2.5, true]],
     },
     {
+        name: "returns a cell of each kind, one kind per row",
+        query: "UNWIND [1, 'two', 2.5, true, null, [3], {four: 4}, datetime('2026-11-04T08:00:00Z'), duration({minutes: 5})] AS cell " +
+            "RETURN cell",
+        types: ["CELL_VIEW"],
+        ordered: true,
+        rows: [[1n], ["two"], [2.5], [true], [null], [[3n]], [{ four: 4n }], [at("2026-11-04T08:00:00Z")], [minutes(5)]],
+    },
+    {
+        name: "returns cells holding a node, an edge and a path",
+        query: "MATCH p = (o:STATION {crs: 'OXF'})-[t:THU]->(m:MODE) UNWIND [o, t, p, m.service, null] AS cell RETURN cell, id(o), id(t), id(m)",
+        check: ({ rows }) => {
+            const [station, edge, callingPoint] = rows[0].slice(1);
+
+            assert.deepEqual(rows.map((row) => row[0]), [station, edge, [station, edge, callingPoint], "S9", null]);
+        },
+    },
+    {
+        name: "reads a key of a map naming a value of another type on each row",
+        query: "MATCH (s:STATION {crs: 'OXF'}) UNWIND keys(s.facilities) AS key RETURN key, s.facilities[key]",
+        types: ["STRING", "CELL_VIEW"],
+        rows: [["cycleSpaces", 400n], ["parking", true], ["retail", ["café", "newsagent"]]],
+    },
+    {
+        name: "reads an element of a mixed list on each row, null where the list holds none",
+        query: "MATCH (s:STATION) RETURN s.crs, [s.minInterchange, s.name, s.sign][2]",
+        types: ["STRING", "CELL_VIEW"],
+        rows: [["DID", null], ["OXF", "Oxford 🚆"], ["PAD", null], ["RDG", null], ["SWI", null]],
+    },
+    {
+        name: "returns the node and the edge an OPTIONAL MATCH misses as null",
+        query: "MATCH (s:STATION) OPTIONAL MATCH (s)-[t:THU]->(m:MODE) RETURN s.crs, t, m, id(t), id(m)",
+        types: ["STRING", "EDGE_ID", "NODE_ID", "INT64", "INT64"],
+        check: ({ rows }) => {
+            assert.deepEqual(rows.map((row) => row[0]).sort(), ["DID", "OXF", "PAD", "RDG", "SWI"]);
+
+            for (const [crs, edge, callingPoint, edgeId, callingPointId] of rows) {
+                if (crs === "OXF") {
+                    assert.ok(edge !== null && callingPoint !== null);
+                    assert.deepEqual([edge, callingPoint], [edgeId, callingPointId]);
+                } else {
+                    assert.deepEqual([edge, callingPoint, edgeId, callingPointId], [null, null, null, null], `the THU hop of ${crs}`);
+                }
+            }
+        },
+    },
+    {
+        name: "holds a missed node and edge as null inside a list, a map and cells",
+        query: "MATCH (s:STATION) OPTIONAL MATCH (s)-[t:THU]->(m:MODE) UNWIND [m, t] AS cell " +
+            "RETURN s.crs, cell, [m, t], {node: m, edge: t}, id(m), id(t)",
+        check: ({ rows }) => {
+            assert.equal(rows.length, 10);
+
+            const cells = new Map<string, Value[]>();
+            for (const [crs, cell, list, map, callingPoint, edge] of rows) {
+                assert.deepEqual(list, [callingPoint, edge], `the list of ${crs}`);
+                assert.deepEqual(map, { node: callingPoint, edge }, `the map of ${crs}`);
+                cells.set(crs as string, [...(cells.get(crs as string) ?? []), cell]);
+            }
+
+            const oxfordHop = (rows.find((row) => row[0] === "OXF") as Value[]).slice(4);
+            for (const [crs, held] of cells) {
+                assert.deepEqual(held, crs === "OXF" ? oxfordHop : [null, null], `the cells of ${crs}`);
+            }
+        },
+    },
+    {
+        name: "returns one row of nulls when OPTIONAL MATCH finds nothing",
+        query: "OPTIONAL MATCH (n:STATION {crs: 'NOWHERE'})-[r:WED]->(m) RETURN n, r, m",
+        types: ["NODE_ID", "EDGE_ID", "NODE_ID"],
+        rows: [[null, null, null]],
+    },
+    {
         name: "returns an empty map and an empty list",
         query: "RETURN {} AS empty, [] AS none",
         types: ["MAP_VIEW", "LIST_VIEW"],
