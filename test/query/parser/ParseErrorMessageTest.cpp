@@ -31,6 +31,21 @@ protected:
         ADD_FAILURE() << "parsed: " << query;
     }
 
+    void reportOf(std::string_view query, std::string& report) {
+        const std::string text {query};
+        CypherAST ast(nullptr, text);
+        CypherParser parser(&ast);
+
+        try {
+            parser.parse(text);
+        } catch (const ParserException& error) {
+            report = error.what();
+            return;
+        }
+
+        ADD_FAILURE() << "parsed: " << query;
+    }
+
     void expectReport(std::string_view query, std::string_view expected) {
         const std::string text {query};
         CypherAST ast(nullptr, text);
@@ -130,4 +145,34 @@ TEST_F(ParseErrorMessageTest, pointsPastABlockCommentOverTwoLines) {
                  "     2 | b */ +\n"
                  "       |      ^\n"
                  "-------* syntax error, unexpected PROG_END");
+}
+
+TEST_F(ParseErrorMessageTest, reportsACRLFLineBreakAsALineFeed) {
+    const std::string_view queries[] = {
+        "MATCH (n) RETURN // list the nodes\n",
+        "//\n",
+        "MATCH (n)\nWHERE n.age > // adults\n",
+        "MATCH (n)\nRETURN\n",
+        "RETURN 1 /* a\nb */ +\n",
+        "MATCH (n)\nRETURN n.\n",
+    };
+
+    for (const std::string_view query : queries) {
+        std::string crlfQuery;
+        for (const char character : query) {
+            if (character == '\n') {
+                crlfQuery += '\r';
+            }
+
+            crlfQuery += character;
+        }
+
+        std::string expected;
+        reportOf(query, expected);
+
+        std::string report;
+        reportOf(crlfQuery, report);
+
+        EXPECT_EQ(report, expected) << query;
+    }
 }

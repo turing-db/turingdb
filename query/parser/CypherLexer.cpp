@@ -335,8 +335,13 @@ void CypherLexer::lexToken(CypherToken& token) {
 
 bool CypherLexer::lexComment(CypherToken& token) {
     if (_query[_offset + 1] == '/') {
-        const size_t lineBreak = _query.find('\n', _offset + 2);
-        const size_t end = lineBreak == std::string_view::npos ? _query.size() : lineBreak;
+        size_t end = _query.find('\n', _offset + 2);
+        if (end == std::string_view::npos) {
+            end = _query.size();
+        } else if (_query[end - 1] == '\r') {
+            end--;
+        }
+
         advance(end - _offset);
 
         return true;
