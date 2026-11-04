@@ -10,6 +10,11 @@ struct TypeValueMapPair {
 
 template <typename... Types>
 struct TypeValueMap {
+    template <typename OtherKeyT>
+    static consteval bool contains() {
+        return false;
+    }
+
     template <template <typename Key, typename Value> typename Transform, typename... Args>
     inline void transform(Args&&... args) {}
 };
@@ -19,6 +24,11 @@ struct TypeValueMap<TypeValueMapPair<KeyT, ValueT>, Types...>
     : public TypeValueMap<Types...> {
 
     ValueT _value;
+
+    template <typename OtherKeyT>
+    static consteval bool contains() {
+        return std::is_same_v<OtherKeyT, KeyT> || TypeValueMap<Types...>::template contains<OtherKeyT>();
+    }
 
     template <typename OtherKeyT>
     inline constexpr auto& get() {
