@@ -142,10 +142,59 @@ constexpr auto KEYWORDS = std::to_array<Keyword>({
 
 constexpr size_t MAX_KEYWORD_LENGTH = 15;
 
-static_assert(std::ranges::is_sorted(KEYWORDS, {}, &Keyword::_spelling));
+constexpr size_t KEYWORD_TABLE_BITS = 11;
+
+constexpr uint8_t EMPTY_SLOT = UINT8_MAX;
+
+constexpr uint32_t FNV_OFFSET_BASIS = 2166136261u;
+
+constexpr uint32_t FNV_PRIME = 16777619u;
 
 static_assert(KEYWORDS.size() + 2 == static_cast<size_t>(CypherTokenKind::ID)
                                          - static_cast<size_t>(CypherTokenKind::PROCEDURES) + 1);
+
+static_assert(KEYWORDS.size() < EMPTY_SLOT);
+
+struct KeywordTable {
+    uint32_t _seed {0};
+    std::array<uint8_t, size_t {1} << KEYWORD_TABLE_BITS> _slots {};
+};
+
+// Clearing bit 0x20 maps a-z onto A-Z. It also changes digits and '_', but never onto a
+// letter, so two words fold to the same bytes only if they are equal ignoring case
+constexpr uint8_t foldCase(char character) {
+    return static_cast<uint8_t>(character & 0xDF);
+}
+
+constexpr size_t findSlot(std::string_view word, uint32_t seed) {
+    uint32_t hash = FNV_OFFSET_BASIS ^ seed;
+    for (const char character : word) {
+        hash ^= foldCase(character);
+        hash *= FNV_PRIME;
+    }
+
+    return hash >> (32 - KEYWORD_TABLE_BITS);
+}
+
+constexpr KeywordTable buildKeywordTable() {
+    for (uint32_t seed = 0;; seed++) {
+        KeywordTable table {._seed = seed};
+        table._slots.fill(EMPTY_SLOT);
+
+        bool collides = false;
+        for (size_t index = 0; index < KEYWORDS.size() && !collides; index++) {
+            uint8_t& slot = table._slots[findSlot(KEYWORDS[index]._spelling, seed)];
+            collides = slot != EMPTY_SLOT;
+            slot = static_cast<uint8_t>(index);
+        }
+
+        if (!collides) {
+            return table;
+        }
+    }
+}
+
+constexpr KeywordTable KEYWORD_TABLE = buildKeywordTable();
 
 bool isBreak(char character) {
     return character == ' ' || character == '\t' || character == '\r' || character == '\n';
@@ -180,18 +229,15 @@ CypherTokenKind findKeyword(std::string_view word) {
         return CypherTokenKind::ID;
     }
 
-    std::array<char, MAX_KEYWORD_LENGTH> buffer {};
-    std::ranges::transform(word, buffer.begin(), [](char character) {
-        return ('a' <= character && character <= 'z') ? static_cast<char>(character - 'a' + 'A') : character;
-    });
-
-    const std::string_view spelling(buffer.data(), word.size());
-    const auto keyword = std::ranges::lower_bound(KEYWORDS, spelling, {}, &Keyword::_spelling);
-    if (keyword == KEYWORDS.end() || keyword->_spelling != spelling) {
+    const uint8_t index = KEYWORD_TABLE._slots[findSlot(word, KEYWORD_TABLE._seed)];
+    if (index == EMPTY_SLOT) {
         return CypherTokenKind::ID;
     }
 
-    return keyword->_kind;
+    const Keyword& keyword = KEYWORDS[index];
+    const bool matches = std::ranges::equal(word, keyword._spelling, {}, foldCase, foldCase);
+
+    return matches ? keyword._kind : CypherTokenKind::ID;
 }
 
 bool opensAValueTest(CypherTokenKind kind) {

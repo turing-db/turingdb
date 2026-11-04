@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <ctype.h>
+#include <algorithm>
+#include <map>
 #include <span>
 #include <string>
 #include <string_view>
@@ -462,6 +465,27 @@ void renderTokens(std::string_view query, std::string& tokens) {
     } while (token._kind != CypherTokenKind::PROG_END && token._kind != CypherTokenKind::LEXER_ERROR);
 }
 
+CypherTokenKind lexKind(std::string_view word) {
+    CypherLexer lexer(word);
+
+    CypherToken token;
+    lexer.lex(token);
+
+    return token._kind;
+}
+
+void lowerCase(std::string& word) {
+    std::ranges::transform(word, word.begin(), [](char character) {
+        return static_cast<char>(tolower(static_cast<unsigned char>(character)));
+    });
+}
+
+void upperCase(std::string& word) {
+    std::ranges::transform(word, word.begin(), [](char character) {
+        return static_cast<char>(toupper(static_cast<unsigned char>(character)));
+    });
+}
+
 }
 
 class CypherLexerTest : public ::testing::Test {
@@ -489,4 +513,49 @@ TEST_F(CypherLexerTest, lexesStringsAndComments) {
 
 TEST_F(CypherLexerTest, lexesArrows) {
     expectTokens(ARROWS);
+}
+
+TEST_F(CypherLexerTest, lexesExactlyTheKeywordsInAnyCase) {
+    const size_t firstKeyword = static_cast<size_t>(CypherTokenKind::PROCEDURES);
+    const size_t endOfKeywords = static_cast<size_t>(CypherTokenKind::ESC_LITERAL);
+
+    std::map<std::string, CypherTokenKind> keywords;
+    for (size_t index = firstKeyword; index < endOfKeywords; index++) {
+        const CypherTokenKind kind = static_cast<CypherTokenKind>(index);
+        std::string spelling(CypherToken::toString(kind));
+
+        // NULL_ and ERROR_ are named with an underscore that their spelling does not have
+        if (spelling.ends_with('_')) {
+            spelling.pop_back();
+        }
+
+        keywords.emplace(spelling, kind);
+    }
+
+    for (const auto& [spelling, kind] : keywords) {
+        std::string lower = spelling;
+        lowerCase(lower);
+
+        std::string capitalized = lower;
+        capitalized[0] = static_cast<char>(toupper(static_cast<unsigned char>(capitalized[0])));
+
+        const std::string words[] = {
+            spelling,
+            lower,
+            capitalized,
+            spelling.substr(0, spelling.size() - 1),
+            spelling + "S",
+            "X" + spelling,
+        };
+
+        for (const std::string& word : words) {
+            std::string upper = word;
+            upperCase(upper);
+
+            const auto keyword = keywords.find(upper);
+            const CypherTokenKind expected = keyword == keywords.end() ? CypherTokenKind::ID : keyword->second;
+
+            EXPECT_EQ(CypherToken::toString(lexKind(word)), CypherToken::toString(expected)) << word;
+        }
+    }
 }
