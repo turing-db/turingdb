@@ -118,6 +118,16 @@ function concatPackets(packets) {
     return out;
 }
 
+// The framed request body the server reads, built byte by byte apart from the client.
+function requestBody(cypher) {
+    const query = encoder.encode(cypher);
+    const body = new Writer();
+    body.u32(query.length);
+    body.raw(query);
+    body.u32(0);
+    return body.toUint8Array();
+}
+
 // Fake fetch: streams the response bytes in small slices so packets straddle reads.
 function makeFakeFetch(bytes, captured) {
     return async (url, init) => {
@@ -405,7 +415,7 @@ async function testQuery() {
 
     assert.strictEqual(captured.url, "/api/query?graph=simpledb&commit=head&change=head");
     assert.strictEqual(captured.init.method, "POST");
-    assert.strictEqual(captured.init.body, "MATCH (n) RETURN n");
+    assert.deepStrictEqual(captured.init.body, requestBody("MATCH (n) RETURN n"));
     assert.strictEqual(captured.init.headers["Content-Type"], "application/turing-proto");
     assert.strictEqual(captured.init.headers["Authorization"], "Bearer secret");
 
@@ -433,6 +443,18 @@ async function testQuery() {
     assert.deepStrictEqual(chunks[1].columns[1].toArray(), [["x"], []]);
     assert.deepStrictEqual(chunks[1].columns[2].toArray(), [2.5, 2.5]);
     assert.deepStrictEqual(chunks[1].columns[3].toArray(), [null, "y"]);
+}
+
+// The query length counts UTF-8 bytes, not UTF-16 code units: "é" is 2 bytes, the emoji 4.
+async function testMultiByteQueryBody() {
+    const captured = {};
+    const bytes = concatPackets([makeEnd(1.0)]);
+    await new TuringClient({ fetch: makeFakeFetch(bytes, captured) }).query("RETURN 'é😀'");
+
+    const body = captured.init.body;
+    const queryLength = new DataView(body.buffer, body.byteOffset).getUint32(0, true);
+    assert.strictEqual(queryLength, 15);
+    assert.deepStrictEqual(body, requestBody("RETURN 'é😀'"));
 }
 
 async function testQueryData() {
@@ -550,7 +572,7 @@ async function testGraphPathIdsStayExact() {
 }
 
 // The null path an OPTIONAL MATCH leaves arrives as a path of 0 nodes and reads as null,
-// as the JSON and Python clients read it.
+// as the Python client reads it.
 async function testNullGraphPath() {
     const header = makeHeader([{ name: "path", typeCode: TYPE_GRAPH_PATH, encoding: ENCODING_VECTOR }]);
 
@@ -568,6 +590,7 @@ async function testNullGraphPath() {
 
 await testQuery();
 await testQueryData();
+await testMultiByteQueryBody();
 await testError();
 await testMaps(false);
 await testMaps(true);
@@ -575,4 +598,4 @@ await testRaggedQueryData();
 await testGraphPathIdsStayExact();
 await testNullGraphPath();
 
-console.log("wasm client smoke test passed: query, queryData, error, maps, ragged, paths, null paths");
+console.log("wasm client smoke test passed: query, queryData, multi-byte body, error, maps, ragged, paths, null paths");

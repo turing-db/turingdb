@@ -22,12 +22,17 @@
     "client"
   ],
   "exports": {
-    ".": "./TuringClient.mjs",
+    ".": {
+      "types": "./TuringClient.d.ts",
+      "default": "./TuringClient.mjs"
+    },
     "./turing_wasm_decoder.wasm": "./turing_wasm_decoder.wasm",
     "./package.json": "./package.json"
   },
+  "types": "./TuringClient.d.ts",
   "files": [
     "TuringClient.mjs",
+    "TuringClient.d.ts",
     "turing_wasm_decoder.mjs",
     "turing_wasm_decoder.wasm",
     "README.md",
