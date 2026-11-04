@@ -546,6 +546,16 @@ async function testRejectsParametersAQueryCannotHold() {
     assert.throws(() => double(2n), TypeError);
 }
 
+// The decoder's buffer is only where it starts: a packet larger than it grows it
+async function testGrowsTheDecoderBuffer() {
+    const bytes = concatPackets([...makeFirstDataframe(), makeEndChunk(3), makeEnd(1.0)]);
+    const client = new TuringClient({ fetch: makeFakeFetch(bytes, {}), bufferCapacity: 8 });
+    const { chunks } = await client.query("MATCH (n) RETURN n");
+
+    assert.deepStrictEqual(chunks[0].names, ["ids", "labels", "score", "nick"]);
+    assert.deepStrictEqual(chunks[0].columns[3].toArray(), ["r", null, "c"]);
+}
+
 // A constant null has no bytes, so no CHUNK packet carries it: each END_CHUNK completes it
 async function testConstantNullInEveryChunk() {
     const header = makeHeader([{ name: "absent", typeCode: TYPE_PROPERTY_NULL, encoding: ENCODING_CONSTANT }]);
@@ -715,6 +725,7 @@ async function testNullGraphPath() {
 await testQuery();
 await testParameters();
 await testRejectsParametersAQueryCannotHold();
+await testGrowsTheDecoderBuffer();
 await testConstantNullInEveryChunk();
 await testOptionalConstantLists();
 await testQueryData();
@@ -726,4 +737,4 @@ await testRaggedQueryData();
 await testGraphPathIdsStayExact();
 await testNullGraphPath();
 
-console.log("wasm client smoke test passed: query, parameters, constant nulls, optional constant lists, queryData, multi-byte body, error, maps, ragged, paths, null paths");
+console.log("wasm client smoke test passed: query, parameters, buffer growth, constant nulls, optional constant lists, queryData, multi-byte body, error, maps, ragged, paths, null paths");

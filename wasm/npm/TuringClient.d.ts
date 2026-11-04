@@ -173,7 +173,7 @@ export interface TuringClientOptions {
     graph?: string;
     /** Sent as `Authorization: Bearer <authToken>`. */
     authToken?: string;
-    /** Decoder buffer size in bytes. Default 1 MiB. */
+    /** The decoder buffer's starting size in bytes. It grows to fit a larger packet. Default 1 MiB. */
     bufferCapacity?: number;
     fetch?: typeof fetch;
     /** Where to fetch `turing_wasm_decoder.wasm` from, in place of the copy next to the client. */

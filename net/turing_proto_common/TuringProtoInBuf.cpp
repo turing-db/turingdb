@@ -10,6 +10,12 @@ TuringProtoInBuf::TuringProtoInBuf(size_t capacity)
 {
 }
 
+void TuringProtoInBuf::ensureCapacity(size_t capacity) {
+    if (capacity > _data.size()) {
+        _data.resize(capacity);
+    }
+}
+
 void TuringProtoInBuf::ensureReadable(size_t len) const {
     if (_readOffset + len > _writeOffset) {
         throw TuringException("TuringProtoInBuf: read past end of received data");

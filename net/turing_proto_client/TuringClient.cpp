@@ -371,9 +371,7 @@ void TuringClient::recvChunkBody(size_t chunkSize, ProtoHeader* outHeader) {
     const size_t payloadSize = chunkSize - ProtoHeader::wireSize();
 
     _inBuf.reset();
-    if (payloadSize > _inBuf.capacity()) {
-        throw TuringException("Server proto payload exceeds client inbuf capacity");
-    }
+    _inBuf.ensureCapacity(payloadSize);
 
     std::array<iovec, 2> iovecs = {{
         {_protoHeaderBuf.data(), ProtoHeader::wireSize()},
