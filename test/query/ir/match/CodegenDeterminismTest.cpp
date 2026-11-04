@@ -31,12 +31,13 @@ class CodegenDeterminismTest : public TuringTest {
 public:
     void initialize() override {
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
+        SystemManager& systemManager = _env->getSystemManager();
 
-        SystemAccessor system = _env->getSystemManager().accessUnique();
+        SystemAccessor system = systemManager.accessUnique();
         Graph* graph = system.createGraph(_graphName);
         SimpleGraph::createSimpleGraph(graph);
 
-        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager(), &_env->getMem(), &_env->getCompilerContext());
+        _interpreter = std::make_unique<QueryInterpreterV3>(&systemManager, &_env->getMem(), &_env->getCompilerContext());
     }
 
 protected:
@@ -68,14 +69,14 @@ protected:
 
     void expectOneProgram(std::string_view query) {
         std::string first;
-        codegenDump(query, first);
+        ASSERT_NO_FATAL_FAILURE(codegenDump(query, first));
 
         std::vector<std::unique_ptr<char[]>> padding;
         for (size_t compilation = 1; compilation < COMPILATION_COUNT; compilation++) {
             padding.push_back(std::make_unique<char[]>(compilation * PADDING_STEP));
 
             std::string dump;
-            codegenDump(query, dump);
+            ASSERT_NO_FATAL_FAILURE(codegenDump(query, dump));
             ASSERT_EQ(dump, first) << "query: " << query << "\ncompilation " << compilation;
         }
     }
@@ -105,6 +106,10 @@ TEST_F(CodegenDeterminismTest, bindsTheVariablesOfSeveralMatchesInOneOrder) {
     expectOneProgram("MATCH (n)-->(z), (l)-->(m) MATCH (n)-->(p)-->(q) WHERE m = p.age / -1 AND m.age = p.age + 28 RETURN n, m, z, p");
     expectOneProgram("MATCH (n)-->(z)-->(m) MATCH (n), (l)-->(m) MATCH (n)-->(p)-->(q) "
                      "WHERE n = p.age / 10 AND m.age < p.age + 2.8 RETURN n, m, z, p");
+}
+
+TEST_F(CodegenDeterminismTest, carriesAGroupingKeyReadTwiceByAComprehensionInOneOrder) {
+    expectOneProgram("MATCH (n:Person) RETURN n.age, [x IN collect(n.name) | toString(n.age) + x + toString(n.age + 1)]");
 }
 
 int main(int argc, char** argv) {

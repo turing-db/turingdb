@@ -416,7 +416,7 @@ dismissal hides a bug.
 Classify each finding with the first rule that fits:
 - **Non-determinism: fix now, before anything else.** A query whose IR, plan or answer differs
   between two runs of one binary. Example: codegen walked pointer-keyed maps, so 6 fixtures
-  carried their columns in heap-address order; #1316 made those maps `llvm::MapVector`s.
+  carried their columns in heap-address order; #1316 made those maps `InsertionOrderedMap`s.
 - **An answer that depends on chunk boundaries or row order: never by design**, even when it
   follows from a design that was chosen. Example: TUR-419. A cell write types a new property
   from its first chunk, so 65,536 integers then 2.5 store as Double, while 65,537 raise.

@@ -66,3 +66,5 @@ target_sources(test_query_ir_compiler_context_reuse PRIVATE ${IR_TEST_DIR}/Strin
 target_include_directories(test_query_ir_compiler_context_reuse PRIVATE ${IR_TEST_DIR})
 
 add_ir_tests(test_query_ir_db_pass_pipeline_reuse DBPassPipelineReuseTest.cpp)
+
+add_ir_tests(test_query_ir_insertion_ordered_map InsertionOrderedMapTest.cpp)

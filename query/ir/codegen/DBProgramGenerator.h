@@ -12,7 +12,6 @@
 #include "decl/PatternData.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "mlir/IR/Types.h"
@@ -26,6 +25,7 @@
 #include "metadata/DateTime.h"
 
 #include "ExplainRequest.h"
+#include "InsertionOrderedMap.h"
 
 #include "VariableDependencyGraph.h"
 
@@ -103,12 +103,12 @@ class YieldItems;
 class DBProgramGenerator {
 public:
     using VariableIdentities = std::vector<mlir::TypedValue<mlir::Type>>;
-    using VariableIdentityMap = llvm::MapVector<const VariableDependency*, VariableIdentities>;
+    using VariableIdentityMap = InsertionOrderedMap<const VariableDependency*, VariableIdentities>;
     using DefinedVars = std::unordered_set<const VariableDependency*>;
-    using ExprValueMap = std::unordered_map<const Expr*, mlir::Value>;
-    using ProjectedColumnMap = llvm::MapVector<const VarDecl*, mlir::Value>;
-    using ElementColumnMap = llvm::MapVector<const VarDecl*, mlir::Value>;
-    using EdgeTypeColumnMap = llvm::MapVector<const VariableDependency*, mlir::Value>;
+    using ExprValueMap = InsertionOrderedMap<const Expr*, mlir::Value>;
+    using ProjectedColumnMap = InsertionOrderedMap<const VarDecl*, mlir::Value>;
+    using ElementColumnMap = InsertionOrderedMap<const VarDecl*, mlir::Value>;
+    using EdgeTypeColumnMap = InsertionOrderedMap<const VariableDependency*, mlir::Value>;
     using ColumnPredicate = llvm::function_ref<bool(mlir::Value)>;
     using VariableColumnBinding = llvm::function_ref<void(const VarDecl*, std::string_view, mlir::Value)>;
     using CaseRegionGenerator = llvm::function_ref<mlir::Value(mlir::Value)>;
@@ -221,7 +221,7 @@ private:
             std::unordered_map<std::string_view, mlir::Value> _properties;
         };
 
-        using CreatedEntityMap = llvm::MapVector<const VarDecl*, CreatedEntity>;
+        using CreatedEntityMap = InsertionOrderedMap<const VarDecl*, CreatedEntity>;
 
         CreatedEntityMap _createdEntities;
 
@@ -285,15 +285,17 @@ private:
             bool readsAsItsEdges() const { return _kind == mlir::storage::PathExpansionKind::Edges && !_reversed && _steps == 1; }
         };
 
-        llvm::MapVector<const VarDecl*, PathBinding> _pathBindings;
+        InsertionOrderedMap<const VarDecl*, PathBinding> _pathBindings;
+
+        using NamedPathMap = InsertionOrderedMap<const VarDecl*, mlir::Value>;
 
         // The path each `MATCH p = ...` built. A path variable appears in no pattern, so it
         // is no VDG variable and cannot live in _varMap.
-        llvm::MapVector<const VarDecl*, mlir::Value> _namedPaths;
+        NamedPathMap _namedPaths;
 
         // The quantified edge pattern each variable-length variable was declared by, whose
         // hop constraints the exploration's region is generated from
-        llvm::MapVector<const VarDecl*, const EdgePattern*> _quantifiedEdges;
+        InsertionOrderedMap<const VarDecl*, const EdgePattern*> _quantifiedEdges;
 
         // The block arguments of the hop region being generated, under the declarations of
         // the hop's entities; empty outside a region
@@ -329,10 +331,12 @@ private:
         std::optional<PartScope::WrittenEntity> _written;
     };
 
+    using RunConstantMap = InsertionOrderedMap<const VarDecl*, RunConstant>;
+
     // The constant imports of every body, by the declaration the body reads them under. In a
     // body run once per row each import holds one value for the run, and a barrier of that
     // body that drops one declares it again, bound again from here.
-    llvm::MapVector<const VarDecl*, RunConstant> _runConstants;
+    RunConstantMap _runConstants;
 
     // The LOAD CSV rows the subquery body being generated imports. A body that groups or
     // dedups runs one input row at a time, so such a row holds one record there and the
@@ -602,7 +606,7 @@ private:
 
     // The scope of each query of a body that reads the row it runs for: each single
     // query, and each WHEN, whose predicates read it
-    using BodyScopes = llvm::MapVector<const RegularQuery*, BranchScope>;
+    using BodyScopes = InsertionOrderedMap<const RegularQuery*, BranchScope>;
 
     static const BranchScope& findBranchScope(const BodyScopes& scopes, const RegularQuery* query);
 
