@@ -12,6 +12,7 @@
 #include "decl/PatternData.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "mlir/IR/Types.h"
@@ -102,12 +103,12 @@ class YieldItems;
 class DBProgramGenerator {
 public:
     using VariableIdentities = std::vector<mlir::TypedValue<mlir::Type>>;
-    using VariableIdentityMap = std::unordered_map<const VariableDependency*, VariableIdentities>;
+    using VariableIdentityMap = llvm::MapVector<const VariableDependency*, VariableIdentities>;
     using DefinedVars = std::unordered_set<const VariableDependency*>;
     using ExprValueMap = std::unordered_map<const Expr*, mlir::Value>;
-    using ProjectedColumnMap = std::unordered_map<const VarDecl*, mlir::Value>;
-    using ElementColumnMap = std::unordered_map<const VarDecl*, mlir::Value>;
-    using EdgeTypeColumnMap = std::unordered_map<const VariableDependency*, mlir::Value>;
+    using ProjectedColumnMap = llvm::MapVector<const VarDecl*, mlir::Value>;
+    using ElementColumnMap = llvm::MapVector<const VarDecl*, mlir::Value>;
+    using EdgeTypeColumnMap = llvm::MapVector<const VariableDependency*, mlir::Value>;
     using ColumnPredicate = llvm::function_ref<bool(mlir::Value)>;
     using VariableColumnBinding = llvm::function_ref<void(const VarDecl*, std::string_view, mlir::Value)>;
     using CaseRegionGenerator = llvm::function_ref<mlir::Value(mlir::Value)>;
@@ -220,7 +221,7 @@ private:
             std::unordered_map<std::string_view, mlir::Value> _properties;
         };
 
-        using CreatedEntityMap = std::unordered_map<const VarDecl*, CreatedEntity>;
+        using CreatedEntityMap = llvm::MapVector<const VarDecl*, CreatedEntity>;
 
         CreatedEntityMap _createdEntities;
 
@@ -284,15 +285,15 @@ private:
             bool readsAsItsEdges() const { return _kind == mlir::storage::PathExpansionKind::Edges && !_reversed && _steps == 1; }
         };
 
-        std::unordered_map<const VarDecl*, PathBinding> _pathBindings;
+        llvm::MapVector<const VarDecl*, PathBinding> _pathBindings;
 
         // The path each `MATCH p = ...` built. A path variable appears in no pattern, so it
         // is no VDG variable and cannot live in _varMap.
-        std::unordered_map<const VarDecl*, mlir::Value> _namedPaths;
+        llvm::MapVector<const VarDecl*, mlir::Value> _namedPaths;
 
         // The quantified edge pattern each variable-length variable was declared by, whose
         // hop constraints the exploration's region is generated from
-        std::unordered_map<const VarDecl*, const EdgePattern*> _quantifiedEdges;
+        llvm::MapVector<const VarDecl*, const EdgePattern*> _quantifiedEdges;
 
         // The block arguments of the hop region being generated, under the declarations of
         // the hop's entities; empty outside a region
@@ -331,7 +332,7 @@ private:
     // The constant imports of every body, by the declaration the body reads them under. In a
     // body run once per row each import holds one value for the run, and a barrier of that
     // body that drops one declares it again, bound again from here.
-    std::unordered_map<const VarDecl*, RunConstant> _runConstants;
+    llvm::MapVector<const VarDecl*, RunConstant> _runConstants;
 
     // The LOAD CSV rows the subquery body being generated imports. A body that groups or
     // dedups runs one input row at a time, so such a row holds one record there and the
@@ -601,7 +602,7 @@ private:
 
     // The scope of each query of a body that reads the row it runs for: each single
     // query, and each WHEN, whose predicates read it
-    using BodyScopes = std::unordered_map<const RegularQuery*, BranchScope>;
+    using BodyScopes = llvm::MapVector<const RegularQuery*, BranchScope>;
 
     static const BranchScope& findBranchScope(const BodyScopes& scopes, const RegularQuery* query);
 

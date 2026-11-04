@@ -149,6 +149,15 @@ using namespace db;
 
 namespace {
 
+// llvm::MapVector has no at(): the entry under @param key, which the map must hold
+template <typename Map>
+auto& entryAt(Map& map, const typename Map::key_type& key) {
+    const auto entry = map.find(key);
+    bioassert(entry != map.end(), "No entry under the key read");
+
+    return entry->second;
+}
+
 // The name a VECTOR SEARCH gives the metric column; anything else it yields is the
 // neighbour ID column, the analyzer having rejected every other name.
 constexpr std::string_view vectorSearchScoreYield = "score";
@@ -1708,10 +1717,10 @@ void DBProgramGenerator::generateHopRegion(mlir::db::ExplorePaths exploration,
     const size_t lastStep = hopCount - 1;
 
     // A name the pattern gives two of its nodes is read at the first of them the walk takes
-    std::unordered_map<const VarDecl*, size_t> declPositions;
+    llvm::MapVector<const VarDecl*, size_t> declPositions;
     const auto placeDecl = [&declPositions, hopCount, reversed](const VarDecl* decl, size_t patternPosition) {
         const size_t walkPosition = walkPositionOf(patternPosition, hopCount, reversed);
-        const auto [placed, inserted] = declPositions.emplace(decl, walkPosition);
+        const auto [placed, inserted] = declPositions.try_emplace(decl, walkPosition);
         if (!inserted) {
             placed->second = std::min(placed->second, walkPosition);
         }
@@ -1767,7 +1776,7 @@ void DBProgramGenerator::generateHopRegion(mlir::db::ExplorePaths exploration,
     }
 
     for (const auto& [node, walkPosition] : nodes) {
-        const size_t namedAt = declPositions.at(node->getDecl());
+        const size_t namedAt = entryAt(declPositions, node->getDecl());
         if (namedAt != walkPosition) {
             const mlir::Value named = block->getArgument(static_cast<unsigned>(namedAt));
             const mlir::Value bound = block->getArgument(static_cast<unsigned>(walkPosition));
@@ -1819,7 +1828,7 @@ mlir::Value DBProgramGenerator::listColumnOf(const VarDecl* decl, mlir::Value co
 
     mlir::Value seeds;
     if (binding._seed) {
-        seeds = _part._varMap.at(binding._seed).back();
+        seeds = entryAt(_part._varMap, binding._seed).back();
     }
 
     const bool expandsEdges = binding._kind == mlir::storage::PathExpansionKind::Edges;
@@ -2529,7 +2538,7 @@ void DBProgramGenerator::generateTraversal(std::span<Stmt* const> stmts) {
         for (const VariableDependency* var : bound) {
             defined.insert(var);
 
-            if (!yieldsConstantColumn(_part._varMap.at(var).back(), _constantColumns)) {
+            if (!yieldsConstantColumn(entryAt(_part._varMap, var).back(), _constantColumns)) {
                 mainComponent._vars.push_back(var);
             }
         }
@@ -2832,7 +2841,7 @@ void DBProgramGenerator::filterConstantScope(mlir::Value predicate) {
     llvm::SmallVector<mlir::Value> columnsToFilter;
     llvm::SmallVector<mlir::Type> resultTypes;
     for (const VariableDependency* var : constantVars) {
-        const mlir::Value column = _part._varMap.at(var).back();
+        const mlir::Value column = entryAt(_part._varMap, var).back();
         const mlir::Value laidOut = _opBuilder.create<mlir::db::BroadcastConstant>(loc, column, noDriver).getResult();
 
         columnsToFilter.push_back(laidOut);
@@ -2959,7 +2968,7 @@ void DBProgramGenerator::extendBoundDataflow(DefinedVars& defined,
     for (const VariableDependency* var : bound) {
         defined.insert(var);
 
-        if (!yieldsConstantColumn(_part._varMap.at(var).back(), _constantColumns)) {
+        if (!yieldsConstantColumn(entryAt(_part._varMap, var).back(), _constantColumns)) {
             carriedSet.push_back(var);
             dataflowVars.push_back(var);
         }
@@ -3053,7 +3062,7 @@ void DBProgramGenerator::resolveYieldedIdentities() {
     const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
 
     for (const YieldedIdentity& identity : identities) {
-        const mlir::Value patternColumn = _part._varMap.at(identity._variable).back();
+        const mlir::Value patternColumn = entryAt(_part._varMap, identity._variable).back();
         const mlir::Value yieldedColumn = _part._yieldedColumns[identity._yieldedIndex]._column;
 
         const bool patternAligned = isRowAlignedHere(patternColumn);
@@ -3251,7 +3260,7 @@ bool DBProgramGenerator::walkReadsAnotherComponent(const DefinedVars& componentV
                     continue;
                 }
 
-                const bool holdsRows = !holdsColumn(var) || !yieldsConstantColumn(_part._varMap.at(var).back(), _constantColumns);
+                const bool holdsRows = !holdsColumn(var) || !yieldsConstantColumn(entryAt(_part._varMap, var).back(), _constantColumns);
                 if (holdsRows) {
                     return true;
                 }
@@ -3490,7 +3499,7 @@ void DBProgramGenerator::expandComponent(const VariableDependency* root,
 void DBProgramGenerator::takeMainDataflow(mlir::Block* mainBlock, TranslatedComponent& component) {
     for (const VariableDependency* var : component._vars) {
         bioassert(holdsColumn(var), "Main dataflow var {} not registered", var->getName());
-        component._columns.push_back(_part._varMap.at(var).back());
+        component._columns.push_back(entryAt(_part._varMap, var).back());
     }
 
     component._region = std::make_unique<mlir::Region>();
@@ -3761,8 +3770,8 @@ void DBProgramGenerator::generateNamedPath(const PatternElement* element, const 
         bioassert(bindingIt != end(_part._pathBindings), "Quantified relationship without a path column");
 
         const PartScope::PathBinding& binding = bindingIt->second;
-        const mlir::Value seedColumn = _part._varMap.at(binding._seed).back();
-        const mlir::Value pathColumn = _part._varMap.at(binding._path).back();
+        const mlir::Value seedColumn = entryAt(_part._varMap, binding._seed).back();
+        const mlir::Value pathColumn = entryAt(_part._varMap, binding._path).back();
 
         // A walk taken against the pattern ends on the node the pattern opens with, so its
         // hops come first and the node it seeded from is the element's last entity
@@ -3789,7 +3798,7 @@ void DBProgramGenerator::generateNamedPath(const PatternElement* element, const 
 
             // Seeded from the far end, the walk lands on the node ahead of it instead, and
             // the node it seeded from follows it
-            const PartScope::PathBinding& binding = _part._pathBindings.at(walkDecl);
+            const PartScope::PathBinding& binding = entryAt(_part._pathBindings, walkDecl);
             if (binding._reversed) {
                 reversedPaths.push_back(static_cast<int64_t>(entities.size() - 1));
                 entities.push_back(resolveEntityColumn(nodePattern->getDecl()));
@@ -3829,7 +3838,7 @@ mlir::Value DBProgramGenerator::pathHandleColumn(const VarDecl* edgeDecl) {
     const auto bindingIt = _part._pathBindings.find(edgeDecl);
     bioassert(bindingIt != end(_part._pathBindings), "Quantified relationship without a path column");
 
-    return _part._varMap.at(bindingIt->second._path).back();
+    return entryAt(_part._varMap, bindingIt->second._path).back();
 }
 
 void DBProgramGenerator::generateMatchOrderBy(const MatchStmt* matchStmt) {
@@ -4557,7 +4566,7 @@ mlir::Value DBProgramGenerator::findPendingMask(const VarDecl* decl) const {
         return mlir::Value {};
     }
 
-    return _part._varMap.at(maskIt->second).back();
+    return entryAt(_part._varMap, maskIt->second).back();
 }
 
 void DBProgramGenerator::rebindGroupedWrittenEntity(const VarDecl* decl,
@@ -4862,7 +4871,7 @@ void DBProgramGenerator::collectCarrySet(CarrySet& carrySet) {
     });
 
     for (const CarriedEntity& carried : carrySet._writtenEntities) {
-        const PartScope::CreatedEntity& written = _part._createdEntities.at(carried._decl);
+        const PartScope::CreatedEntity& written = entryAt(_part._createdEntities, carried._decl);
 
         carrySet._columns.push_back(written._column);
 
@@ -4910,7 +4919,7 @@ void DBProgramGenerator::rebindCarrySet(mlir::ValueRange columns,
 
     size_t columnIndex = firstColumn + carrySet._inFlight._columns.size();
     for (const CarriedEntity& carried : carrySet._writtenEntities) {
-        PartScope::CreatedEntity& written = _part._createdEntities.at(carried._decl);
+        PartScope::CreatedEntity& written = entryAt(_part._createdEntities, carried._decl);
 
         written._column = columns[columnIndex];
         columnIndex++;
@@ -4982,7 +4991,7 @@ void DBProgramGenerator::generateMergeActions(const MergeStmt* mergeStmt, mlir::
 void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
     // Collect the columns a MATCH bound or a CALL yielded, by variable, so CREATE
     // patterns can reference them.
-    std::unordered_map<const VarDecl*, mlir::Value> knownVars;
+    llvm::MapVector<const VarDecl*, mlir::Value> knownVars;
     for (const auto& [var, identities] : _part._varMap) {
         const VarDecl* decl = var->getDecl();
         if (decl && !identities.empty()) {
@@ -5000,10 +5009,8 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
         knownVars[writtenDecl] = written._column;
     }
 
-    // The pattern's own order picks the column, since reading an arbitrary bucket of
-    // knownVars would make the number of nodes written depend on where a name hashed. A
-    // scope of nothing but yielded columns has no such order to read, so it falls back on
-    // one of them
+    // The pattern's own order picks the column. A scope of nothing but yielded columns has
+    // no such order to read, so it falls back on the first of them
     mlir::Value matchCardinality = resolveWildcardColumn();
     if (!matchCardinality && !knownVars.empty()) {
         matchCardinality = knownVars.begin()->second;
@@ -5019,7 +5026,7 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
         const VarDecl* decl = node->getDecl();
 
         if (decl && knownVars.contains(decl)) {
-            return knownVars.at(decl);
+            return entryAt(knownVars, decl);
         }
 
         const NodePatternData* data = node->getData();
@@ -5159,7 +5166,7 @@ mlir::Value DBProgramGenerator::resolveEntityColumn(const VarDecl* decl) {
     const bool foundEdgeIdentity = findIt != edgeIdentities.end() && !findIt->second.empty();
     if (foundEdgeIdentity) {
         const VariableDependency* representative = findIt->second.front();
-        return _part._varMap.at(representative).back();
+        return entryAt(_part._varMap, representative).back();
     }
 
     const auto createdIt = _part._createdEntities.find(decl);
@@ -5176,7 +5183,7 @@ mlir::Value DBProgramGenerator::resolveEntityColumn(const VarDecl* decl) {
     // read off the paths of its walk
     const auto pathIt = _part._pathBindings.find(decl);
     if (pathIt != end(_part._pathBindings) && pathIt->second._path) {
-        return listColumnOf(decl, _part._varMap.at(pathIt->second._path).back());
+        return listColumnOf(decl, entryAt(_part._varMap, pathIt->second._path).back());
     }
 
     const auto projectedIt = _part._projectedColumns.find(decl);
@@ -6332,7 +6339,7 @@ void DBProgramGenerator::emitCallSubquery(const CallSubqueryStmt* subquery, Subq
     std::unordered_set<std::string_view> outerImportedCSVRows;
     std::swap(_importedCSVRows, outerImportedCSVRows);
 
-    const std::unordered_map<const VarDecl*, RunConstant> outerRunConstants = _runConstants;
+    const llvm::MapVector<const VarDecl*, RunConstant> outerRunConstants = _runConstants;
 
     _opBuilder.setInsertionPointToStart(bodyBlock);
 
@@ -7190,7 +7197,7 @@ void DBProgramGenerator::generateOptionalMatch(std::span<Stmt* const> stmt) {
         resultTypes.push_back(column._column.getType());
     }
 
-    const mlir::Value carriedTag = tagsRows ? _part._varMap.at(tagVariable).back() : mlir::Value();
+    const mlir::Value carriedTag = tagsRows ? entryAt(_part._varMap, tagVariable).back() : mlir::Value();
     _opBuilder.create<mlir::db::OptionalYield>(loc, carriedTag, yieldedColumns);
 
     _opBuilder.setInsertionPointToEnd(outerBlock);
@@ -7499,7 +7506,7 @@ void DBProgramGenerator::forEachVariableColumn(const VariableColumnBinding& bind
             continue;
         }
 
-        bind(groupDecl, groupDecl->getName(), _part._varMap.at(binding._path).back());
+        bind(groupDecl, groupDecl->getName(), entryAt(_part._varMap, binding._path).back());
     }
 
     // And so is the element a list comprehension bound, inside its body
@@ -7515,7 +7522,7 @@ void DBProgramGenerator::forEachVariableColumn(const VariableColumnBinding& bind
             continue;
         }
 
-        bind(decl, decl->getName(), _part._varMap.at(representative).back());
+        bind(decl, decl->getName(), entryAt(_part._varMap, representative).back());
     }
 }
 
@@ -8550,7 +8557,7 @@ void DBProgramGenerator::generateFoldRegion(mlir::Region& region,
     const PartScope::CreatedEntityMap outerCreatedEntities = _part._createdEntities;
     const ExprValueMap outerExprMap = _part._exprMap;
     const ProjectedColumnMap outerProjectedColumns = _part._projectedColumns;
-    const std::unordered_map<const VarDecl*, mlir::Value> outerNamedPaths = _part._namedPaths;
+    const llvm::MapVector<const VarDecl*, mlir::Value> outerNamedPaths = _part._namedPaths;
 
     const mlir::Block::BlockArgListType carriedArguments = bodyBlock->getArguments().drop_front(2);
 
@@ -8614,7 +8621,7 @@ void DBProgramGenerator::generateElementRegion(mlir::Region& region,
     const PartScope::CreatedEntityMap outerCreatedEntities = _part._createdEntities;
     const ExprValueMap outerExprMap = _part._exprMap;
     const ProjectedColumnMap outerProjectedColumns = _part._projectedColumns;
-    const std::unordered_map<const VarDecl*, mlir::Value> outerNamedPaths = _part._namedPaths;
+    const llvm::MapVector<const VarDecl*, mlir::Value> outerNamedPaths = _part._namedPaths;
 
     const VarDecl* const itemDecl = comprehension->getDecl();
 
@@ -8825,7 +8832,7 @@ void DBProgramGenerator::translatePatternComprehensionExpr(const Expr* expr,
     generatePart(patternStatements);
 
     const mlir::Value value = getOrTranslateExprColumn(comprehension->getProjection());
-    const mlir::Value rowTags = tagsRows ? _part._varMap.at(tagVariable).back() : mlir::Value {};
+    const mlir::Value rowTags = tagsRows ? entryAt(_part._varMap, tagVariable).back() : mlir::Value {};
 
     _opBuilder.create<mlir::db::ComprehensionYield>(loc, rowTags, value);
 
@@ -9080,7 +9087,7 @@ mlir::Value DBProgramGenerator::generateSubqueryExpression(const RegularQuery* b
     std::unordered_set<std::string_view> outerImportedCSVRows;
     std::swap(_importedCSVRows, outerImportedCSVRows);
 
-    const std::unordered_map<const VarDecl*, RunConstant> outerRunConstants = _runConstants;
+    const llvm::MapVector<const VarDecl*, RunConstant> outerRunConstants = _runConstants;
 
     llvm::SmallVector<PublishedColumn> held;
 
@@ -10905,7 +10912,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
             collectCSVRowVariables(projectedDecl, rowVars);
 
             for (const VariableDependency* rowVar : rowVars) {
-                keyColumns.push_back(_part._varMap.at(rowVar).back());
+                keyColumns.push_back(entryAt(_part._varMap, rowVar).back());
                 keyVarAtPos.push_back(rowVar);
                 keyVarDeclAtPos.push_back(projectedDecl);
                 keyExprAtPos.push_back(nullptr);
