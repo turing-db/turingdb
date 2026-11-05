@@ -131,9 +131,10 @@ ListShape collectedListShape(const RegularQuery* body) {
 
 }
 
-ExprAnalyzer::ExprAnalyzer(CypherAST* ast, const GraphView& graphView)
+ExprAnalyzer::ExprAnalyzer(CypherAST* ast, const GraphView& graphView, const ParameterMap* parameters)
     : _ast(ast),
     _graphView(graphView),
+    _parameters(parameters),
     _graphMetadata(_graphView.metadata())
 {
 }

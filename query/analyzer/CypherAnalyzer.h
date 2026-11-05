@@ -12,6 +12,7 @@
 namespace db {
 
 class CypherAST;
+class ParameterMap;
 class Expr;
 class VarDecl;
 class ReadStmtAnalyzer;
@@ -57,7 +58,7 @@ class DropIndexQuery;
 
 class CypherAnalyzer {
 public:
-    CypherAnalyzer(CypherAST* ast, GraphView graphView);
+    CypherAnalyzer(CypherAST* ast, GraphView graphView, const ParameterMap* parameters = nullptr);
     ~CypherAnalyzer();
 
     CypherAnalyzer(const CypherAnalyzer&) = delete;
