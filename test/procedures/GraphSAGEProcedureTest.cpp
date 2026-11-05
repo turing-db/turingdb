@@ -515,20 +515,11 @@ TEST_F(GraphSAGEProcedureTest, firstHopDstNodesAreTheSeeds) {
     EXPECT_EQ(sortedColumn(run, 0), expected);
 }
 
-// A seed the graph does not hold reaches nothing, and the call still finishes
-TEST_F(GraphSAGEProcedureTest, anUnknownSeedFinishesWithNoEdgeRows) {
+TEST_F(GraphSAGEProcedureTest, rejectsAnUnknownSeed) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
-    SAGERun run;
-    runSAGE(reader.getView(), {9999}, {2, 2, 2}, 5, ChunkConfig::CHUNK_SIZE, run);
-
-    for (size_t hop = 0; hop < hops; hop++) {
-        const size_t base = hop * returnValuesPerHop;
-
-        EXPECT_TRUE(run._rows[base + 1].empty()) << "hop " << hop << " emitted a source";
-        EXPECT_TRUE(run._rows[base + 2].empty()) << "hop " << hop << " emitted a target";
-    }
+    EXPECT_THROW(runFirstStep(reader.getView(), {9999}, {2, 2, 2}), TuringException);
 }
 
 // The fanout list names one sample size per hop, so a list of any other length names

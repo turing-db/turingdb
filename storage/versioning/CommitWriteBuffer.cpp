@@ -620,3 +620,21 @@ void CommitWriteBufferRebaser::rebaseIndexes(Commit::CommitSpan commitsSinceBran
     auto [newEnd, oldEnd] = std::ranges::unique(incomingIndexes);
     incomingIndexes.erase(newEnd, oldEnd);
 }
+
+size_t db::committedNodeCount(const GraphView* view) {
+    if (!view || !view->isValid()) {
+        return 0;
+    }
+
+    const GraphReader reader = view->read();
+    return reader.getTotalNodesAllocated();
+}
+
+size_t db::committedEdgeCount(const GraphView* view) {
+    if (!view || !view->isValid()) {
+        return 0;
+    }
+
+    const GraphReader reader = view->read();
+    return reader.getTotalEdgesAllocated();
+}

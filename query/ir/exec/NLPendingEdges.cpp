@@ -4,10 +4,10 @@
 
 #include "iterators/EdgeTypeMatch.h"
 #include "reader/GraphReader.h"
+#include "versioning/CommitWriteBuffer.h"
 
 #include "NLExecutionContext.h"
 #include "NLProgram.h"
-#include "NLWriteProperties.h"
 
 using namespace db;
 

@@ -10,7 +10,7 @@ using namespace db;
 ScannedNodes::ScannedNodes(const GraphView& view, const CommitWriteBuffer* writeBuffer, size_t firstQueryNode)
     : _reader(view.read()),
     _writeBuffer(writeBuffer),
-    _committedCount(view.isValid() ? _reader.getTotalNodesAllocated() : 0),
+    _committedCount(committedNodeCount(&view)),
     _firstQueryNode(firstQueryNode),
     _pendingCount(writeBuffer ? writeBuffer->numPendingNodes() : 0)
 {

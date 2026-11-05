@@ -24,7 +24,6 @@
 #include "QueryTypeName.h"
 #include "metadata/PropertyType.h"
 #include "metadata/PropertyTypeMap.h"
-#include "reader/GraphReader.h"
 #include "views/GraphView.h"
 #include "writers/MetadataBuilder.h"
 
@@ -604,24 +603,6 @@ const std::optional<PropertyType>& resolveMapKeyType(const GraphView* view,
     return keyType._type;
 }
 
-}
-
-size_t db::committedNodeCount(const GraphView* view) {
-    if (!view || !view->isValid()) {
-        return 0;
-    }
-
-    const GraphReader reader = view->read();
-    return reader.getTotalNodesAllocated();
-}
-
-size_t db::committedEdgeCount(const GraphView* view) {
-    if (!view || !view->isValid()) {
-        return 0;
-    }
-
-    const GraphReader reader = view->read();
-    return reader.getTotalEdgesAllocated();
 }
 
 bool db::writeTouchesRow(const ColumnMask* rows, size_t row) {

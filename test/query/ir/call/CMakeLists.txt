@@ -53,6 +53,8 @@ add_call_v3_test(test_query_ir_call_graphsage_row_arguments CallGraphSAGERowArgu
 
 add_call_v3_test(test_query_ir_call_graphsage_unknown_seed CallGraphSAGEUnknownSeedTest.cpp)
 
+add_call_v3_test(test_query_ir_call_graphsage_null_seed CallGraphSAGENullSeedTest.cpp)
+
 add_call_v3_test(test_query_ir_call_yield_star CallYieldStarTest.cpp)
 
 add_call_v3_test(test_query_ir_call_skip_limit CallSkipLimitTest.cpp)

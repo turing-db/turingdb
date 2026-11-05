@@ -294,17 +294,6 @@ TEST_F(CallGraphSAGETest, aZeroFanoutYieldsOnlyTheSeeds) {
     EXPECT_EQ(sink.getRows(), expected);
 }
 
-// A seed the graph does not hold reaches nothing, and the call still answers.
-TEST_F(CallGraphSAGETest, anUnknownSeedAnswersWithNoEdges) {
-    StringRowSink sink;
-    runQuery("CALL gnn.graphSAGE([9999], [2, 2, 2], 42) YIELD src_nodes0 "
-             "RETURN count(src_nodes0)",
-             sink);
-
-    const std::vector<StringRowSink::Row> expected {{"0"}};
-    EXPECT_EQ(sink.getRows(), expected);
-}
-
 // The fanout list names one sample size per hop, so any other length names something the
 // call cannot act on.
 TEST_F(CallGraphSAGETest, rejectsAFanoutListOfTheWrongSize) {

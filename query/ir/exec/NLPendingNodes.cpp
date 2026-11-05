@@ -1,7 +1,8 @@
 #include "NLPendingNodes.h"
 
+#include "versioning/CommitWriteBuffer.h"
+
 #include "NLExecutionContext.h"
-#include "NLWriteProperties.h"
 
 using namespace db;
 

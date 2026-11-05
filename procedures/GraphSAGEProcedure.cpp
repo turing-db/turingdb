@@ -47,6 +47,8 @@ constexpr std::string_view NEGATIVE_FANOUT_ERROR = "Fanout {} is negative.";
 
 constexpr std::string_view SEEDS_ERROR = "graphSAGE() seeds must be a list of nodes or ints";
 
+constexpr std::string_view INVALID_NODE_ID_ERROR = "Invalid node ID: {}";
+
 constexpr std::string_view FANOUTS_ERROR = "graphSAGE() fanouts must be a list of ints";
 
 constexpr std::string_view seedErr = "graphSAGE() seed must be an int";
@@ -63,7 +65,6 @@ struct Data final : public TypedProcedureData<GraphSAGEProcedure, IndexedProcedu
     bool _started {false};
 };
 
-// A seed that names no node is skipped, as a MATCH on its ID matches nothing
 void readSeeds(const ListView list, const ScannedNodes& scanned, ColumnNodeIDs& seeds) {
     for (const CellView element : list) {
         const CellTag tag = element.getTag();
@@ -74,7 +75,7 @@ void readSeeds(const ListView list, const ScannedNodes& scanned, ColumnNodeIDs& 
         } else if (tag == CellTag::Int) {
             const types::Int64::Primitive id = element.getAs<types::Int64::Primitive>();
             if (id < 0) {
-                continue;
+                throw ProcedureException(fmt::format(INVALID_NODE_ID_ERROR, id));
             }
 
             seed = NodeID(static_cast<uint64_t>(id));
@@ -82,9 +83,11 @@ void readSeeds(const ListView list, const ScannedNodes& scanned, ColumnNodeIDs& 
             throw ProcedureException(std::string(SEEDS_ERROR));
         }
 
-        if (scanned.contains(seed)) {
-            seeds.push_back(seed);
+        if (!scanned.contains(seed)) {
+            throw ProcedureException(fmt::format(INVALID_NODE_ID_ERROR, seed.getValue()));
         }
+
+        seeds.push_back(seed);
     }
 }
 
