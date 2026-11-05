@@ -2428,6 +2428,10 @@ public:
     void setCount(size_t count) { _count = count; }
     void addCount(size_t count) { _count += count; }
 
+    // The exact total of a sum or an average of durations, in microseconds
+    __int128 getDurationTotal() const { return _durationTotal; }
+    void setDurationTotal(__int128 total) { _durationTotal = total; }
+
     // A min/max or tagged sum accumulator holds one value, so a new one is copied into the
     // spare store and the stores flip at once
     NLCompactingValueStore& accumulatorValues() { return _accumulatorValues; }
@@ -2435,14 +2439,15 @@ public:
 private:
     Column* _accumulator {nullptr};
     size_t _count {0};
+    __int128 _durationTotal {0};
     NLCompactingValueStore _accumulatorValues;
 };
 
 // Handlers of one aggregate, selected during translation from the reduction and
 // the column value type (as the count / gather / append families are), so the
 // per-type fan-out lives in one place. Reset re-initializes the accumulator (a
-// present zero for a typed sum/avg, null for min/max and a tagged cell) and zeroes the
-// count; update folds
+// present zero for a typed sum/avg of numbers, null for min/max and a tagged cell) and
+// zeroes the count and the duration total; update folds
 // a chunk's non-null values into the accumulator; result writes the single
 // reduced row into the output column, building a value it computes - the average of
 // tagged cells - in the step buffers.
@@ -2592,9 +2597,11 @@ using NLGroupKeyGatherFunction = void (*)(const Column* input,
 // newly added groups to the reduction's identity - a present zero (sum/avg), a
 // null (min/max) or a zero tally (count). The accumulator column holds the reduced
 // value per group (null for count); counts holds the per-group non-null tally
-// (used by count and avg). One per kind / value type, selected during translation.
+// (used by count and avg); durationTotals holds the per-group 128-bit total of a sum
+// or an average of durations. One per kind / value type, selected during translation.
 using NLGroupAggregateGrowFunction = void (*)(Column* accumulator,
                                               std::vector<uint64_t>& counts,
+                                              std::vector<__int128>& durationTotals,
                                               size_t groupCount);
 
 // Fold this step's chunk into the per-group state: for each input row, reduce its
@@ -2602,10 +2609,12 @@ using NLGroupAggregateGrowFunction = void (*)(Column* accumulator,
 // group-index map nl.group_aggregate_update built for this step. One per kind /
 // value type. The parameters are the union of what any reduction needs, so each fold
 // reads only its own: sum/min/max ignore counts, count ignores the accumulator, only
-// the distinct kinds touch the tally of already-charged (group, value) pairs, and only
-// min/max and a sum of tagged cells copy the values they keep into values.
+// sums and averages of durations touch durationTotals, only the distinct kinds touch the
+// tally of already-charged (group, value) pairs, and only min/max and a sum of tagged
+// cells copy the values they keep into values.
 using NLGroupAggregateFoldFunction = void (*)(Column* accumulator,
                                               std::vector<uint64_t>& counts,
+                                              std::vector<__int128>& durationTotals,
                                               const Column* input,
                                               const std::vector<size_t>& groups,
                                               NLGroupDistinctTally& distinct,
@@ -2623,6 +2632,7 @@ using NLReownRowsFunction = void (*)(Column* column, const std::vector<size_t>& 
 // value type.
 using NLGroupAggregateEmitFunction = void (*)(const Column* accumulator,
                                               const std::vector<uint64_t>& counts,
+                                              const std::vector<__int128>& durationTotals,
                                               size_t begin,
                                               size_t count,
                                               Column* output,
@@ -2695,7 +2705,8 @@ public:
 
     // One aggregate. The update folds the incoming chunk _input into the per-group
     // state (_accumulator, one reduced value per group - null for count - and
-    // _counts, one non-null tally per group, used by count and avg); the emit fills
+    // _counts, one non-null tally per group, used by count and avg, and _durationTotals,
+    // the 128-bit total per group of a sum or an average of durations); the emit fills
     // the loop variable _output. _grow/_fold/_emit are baked from the kind and the
     // value type. _distinct is the tally of a DISTINCT aggregate, left empty by every
     // other reduction.
@@ -2704,6 +2715,7 @@ public:
         Column* _accumulator {nullptr};
         Column* _output {nullptr};
         std::vector<uint64_t> _counts;
+        std::vector<__int128> _durationTotals;
         NLGroupDistinctTally _distinct;
         NLGroupAggregateGrowFunction _grow {nullptr};
         NLGroupAggregateFoldFunction _fold {nullptr};

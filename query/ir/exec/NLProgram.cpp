@@ -500,6 +500,7 @@ void NLGroupAggregateState::reset() {
         }
 
         aggregate._counts.clear();
+        aggregate._durationTotals.clear();
         aggregate._distinct.clear();
     }
 }
@@ -547,6 +548,7 @@ void NLCollectState::reset() {
         }
 
         aggregate._counts.clear();
+        aggregate._durationTotals.clear();
         aggregate._distinct.clear();
     }
 
@@ -564,7 +566,7 @@ void NLCollectState::reset() {
         }
 
         for (NLGroupAggregateState::Aggregate& aggregate : _aggregates) {
-            aggregate._grow(aggregate._accumulator, aggregate._counts, 1);
+            aggregate._grow(aggregate._accumulator, aggregate._counts, aggregate._durationTotals, 1);
         }
     }
 }

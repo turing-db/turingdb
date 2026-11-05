@@ -198,4 +198,8 @@ add_turing_test(test_query_ir_limit_past_a_collect LimitPastACollectTest.cpp)
 
 add_turing_test(test_query_ir_duration_sum_average DurationSumAverageTest.cpp)
 
+add_turing_test(test_query_ir_duration_sum_overflow DurationSumOverflowTest.cpp)
+
+add_turing_test(test_query_ir_duration_sum_row_order DurationSumRowOrderTest.cpp)
+
 add_turing_test(test_query_ir_percentile_held_in_a_cell PercentileHeldInACellTest.cpp)
