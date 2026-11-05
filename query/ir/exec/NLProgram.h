@@ -2851,6 +2851,8 @@ public:
 
     void addResultColumn(Column* column) { _resultColumns.push_back(column); }
 
+    void setExecutionContext(const NLExecutionContext* context);
+
     // Prepare the procedure on its first drive and rewind it - the RESET step - on each
     // later one, so a procedure that finished the previous chunk of arguments starts
     // afresh on the next one, dropping whatever per-drive state it kept.
