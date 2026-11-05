@@ -624,7 +624,7 @@ LogicalResult verifyHopRegion(Operation* op, Region& hop, size_t step, ValueRang
     for (Operation& inner : block) {
         for (const Value operand : inner.getOperands()) {
             if (const auto argument = dyn_cast<BlockArgument>(operand)) {
-                if (argument.getOwner() != &block) {
+                if (argument.getOwner() != &block && !::db::isFunctionArgument(argument)) {
                     return op->emitOpError("hop region reads a block argument of another region");
                 }
 

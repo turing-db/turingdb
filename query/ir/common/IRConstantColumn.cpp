@@ -1,5 +1,6 @@
 #include "IRConstantColumn.h"
 
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
@@ -49,9 +50,10 @@ bool isConstantColumn(mlir::Value root, llvm::DenseMap<mlir::Value, bool>& class
         }
 
         mlir::Operation* const definingOp = value.getDefiningOp();
-        const bool isConstantLike = definingOp
-                                 && (definingOp->hasTrait<mlir::OpTrait::ConstantLike>()
-                                     || definingOp->hasTrait<mlir::OpTrait::ConstantResult>());
+        const bool isConstantLike = isFunctionArgument(value)
+                                 || (definingOp
+                                     && (definingOp->hasTrait<mlir::OpTrait::ConstantLike>()
+                                         || definingOp->hasTrait<mlir::OpTrait::ConstantResult>()));
         const bool constantThroughOperands = definingOp
                                           && definingOp->hasTrait<mlir::OpTrait::ConstantThroughOperands>()
                                           && runsWithoutRaising(definingOp);
@@ -92,6 +94,11 @@ bool isConstantColumn(mlir::Value root, llvm::DenseMap<mlir::Value, bool>& class
     return classified.at(root);
 }
 
+}
+
+bool db::isFunctionArgument(mlir::Value value) {
+    const mlir::BlockArgument argument = mlir::dyn_cast<mlir::BlockArgument>(value);
+    return argument && mlir::isa_and_present<mlir::func::FuncOp>(argument.getOwner()->getParentOp());
 }
 
 bool db::yieldsConstantColumn(mlir::Value value) {

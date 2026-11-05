@@ -69,6 +69,8 @@ class CollectSubqueryExpr;
 class ListSliceExpr;
 class LoadCSVStmt;
 class MapLiteral;
+class ParameterDecl;
+class ParameterExpr;
 class MatchStmt;
 class MergeStmt;
 class NodePattern;
@@ -316,6 +318,9 @@ private:
     // column is walked once rather than once per clause
     llvm::DenseMap<mlir::Value, bool> _constantColumns;
 
+    // The argument of main each parameter is bound to
+    llvm::DenseMap<const ParameterDecl*, mlir::Value> _parameterArguments;
+
     // The branches of a union in a subquery body start from the rows of that body, so each
     // branch block being generated maps to the body block whose columns are in flight in it
     std::unordered_map<mlir::Block*, mlir::Block*> _unionBranchRowBlocks;
@@ -358,7 +363,7 @@ private:
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = nullptr) const;
 
-    void createMain();
+    void createMain(std::span<ParameterDecl* const> parameters);
 
     // What being one branch of a union asks of a query body's result: its projected
     // constants laid out over its rows, so every branch emits the result table's columns
@@ -1395,6 +1400,8 @@ private:
 
     mlir::Value translateArg(const Expr* argExpr);
     mlir::Value translateLiteralExpr(const Literal* literal);
+    mlir::Value translateParameterExpr(const ParameterExpr* parameterExpr);
+    mlir::Type parameterType(const ParameterDecl* decl);
     mlir::Type propertyValueType(ValueType valueType);
     mlir::Value translatePropertyExpr(const PropertyExpr* propExpr);
 

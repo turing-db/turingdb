@@ -25,6 +25,9 @@ class ConstantResult
 
 namespace db {
 
+// Whether @param value is an argument of the function: a parameter, bound once for the run
+bool isFunctionArgument(mlir::Value value);
+
 // Whether @param value holds the same value in every row: a constant, or a computation
 // over constants alone
 bool yieldsConstantColumn(mlir::Value value);

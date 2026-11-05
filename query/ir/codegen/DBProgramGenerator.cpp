@@ -84,6 +84,7 @@
 #include "stmt/StmtContainer.h"
 #include "decl/DeclContext.h"
 #include "decl/EvaluatedType.h"
+#include "decl/ParameterDecl.h"
 #include "decl/PatternData.h"
 #include "decl/VarDecl.h"
 #include "FunctionInvocation.h"
@@ -109,6 +110,7 @@
 #include "expr/ListSliceExpr.h"
 #include "expr/LiteralExpr.h"
 #include "expr/LogicalExpr.h"
+#include "expr/ParameterExpr.h"
 #include "expr/PatternComprehensionExpr.h"
 #include "expr/PropertyExpr.h"
 #include "expr/PropertyLookupExpr.h"
@@ -570,6 +572,31 @@ const std::unordered_map<std::string_view, BinaryFunctionEmitter> binaryFunction
 // The list a literal UNWIND spreads, null for the one literal that is no list and still
 // analyzes - `UNWIND null`, which spreads into no row. Anything else here is a statement
 // the analyzer let through and neither of the sources built from one can lower.
+// The type a list of @param shape is read under, as a literal of that shape infers it: the
+// leaf's own type, none for a leaf no element names, any where the elements share none,
+// under one list per level
+mlir::Type listShapeType(mlir::OpBuilder& builder, const ListShape& shape) {
+    mlir::MLIRContext* const context = builder.getContext();
+    const EvaluatedType leaf = shape.getLeafType();
+    const bool sharesNoType = leaf == EvaluatedType::Invalid;
+    const std::optional<ValueType> leafValueType = sharesNoType ? std::nullopt : toValueType(leaf);
+
+    mlir::Type element;
+    if (leaf == EvaluatedType::Null) {
+        element = mlir::NoneType::get(context);
+    } else if (leafValueType) {
+        element = valueTypeToElementType(builder, *leafValueType);
+    } else {
+        element = mlir::storage::AnyType::get(context);
+    }
+
+    for (size_t level = 0; level < shape.getDepth(); level++) {
+        element = mlir::storage::ListType::get(context, element);
+    }
+
+    return element;
+}
+
 const ListLiteral* literalUnwindList(const DiagnosticsManager* diagnostics, const UnwindStmt* unwind) {
     const LiteralExpr* literalExpr = dynamic_cast<const LiteralExpr*>(unwind->arg());
     if (!literalExpr) {
@@ -1855,7 +1882,7 @@ mlir::Value DBProgramGenerator::pathElementsColumn(mlir::Value column, mlir::sto
     return _opBuilder.create<mlir::db::PathElements>(_opBuilder.getUnknownLoc(), nullableType, column, kind).getResult();
 }
 
-void DBProgramGenerator::createMain() {
+void DBProgramGenerator::createMain(std::span<ParameterDecl* const> parameters) {
     bioassert(_module, "Null module");
     bioassert(_mlirCtxt, "Null context");
 
@@ -1863,11 +1890,26 @@ void DBProgramGenerator::createMain() {
     _mlirCtxt->loadDialect<mlir::storage::Storage>();
     _mlirCtxt->loadDialect<mlir::func::FuncDialect>();
 
+    llvm::SmallVector<mlir::Type> argumentTypes;
+    llvm::SmallVector<mlir::Attribute> argumentAttributes;
+    for (const ParameterDecl* decl : parameters) {
+        argumentTypes.push_back(allocColumnType(parameterType(decl)));
+
+        const mlir::StringAttr name = _opBuilder.getStringAttr(decl->getName());
+        argumentAttributes.push_back(_opBuilder.getDictionaryAttr(_opBuilder.getNamedAttr(mlir::storage::PARAMETER_NAME_ATTRIBUTE, name)));
+    }
+
     _opBuilder.setInsertionPointToEnd(_module->getBody());
 
-    const mlir::FunctionType funcType = mlir::FunctionType::get(_mlirCtxt, {}, {});
+    const mlir::FunctionType funcType = mlir::FunctionType::get(_mlirCtxt, argumentTypes, {});
     auto func = _opBuilder.create<mlir::func::FuncOp>(_opBuilder.getUnknownLoc(), "main", funcType);
+    func.setAllArgAttrs(argumentAttributes);
     mlir::Block& block = *func.addEntryBlock();
+
+    _parameterArguments.clear();
+    for (const auto [decl, argument] : llvm::zip_equal(parameters, block.getArguments())) {
+        _parameterArguments[decl] = argument;
+    }
 
     _opBuilder.setInsertionPointToStart(&block);
 }
@@ -1877,7 +1919,7 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
     _constantColumns.clear();
     _vdg.setDiagnosticsManager(ast->getDiagnosticsManager());
 
-    createMain();
+    createMain(ast->parameterDecls());
 
     const mlir::Location uloc = _opBuilder.getUnknownLoc();
 
@@ -1918,7 +1960,7 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
 }
 
 void DBProgramGenerator::generateExplainResult(const ExplainReport& report) {
-    createMain();
+    createMain({});
 
     const mlir::Location uloc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType stringColumn = allocColumnType(mlir::storage::StringType::get(_mlirCtxt));
@@ -2613,6 +2655,10 @@ void DBProgramGenerator::generateTraversal(std::span<Stmt* const> stmts) {
 // enclosing block holds a different row set. Stricter than dominance on purpose: such
 // a value does dominate here, it is just the wrong rows.
 bool DBProgramGenerator::isRowAlignedHere(mlir::Value column) const {
+    if (isFunctionArgument(column)) {
+        return true;
+    }
+
     mlir::Operation* const definingOp = column.getDefiningOp();
     mlir::Block* const definingBlock = definingOp
         ? definingOp->getBlock()
@@ -8250,7 +8296,7 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
         break;
 
         case Expr::Kind::PARAMETER:
-            throwError("Parameters in expressions are not implemented yet.", expr);
+            _part._exprMap[expr] = translateParameterExpr(static_cast<const ParameterExpr*>(expr));
         break;
 
         case Expr::Kind::_SIZE:
@@ -9714,6 +9760,25 @@ mlir::Value DBProgramGenerator::translateLiteralExpr(const Literal* literal) {
 
     const mlir::db::ColumnType resultType = allocColumnType(valueAttr.getType());
     return _opBuilder.create<mlir::db::ConstantOp>(uloc, resultType, valueAttr).getResult();
+}
+
+mlir::Value DBProgramGenerator::translateParameterExpr(const ParameterExpr* parameterExpr) {
+    const auto argumentIt = _parameterArguments.find(parameterExpr->getDecl());
+    bioassert(argumentIt != _parameterArguments.end(), "A parameter reached codegen with no argument of main.");
+
+    return argumentIt->second;
+}
+
+// A parameter with a value has the type its literal would have; a null has the null literal's
+mlir::Type DBProgramGenerator::parameterType(const ParameterDecl* decl) {
+    const std::optional<ValueType> valueType = decl->getValueType();
+    if (!valueType) {
+        return mlir::storage::NullableType::get(_mlirCtxt, mlir::NoneType::get(_mlirCtxt));
+    } else if (*valueType == ValueType::List) {
+        return listShapeType(_opBuilder, decl->getListShape());
+    }
+
+    return valueTypeToElementType(_opBuilder, *valueType);
 }
 
 // The column of a null in every row, the shape translateLiteralExpr gives the null literal
