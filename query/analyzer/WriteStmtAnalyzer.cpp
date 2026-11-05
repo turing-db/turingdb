@@ -12,16 +12,19 @@
 #include "ExprAnalyzer.h"
 #include "LabelExpr.h"
 #include "NodePattern.h"
+#include "ParameterValue.h"
 #include "Pattern.h"
 #include "PatternElement.h"
 #include "Symbol.h"
 #include "decl/DeclContext.h"
 #include "decl/EvaluatedType.h"
+#include "decl/ParameterDecl.h"
 #include "decl/PatternData.h"
 #include "decl/VarDecl.h"
 #include "expr/Expr.h"
 #include "expr/ExprChain.h"
 #include "expr/LiteralExpr.h"
+#include "expr/ParameterExpr.h"
 #include "expr/PropertyExpr.h"
 #include "expr/SymbolExpr.h"
 #include "stmt/DeleteStmt.h"
@@ -496,7 +499,9 @@ void WriteStmtAnalyzer::analyzePropertiesAssign(SetItem::EntityPropertiesAssign&
 
     const EvaluatedType valueType = value->getType();
 
-    if (valueType == EvaluatedType::Map) {
+    if (valueType == EvaluatedType::Map && value->getKind() == Expr::Kind::PARAMETER) {
+        analyzeMapParameterProperties(static_cast<ParameterExpr*>(value), assign._createdProperties);
+    } else if (valueType == EvaluatedType::Map) {
         analyzeMapLiteralProperties(value, assign._createdProperties);
     } else if (valueType == EvaluatedType::Any || valueType == EvaluatedType::Null) {
         return;
@@ -542,10 +547,7 @@ void WriteStmtAnalyzer::analyzeMapLiteralProperties(const Expr* value, std::vect
             const bool writesAnotherType = exprType != EvaluatedType::Any
                                         && !ExprAnalyzer::propTypeCompatible(propertyType, writtenType);
             if (writesAnotherType) {
-                throwError(fmt::format("Cannot evaluate property: types '{}' and '{}' are incompatible",
-                                       ValueTypeName::value(propertyType),
-                                       EvaluatedTypeName::value(writtenType)),
-                           expr);
+                throwIncompatibleProperty(propertyType, writtenType, expr);
             }
 
             continue;
@@ -563,9 +565,43 @@ void WriteStmtAnalyzer::analyzeMapLiteralProperties(const Expr* value, std::vect
                        expr);
         }
 
-        _exprAnalyzer->addToBeCreatedType(propertyName, createdType, expr);
-        created.push_back({propertyName, createdType, expr});
+        createProperty(propertyName, createdType, expr, created);
     }
+}
+
+// The entries of a map parameter are known at analysis, so each is checked against the
+// property it writes as a map literal's entries are
+void WriteStmtAnalyzer::analyzeMapParameterProperties(ParameterExpr* expr, std::vector<EntityPropertyConstraint>& created) {
+    const ParameterValue& map = expr->getDecl()->getValue();
+
+    for (const auto& [propertyName, entry] : map.getMap()) {
+        if (propertyName.empty()) {
+            throwError(fmt::format("A property name cannot be empty, and the map bound to ${} holds one",
+                                   expr->getDecl()->getName()),
+                       expr);
+        } else if (entry.isNull()) {
+            continue;
+        }
+
+        const ValueType propertyType = _exprAnalyzer->resolvePropertyType(propertyName);
+        if (propertyType == ValueType::Invalid) {
+            createProperty(propertyName, entry.getType(), expr, created);
+        } else if (!ExprAnalyzer::propTypeCompatible(propertyType, ParameterDecl::evaluatedTypeOf(entry))) {
+            throwIncompatibleProperty(propertyType, ParameterDecl::evaluatedTypeOf(entry), expr);
+        }
+    }
+}
+
+void WriteStmtAnalyzer::throwIncompatibleProperty(ValueType propertyType, EvaluatedType writtenType, const Expr* expr) const {
+    throwError(fmt::format("Cannot evaluate property: types '{}' and '{}' are incompatible",
+                           ValueTypeName::value(propertyType),
+                           EvaluatedTypeName::value(writtenType)),
+               expr);
+}
+
+void WriteStmtAnalyzer::createProperty(std::string_view propertyName, ValueType createdType, Expr* expr, std::vector<EntityPropertyConstraint>& created) {
+    _exprAnalyzer->addToBeCreatedType(propertyName, createdType, expr);
+    created.push_back({propertyName, createdType, expr});
 }
 
 void WriteStmtAnalyzer::throwError(std::string_view msg, const void* obj) const {

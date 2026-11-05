@@ -11,7 +11,9 @@
 #include "DiagnosticsManager.h"
 #include "AnalyzeException.h"
 #include "ReadStmtAnalyzer.h"
+#include "ParameterMap.h"
 #include "ParameterProbe.h"
+#include "ParameterValue.h"
 #include "CypherAST.h"
 #include "FunctionDecls.h"
 #include "FunctionResolver.h"
@@ -442,12 +444,31 @@ void ExprAnalyzer::analyzeSymbolExpr(SymbolExpr* expr) {
 }
 
 void ExprAnalyzer::analyzeParameterExpr(ParameterExpr* expr) {
-    ParameterDecl* decl = _ast->getOrCreateParameterDecl(expr->getParameter()->getName());
+    const std::string_view name = expr->getParameter()->getName();
+    ParameterDecl* decl = _ast->findParameterDecl(name);
+    if (!decl) {
+        decl = ParameterDecl::create(_ast, name, boundParameterValue(name, expr));
+    }
+
     expr->setDecl(decl);
 
-    expr->setType(EvaluatedType::Parameter);
-    expr->setCandidateTypes(decl->getCandidateTypes());
+    const EvaluatedType type = decl->getType();
+    expr->setType(type);
+
+    if (type == EvaluatedType::List) {
+        expr->setListShape(ListShape(EvaluatedType::Invalid, 1));
+    }
+
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
+}
+
+const ParameterValue& ExprAnalyzer::boundParameterValue(std::string_view name, const void* obj) const {
+    const ParameterValue* value = _parameters ? _parameters->get(name) : nullptr;
+    if (!value) {
+        throwError(fmt::format("Parameter ${} is not defined", name), obj);
+    }
+
+    return *value;
 }
 
 void ExprAnalyzer::narrowOperand(Expr* operand, EvaluatedTypeSet accepted) {

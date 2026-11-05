@@ -309,7 +309,7 @@ public:
 
     // A parameter has one value for the whole request, so every $name in it, in any
     // scope, union branch or subquery, reads the same declaration
-    ParameterDecl* getOrCreateParameterDecl(std::string_view name);
+    ParameterDecl* findParameterDecl(std::string_view name);
     const std::vector<ParameterDecl*>& parameterDecls() const { return _parameterDecls; }
 
 private:

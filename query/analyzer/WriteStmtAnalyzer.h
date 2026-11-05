@@ -11,6 +11,8 @@
 
 namespace db {
 
+class ParameterExpr;
+
 class CypherAST;
 class VarDecl;
 class DeclContext;
@@ -72,6 +74,9 @@ private:
     void analyze(SetItem* item);
     void analyzePropertiesAssign(SetItem::EntityPropertiesAssign& assign, const SetItem* item);
     void analyzeMapLiteralProperties(const Expr* value, std::vector<EntityPropertyConstraint>& created);
+    void analyzeMapParameterProperties(ParameterExpr* expr, std::vector<EntityPropertyConstraint>& created);
+    void throwIncompatibleProperty(ValueType propertyType, EvaluatedType writtenType, const Expr* expr) const;
+    void createProperty(std::string_view propertyName, ValueType createdType, Expr* expr, std::vector<EntityPropertyConstraint>& created);
 
     void throwOnEntityWhere(const Pattern* pattern, std::string_view clause) const;
     void throwOnUndirectedEdge(const Pattern* pattern) const;
