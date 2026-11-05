@@ -122,6 +122,24 @@ MapBuffer<>::MapItemVariant writtenValue(NLWrittenValues& written,
     return PropertyNull {};
 }
 
+template <TypedInternalID IDT>
+const PropertyManager& partProperties(const DataPart& part) {
+    if constexpr (std::is_same_v<IDT, NodeID>) {
+        return part.nodeProperties();
+    } else {
+        return part.edgeProperties();
+    }
+}
+
+template <TypedInternalID IDT>
+IDT firstPartEntity(const DataPart& part) {
+    if constexpr (std::is_same_v<IDT, NodeID>) {
+        return part.getFirstNodeID();
+    } else {
+        return part.getFirstEdgeID();
+    }
+}
+
 }
 
 NLEntityProperties::NLEntityProperties(NLExecutionContext* context, NLValueStore* readValues)
@@ -176,17 +194,18 @@ void NLEntityProperties::readEntries(IDT entity, std::vector<Entry>& entries) {
 }
 
 template <TypedInternalID IDT>
-bool NLEntityProperties::readEntry(IDT entity, std::string_view key, Entry& entry) {
-    _readsValues = true;
-    collect(entity);
+bool NLEntityProperties::readValue(IDT entity, std::string_view name, MapBuffer<>::MapItemVariant& value) {
+    const PropertyType type = findPropertyType(name);
 
-    const auto found = std::ranges::lower_bound(_properties, key, {}, &Property::_name);
-    if (found == _properties.end() || found->_name != key) {
+    if (!type.isValid()) {
         return false;
+    } else if (isPending(entity)) {
+        return readPendingValue(entity, type, value);
+    } else if (const CommitWriteBuffer::SupportedTypeVariant* update = findUpdate(entity, type._id)) {
+        return readWrittenValue(type, *update, value);
     }
 
-    entry = Entry {.key = found->_name, .value = found->_value};
-    return true;
+    return readCommittedValue(entity, type._id, value);
 }
 
 template <TypedInternalID IDT>
@@ -205,8 +224,7 @@ void NLEntityProperties::collect(IDT entity) {
 
 template <TypedInternalID IDT>
 void NLEntityProperties::collectCommitted(IDT entity) {
-    const uint64_t entityValue = entity.getValue();
-    const EntityID entityID {entityValue};
+    const EntityID entityID {entity.getValue()};
 
     for (const PropertyTypeID id : _decided) {
         _isDecided[id.getValue()] = false;
@@ -214,8 +232,8 @@ void NLEntityProperties::collectCommitted(IDT entity) {
     _decided.clear();
 
     for (const auto& part : rv::reverse(_view->dataparts())) {
-        const PropertyManager& properties = std::is_same_v<IDT, NodeID> ? part->nodeProperties() : part->edgeProperties();
-        const uint64_t firstEntity = std::is_same_v<IDT, NodeID> ? part->getFirstNodeID().getValue() : part->getFirstEdgeID().getValue();
+        const PropertyManager& properties = partProperties<IDT>(*part);
+        const IDT firstEntity = firstPartEntity<IDT>(*part);
 
         for (const auto& [id, container] : properties) {
             const size_t index = id.getValue();
@@ -235,7 +253,7 @@ void NLEntityProperties::collectCommitted(IDT entity) {
             }
         }
 
-        if (entityValue >= firstEntity) {
+        if (entity >= firstEntity) {
             return;
         }
     }
@@ -243,16 +261,8 @@ void NLEntityProperties::collectCommitted(IDT entity) {
 
 template <TypedInternalID IDT>
 void NLEntityProperties::collectPending(IDT entity) {
-    if constexpr (std::is_same_v<IDT, NodeID>) {
-        const CommitWriteBuffer::PendingNode& node = _writeBuffer->getPendingNode(entity.getValue() - _committedNodeCount);
-        for (const CommitWriteBuffer::UntypedProperty& property : node.properties) {
-            addWritten(property.propertyID, property.value);
-        }
-    } else {
-        const CommitWriteBuffer::PendingEdge& edge = _writeBuffer->getPendingEdge(entity.getValue() - _committedEdgeCount);
-        for (const CommitWriteBuffer::UntypedProperty& property : edge.properties) {
-            addWritten(property.propertyID, property.value);
-        }
+    for (const CommitWriteBuffer::UntypedProperty& property : getPendingProperties(entity)) {
+        addWritten(property.propertyID, property.value);
     }
 }
 
@@ -272,6 +282,73 @@ void NLEntityProperties::collectUpdates(IDT entity) {
     for (const PropertyTypeID id : updated) {
         std::erase_if(_properties, [id](const Property& property) { return property._id == id; });
         addWritten(id, *_written->findUpdate(entity, id));
+    }
+}
+
+template <TypedInternalID IDT>
+bool NLEntityProperties::readCommittedValue(IDT entity, PropertyTypeID id, MapBuffer<>::MapItemVariant& value) const {
+    const EntityID entityID {entity.getValue()};
+
+    for (const auto& part : rv::reverse(_view->dataparts())) {
+        const PropertyManager& properties = partProperties<IDT>(*part);
+        const auto found = properties.find(id);
+
+        const PropertyContainer* container = found == properties.end() ? nullptr : found->second.get();
+        const bool holdsAnEntry = container && container->hasEntry(entityID);
+
+        if (holdsAnEntry && !container->has(entityID)) {
+            return false;
+        } else if (holdsAnEntry) {
+            value = storedValue(*container, entityID);
+            return true;
+        } else if (entity >= firstPartEntity<IDT>(*part)) {
+            return false;
+        }
+    }
+
+    return false;
+}
+
+template <TypedInternalID IDT>
+bool NLEntityProperties::readPendingValue(IDT entity, const PropertyType& type, MapBuffer<>::MapItemVariant& value) {
+    const CommitWriteBuffer::UntypedProperties& properties = getPendingProperties(entity);
+
+    const auto found = std::ranges::find(properties, type._id, &CommitWriteBuffer::UntypedProperty::propertyID);
+    if (found == properties.end()) {
+        return false;
+    }
+
+    return readWrittenValue(type, found->value, value);
+}
+
+template <TypedInternalID IDT>
+const CommitWriteBuffer::SupportedTypeVariant* NLEntityProperties::findUpdate(IDT entity, PropertyTypeID id) {
+    if (!_writeBuffer) {
+        return nullptr;
+    }
+
+    _written->indexUpdates(_writeBuffer);
+
+    return _written->findUpdate(entity, id);
+}
+
+bool NLEntityProperties::readWrittenValue(const PropertyType& type,
+                                          const CommitWriteBuffer::SupportedTypeVariant& written,
+                                          MapBuffer<>::MapItemVariant& value) {
+    if (!holdsValue(written)) {
+        return false;
+    }
+
+    value = writtenValue(*_written, *_readValues, type._valueType, written);
+    return true;
+}
+
+template <TypedInternalID IDT>
+const CommitWriteBuffer::UntypedProperties& NLEntityProperties::getPendingProperties(IDT entity) const {
+    if constexpr (std::is_same_v<IDT, NodeID>) {
+        return _writeBuffer->getPendingNode(entity.getValue() - _committedNodeCount).properties;
+    } else {
+        return _writeBuffer->getPendingEdge(entity.getValue() - _committedEdgeCount).properties;
     }
 }
 
@@ -302,6 +379,21 @@ void NLEntityProperties::add(PropertyTypeID id, const MapBuffer<>::MapItemVarian
     _properties.push_back(Property {._id = id, ._name = getName(id), ._value = value});
 }
 
+PropertyType NLEntityProperties::findPropertyType(std::string_view name) {
+    const bool isResolved = _resolvedType.isValid() && name == _resolvedName;
+    if (isResolved) {
+        return _resolvedType;
+    }
+
+    const std::optional<PropertyType> type = findWrittenPropertyType(_view, _metadataBuilder, name);
+    if (type) {
+        _resolvedName = name;
+        _resolvedType = *type;
+    }
+
+    return type.value_or(PropertyType {});
+}
+
 std::string_view NLEntityProperties::getName(PropertyTypeID id) const {
     const PropertyTypeMap& propertyTypes = _view->metadata().propTypes();
 
@@ -319,19 +411,10 @@ std::string_view NLEntityProperties::getName(PropertyTypeID id) const {
 }
 
 ValueType NLEntityProperties::getValueType(PropertyTypeID id) const {
-    const PropertyTypeMap& propertyTypes = _view->metadata().propTypes();
+    const std::optional<PropertyType> type = findWrittenPropertyType(_view, _metadataBuilder, id);
+    bioassert(type, "Property type {} is in neither the graph's nor the change's metadata", id.getValue());
 
-    const std::optional<PropertyType> type = propertyTypes.get(id);
-    if (type) {
-        return type->_valueType;
-    }
-
-    bioassert(_metadataBuilder, "Property type {} is not in the graph's metadata", id.getValue());
-
-    const std::optional<PropertyType> written = _metadataBuilder->findPropertyType(id);
-    bioassert(written, "Property type {} is not in the change's metadata", id.getValue());
-
-    return written->_valueType;
+    return type->_valueType;
 }
 
 template void NLEntityProperties::readKeys<NodeID>(NodeID entity, std::vector<std::string_view>& keys);
@@ -340,5 +423,5 @@ template void NLEntityProperties::readIDs<NodeID>(NodeID entity, std::vector<Pro
 template void NLEntityProperties::readIDs<EdgeID>(EdgeID entity, std::vector<PropertyTypeID>& ids);
 template void NLEntityProperties::readEntries<NodeID>(NodeID entity, std::vector<Entry>& entries);
 template void NLEntityProperties::readEntries<EdgeID>(EdgeID entity, std::vector<Entry>& entries);
-template bool NLEntityProperties::readEntry<NodeID>(NodeID entity, std::string_view key, Entry& entry);
-template bool NLEntityProperties::readEntry<EdgeID>(EdgeID entity, std::string_view key, Entry& entry);
+template bool NLEntityProperties::readValue<NodeID>(NodeID entity, std::string_view name, MapBuffer<>::MapItemVariant& value);
+template bool NLEntityProperties::readValue<EdgeID>(EdgeID entity, std::string_view name, MapBuffer<>::MapItemVariant& value);

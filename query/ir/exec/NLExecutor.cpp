@@ -5609,18 +5609,18 @@ bool findKeyedEntry(const NLKeyedValue& keyed,
                     NLEntityProperties& properties,
                     MapBuffer<>& mapBuffer,
                     MapEntryView& entry) {
-    MapBuffer<>::MapKeyValuePair property;
+    MapBuffer<>::MapKeyValuePair property {.key = key};
 
     if (std::holds_alternative<std::monostate>(keyed)) {
         return false;
     } else if (const MapView* map = std::get_if<MapView>(&keyed)) {
         return findMapEntry(*map, key, entry);
     } else if (const NodeID* node = std::get_if<NodeID>(&keyed)) {
-        if (!properties.readEntry(*node, key, property)) {
+        if (!properties.readValue(*node, key, property.value)) {
             return false;
         }
     } else if (const EdgeID* edge = std::get_if<EdgeID>(&keyed)) {
-        if (!properties.readEntry(*edge, key, property)) {
+        if (!properties.readValue(*edge, key, property.value)) {
             return false;
         }
     } else {

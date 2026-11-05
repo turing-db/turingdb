@@ -22,6 +22,13 @@ class MetadataBuilder;
 
 bool holdsValue(const CommitWriteBuffer::SupportedTypeVariant& value);
 
+std::optional<PropertyType> findWrittenPropertyType(const GraphView* view,
+                                                    const MetadataBuilder* metadataBuilder,
+                                                    std::string_view name);
+std::optional<PropertyType> findWrittenPropertyType(const GraphView* view,
+                                                    const MetadataBuilder* metadataBuilder,
+                                                    PropertyTypeID id);
+
 // A write with no rows mask touches every row
 bool writeTouchesRow(const ColumnMask* rows, size_t row);
 

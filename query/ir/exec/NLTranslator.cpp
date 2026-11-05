@@ -58,6 +58,7 @@
 #include "NLRuntimeProperty.h"
 #include "NLExecutor.h"
 #include "NLSystemTranslator.h"
+#include "NLWriteProperties.h"
 
 #include "LocalMemory.h"
 #include "IRException.h"
@@ -2200,12 +2201,7 @@ void NLTranslator::translateScanEdgesByEndpointLabelsLoop(const IteratorConfig& 
 std::optional<PropertyType> NLTranslator::findPropertyType(llvm::StringRef name) const {
     const std::string_view propertyName(name.data(), name.size());
 
-    const std::optional<PropertyType> propertyType = _view->metadata().propTypes().get(propertyName);
-    if (propertyType || !_metadataBuilder) {
-        return propertyType;
-    }
-
-    return _metadataBuilder->findPropertyType(propertyName);
+    return findWrittenPropertyType(_view, _metadataBuilder, propertyName);
 }
 
 std::optional<EdgeTypeID> NLTranslator::findEdgeType(llvm::StringRef name) const {

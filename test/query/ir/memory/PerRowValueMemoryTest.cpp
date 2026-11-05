@@ -2,21 +2,12 @@
 
 #include <stddef.h>
 
-#include <algorithm>
 #include <fstream>
-#include <span>
 #include <string>
 #include <string_view>
 
-#if defined(__APPLE__)
-#include <malloc/malloc.h>
-#else
-#include <malloc.h>
-#endif
-
-#include "NLOutputSink.h"
-
 #include "CallV3Test.h"
+#include "HeapSamplingSink.h"
 
 using namespace db;
 using namespace turing::test;
@@ -24,43 +15,6 @@ using namespace turing::test;
 namespace {
 
 constexpr size_t MEGABYTE = 1024 * 1024;
-
-size_t getHeapBytesInUse() {
-#if defined(__APPLE__)
-    malloc_statistics_t statistics;
-    malloc_zone_statistics(nullptr, &statistics);
-    return statistics.size_in_use;
-#else
-    const struct mallinfo2 info = mallinfo2();
-    return info.uordblks + info.hblkhd;
-#endif
-}
-
-// Samples the heap at every chunk the query emits, so the growth it records is the
-// memory the query holds while it runs, not what it leaves behind
-class HeapSamplingSink : public NLOutputSink {
-public:
-    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
-        const size_t bytes = getHeapBytesInUse();
-
-        if (_sampleCount == 0) {
-            _firstBytes = bytes;
-        }
-
-        _peakBytes = std::max(_peakBytes, bytes);
-        _rowCount += rowCount;
-        _sampleCount++;
-    }
-
-    size_t getGrowth() const { return _peakBytes - _firstBytes; }
-    size_t getRowCount() const { return _rowCount; }
-
-private:
-    size_t _firstBytes {0};
-    size_t _peakBytes {0};
-    size_t _rowCount {0};
-    size_t _sampleCount {0};
-};
 
 }
 

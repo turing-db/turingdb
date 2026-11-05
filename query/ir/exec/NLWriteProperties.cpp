@@ -487,34 +487,6 @@ void readWrittenConstMap(const Column* column, size_t rowCount, std::vector<Writ
     maps.assign(rowCount, writtenMap(constant->getRaw()));
 }
 
-std::optional<PropertyType> findWrittenPropertyType(const GraphView* view,
-                                                    const MetadataBuilder* metadataBuilder,
-                                                    std::string_view name) {
-    const GraphMetadata& metadata = view->metadata();
-    const PropertyTypeMap& propertyTypes = metadata.propTypes();
-
-    const std::optional<PropertyType> graphType = propertyTypes.get(name);
-    if (graphType || !metadataBuilder) {
-        return graphType;
-    }
-
-    return metadataBuilder->findPropertyType(name);
-}
-
-std::optional<PropertyType> findWrittenPropertyType(const GraphView* view,
-                                                    const MetadataBuilder* metadataBuilder,
-                                                    PropertyTypeID id) {
-    const GraphMetadata& metadata = view->metadata();
-    const PropertyTypeMap& propertyTypes = metadata.propTypes();
-
-    const std::optional<PropertyType> graphType = propertyTypes.get(id);
-    if (graphType || !metadataBuilder) {
-        return graphType;
-    }
-
-    return metadataBuilder->findPropertyType(id);
-}
-
 // The cell of each row @param written holds, or of every row for a null mask. A constant
 // column holds its one cell on each of the @param rowCount rows.
 template <typename Visit>
@@ -611,6 +583,34 @@ bool db::writeTouchesRow(const ColumnMask* rows, size_t row) {
 
 bool db::holdsValue(const CommitWriteBuffer::SupportedTypeVariant& value) {
     return std::visit([](const auto& held) { return held.has_value(); }, value);
+}
+
+std::optional<PropertyType> db::findWrittenPropertyType(const GraphView* view,
+                                                        const MetadataBuilder* metadataBuilder,
+                                                        std::string_view name) {
+    const GraphMetadata& metadata = view->metadata();
+    const PropertyTypeMap& propertyTypes = metadata.propTypes();
+
+    const std::optional<PropertyType> graphType = propertyTypes.get(name);
+    if (graphType || !metadataBuilder) {
+        return graphType;
+    }
+
+    return metadataBuilder->findPropertyType(name);
+}
+
+std::optional<PropertyType> db::findWrittenPropertyType(const GraphView* view,
+                                                        const MetadataBuilder* metadataBuilder,
+                                                        PropertyTypeID id) {
+    const GraphMetadata& metadata = view->metadata();
+    const PropertyTypeMap& propertyTypes = metadata.propTypes();
+
+    const std::optional<PropertyType> graphType = propertyTypes.get(id);
+    if (graphType || !metadataBuilder) {
+        return graphType;
+    }
+
+    return metadataBuilder->findPropertyType(id);
 }
 
 void db::extractWrittenMaps(const Column* column,

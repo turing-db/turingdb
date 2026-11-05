@@ -34,6 +34,8 @@ add_call_v3_test(test_query_ir_any_cell_addition_type_error AnyCellAdditionTypeE
 
 add_turing_test(test_query_ir_any_property_read AnyPropertyReadTest.cpp)
 
+add_turing_test(test_query_ir_any_entity_property_read_by_name EntityPropertyReadByNameTest.cpp)
+
 add_turing_test(test_query_ir_container_index ContainerIndexTest.cpp)
 
 add_ir_tests(test_query_ir_container_index_codegen ContainerIndexCodegenTest.cpp)
