@@ -147,7 +147,7 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
         return;
     }
 
-    CypherAnalyzer analyzer(&ast, view);
+    CypherAnalyzer analyzer(&ast, view, parameters);
     try {
         analyzer.analyze();
     } catch (const CompilerException& e) {

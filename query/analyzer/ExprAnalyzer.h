@@ -20,6 +20,7 @@ namespace db {
 
 class CypherAST;
 class CypherAnalyzer;
+class ParameterMap;
 class DeclContext;
 class FunctionResolver;
 class LoadCSVStmt;
@@ -56,7 +57,7 @@ class ReadStmtAnalyzer;
 
 class ExprAnalyzer {
 public:
-    ExprAnalyzer(CypherAST* ast, const GraphView& graphView);
+    ExprAnalyzer(CypherAST* ast, const GraphView& graphView, const ParameterMap* parameters = nullptr);
     ~ExprAnalyzer();
 
     ExprAnalyzer(const ExprAnalyzer&) = delete;
@@ -155,6 +156,7 @@ private:
     CypherAST* _ast {nullptr};
     CypherAnalyzer* _queryAnalyzer {nullptr};
     GraphView _graphView;
+    const ParameterMap* _parameters {nullptr};
     DeclContext* _ctxt {nullptr};
     ReadStmtAnalyzer* _readAnalyzer {nullptr};
     const GraphMetadata& _graphMetadata;

@@ -134,11 +134,11 @@ constexpr std::string_view shortestPathErr = "Cannot return {} after SHORTESTPAT
 
 }
 
-CypherAnalyzer::CypherAnalyzer(CypherAST* ast, GraphView graphView)
+CypherAnalyzer::CypherAnalyzer(CypherAST* ast, GraphView graphView, const ParameterMap* parameters)
     : _ast(ast),
     _graphView(graphView),
     _graphMetadata(graphView.metadata()),
-    _exprAnalyzer(std::make_unique<ExprAnalyzer>(_ast, _graphView)),
+    _exprAnalyzer(std::make_unique<ExprAnalyzer>(_ast, _graphView, parameters)),
     _readAnalyzer(std::make_unique<ReadStmtAnalyzer>(_ast, _graphView)),
     _writeAnalyzer(std::make_unique<WriteStmtAnalyzer>(_ast, _graphView))
 {
