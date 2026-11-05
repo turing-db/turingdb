@@ -327,14 +327,6 @@ TEST_F(CallGraphSAGETest, rejectsANonIntegerSeedList) {
                            "ints");
 }
 
-// Both list arguments are constant, so a variable read per row cannot supply one.
-TEST_F(CallGraphSAGETest, rejectsSeedsReadFromARow) {
-    runQueryExpectingError("MATCH (n:Person) "
-                           "CALL gnn.graphSAGE([n], [2, 2, 2]) YIELD dst_nodes0 "
-                           "RETURN dst_nodes0",
-                           "constant");
-}
-
 // A name the procedure does not declare cannot be yielded.
 TEST_F(CallGraphSAGETest, rejectsAnUndeclaredYield) {
     runQueryExpectingError("CALL gnn.graphSAGE([0], [2, 2, 2]) YIELD dst_nodes3 "

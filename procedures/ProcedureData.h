@@ -29,6 +29,10 @@ public:
         return _inputColumns[i];
     }
 
+    // The rows of the row-aligned arguments, which all hold as many, or a single one when
+    // every argument is a constant
+    size_t getArgumentRowCount() const;
+
     Column* getReturnColumn(size_t i) {
         return _returnColumns[i];
     }

@@ -1,11 +1,11 @@
 #include "GraphSAGEProcedure.h"
 
-#include <algorithm>
-#include <array>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include <spdlog/fmt/bundled/format.h>
 
@@ -15,13 +15,14 @@
 #include "Procedure.h"
 #include "ProcedureContext.h"
 #include "ProcedureData.h"
+#include "ProcedureException.h"
 #include "ProcedureNamespace.h"
 #include "TypedProcedure.h"
 #include "ProcedureState.h"
 #include "ProcedureTypeVector.h"
 
-#include "columns/Column.h"
-#include "columns/ColumnConst.h"
+#include "columns/ColumnIDs.h"
+#include "columns/ColumnIndices.h"
 
 #include "CellTag.h"
 #include "CellView.h"
@@ -29,9 +30,6 @@
 
 #include "metadata/PropertyType.h"
 
-#include "iterators/ChunkConfig.h"
-
-#include "TuringException.h"
 #include "BioAssert.h"
 
 using namespace db;
@@ -44,135 +42,165 @@ constexpr std::string_view fanoutSizeErr =
 constexpr std::string_view fanoutWidthErr =
     "Fanout {} exceeds the maximum of {}: a hop's sample must fit in one chunk.";
 
-constexpr std::string_view seedErr = "graphSAGE() seed must be a constant int";
+constexpr std::string_view NEGATIVE_FANOUT_ERROR = "Fanout {} is negative.";
+
+constexpr std::string_view SEEDS_ERROR = "graphSAGE() seeds must be a list of nodes or ints";
+
+constexpr std::string_view FANOUTS_ERROR = "graphSAGE() fanouts must be a list of ints";
+
+constexpr std::string_view seedErr = "graphSAGE() seed must be an int";
 
 constexpr size_t returnValuesPerHop = 3;
 
 static_assert(GraphSAGEProcedure::numHops == 3, "Update the return values");
 
-struct Data final : public TypedProcedureData<GraphSAGEProcedure> {
-    std::unique_ptr<GraphSAGESampler> sampler;
+struct Data final : public TypedProcedureData<GraphSAGEProcedure, IndexedProcedureData> {
+    std::unique_ptr<GraphSAGESampler> _sampler;
+    ColumnNodeIDs _seeds;
+
+    size_t _row {0};
+    bool _started {false};
 };
 
-void numericList(const ListView l) {
-    const auto isInt = [](CellView ele) -> bool {
-        return ele.getTag() == CellTag::Int;
-    };
-    const bool allInts = std::ranges::all_of(l, isInt);
-    if (!allInts) {
-        throw TuringException("graphSAGE() seeds must be a list of ints");
-    }
-}
+void readSeeds(const ListView list, ColumnNodeIDs& seeds) {
+    for (const CellView element : list) {
+        const CellTag tag = element.getTag();
 
-void validFanoutList(const ListView l) {
-    const size_t listSize = l.size();
-    constexpr size_t reqSize = GraphSAGESampler::hops;
-
-    if (listSize != reqSize) {
-        throw TuringException(fmt::format(fanoutSizeErr, reqSize, listSize));
-    }
-
-    for (const CellView ele : l) {
-        const size_t fanout = ele.getAs<types::Int64::Primitive>();
-        if (fanout > ChunkConfig::CHUNK_SIZE) {
-            throw TuringException(fmt::format(fanoutWidthErr, fanout, ChunkConfig::CHUNK_SIZE));
+        if (tag == CellTag::NodeID) {
+            seeds.push_back(element.getAs<NodeID>());
+        } else if (tag == CellTag::Int) {
+            seeds.emplace_back(element.getAs<types::Int64::Primitive>());
+        } else {
+            throw ProcedureException(std::string(SEEDS_ERROR));
         }
     }
 }
 
-void validateInput(Data& data) {
-    {
-        const Column* seedsCol =  data.getInputColumn(0);
-        const ListView seeds = ProcUtils::constArg<ListView>(seedsCol, "Invalid seed column.");
-        numericList(seeds);
+void readFanouts(const ListView list, size_t chunkSize, GraphSAGESampler::Fanouts& fanouts) {
+    const size_t listSize = list.size();
+    if (listSize != GraphSAGESampler::hops) {
+        throw ProcedureException(fmt::format(fanoutSizeErr, GraphSAGESampler::hops, listSize));
     }
-    {
-        const Column* fanoutsCol = data.getInputColumn(1);
-        const ListView fanouts = ProcUtils::constArg<ListView>(fanoutsCol, "Invalid fanouts column");
-        numericList(fanouts);
-        validFanoutList(fanouts);
+
+    size_t hop = 0;
+    for (const CellView element : list) {
+        if (element.getTag() != CellTag::Int) {
+            throw ProcedureException(std::string(FANOUTS_ERROR));
+        }
+
+        const int64_t fanout = element.getAs<types::Int64::Primitive>();
+        if (fanout < 0) {
+            throw ProcedureException(fmt::format(NEGATIVE_FANOUT_ERROR, fanout));
+        } else if (static_cast<size_t>(fanout) > chunkSize) {
+            throw ProcedureException(fmt::format(fanoutWidthErr, fanout, chunkSize));
+        }
+
+        fanouts[hop] = fanout;
+        hop++;
     }
+}
+
+// A null seed list names no node, so its row is sampled from no seeds
+void startSample(Data& data, size_t chunkSize) {
+    const size_t row = data._row;
+
+    const std::optional<ListView> fanoutList =
+        ProcUtils::rowArgument<ListView>(data.getInputColumn(1), row, FANOUTS_ERROR);
+    if (!fanoutList) {
+        throw ProcedureException(fmt::format(fanoutSizeErr, GraphSAGESampler::hops, "null"));
+    }
+
+    GraphSAGESampler::Fanouts fanouts {};
+    readFanouts(*fanoutList, chunkSize, fanouts);
+
+    const std::optional<ListView> seeds =
+        ProcUtils::rowArgument<ListView>(data.getInputColumn(0), row, SEEDS_ERROR);
+
+    data._seeds.clear();
+    if (seeds) {
+        readSeeds(*seeds, data._seeds);
+    }
+
+    const std::optional<uint64_t> rngSeed =
+        ProcUtils::rowArgument<types::Int64::Primitive>(data.getInputColumn(2), row, seedErr);
+
+    data._sampler->start(&data._seeds, fanouts, rngSeed);
+    data._started = true;
 }
 
 template <size_t Hop>
-void setHopData(Data& data, const GraphSAGESampler::Fanouts& fanouts) {
+void bindHopColumns(Data& data) {
     constexpr size_t base = Hop * returnValuesPerHop;
 
-    data.sampler->setHopData(Hop,
-                             data.getReturnColumn<base + 1>(),
-                             data.getReturnColumn<base + 2>(),
-                             data.getReturnColumn<base>(),
-                             fanouts[Hop]);
+    data._sampler->setHopColumns(Hop,
+                                 data.getReturnColumn<base + 1>(),
+                                 data.getReturnColumn<base + 2>(),
+                                 data.getReturnColumn<base>());
 }
 
 template <size_t... Hops>
-void setHopsData(Data& data, const GraphSAGESampler::Fanouts& fanouts, std::index_sequence<Hops...>) {
-    (setHopData<Hops>(data, fanouts), ...);
+void bindHopsColumns(Data& data, std::index_sequence<Hops...>) {
+    (bindHopColumns<Hops>(data), ...);
 }
 
-// The seeds are a constant argument, so they are read the same way whether the call is
-// being prepared or rewound for another drive
-void seedSampler(Data& data) {
-    ColumnNodeIDs nodes;
-
-    const Column* seedsErased = data.getInputColumn(0);
-    const auto* seeds = dynamic_cast<const ColumnConst<ListView>*>(seedsErased);
-    bioassert(seeds, "Invalid seeds");
-
-    const ListView list = seeds->getRaw();
-    for (const CellView ele : list) {
-        nodes.emplace_back(ele.getAs<types::Int64::Primitive>());
-    }
-
-    data.sampler->seed(&nodes);
+void rewind(Data& data) {
+    data._row = 0;
+    data._started = false;
 }
 
 void prepareImpl(ProcedureState* state) {
     Data& data = state->data<Data>();
-    validateInput(data);
-
-    const size_t seed = [&] -> size_t {
-        const Column* col = data.getInputColumn(2);
-
-        return col ? ProcUtils::constArg<types::Int64::Primitive>(col, seedErr)
-                   : GraphSAGESampler::NOSEED;
-    }();
 
     const ProcedureContext* ctxt = state->getContext();
     const GraphView& view = *ctxt->getGraphView();
 
-    const GraphSAGESampler::Fanouts fanouts = [&] -> auto {
-        GraphSAGESampler::Fanouts out;
-        using FanoutColType = const ColumnConst<ListView>;
-        const Column* col = data.getInputColumn(1);
-        const auto* fanoutsCol = dynamic_cast<FanoutColType*>(col);
-        bioassert(fanoutsCol, "Invalid fanouts col passed validation");
-        const ListView l = fanoutsCol->getRaw();
-        const auto eles = l.elements();
-        for (size_t i = 0; i < GraphSAGESampler::hops; i++) {
-            const size_t fanout = eles[i].getAs<types::Int64::Primitive>();
-            out[i] = fanout;
-        }
-        return out;
-    }();
+    data._sampler = std::make_unique<GraphSAGESampler>(view);
+    bindHopsColumns(data, std::make_index_sequence<GraphSAGESampler::hops> {});
 
-    data.sampler = std::make_unique<GraphSAGESampler>(view, seed);
-
-    setHopsData(data, fanouts, std::make_index_sequence<GraphSAGESampler::hops> {});
-
-    seedSampler(data);
+    rewind(data);
 }
 
+// A step packs the samples of consecutive rows into its budget, and ends early on a
+// sample the budget cuts short, which the next step resumes
 void executeImpl(ProcedureState* state) {
     Data& data = state->data<Data>();
 
-    std::unique_ptr<GraphSAGESampler>& sampler = data.sampler;
+    GraphSAGESampler* sampler = data._sampler.get();
     bioassert(sampler, "Null sampler");
 
-    const size_t chunkSize = state->getContext()->getChunkSize();
-    sampler->sample(chunkSize);
+    ColumnIndices* indices = data.indices();
 
-    if (sampler->finished()) {
+    data.clearReturnColumns();
+    if (indices) {
+        indices->clear();
+    }
+
+    const size_t rowCount = data.getArgumentRowCount();
+    const size_t chunkSize = state->getContext()->getChunkSize();
+    size_t budget = chunkSize;
+
+    while (data._row < rowCount && budget > 0) {
+        if (!data._started) {
+            startSample(data, chunkSize);
+        }
+
+        const size_t sampledRows = sampler->sample(budget);
+        budget -= sampledRows;
+
+        if (indices) {
+            std::vector<size_t>& inputRows = indices->getRaw();
+            inputRows.resize(inputRows.size() + sampledRows, data._row);
+        }
+
+        if (!sampler->finished()) {
+            return;
+        }
+
+        data._row++;
+        data._started = false;
+    }
+
+    if (data._row == rowCount) {
         state->finish();
     }
 }
@@ -182,9 +210,9 @@ void executeImpl(ProcedureState* state) {
 void GraphSAGEProcedure::registerProcedure(ProcedureNamespace* ns) {
     Procedure* proc = createTypedProcedure<Data>("graphSAGE");
 
-    proc->addConstantArgument("seeds", ProcedureType::LIST);
-    proc->addConstantArgument("fanouts", ProcedureType::LIST);
-    proc->addOptionalConstantArgument("seed", ProcedureType::INT64);
+    proc->addArgument("seeds", ProcedureType::LIST);
+    proc->addArgument("fanouts", ProcedureType::LIST);
+    proc->addOptionalArgument("seed", ProcedureType::INT64);
 
     ns->addProcedure(proc);
 }
@@ -195,18 +223,12 @@ void GraphSAGEProcedure::execute(ProcedureState* state) {
             prepareImpl(state);
         break;
 
-        case ProcedureState::Step::RESET: {
-            Data& data = state->data<Data>();
-            if (data.sampler) {
-                data.sampler->reset();
-                seedSampler(data);
-            }
-        }
+        case ProcedureState::Step::RESET:
+            rewind(state->data<Data>());
         break;
 
-        case ProcedureState::Step::EXECUTE: {
+        case ProcedureState::Step::EXECUTE:
             executeImpl(state);
-        }
         break;
     }
 }

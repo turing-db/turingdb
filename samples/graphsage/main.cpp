@@ -180,7 +180,7 @@ int main(int argc, const char** argv) {
     bool explain = false;
     bool dump = false;
     size_t chunkSize = ChunkConfig::CHUNK_SIZE;
-    size_t rngSeed = GraphSAGESampler::NOSEED;
+    size_t rngSeed = 0;
 
     auto& argParser = toolInit.getArgParser();
     argParser.add_argument("--seeds", "-s")
@@ -210,6 +210,11 @@ int main(int argc, const char** argv) {
 
 
     toolInit.init(argc, argv);
+
+    std::optional<uint64_t> sampleSeed;
+    if (argParser.is_used("--seed")) {
+        sampleSeed = rngSeed;
+    }
 
     std::vector<std::string> fanoutParts;
     splitList(fanoutList, fanoutParts);
@@ -271,9 +276,9 @@ int main(int argc, const char** argv) {
     std::array<NodeCol, hops> tgts {};
     std::array<NodeCol, hops> dstNodes {};
 
-    GraphSAGESampler sampler(view, rngSeed);
+    GraphSAGESampler sampler(view);
     for (size_t hop = 0; hop < hops; hop++) {
-        sampler.setHopData(hop, &srcs[hop], &tgts[hop], &dstNodes[hop], fanouts[hop]);
+        sampler.setHopColumns(hop, &srcs[hop], &tgts[hop], &dstNodes[hop]);
     }
 
     std::vector<DumpColumn> columns;
@@ -287,9 +292,10 @@ int main(int argc, const char** argv) {
 
     fmt::print("\nseeds: {}\nfanouts: {}\nchunk: {}\n", seedList, fanoutList, chunkSize);
 
-    sampler.seed(&seeds);
+    sampler.start(&seeds, fanouts, sampleSeed);
 
     for (size_t chunk = 0; !sampler.finished(); chunk++) {
+        sampler.clearColumns();
         sampler.sample(chunkSize);
 
         fmt::print("\n######## chunk {} ({} rows) ########\n", chunk, dstNodes[0].size());

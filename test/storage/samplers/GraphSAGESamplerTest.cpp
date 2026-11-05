@@ -113,12 +113,12 @@ protected:
         std::array<NodeCol, hops> tgts {};
         std::array<NodeCol, hops> dstNodes {};
 
-        GraphSAGESampler sampler(reader.getView(), rngSeed);
+        GraphSAGESampler sampler(reader.getView());
         for (size_t hop = 0; hop < hops; hop++) {
-            sampler.setHopData(hop, &srcs[hop], &tgts[hop], &dstNodes[hop], fanouts[hop]);
+            sampler.setHopColumns(hop, &srcs[hop], &tgts[hop], &dstNodes[hop]);
         }
 
-        sampler.seed(&seeds);
+        sampler.start(&seeds, fanouts, rngSeed);
 
         rows = RunRows {};
         stats = RunStats {};
@@ -126,6 +126,7 @@ protected:
         constexpr size_t stepCap = 4096;
 
         while (!sampler.finished()) {
+            sampler.clearColumns();
             sampler.sample(maxRows);
             stats._steps++;
 
@@ -564,7 +565,7 @@ TEST_F(GraphSAGESamplerTest, oneSeedReachesAllThreeHops) {
     }
 }
 
-TEST_F(GraphSAGESamplerTest, resetAndReseedRepeatsTheRun) {
+TEST_F(GraphSAGESamplerTest, startingAgainRepeatsTheRun) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
@@ -576,16 +577,17 @@ TEST_F(GraphSAGESamplerTest, resetAndReseedRepeatsTheRun) {
     std::array<NodeCol, hops> tgts {};
     std::array<NodeCol, hops> dstNodes {};
 
-    GraphSAGESampler sampler(reader.getView(), rngSeed);
+    GraphSAGESampler sampler(reader.getView());
     for (size_t hop = 0; hop < hops; hop++) {
-        sampler.setHopData(hop, &srcs[hop], &tgts[hop], &dstNodes[hop], fanouts[hop]);
+        sampler.setHopColumns(hop, &srcs[hop], &tgts[hop], &dstNodes[hop]);
     }
 
     const auto drive = [&](RunRows& rows) {
         rows = RunRows {};
-        sampler.seed(&seeds);
+        sampler.start(&seeds, fanouts, rngSeed);
 
         while (!sampler.finished()) {
+            sampler.clearColumns();
             sampler.sample(4);
 
             for (size_t hop = 0; hop < hops; hop++) {
@@ -596,8 +598,6 @@ TEST_F(GraphSAGESamplerTest, resetAndReseedRepeatsTheRun) {
 
     RunRows first;
     drive(first);
-
-    sampler.reset();
 
     RunRows second;
     drive(second);
@@ -610,6 +610,93 @@ TEST_F(GraphSAGESamplerTest, resetAndReseedRepeatsTheRun) {
 
         EXPECT_EQ(firstNodes, secondNodes) << "hop " << hop << " frontier not rebuilt";
     }
+}
+
+// Two samples can share the columns of one step: the second one's rows follow the first's
+TEST_F(GraphSAGESamplerTest, aSampleAppendsToTheColumns) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    const GraphSAGESampler::Fanouts fanouts {2, 2, 2};
+    const ColumnNodeIDs firstSeeds = {0, 8};
+    const ColumnNodeIDs secondSeeds = {9};
+
+    std::array<NodeCol, hops> srcs {};
+    std::array<NodeCol, hops> tgts {};
+    std::array<NodeCol, hops> dstNodes {};
+
+    GraphSAGESampler sampler(reader.getView());
+    for (size_t hop = 0; hop < hops; hop++) {
+        sampler.setHopColumns(hop, &srcs[hop], &tgts[hop], &dstNodes[hop]);
+    }
+
+    sampler.start(&firstSeeds, fanouts, 3);
+    const size_t firstRows = sampler.sample(ChunkConfig::CHUNK_SIZE);
+    ASSERT_TRUE(sampler.finished());
+
+    sampler.start(&secondSeeds, fanouts, 3);
+    const size_t secondRows = sampler.sample(ChunkConfig::CHUNK_SIZE);
+    ASSERT_TRUE(sampler.finished());
+
+    for (size_t hop = 0; hop < hops; hop++) {
+        EXPECT_EQ(dstNodes[hop].size(), firstRows + secondRows) << "hop " << hop << " dstNodes ragged";
+        EXPECT_EQ(srcs[hop].size(), firstRows + secondRows) << "hop " << hop << " srcs ragged";
+        EXPECT_EQ(tgts[hop].size(), firstRows + secondRows) << "hop " << hop << " tgts ragged";
+    }
+
+    std::vector<uint64_t> firstFrontier;
+    std::vector<uint64_t> secondFrontier;
+    for (size_t row = 0; row < firstRows + secondRows; row++) {
+        const NodeID node = dstNodes[0][row];
+        if (!node.isValid()) {
+            continue;
+        }
+
+        if (row < firstRows) {
+            firstFrontier.push_back(node.getValue());
+        } else {
+            secondFrontier.push_back(node.getValue());
+        }
+    }
+
+    const std::vector<uint64_t> expectedFirst {0, 8};
+    const std::vector<uint64_t> expectedSecond {9};
+    EXPECT_EQ(firstFrontier, expectedFirst);
+    EXPECT_EQ(secondFrontier, expectedSecond);
+}
+
+// Gym (13) has three in-edges. A node's sample is drawn whole, so with two rows left the
+// call emits the frontier alone and leaves the edges to the next call.
+TEST_F(GraphSAGESamplerTest, aFanoutWiderThanTheBudgetWaitsForALaterCall) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    const GraphSAGESampler::Fanouts fanouts {3, 0, 0};
+    const ColumnNodeIDs seeds = {13};
+
+    std::array<NodeCol, hops> srcs {};
+    std::array<NodeCol, hops> tgts {};
+    std::array<NodeCol, hops> dstNodes {};
+
+    GraphSAGESampler sampler(reader.getView());
+    for (size_t hop = 0; hop < hops; hop++) {
+        sampler.setHopColumns(hop, &srcs[hop], &tgts[hop], &dstNodes[hop]);
+    }
+
+    sampler.start(&seeds, fanouts, 5);
+
+    EXPECT_EQ(sampler.sample(2), 1U);
+    EXPECT_FALSE(sampler.finished());
+
+    sampler.clearColumns();
+
+    EXPECT_EQ(sampler.sample(3), 3U);
+    EXPECT_TRUE(sampler.finished());
+
+    const size_t drawnSources = std::ranges::count_if(srcs[0], [](const NodeID node) {
+        return node.isValid();
+    });
+    EXPECT_EQ(drawnSources, 3U);
 }
 
 TEST_F(GraphSAGESamplerTest, everyBudgetProducesRectangularSteps) {
@@ -642,18 +729,19 @@ TEST_F(GraphSAGESamplerTest, unwiredColumnsAreSkipped) {
     NodeCol firstDstNodes;
     NodeCol lastTgts;
 
-    GraphSAGESampler sampler(reader.getView(), rngSeed);
-    sampler.setHopData(0, nullptr, nullptr, &firstDstNodes, fanouts[0]);
-    sampler.setHopData(1, nullptr, nullptr, nullptr, fanouts[1]);
-    sampler.setHopData(2, nullptr, &lastTgts, nullptr, fanouts[2]);
+    GraphSAGESampler sampler(reader.getView());
+    sampler.setHopColumns(0, nullptr, nullptr, &firstDstNodes);
+    sampler.setHopColumns(1, nullptr, nullptr, nullptr);
+    sampler.setHopColumns(2, nullptr, &lastTgts, nullptr);
 
-    sampler.seed(&seeds);
+    sampler.start(&seeds, fanouts, rngSeed);
 
     std::vector<uint64_t> dstNodes;
     std::vector<uint64_t> targets;
     size_t steps = 0;
 
     while (!sampler.finished()) {
+        sampler.clearColumns();
         sampler.sample(ChunkConfig::CHUNK_SIZE);
         steps++;
 
