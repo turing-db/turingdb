@@ -6757,6 +6757,26 @@ bool isSameMap(const WrittenMap& lhs, const WrittenMap& rhs) {
     return lhsEntries.data() == rhsEntries.data() && lhsEntries.size() == rhsEntries.size();
 }
 
+template <typename IDs, typename Visit>
+void visitWrittenMapRows(const std::vector<WrittenMap>& maps,
+                         const ColumnMask* rows,
+                         const IDs& raw,
+                         size_t rowCount,
+                         Visit visit) {
+    const WrittenMap* previousMap = nullptr;
+
+    for (size_t row = 0; row < rowCount; row++) {
+        if (!setWritesRow(rows, raw[row], row)) {
+            continue;
+        }
+
+        const bool holdsAnotherMap = !previousMap || !isSameMap(*previousMap, maps[row]);
+        visit(row, holdsAnotherMap);
+
+        previousMap = &maps[row];
+    }
+}
+
 template <typename IDColumn>
 void runSetProperties(NLExecutionContext* context, NLFunctionData* data) {
     constexpr bool WRITES_NODES = std::is_same_v<IDColumn, ColumnNodeIDs>;
@@ -6776,37 +6796,44 @@ void runSetProperties(NLExecutionContext* context, NLFunctionData* data) {
     }
 
     const GraphView* view = context->getView();
-    const MetadataBuilder* metadataBuilder = context->getMetadataBuilder();
+    MetadataBuilder* metadataBuilder = context->getMetadataBuilder();
     const ColumnMask* rows = setData->getRows();
     const bool replaces = setData->getReplaces();
     const auto& raw = entities->getRaw();
 
+    std::vector<MapKeyPropertyType>& keyTypes = setData->getKeyTypes();
+    std::vector<MapKeyCreatedType> createdTypes;
+
+    forgetUntypedMapKeys(keyTypes);
+    visitWrittenMapRows(maps, rows, raw, rowCount, [&](size_t row, bool holdsAnotherMap) {
+        if (holdsAnotherMap) {
+            widenCreatedMapKeyTypes(maps[row], view, metadataBuilder, keyTypes, createdTypes);
+        }
+    });
+
+    for (const MapKeyCreatedType& created : createdTypes) {
+        metadataBuilder->getOrCreatePropertyType(created._key, created._type);
+    }
+
     CommitWriteBuffer::UntypedProperties& mapProperties = setData->getMapProperties();
     std::vector<StagedRange>& mapRanges = setData->getMapRanges();
-    std::vector<MapKeyPropertyType>& keyTypes = setData->getKeyTypes();
 
     mapProperties.clear();
     mapRanges.assign(rowCount, StagedRange {});
 
-    const WrittenMap* stagedMap = nullptr;
     StagedRange stagedRange;
 
-    for (size_t row = 0; row < rowCount; row++) {
-        if (!writeTouchesRow(rows, row) || !raw[row].isValid()) {
-            continue;
-        }
-
-        const bool stagesAnotherMap = !stagedMap || !isSameMap(*stagedMap, maps[row]);
-        if (stagesAnotherMap) {
+    forgetUntypedMapKeys(keyTypes);
+    visitWrittenMapRows(maps, rows, raw, rowCount, [&](size_t row, bool holdsAnotherMap) {
+        if (holdsAnotherMap) {
             const size_t begin = mapProperties.size();
             stageMapProperties(maps[row], view, metadataBuilder, keyTypes, mapProperties);
 
-            stagedMap = &maps[row];
             stagedRange = StagedRange {begin, mapProperties.size()};
         }
 
         mapRanges[row] = stagedRange;
-    }
+    });
 
     const size_t firstPendingID = WRITES_NODES ? committedNodeCount(view) : committedEdgeCount(view);
     const size_t pendingCount = WRITES_NODES ? writeBuffer->numPendingNodes() : writeBuffer->numPendingEdges();
@@ -6823,7 +6850,7 @@ void runSetProperties(NLExecutionContext* context, NLFunctionData* data) {
     std::vector<ValueType>& heldTypes = setData->getHeldTypes();
 
     for (size_t row = 0; row < rowCount; row++) {
-        if (!writeTouchesRow(rows, row) || !raw[row].isValid()) {
+        if (!setWritesRow(rows, raw[row], row)) {
             continue;
         }
 

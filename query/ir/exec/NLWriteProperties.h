@@ -61,7 +61,7 @@ void extractWrittenMaps(const Column* column,
                         size_t rowCount,
                         std::vector<WrittenMap>& maps);
 
-// The property type one key of the map staged last resolved to. Keys are stored sorted, so
+// The property type one key of the map read last resolved to. Keys are stored sorted, so
 // the maps a column builds per row line their keys up and resolve each name once.
 struct MapKeyPropertyType {
     std::string _key;
@@ -74,9 +74,27 @@ struct StagedRange {
     size_t _end {0};
 };
 
+// The type a key no property carries takes from the values the maps of one write give it
+struct MapKeyCreatedType {
+    std::string _key;
+    ValueType _type {ValueType::Invalid};
+};
+
+// A key no property carried may name one a write has created since
+void forgetUntypedMapKeys(std::vector<MapKeyPropertyType>& keyTypes);
+
+// Widens the type of each key of @param map that no property carries by its value, as a
+// write of cells types a new property. A null value leaves the type as it is.
+void widenCreatedMapKeyTypes(const WrittenMap& map,
+                             const GraphView* view,
+                             const MetadataBuilder* metadataBuilder,
+                             std::vector<MapKeyPropertyType>& keyTypes,
+                             std::vector<MapKeyCreatedType>& created);
+
 // Appends the properties a map names, each staged as its property's type takes it. A key no
-// property carries throws, since a map value's type is only known per row, unless its
-// value is null, which removes nothing.
+// property carries is skipped where its value is null, which removes nothing; any other
+// names a property created from the type widenCreatedMapKeyTypes widened, and @param
+// keyTypes has forgotten its untyped keys since.
 void stageMapProperties(const WrittenMap& map,
                         const GraphView* view,
                         const MetadataBuilder* metadataBuilder,

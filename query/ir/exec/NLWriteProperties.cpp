@@ -589,6 +589,20 @@ ValueType widenCellType(ValueType widest, CellTag tag, std::string_view property
                                   queryTypeName(tag)));
 }
 
+const std::optional<PropertyType>& resolveMapKeyType(const GraphView* view,
+                                                     const MetadataBuilder* metadataBuilder,
+                                                     std::string_view key,
+                                                     MapKeyPropertyType& keyType) {
+    const bool resolvesTheKey = !keyType._resolved || keyType._key != key;
+
+    if (resolvesTheKey) {
+        keyType._key = key;
+        keyType._type = findWrittenPropertyType(view, metadataBuilder, key);
+        keyType._resolved = true;
+    }
+
+    return keyType._type;
+}
 
 }
 
@@ -644,6 +658,52 @@ void db::extractWrittenMaps(const Column* column,
     }
 }
 
+void db::forgetUntypedMapKeys(std::vector<MapKeyPropertyType>& keyTypes) {
+    for (MapKeyPropertyType& keyType : keyTypes) {
+        if (!keyType._type) {
+            keyType._resolved = false;
+        }
+    }
+}
+
+void db::widenCreatedMapKeyTypes(const WrittenMap& map,
+                                 const GraphView* view,
+                                 const MetadataBuilder* metadataBuilder,
+                                 std::vector<MapKeyPropertyType>& keyTypes,
+                                 std::vector<MapKeyCreatedType>& created) {
+    if (!map._map) {
+        return;
+    }
+
+    const std::span<const MapEntryView> entries = map._map->entries();
+    if (keyTypes.size() < entries.size()) {
+        keyTypes.resize(entries.size());
+    }
+
+    for (size_t index = 0; index < entries.size(); index++) {
+        const MapEntryView& entry = entries[index];
+        const std::string_view key = entry.getKey();
+        const CellView value = entry.getValue();
+        const CellTag tag = value.getTag();
+
+        if (tag == CellTag::Null) {
+            continue;
+        }
+
+        const std::optional<PropertyType>& propertyType = resolveMapKeyType(view, metadataBuilder, key, keyTypes[index]);
+        if (propertyType) {
+            continue;
+        }
+
+        auto createdKey = std::ranges::find(created, key, &MapKeyCreatedType::_key);
+        if (createdKey == created.end()) {
+            createdKey = created.insert(created.end(), MapKeyCreatedType {std::string(key), ValueType::Invalid});
+        }
+
+        createdKey->_type = widenCellType(createdKey->_type, tag, key);
+    }
+}
+
 void db::stageMapProperties(const WrittenMap& map,
                             const GraphView* view,
                             const MetadataBuilder* metadataBuilder,
@@ -669,22 +729,14 @@ void db::stageMapProperties(const WrittenMap& map,
         const std::string_view key = entry.getKey();
         const CellView value = entry.getValue();
 
-        MapKeyPropertyType& keyType = keyTypes[index];
-        const bool resolvesTheKey = !keyType._resolved || keyType._key != key;
-        if (resolvesTheKey) {
-            keyType._key = key;
-            keyType._type = findWrittenPropertyType(view, metadataBuilder, key);
-            keyType._resolved = true;
-        }
-
-        const std::optional<PropertyType>& propertyType = keyType._type;
+        const std::optional<PropertyType>& propertyType = resolveMapKeyType(view, metadataBuilder, key, keyTypes[index]);
         const bool removesNothing = !propertyType && value.getTag() == CellTag::Null;
 
         if (removesNothing) {
             continue;
-        } else if (!propertyType) {
-            throw IRException(fmt::format("Cannot create property '{}' from a value whose type is only known per row", key));
         }
+
+        bioassert(propertyType, "The property '{}' a map writes has no type", key);
 
         CommitWriteBuffer::UntypedProperty& property = staged.emplace_back(propertyType->_id);
         if (!stageCellIfItFits(value, propertyType->_valueType, property.value)) {
