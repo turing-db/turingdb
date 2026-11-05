@@ -9,6 +9,7 @@ target_link_libraries(turing_parser_test_support_s PUBLIC turing_test_libs)
 target_compile_definitions(turing_parser_test_support_s PRIVATE CYPHER_CORPUS_DIR="${CMAKE_SOURCE_DIR}/fuzz/corpus/cypher")
 
 add_turing_test(test_query_parser_parenthesized_property_access ParenthesizedPropertyAccessTest.cpp)
+add_turing_test(test_query_parser_parse_expression ParseExpressionTest.cpp)
 add_turing_test(test_query_parser_keyword_object_name KeywordObjectNameTest.cpp)
 add_turing_test(test_query_parser_parse_error_message ParseErrorMessageTest.cpp)
 add_turing_test(test_query_parser_cypher_lexer CypherLexerTest.cpp)

@@ -23,6 +23,20 @@ void CypherParser::parse(std::string_view query) {
     CypherGrammar grammar(_ast, &lexer);
     grammar.parseScript();
 
+    throwIfNestedTooDeep(lexer);
+}
+
+Expr* CypherParser::parseExpression(std::string_view expression, size_t& endOffset) {
+    CypherLexer lexer(expression);
+    CypherGrammar grammar(_ast, &lexer);
+    Expr* expr = grammar.parseExpression(endOffset);
+
+    throwIfNestedTooDeep(lexer);
+
+    return expr;
+}
+
+void CypherParser::throwIfNestedTooDeep(CypherLexer& lexer) const {
     const Expr* tooDeep = ExprDepth::findDeeperThan(_ast->getExpressions(), MAX_EXPRESSION_DEPTH);
     if (tooDeep) {
         const SourceManager* sourceManager = _ast->getSourceManager();

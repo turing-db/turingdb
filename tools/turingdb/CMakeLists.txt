@@ -13,6 +13,8 @@ add_executable(turingdb ${turingdb_sources})
 set_target_properties(turingdb PROPERTIES ENABLE_EXPORTS TRUE)
 target_link_libraries(turingdb PUBLIC
     turing_db_s
+    turing_db_parser_s
+    turing_db_ast_s
     turing_db_storage_s
     turing_db_server_s
     turing_db_auth_s
@@ -20,7 +22,6 @@ target_link_libraries(turingdb PUBLIC
     turing_db_proto_client_s
     argparse
     linenoise_s
-    termcolor
-    nlohmann_json)
+    termcolor)
 
 install(TARGETS turingdb DESTINATION bin)
