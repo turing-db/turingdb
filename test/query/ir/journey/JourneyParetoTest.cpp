@@ -183,9 +183,7 @@ TEST_F(JourneyParetoTest, DISABLED_sortsTheLegsWithSortMulti) {
                {{"[b, a, d, c]"}});
 }
 
-// Disabled: a key of a node held in a map is read as a key of a map held by another map,
-// which the analyzer rejects.
-TEST_F(JourneyParetoTest, DISABLED_readsTheStationOfALeg) {
+TEST_F(JourneyParetoTest, readsTheStationOfALeg) {
     std::string query;
     findLegsFromOxford(query, "['DID', 'RDG', 'PAD']", 470, 500);
     query += "WITH [{service: firstStop.service, prevCalling: inter}] AS legs ";
