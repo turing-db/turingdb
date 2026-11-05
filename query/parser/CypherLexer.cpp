@@ -109,6 +109,7 @@ constexpr auto KEYWORDS = std::to_array<Keyword>({
     {"OR", CypherTokenKind::OR},
     {"ORDER", CypherTokenKind::ORDER},
     {"PARQUET", CypherTokenKind::PARQUET},
+    {"POINTS", CypherTokenKind::POINTS},
     {"PROCEDURES", CypherTokenKind::PROCEDURES},
     {"PULL", CypherTokenKind::PULL},
     {"PUSH", CypherTokenKind::PUSH},

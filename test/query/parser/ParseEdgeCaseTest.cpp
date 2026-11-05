@@ -378,15 +378,16 @@ TEST_F(ParseEdgeCaseTest, parsesAdministrativeQueries) {
         types.emplace("d", ValueType::DateTime);
         types.emplace("t", ValueType::DateTime);
         types.emplace("u", ValueType::Duration);
+        types.emplace("p", ValueType::Point);
         load->setTypedPropertySpec(std::move(types));
 
-        expectParse("LOAD JSONL 'f' WITH EMBEDDINGS [{e, 4}] WITH DATETIMES ['d', t] WITH DURATIONS [u]", {load});
+        expectParse("LOAD JSONL 'f' WITH EMBEDDINGS [{e, 4}] WITH DATETIMES ['d', t] WITH DURATIONS [u] WITH POINTS [p]", {load});
     }
 
     expectError("LOAD JSONL 'f' WITH 5",
                 "     1 | LOAD JSONL 'f' WITH 5\n"
                 "       |                     ^\n"
-                "-------* syntax error, unexpected DIGIT, expecting DATETIMES or DURATIONS or EMBEDDINGS");
+                "-------* syntax error, unexpected DIGIT, expecting DATETIMES or DURATIONS or POINTS or EMBEDDINGS");
 
     expectParse("LOAD GML 'f'", {LoadGMLQuery::create(getExpectedAST(), fs::Path(std::string("f")))});
 

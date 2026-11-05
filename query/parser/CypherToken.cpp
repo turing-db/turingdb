@@ -97,6 +97,7 @@ constexpr auto TOKEN_NAMES = std::to_array<TokenName>({
     {CypherTokenKind::HEADERS, "HEADERS"},
     {CypherTokenKind::DATETIMES, "DATETIMES"},
     {CypherTokenKind::DURATIONS, "DURATIONS"},
+    {CypherTokenKind::POINTS, "POINTS"},
     {CypherTokenKind::EMBEDDINGS, "EMBEDDINGS"},
     {CypherTokenKind::JSONL, "JSONL"},
     {CypherTokenKind::LIST, "LIST"},

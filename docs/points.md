@@ -74,3 +74,19 @@ combined with the height difference, as Neo4j does. It is null for points in dif
 `point.withinBBox(p, lowerLeft, upperRight)` is whether `p` lies in the box, bounds included. In a
 geographic CRS a `lowerLeft` east of `upperRight` makes a box that crosses the 180th meridian, and
 a `lowerLeft` north of `upperRight` an empty one. It is null unless the three points share a CRS.
+
+# Importing
+
+`LOAD JSONL` reads a point out of a JSON object under a name a `WITH POINTS [...]` clause lists,
+by the rules `point()` reads a map with:
+
+```
+LOAD JSONL '/data/cities.jsonl' AS cities WITH POINTS [at]
+
+{"type": "node", "id": "0", "labels": ["City"],
+ "properties": {"name": "Paris", "at": {"longitude": 2.3522, "latitude": 48.8566}}}
+```
+
+A JSON null leaves the property unset. An object naming no point, or holding a null, raises.
+`WITH POINTS`, `WITH DATETIMES` and `WITH DURATIONS` fill one `TypedPropertySpec`, which maps
+each name to the type it is read as, and a name given two types is rejected.

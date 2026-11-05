@@ -585,6 +585,8 @@ void CypherGrammar::parseJsonlOption(JsonlImportSpecs& specs) {
         parseTypedNames(specs._types, ValueType::DateTime);
     } else if (accept(CypherTokenKind::DURATIONS)) {
         parseTypedNames(specs._types, ValueType::Duration);
+    } else if (accept(CypherTokenKind::POINTS)) {
+        parseTypedNames(specs._types, ValueType::Point);
     } else {
         throwUnexpectedToken();
     }

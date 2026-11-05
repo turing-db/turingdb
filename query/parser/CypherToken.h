@@ -94,6 +94,7 @@ enum class CypherTokenKind : uint8_t {
     HEADERS,
     DATETIMES,
     DURATIONS,
+    POINTS,
     EMBEDDINGS,
     JSONL,
     LIST,

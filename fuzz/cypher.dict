@@ -70,6 +70,8 @@
 "EMBEDDINGS"
 "AVAILABLE"
 "DATETIMES"
+"DURATIONS"
+"POINTS"
 
 # --- Boolean and null ---
 "TRUE"
