@@ -10,6 +10,7 @@
 #include <spdlog/fmt/bundled/format.h>
 
 #include "samplers/GraphSAGESampler.h"
+#include "versioning/ScannedNodes.h"
 
 #include "ProcUtils.h"
 #include "Procedure.h"
@@ -62,16 +63,27 @@ struct Data final : public TypedProcedureData<GraphSAGEProcedure, IndexedProcedu
     bool _started {false};
 };
 
-void readSeeds(const ListView list, ColumnNodeIDs& seeds) {
+// A seed that names no node is skipped, as a MATCH on its ID matches nothing
+void readSeeds(const ListView list, const ScannedNodes& scanned, ColumnNodeIDs& seeds) {
     for (const CellView element : list) {
         const CellTag tag = element.getTag();
 
+        NodeID seed;
         if (tag == CellTag::NodeID) {
-            seeds.push_back(element.getAs<NodeID>());
+            seed = element.getAs<NodeID>();
         } else if (tag == CellTag::Int) {
-            seeds.emplace_back(element.getAs<types::Int64::Primitive>());
+            const types::Int64::Primitive id = element.getAs<types::Int64::Primitive>();
+            if (id < 0) {
+                continue;
+            }
+
+            seed = NodeID(static_cast<uint64_t>(id));
         } else {
             throw ProcedureException(std::string(SEEDS_ERROR));
+        }
+
+        if (scanned.contains(seed)) {
+            seeds.push_back(seed);
         }
     }
 }
@@ -101,7 +113,7 @@ void readFanouts(const ListView list, size_t chunkSize, GraphSAGESampler::Fanout
 }
 
 // A null seed list names no node, so its row is sampled from no seeds
-void startSample(Data& data, size_t chunkSize) {
+void startSample(Data& data, size_t chunkSize, const ScannedNodes& scanned) {
     const size_t row = data._row;
 
     const std::optional<ListView> fanoutList =
@@ -118,7 +130,7 @@ void startSample(Data& data, size_t chunkSize) {
 
     data._seeds.clear();
     if (seeds) {
-        readSeeds(*seeds, data._seeds);
+        readSeeds(*seeds, scanned, data._seeds);
     }
 
     const std::optional<uint64_t> rngSeed =
@@ -175,13 +187,16 @@ void executeImpl(ProcedureState* state) {
         indices->clear();
     }
 
+    const ProcedureContext* context = state->getContext();
+    const ScannedNodes scanned(*context->getGraphView(), context->getWriteBuffer(), context->getFirstQueryNode());
+
     const size_t rowCount = data.getArgumentRowCount();
-    const size_t chunkSize = state->getContext()->getChunkSize();
+    const size_t chunkSize = context->getChunkSize();
     size_t budget = chunkSize;
 
     while (data._row < rowCount && budget > 0) {
         if (!data._started) {
-            startSample(data, chunkSize);
+            startSample(data, chunkSize, scanned);
         }
 
         const size_t sampledRows = sampler->sample(budget);

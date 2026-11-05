@@ -72,6 +72,7 @@
 #include "reader/GraphReader.h"
 #include "versioning/CommitWriteBuffer.h"
 #include "versioning/PendingAdjacency.h"
+#include "versioning/ScannedNodes.h"
 #include "views/GraphView.h"
 
 #include "CSVParser.h"
@@ -1588,46 +1589,13 @@ std::optional<NodeID> namedNode(const std::optional<Cell>& cell) {
     return namedNode(*cell);
 }
 
-// The nodes a node scan produces: the ones the view holds and did not delete, and the ones
-// the running query created and did not delete
-class ScannedNodes {
-public:
-    explicit ScannedNodes(const NLExecutionContext* context)
-        : _reader(context->getView()->read()),
-        _writeBuffer(context->getWriteBuffer()),
-        _committedCount(committedNodeCount(context->getView())),
-        _firstQueryNode(context->getFirstQueryNode()),
-        _pendingCount(_writeBuffer ? _writeBuffer->numPendingNodes() : 0)
-    {
-    }
-
-    bool contains(NodeID node) const {
-        const uint64_t id = node.getValue();
-        if (id < _committedCount) {
-            return !_reader.nodeIsDeleted(node);
-        }
-
-        const uint64_t offset = id - _committedCount;
-        const bool createdByThisQuery = offset >= _firstQueryNode && offset < _pendingCount;
-
-        return createdByThisQuery && !_writeBuffer->deletedPendingNodes().contains(offset);
-    }
-
-private:
-    const GraphReader _reader;
-    const CommitWriteBuffer* _writeBuffer {nullptr};
-    size_t _committedCount {0};
-    size_t _firstQueryNode {0};
-    size_t _pendingCount {0};
-};
-
 template <typename Cell>
 void fetchNamedNodes(const Column* ids, const NLExecutionContext* context, ColumnVector<size_t>* indices, ColumnNodeIDs* nodes) {
     const std::vector<Cell>& cells = static_cast<const ColumnVector<Cell>*>(ids)->getRaw();
     std::vector<size_t>& rows = indices->getRaw();
     std::vector<NodeID>& fetched = nodes->getRaw();
 
-    const ScannedNodes scanned(context);
+    const ScannedNodes scanned(*context->getView(), context->getWriteBuffer(), context->getFirstQueryNode());
 
     for (size_t row = 0; row < cells.size(); row++) {
         const std::optional<NodeID> node = namedNode(cells[row]);
@@ -12498,6 +12466,8 @@ void NLExecutor::runShortestPathLoop(NLExecutionContext* context, NLFunctionData
 void NLExecutor::runProcedureInitLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLProcedureLoopData* loopData = static_cast<NLProcedureLoopData*>(data);
     NLProcedureState* state = loopData->getState();
+
+    state->setExecutionContext(context);
 
     // This loop drives the procedure over one chunk of its arguments and is re-entered
     // for the next chunk, so rewind it here: a procedure that finished the previous

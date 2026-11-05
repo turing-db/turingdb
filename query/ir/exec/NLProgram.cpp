@@ -4,6 +4,7 @@
 #include <limits>
 #include <numeric>
 
+#include "NLExecutionContext.h"
 #include "NLRuntimeProperty.h"
 #include "NLMergeWorkingSet.h"
 #include "Procedure.h"
@@ -194,6 +195,11 @@ std::span<const NodeID> NLNodeSetState::getNodes() {
     }
 
     return _nodes;
+}
+
+void NLProcedureState::setExecutionContext(const NLExecutionContext* context) {
+    _context.setWriteBuffer(context->getWriteBuffer());
+    _context.setFirstQueryNode(context->getFirstQueryNode());
 }
 
 void NLProcedureState::prepareOrResetForNewDrive() {

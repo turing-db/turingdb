@@ -9,6 +9,7 @@
 
 namespace db {
 
+class CommitWriteBuffer;
 class Graph;
 class GraphView;
 class Transaction;
@@ -26,6 +27,8 @@ public:
     size_t getChunkSize() const { return _chunkSize; }
     QueryListBuffer* getListBuffer() const { return _listBuffer; }
     StringBuffer* getStringBuffer() const { return _stringBuffer; }
+    const CommitWriteBuffer* getWriteBuffer() const { return _writeBuffer; }
+    size_t getFirstQueryNode() const { return _firstQueryNode; }
 
     void setGraph(Graph* graph) { _graph = graph; }
     void setGraphView(const GraphView* graphView) { _graphView = graphView; }
@@ -34,6 +37,8 @@ public:
     void setChunkSize(size_t chunkSize) { _chunkSize = chunkSize; }
     void setListBuffer(ListBuffer<>* listBuffer) { _listBuffer = listBuffer; }
     void setStringBuffer(StringBuffer* stringBuffer) { _stringBuffer = stringBuffer; }
+    void setWriteBuffer(const CommitWriteBuffer* writeBuffer) { _writeBuffer = writeBuffer; }
+    void setFirstQueryNode(size_t firstQueryNode) { _firstQueryNode = firstQueryNode; }
 
 private:
     Graph* _graph {nullptr};
@@ -43,6 +48,8 @@ private:
     size_t _chunkSize {0};
     QueryListBuffer* _listBuffer {nullptr};
     StringBuffer* _stringBuffer {nullptr};
+    const CommitWriteBuffer* _writeBuffer {nullptr};
+    size_t _firstQueryNode {0};
 };
 
 }
