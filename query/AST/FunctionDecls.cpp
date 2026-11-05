@@ -9,6 +9,7 @@ FunctionDecls::FunctionDecls()
 {
     initDefault();
     initCollectionFunctions();
+    initSpatialFunctions();
 }
 
 FunctionDecls::~FunctionDecls() {
@@ -938,6 +939,26 @@ void FunctionDecls::initCollectionFunctions() {
 
     for (FunctionSignature* indexOf : indexOfs) {
         indexOf->setReturnTypes({{EvaluatedType::Integer}});
+    }
+}
+
+void FunctionDecls::initSpatialFunctions() {
+    FunctionNamespace* point = _root.createNamespace("point");
+
+    const PossibleArgTypes pointOrCell {EvaluatedType::Point, EvaluatedType::Any};
+
+    std::vector<FunctionSignature*> distances;
+    point->createOverloads("distance", {pointOrCell, pointOrCell}, distances);
+
+    for (FunctionSignature* distance : distances) {
+        distance->setReturnTypes({{EvaluatedType::Double}});
+    }
+
+    std::vector<FunctionSignature*> boxes;
+    point->createOverloads("withinBBox", {pointOrCell, pointOrCell, pointOrCell}, boxes);
+
+    for (FunctionSignature* box : boxes) {
+        box->setReturnTypes({{EvaluatedType::Bool}});
     }
 }
 

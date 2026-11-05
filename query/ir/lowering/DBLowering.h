@@ -304,6 +304,9 @@ private:
     void lowerSplit(mlir::db::Split split);
     void lowerReplace(mlir::db::Replace replace);
 
+    template <typename NLOp>
+    void lowerPointFunction(mlir::Operation* operation, mlir::Type valueType);
+
     template <typename NLStringEndOp, typename StringEndOp>
     void lowerStringEnd(StringEndOp stringEnd);
 

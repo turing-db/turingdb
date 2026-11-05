@@ -4,6 +4,7 @@
 
 #include <compare>
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -69,6 +70,12 @@ public:
 
     // point() of a map. False where the map holds a null.
     static bool fromMap(const MapView& map, Point& value);
+
+    // Nullopt for two points in different CRSs
+    static std::optional<double> distance(Point lhs, Point rhs);
+
+    // Nullopt unless the three points share a CRS
+    static std::optional<bool> withinBBox(Point value, Point lowerLeft, Point upperRight);
 
     static void format(std::string& out, Point value);
 

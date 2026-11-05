@@ -3278,6 +3278,24 @@ def Replace : NLOp<"replace", [Pure, RowAlignedThroughOperands]> {
   let assemblyFormat = "$string `,` $search `,` $replacement attr-dict `:` functional-type(operands, results)";
 }
 
+def PointDistance : NLOp<"point_distance", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Row-wise distance between two points, null across CRSs";
+
+  let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
+def PointWithinBBox : NLOp<"point_within_bbox", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Row-wise test of a point against a box, null unless the three share a CRS";
+
+  let arguments = (ins NLChunk:$point, NLChunk:$lowerLeft, NLChunk:$upperRight);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$point `,` $lowerLeft `,` $upperRight attr-dict `:` functional-type(operands, results)";
+}
+
 class NLBinaryFunctionOp<string mnemonic> : NLOp<mnemonic, [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Apply a binary scalar function row-wise to two value chunks";
 

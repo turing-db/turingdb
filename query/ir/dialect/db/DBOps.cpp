@@ -278,6 +278,19 @@ bool isStringColumn(Type type) {
     return isa<storage::StringType, storage::AnyType, NoneType>(value);
 }
 
+bool isPointColumn(Type type) {
+    const auto column = dyn_cast<ColumnType>(type);
+    if (!column) {
+        return false;
+    }
+
+    const Type element = column.getType();
+    const auto nullable = dyn_cast<storage::NullableType>(element);
+    const Type value = nullable ? nullable.getValueType() : element;
+
+    return isa<storage::PointType, storage::AnyType, NoneType>(value);
+}
+
 bool isIntegerColumn(Value column) {
     return isa<ColumnType>(column.getType())
         && isa<IntegerType, storage::AnyType, NoneType>(::db::declaredColumnElement(column));
@@ -2472,6 +2485,40 @@ LogicalResult Replace::verify() {
     return verifyStringResult(getOperation(), getResult());
 }
 
+LogicalResult PointDistance::verify() {
+    const bool readsPoints = llvm::all_of(getOperation()->getOperands(), [](Value operand) {
+        return isPointColumn(operand.getType());
+    });
+
+    if (!readsPoints) {
+        return emitOpError("operands must be point columns");
+    }
+
+    const ColumnType resultColumn = dyn_cast<ColumnType>(getResult().getType());
+    if (!resultColumn || !isa<Float64Type>(resultColumn.getType())) {
+        return emitOpError("result must be a column of f64");
+    }
+
+    return success();
+}
+
+LogicalResult PointWithinBBox::verify() {
+    const bool readsPoints = llvm::all_of(getOperation()->getOperands(), [](Value operand) {
+        return isPointColumn(operand.getType());
+    });
+
+    if (!readsPoints) {
+        return emitOpError("operands must be point columns");
+    }
+
+    const ColumnType resultColumn = dyn_cast<ColumnType>(getResult().getType());
+    if (!resultColumn || !isa<storage::BoolType>(resultColumn.getType())) {
+        return emitOpError("result must be a column of booleans");
+    }
+
+    return success();
+}
+
 LogicalResult Split::verify() {
     const Value delimiter = getDelimiter();
 
@@ -3186,6 +3233,22 @@ Speculation::Speculatability Replace::getSpeculatability() {
     });
 
     return speculatableWhen(readsStrings);
+}
+
+Speculation::Speculatability PointDistance::getSpeculatability() {
+    const bool readsPoints = llvm::all_of(getOperation()->getOperands(), [](Value operand) {
+        return isa<storage::PointType>(columnElement(operand));
+    });
+
+    return speculatableWhen(readsPoints);
+}
+
+Speculation::Speculatability PointWithinBBox::getSpeculatability() {
+    const bool readsPoints = llvm::all_of(getOperation()->getOperands(), [](Value operand) {
+        return isa<storage::PointType>(columnElement(operand));
+    });
+
+    return speculatableWhen(readsPoints);
 }
 
 Speculation::Speculatability Split::getSpeculatability() {

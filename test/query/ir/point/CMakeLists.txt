@@ -6,3 +6,6 @@ target_include_directories(test_query_ir_point_value_flow PRIVATE ${IR_TEST_DIR}
 
 add_turing_test(test_query_ir_point_component PointComponentTest.cpp)
 target_include_directories(test_query_ir_point_component PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_point_spatial_functions PointSpatialFunctionsTest.cpp)
+target_include_directories(test_query_ir_point_spatial_functions PRIVATE ${IR_TEST_DIR})

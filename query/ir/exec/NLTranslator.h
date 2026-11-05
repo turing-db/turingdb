@@ -1107,6 +1107,7 @@ private:
     void translateSubstring(mlir::nl::Substring substring, NLStmtContainer* body);
     void translateSplit(mlir::nl::Split split, NLStmtContainer* body);
     void translateReplace(mlir::nl::Replace replace, NLStmtContainer* body);
+    void translatePointFunction(mlir::Operation* operation, NLHandlerFunction run, NLStmtContainer* body);
 
     template <typename Function, typename StringEndOp>
     void translateStringEnd(StringEndOp stringEnd, NLStmtContainer* body);

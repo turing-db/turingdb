@@ -3220,6 +3220,47 @@ def Replace : TuringOp<"replace", [MayRaise, ConstantThroughOperands, DeclareOpI
   }];
 }
 
+def PointDistance : TuringOp<"point_distance", [MayRaise, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+  let summary = "The distance between the points of each row, null for two points in different CRSs";
+
+  let description = [{
+      Euclidean between two cartesian points, and great-circle metres between two
+      geographic ones. It raises on a tagged cell holding no point.
+
+      %d = db.point_distance(%a, %b) : (!db.column<!storage.point>, !db.column<!storage.point>)
+                                       -> !db.column<f64>
+  }];
+
+  let arguments = (ins Column:$lhs, Column:$rhs);
+  let results   = (outs Column:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $lhs `,` $rhs `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+def PointWithinBBox : TuringOp<"point_within_bbox", [MayRaise, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+  let summary = "Whether each row's point lies in its box, null unless the three share a CRS";
+
+  let description = [{
+      The box is bounded by its lower left and upper right corners, both included. It
+      raises on a tagged cell holding no point.
+
+      %in = db.point_within_bbox(%p, %lowerLeft, %upperRight)
+          : (!db.column<!storage.point>, !db.column<!storage.point>, !db.column<!storage.point>)
+            -> !db.column<!storage.bool>
+  }];
+
+  let arguments = (ins Column:$point, Column:$lowerLeft, Column:$upperRight);
+  let results   = (outs Column:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $point `,` $lowerLeft `,` $upperRight `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
 class BinaryFunctionOp<string mnemonic> : TuringOp<mnemonic, [Pure, ConstantThroughOperands]> {
   let summary = "Apply a binary function row-wise to two value columns";
 

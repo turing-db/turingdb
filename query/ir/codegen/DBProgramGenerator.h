@@ -1392,6 +1392,8 @@ private:
     void translateSubstring(const Expr* expr, const ExprChain* args);
     void translateSplit(const Expr* expr, const ExprChain* args);
     void translateReplace(const Expr* expr, const ExprChain* args);
+    void translatePointDistance(const Expr* expr, const ExprChain* args);
+    void translatePointWithinBBox(const Expr* expr, const ExprChain* args);
 
     template <typename StringEndOp>
     void translateStringEnd(const Expr* expr, const ExprChain* args);

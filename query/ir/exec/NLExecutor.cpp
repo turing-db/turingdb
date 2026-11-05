@@ -5834,6 +5834,28 @@ std::optional<types::Int64::Primitive> unsignedValueArgument(const Column* input
 }
 
 template <typename ColumnT>
+std::optional<types::Point::Primitive> pointValueArgument(const Column* input, size_t row, std::string_view) {
+    return (*static_cast<const ColumnT*>(input))[row];
+}
+
+template <typename ColumnT>
+std::optional<types::Point::Primitive> cellPointArgument(const Column* input, size_t row, std::string_view functionName) {
+    const std::optional<CellView> cell = (*static_cast<const ColumnT*>(input))[row];
+    if (!cell.has_value()) {
+        return std::nullopt;
+    }
+
+    const CellTag tag = cell->getTag();
+    if (tag == CellTag::Point) {
+        return cell->getAs<types::Point::Primitive>();
+    } else if (tag == CellTag::Null) {
+        return std::nullopt;
+    }
+
+    throwCellTypeError(functionName, "a point", tag);
+}
+
+template <typename ColumnT>
 std::optional<types::Int64::Primitive> cellIntegerArgument(const Column* input, size_t row, std::string_view functionName) {
     const std::optional<CellView> cell = (*static_cast<const ColumnT*>(input))[row];
     if (!cell.has_value()) {
@@ -10012,6 +10034,62 @@ void NLExecutor::runReplace(NLExecutionContext*, NLFunctionData* data) {
 template void NLExecutor::runReplace<types::String::Primitive>(NLExecutionContext* context, NLFunctionData* data);
 template void NLExecutor::runReplace<std::optional<types::String::Primitive>>(NLExecutionContext* context, NLFunctionData* data);
 
+void NLExecutor::runPointDistance(NLExecutionContext*, NLFunctionData* data) {
+    const NLPointFunctionData* function = static_cast<NLPointFunctionData*>(data);
+
+    const NLPointFunctionData::PointArgument& lhs = function->getArguments()[0];
+    const NLPointFunctionData::PointArgument& rhs = function->getArguments()[1];
+
+    const size_t rowCount = lhs._column->size();
+    bioassert(rhs._column->size() == rowCount, "Columns of a point.distance are not row-aligned.");
+
+    std::vector<std::optional<types::Double::Primitive>>& outputRaw =
+        static_cast<ColumnOptVector<types::Double::Primitive>*>(function->getResult())->getRaw();
+    outputRaw.resize(rowCount);
+
+    for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        const std::optional<Point> from = lhs._read(lhs._column, rowIndex, "point.distance");
+        const std::optional<Point> to = rhs._read(rhs._column, rowIndex, "point.distance");
+
+        if (from.has_value() && to.has_value()) {
+            outputRaw[rowIndex] = Point::distance(*from, *to);
+        } else {
+            outputRaw[rowIndex] = std::nullopt;
+        }
+    }
+}
+
+void NLExecutor::runPointWithinBBox(NLExecutionContext*, NLFunctionData* data) {
+    const NLPointFunctionData* function = static_cast<NLPointFunctionData*>(data);
+
+    const NLPointFunctionData::PointArgument& point = function->getArguments()[0];
+    const NLPointFunctionData::PointArgument& lowerLeft = function->getArguments()[1];
+    const NLPointFunctionData::PointArgument& upperRight = function->getArguments()[2];
+
+    const size_t rowCount = point._column->size();
+    bioassert(lowerLeft._column->size() == rowCount, "Columns of a point.withinBBox are not row-aligned.");
+    bioassert(upperRight._column->size() == rowCount, "Columns of a point.withinBBox are not row-aligned.");
+
+    std::vector<std::optional<types::Bool::Primitive>>& outputRaw =
+        static_cast<ColumnOptVector<types::Bool::Primitive>*>(function->getResult())->getRaw();
+    outputRaw.resize(rowCount);
+
+    for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        const std::optional<Point> value = point._read(point._column, rowIndex, "point.withinBBox");
+        const std::optional<Point> lower = lowerLeft._read(lowerLeft._column, rowIndex, "point.withinBBox");
+        const std::optional<Point> upper = upperRight._read(upperRight._column, rowIndex, "point.withinBBox");
+
+        const bool readsANull = !value.has_value() || !lower.has_value() || !upper.has_value();
+        const std::optional<bool> within = readsANull ? std::nullopt : Point::withinBBox(*value, *lower, *upper);
+
+        if (within.has_value()) {
+            outputRaw[rowIndex] = types::Bool::Primitive {*within};
+        } else {
+            outputRaw[rowIndex] = std::nullopt;
+        }
+    }
+}
+
 void NLExecutor::runRange(NLExecutionContext*, NLFunctionData* data) {
     const NLRangeData* range = static_cast<NLRangeData*>(data);
 
@@ -10432,6 +10510,30 @@ NLStringListArgumentRead NLExecutor::selectStringListArgumentRead(const Column* 
     }
 
     throw IRException("a string function reads a list of strings out of a nullable string column, a list column, or a column of tagged cells");
+}
+
+NLPointArgumentRead NLExecutor::selectPointArgumentRead(const Column* input) {
+    using PointValue = types::Point::Primitive;
+
+    const ColumnKind::Code kind = input->getKind();
+
+    if (kind == ColumnOptVector<PointValue>::staticKind()) {
+        return &pointValueArgument<ColumnOptVector<PointValue>>;
+    } else if (kind == ColumnConst<PointValue>::staticKind()) {
+        return &pointValueArgument<ColumnConst<PointValue>>;
+    } else if (kind == ColumnConst<std::optional<PointValue>>::staticKind()) {
+        return &pointValueArgument<ColumnConst<std::optional<PointValue>>>;
+    } else if (kind == ColumnVector<CellView>::staticKind()) {
+        return &cellPointArgument<ColumnVector<CellView>>;
+    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
+        return &cellPointArgument<ColumnOptVector<CellView>>;
+    } else if (kind == ColumnConst<CellView>::staticKind()) {
+        return &cellPointArgument<ColumnConst<CellView>>;
+    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
+        return &cellPointArgument<ColumnConst<std::optional<CellView>>>;
+    }
+
+    throw IRException("a point function reads a point argument out of a nullable point column, or a column of tagged cells");
 }
 
 NLIntegerArgumentRead NLExecutor::selectIntegerArgumentRead(const Column* input) {

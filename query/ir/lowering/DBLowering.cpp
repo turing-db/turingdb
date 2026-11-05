@@ -1508,6 +1508,10 @@ void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
         lowerStringEnd<nl::Right>(right);
     } else if (mlir::db::Replace replace = mlir::dyn_cast<mlir::db::Replace>(operation)) {
         lowerReplace(replace);
+    } else if (mlir::isa<mlir::db::PointDistance>(operation)) {
+        lowerPointFunction<nl::PointDistance>(&operation, _builder.getF64Type());
+    } else if (mlir::isa<mlir::db::PointWithinBBox>(operation)) {
+        lowerPointFunction<nl::PointWithinBBox>(&operation, _builder.getI1Type());
     } else if (mlir::db::ListSlice listSlice = mlir::dyn_cast<mlir::db::ListSlice>(operation)) {
         lowerListSlice(listSlice);
     } else if (mlir::isa<mlir::db::PercentileCont, mlir::db::PercentileDisc>(operation)) {
@@ -2933,6 +2937,23 @@ void DBLowering::lowerReplace(mlir::db::Replace replace) {
                                                         arguments[2]);
 
     _valueMap[replace.getResult()] = replaced.getResult();
+}
+
+// Two points in different CRSs have no distance and no box, so the result is nullable
+// whatever its arguments are
+template <typename NLOp>
+void DBLowering::lowerPointFunction(mlir::Operation* operation, mlir::Type valueType) {
+    llvm::SmallVector<mlir::Value, 3> arguments;
+    containerCellChunks(operation->getOperands(), arguments);
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const nl::ChunkType resultType = nl::ChunkType::get(context, storage::NullableType::get(context, valueType));
+
+    setInsertionForNaryOp(arguments);
+
+    NLOp lowered = _builder.create<NLOp>(_builder.getUnknownLoc(), mlir::TypeRange {resultType}, arguments);
+
+    _valueMap[operation->getResult(0)] = lowered.getResult();
 }
 
 void DBLowering::lowerScanEdges(mlir::db::ScanEdges scanEdges) {

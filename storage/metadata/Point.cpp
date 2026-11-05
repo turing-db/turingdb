@@ -6,6 +6,7 @@
 
 #include <array>
 #include <iterator>
+#include <numbers>
 #include <unordered_map>
 #include <utility>
 
@@ -19,6 +20,8 @@
 using namespace db;
 
 namespace {
+
+constexpr double EARTH_MEAN_RADIUS_METRES = 6371008.8;
 
 enum class PointKey : uint8_t {
     X = 0,
@@ -256,6 +259,32 @@ std::strong_ordering compareCoordinates(double lhs, double rhs) {
 
 bool withinRange(double value, double lower, double upper) {
     return value >= lower && value <= upper;
+}
+
+// A longitude range whose lower end lies east of its upper end crosses the 180th meridian
+bool withinLongitudes(double longitude, double west, double east) {
+    if (west <= east) {
+        return withinRange(longitude, west, east);
+    }
+
+    return longitude >= west || longitude <= east;
+}
+
+double haversineDistance(Point lhs, Point rhs, double radius) {
+    constexpr double radiansPerDegree = std::numbers::pi / 180.0;
+
+    const double lhsLongitude = lhs.getX() * radiansPerDegree;
+    const double lhsLatitude = lhs.getY() * radiansPerDegree;
+    const double rhsLongitude = rhs.getX() * radiansPerDegree;
+    const double rhsLatitude = rhs.getY() * radiansPerDegree;
+
+    const double halfLatitudeSine = sin((rhsLatitude - lhsLatitude) / 2.0);
+    const double halfLongitudeSine = sin((rhsLongitude - lhsLongitude) / 2.0);
+
+    const double alpha = halfLatitudeSine * halfLatitudeSine
+                       + cos(lhsLatitude) * cos(rhsLatitude) * halfLongitudeSine * halfLongitudeSine;
+
+    return radius * 2.0 * atan2(sqrt(alpha), sqrt(1.0 - alpha));
 }
 
 }
@@ -513,6 +542,49 @@ bool Point::fromMap(const MapView& map, Point& value) {
     value = Point(crs, x, y, z);
 
     return true;
+}
+
+std::optional<double> Point::distance(Point lhs, Point rhs) {
+    const PointCRS crs = lhs.getCRS();
+    if (crs != rhs.getCRS()) {
+        return std::nullopt;
+    }
+
+    const double heightDifference = lhs.getZ() - rhs.getZ();
+
+    if (!isGeographic(crs)) {
+        const double xDifference = lhs.getX() - rhs.getX();
+        const double yDifference = lhs.getY() - rhs.getY();
+
+        return sqrt(xDifference * xDifference + yDifference * yDifference + heightDifference * heightDifference);
+    } else if (getDimension(crs) == 2) {
+        return haversineDistance(lhs, rhs, EARTH_MEAN_RADIUS_METRES);
+    }
+
+    const double averageHeight = (lhs.getZ() + rhs.getZ()) / 2.0;
+    const double surfaceDistance = haversineDistance(lhs, rhs, EARTH_MEAN_RADIUS_METRES + averageHeight);
+
+    return sqrt(surfaceDistance * surfaceDistance + heightDifference * heightDifference);
+}
+
+std::optional<bool> Point::withinBBox(Point value, Point lowerLeft, Point upperRight) {
+    const PointCRS crs = value.getCRS();
+    const bool sharesTheCRS = lowerLeft.getCRS() == crs && upperRight.getCRS() == crs;
+    if (!sharesTheCRS) {
+        return std::nullopt;
+    }
+
+    const bool withinHeights = withinRange(value.getZ(), lowerLeft.getZ(), upperRight.getZ());
+
+    if (!isGeographic(crs)) {
+        return withinRange(value.getX(), lowerLeft.getX(), upperRight.getX())
+            && withinRange(value.getY(), lowerLeft.getY(), upperRight.getY())
+            && withinHeights;
+    }
+
+    return withinLongitudes(value.getX(), lowerLeft.getX(), upperRight.getX())
+        && withinRange(value.getY(), lowerLeft.getY(), upperRight.getY())
+        && withinHeights;
 }
 
 void Point::format(std::string& out, Point value) {

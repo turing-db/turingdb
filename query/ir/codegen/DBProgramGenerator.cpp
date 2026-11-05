@@ -10443,6 +10443,12 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
     } else if (funcName == "replace") {
         translateReplace(expr, args);
         return;
+    } else if (funcName == "point.distance") {
+        translatePointDistance(expr, args);
+        return;
+    } else if (funcName == "point.withinBBox") {
+        translatePointWithinBBox(expr, args);
+        return;
     } else if (funcName == "normalize") {
         translateNormalFormFunction<mlir::db::Normalize>(expr, args, mlir::storage::StringType::get(_mlirCtxt));
         return;
@@ -10533,6 +10539,42 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
     }
 
     throwError(fmt::format("Unsupported function: {}", funcName), expr);
+}
+
+void DBProgramGenerator::translatePointDistance(const Expr* expr, const ExprChain* args) {
+    bioassert(args && args->size() == 2, "point.distance() takes 2 arguments.");
+
+    const ExprChain::ExprVector& argExprs = args->getExprs();
+
+    const mlir::Value lhs = translateArg(argExprs[0]);
+    const mlir::Value rhs = translateArg(argExprs[1]);
+
+    mlir::db::PointDistance distance = _opBuilder.create<mlir::db::PointDistance>(_opBuilder.getUnknownLoc(),
+                                                                                 allocColumnType(_opBuilder.getF64Type()),
+                                                                                 lhs,
+                                                                                 rhs);
+
+    _part._exprMap[expr] = distance.getResult();
+}
+
+void DBProgramGenerator::translatePointWithinBBox(const Expr* expr, const ExprChain* args) {
+    bioassert(args && args->size() == 3, "point.withinBBox() takes 3 arguments.");
+
+    const ExprChain::ExprVector& argExprs = args->getExprs();
+
+    const mlir::Value point = translateArg(argExprs[0]);
+    const mlir::Value lowerLeft = translateArg(argExprs[1]);
+    const mlir::Value upperRight = translateArg(argExprs[2]);
+
+    const mlir::Type boolType = mlir::storage::BoolType::get(_mlirCtxt);
+
+    mlir::db::PointWithinBBox within = _opBuilder.create<mlir::db::PointWithinBBox>(_opBuilder.getUnknownLoc(),
+                                                                                   allocColumnType(boolType),
+                                                                                   point,
+                                                                                   lowerLeft,
+                                                                                   upperRight);
+
+    _part._exprMap[expr] = within.getResult();
 }
 
 void DBProgramGenerator::translateRange(const Expr* expr, const ExprChain* args) {

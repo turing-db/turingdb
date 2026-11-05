@@ -425,6 +425,8 @@ public:
     static void runStringEnd(NLExecutionContext* context, NLFunctionData* data);
     template <typename Result>
     static void runReplace(NLExecutionContext* context, NLFunctionData* data);
+    static void runPointDistance(NLExecutionContext* context, NLFunctionData* data);
+    static void runPointWithinBBox(NLExecutionContext* context, NLFunctionData* data);
 
     // Build one map per row (nl.make_map): row r of the result maps each key to what its
     // value column holds at r, as one contiguous run of the query's map buffer.
@@ -473,6 +475,7 @@ public:
     static NLStringArgumentRead selectStringArgumentRead(const Column* input);
     static NLStringListArgumentRead selectStringListArgumentRead(const Column* input);
     static NLIntegerArgumentRead selectIntegerArgumentRead(const Column* input);
+    static NLPointArgumentRead selectPointArgumentRead(const Column* input);
 
     // Build one list per row (nl.list_comprehension): the body runs over the elements of
     // the step's cells, a chunkful at a time, and row r takes the ones it kept of its own

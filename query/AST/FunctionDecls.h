@@ -33,6 +33,8 @@ private:
 
     void initCollectionFunctions();
 
+    void initSpatialFunctions();
+
     FunctionSignature* createFunction(std::string_view name);
 
     void addAlias(std::string_view alias, std::string_view name);

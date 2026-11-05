@@ -1329,6 +1329,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateStringEnd<RightFunction>(right, body);
         } else if (nl::Replace replace = mlir::dyn_cast<nl::Replace>(operation)) {
             translateReplace(replace, body);
+        } else if (mlir::isa<nl::PointDistance>(operation)) {
+            translatePointFunction(&operation, &NLExecutor::runPointDistance, body);
+        } else if (mlir::isa<nl::PointWithinBBox>(operation)) {
+            translatePointFunction(&operation, &NLExecutor::runPointWithinBBox, body);
         } else if (nl::ListComprehension listComprehension = mlir::dyn_cast<nl::ListComprehension>(operation)) {
             translateListComprehension(listComprehension, body);
         } else if (nl::ListPredicate listPredicate = mlir::dyn_cast<nl::ListPredicate>(operation)) {
@@ -4380,6 +4384,22 @@ void NLTranslator::translateReplace(nl::Replace replace, NLStmtContainer* body) 
     } else {
         body->emplaceStmt(&NLExecutor::runReplace<types::String::Primitive>, data);
     }
+}
+
+void NLTranslator::translatePointFunction(mlir::Operation* operation, NLHandlerFunction run, NLStmtContainer* body) {
+    const mlir::Value resultValue = operation->getResult(0);
+
+    Column* const result = allocColumnForChunkType(resultValue.getType());
+    _valueSlots[resultValue] = result;
+
+    NLPointFunctionData* data = _program->allocFunctionData<NLPointFunctionData>(result);
+
+    for (const mlir::Value operand : operation->getOperands()) {
+        const Column* const argument = getColumn(operand);
+        data->addArgument(NLPointFunctionData::PointArgument {argument, NLExecutor::selectPointArgumentRead(argument)});
+    }
+
+    body->emplaceStmt(run, data);
 }
 
 template <typename Data, typename Op, typename... Extra>

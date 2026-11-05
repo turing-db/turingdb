@@ -4254,6 +4254,34 @@ using NLIntegerArgumentRead = std::optional<types::Int64::Primitive> (*)(const C
                                                                         size_t row,
                                                                         std::string_view functionName);
 
+using NLPointArgumentRead = std::optional<types::Point::Primitive> (*)(const Column* input,
+                                                                      size_t row,
+                                                                      std::string_view functionName);
+
+// The arguments of point.distance or point.withinBBox, each a column read one point per row
+class NLPointFunctionData : public NLFunctionData {
+public:
+    struct PointArgument {
+        const Column* _column {nullptr};
+        NLPointArgumentRead _read {nullptr};
+    };
+
+    explicit NLPointFunctionData(Column* result)
+        : _result(result)
+    {
+    }
+
+    Column* getResult() const { return _result; }
+
+    const std::vector<PointArgument>& getArguments() const { return _arguments; }
+
+    void addArgument(const PointArgument& argument) { _arguments.push_back(argument); }
+
+private:
+    Column* _result {nullptr};
+    std::vector<PointArgument> _arguments;
+};
+
 class NLSubstringData : public NLFunctionData {
 public:
     struct StringArgument {
