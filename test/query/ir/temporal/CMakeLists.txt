@@ -69,6 +69,8 @@ add_turing_test(test_query_ir_duration_scaled_by_a_double DurationScaledByADoubl
 
 add_turing_test(test_query_ir_duration_cell_dividend DurationCellDividendTest.cpp)
 
+add_turing_test(test_query_ir_null_temporal_operand NullTemporalOperandTest.cpp)
+
 add_turing_test(test_query_ir_load_jsonl_duration LoadJsonlDurationTest.cpp)
 target_sources(test_query_ir_load_jsonl_duration PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
 target_include_directories(test_query_ir_load_jsonl_duration PRIVATE ${IR_TEST_DIR})

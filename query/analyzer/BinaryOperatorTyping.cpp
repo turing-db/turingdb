@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -243,11 +244,11 @@ RuleResult multiplicationType(EvaluatedType a, EvaluatedType b) {
 
 RuleResult divisionType(EvaluatedType a, EvaluatedType b) {
     const bool dividesADuration = a == EvaluatedType::Duration && isNumber(b);
-    const bool dividesAnAny = TypePairBitset(a, b) == TypePairBitset(EvaluatedType::Any, EvaluatedType::Duration);
+    const bool dividesADurationByAnAny = a == EvaluatedType::Duration && b == EvaluatedType::Any;
 
     if (dividesADuration) {
         return valid(EvaluatedType::Duration);
-    } else if (dividesAnAny) {
+    } else if (dividesADurationByAnAny) {
         return valid(EvaluatedType::Any);
     }
 
@@ -284,7 +285,7 @@ RuleResult membershipType(EvaluatedType b) {
     return valid(EvaluatedType::Bool);
 }
 
-RuleResult ruleType(BinaryOperator op, EvaluatedType a, EvaluatedType b) {
+RuleResult operatorType(BinaryOperator op, EvaluatedType a, EvaluatedType b) {
     switch (op) {
         case BinaryOperator::NotEqual:
         case BinaryOperator::Equal:
@@ -330,6 +331,58 @@ RuleResult ruleType(BinaryOperator op, EvaluatedType a, EvaluatedType b) {
     }
 
     return invalid(TypingReason::InvalidOperator);
+}
+
+std::optional<TypingReason> valueOperatorReason(BinaryOperator op) {
+    switch (op) {
+        case BinaryOperator::Add:
+            return TypingReason::IncompatibleAdditionTypes;
+        break;
+        case BinaryOperator::Concat:
+            return TypingReason::IncompatibleConcatenationTypes;
+        break;
+        case BinaryOperator::Sub:
+        case BinaryOperator::Mult:
+        case BinaryOperator::Div:
+        case BinaryOperator::Mod:
+        case BinaryOperator::Pow:
+            return TypingReason::IncompatibleNumericTypes;
+        break;
+        default:
+            return std::nullopt;
+        break;
+    }
+}
+
+bool takesAValueBeside(BinaryOperator op, EvaluatedType known, bool knownIsLeft) {
+    for (uint32_t values = PARAMETER_VALUE_TYPES.getBitset(); values != 0; values &= values - 1) {
+        const EvaluatedType value = ParameterProbe::lowestType(values);
+        const EvaluatedType left = knownIsLeft ? known : value;
+        const EvaluatedType right = knownIsLeft ? value : known;
+
+        if (operatorType(op, left, right)._type != EvaluatedType::Invalid) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// A null stands for a value of any type, so it answers null only beside an operand some
+// value combines with: null / duration(1) is a type error, as 5 / duration(1) is
+RuleResult ruleType(BinaryOperator op, EvaluatedType a, EvaluatedType b) {
+    const RuleResult result = operatorType(op, a, b);
+    const std::optional<TypingReason> valueReason = valueOperatorReason(op);
+
+    const bool leftIsNull = a == EvaluatedType::Null;
+    const bool pairsOneNull = leftIsNull != (b == EvaluatedType::Null);
+    const bool checksTheNull = result._type != EvaluatedType::Invalid && pairsOneNull && valueReason.has_value();
+
+    if (checksTheNull && !takesAValueBeside(op, leftIsNull ? b : a, !leftIsNull)) {
+        return invalid(*valueReason);
+    }
+
+    return result;
 }
 
 void probeType(BinaryOperator op, const ExprType& lhs, const ExprType& rhs, BinaryTyping& out) {
