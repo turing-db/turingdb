@@ -286,3 +286,6 @@ add_ir_tests(test_query_ir_named_walk_across_subquery NamedWalkAcrossSubqueryTes
 
 # A body run once per row reads the relationships of a variable-length pattern it imports.
 add_ir_tests(test_query_ir_per_run_import_walk PerRunImportWalkTest.cpp)
+
+# A CASE or coalesce in a CALL body over a constant the body binds, in a SET, a CREATE, a MERGE and a RETURN: TUR-376.
+add_turing_test(test_query_ir_call_body_case_over_bound_constant CallBodyCaseOverBoundConstantTest.cpp)
