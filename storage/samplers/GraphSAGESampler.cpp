@@ -26,11 +26,19 @@ const auto clearImpl = [](auto* col) -> void {
     col->clear();
 };
 
+void appendNodes(GraphSAGESampler::NodeCol* column, const ColumnNodeIDs& nodes) {
+    if (!column) {
+        return;
+    }
+
+    auto& raw = column->getRaw();
+    raw.insert(raw.end(), nodes.cbegin(), nodes.cend());
 }
 
-GraphSAGESampler::GraphSAGESampler(GraphView view, size_t seed)
-    : _view(view),
-    _seed(seed)
+}
+
+GraphSAGESampler::GraphSAGESampler(GraphView view)
+    : _view(view)
 {
 }
 
@@ -50,6 +58,16 @@ void GraphSAGESampler::HopData::apply(const F& func, Args&&... args) {
 
     constexpr size_t numCols = sizeof(HopColumns) / sizeof(NodeCol*);
     static_assert(numCols == 3, "Member added, update apply.");
+}
+
+size_t GraphSAGESampler::HopData::size() const {
+    for (const NodeCol* column : {_dstNodes, _srcs, _tgts}) {
+        if (column) {
+            return column->size();
+        }
+    }
+
+    return 0;
 }
 
 void GraphSAGESampler::HopData::resize(size_t size) {
@@ -75,33 +93,39 @@ void GraphSAGESampler::HopData::reset() {
     _emitted = 0;
 }
 
-void GraphSAGESampler::setHopData(size_t idx, NodeCol* srcs, NodeCol* tgts, NodeCol* dst, size_t fanout) {
-    bioassert(idx < hops, "Tried to set OOB hop data");
-    HopData& hopData = _sampleData[idx];
+void GraphSAGESampler::setHopColumns(size_t hop, NodeCol* srcs, NodeCol* tgts, NodeCol* dst) {
+    bioassert(hop < hops, "Tried to set OOB hop data");
+    HopData& hopData = _sampleData[hop];
 
-    hopData._fanout = fanout;
     hopData._srcs = srcs;
     hopData._dstNodes = dst;
     hopData._tgts = tgts;
 }
 
-void GraphSAGESampler::reset() {
+void GraphSAGESampler::clearColumns() {
     for (HopData& data : _sampleData) {
         data.clear();
-        data.reset();
     }
 }
 
 bool GraphSAGESampler::finished() const {
-    return _seeded && std::ranges::all_of(_sampleData, &HopData::finished);
+    return _started && std::ranges::all_of(_sampleData, &HopData::finished);
 }
 
-void GraphSAGESampler::seed(const ColumnNodeIDs* seeds) {
+void GraphSAGESampler::start(const ColumnNodeIDs* seeds, const Fanouts& fanouts, std::optional<uint64_t> rngSeed) {
     static_assert(hops >= 1);
+
+    _rngSeed = rngSeed;
+
+    for (size_t hop = 0; hop < hops; hop++) {
+        HopData& data = _sampleData[hop];
+        data.reset();
+        data._fanout = fanouts[hop];
+    }
 
     pushFrontier(0, seeds);
 
-    _seeded = true;
+    _started = true;
 }
 
 void GraphSAGESampler::pushNode(HopData& data, NodeID node) {
@@ -145,15 +169,13 @@ size_t GraphSAGESampler::emitFrontier(size_t hop, size_t maxRows) {
 size_t GraphSAGESampler::expandHop(size_t hop, size_t maxRows) {
     HopData& data = _sampleData[hop];
 
-    if (data._fanout == 0 || data._frontier.empty()) {
+    if (data._fanout == 0 || data._fanout > maxRows || data._frontier.empty()) {
         return 0;
     }
 
     if (!data._writer) {
-        const bool haveSeed = _seed != NOSEED;
-        data._writer = haveSeed
-            ? std::make_unique<NeighbourhoodSampleWriter>(_view, &data._frontier, data._fanout, _seed)
-            : std::make_unique<NeighbourhoodSampleWriter>(_view, &data._frontier, data._fanout);
+        data._writer = std::make_unique<NeighbourhoodSampleWriter>(_view, &data._frontier, data._fanout, _rngSeed);
+        data._writer->setOutputColumns(&_drawnSrcs, nullptr, nullptr, data._tgts ? &_drawnTgts : nullptr);
     }
 
     std::unique_ptr<NeighbourhoodSampleWriter>& writer = data._writer;
@@ -162,33 +184,25 @@ size_t GraphSAGESampler::expandHop(size_t hop, size_t maxRows) {
         return 0;
     }
 
-    NodeCol* srcs = data._srcs ? data._srcs : &_srcsScratch;
-
-    writer->setOutputColumns(srcs, nullptr, nullptr, data._tgts);
-
     writer->fill(maxRows);
 
-    if (data._tgts) {
-        bioassert(srcs->size() == data._tgts->size(), "Mismatched srcs, tgts");
-    }
+    appendNodes(data._srcs, _drawnSrcs);
+    appendNodes(data._tgts, _drawnTgts);
 
     if (hop + 1 < hops) {
-        pushFrontier(hop + 1, srcs);
+        pushFrontier(hop + 1, &_drawnSrcs);
     }
 
-    return srcs->size();
+    return _drawnSrcs.size();
 }
 
-void GraphSAGESampler::sample(size_t maxRows) {
-    bioassert(_seeded, "Attempted to sample without seeding");
+size_t GraphSAGESampler::sample(size_t maxRows) {
+    bioassert(_started, "Attempted to sample without starting");
     bioassert(maxRows > 0, "maxRows was zero");
 
+    size_t columnRows = 0;
     for (const HopData& data : _sampleData) {
-        bioassert(maxRows >= data._fanout, "Row budget is narrower than a hop's fanout");
-    }
-
-    for (HopData& data : _sampleData) {
-        data.clear();
+        columnRows = std::max(columnRows, data.size());
     }
 
     size_t requiredRowCount = 0; // ensure all columns are the same size
@@ -201,8 +215,10 @@ void GraphSAGESampler::sample(size_t maxRows) {
 
     // null-extend columns to ensure rectangularity
     for (HopData& data : _sampleData) {
-        data.resize(requiredRowCount);
+        data.resize(columnRows + requiredRowCount);
     }
+
+    return requiredRowCount;
 }
 
 template void GraphSAGESampler::HopData::apply<decltype(resizeImpl), size_t>(const decltype(resizeImpl)&, size_t&&);

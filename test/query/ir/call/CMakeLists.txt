@@ -49,6 +49,8 @@ add_call_v3_test(test_query_ir_call_reserved_word_procedure CallReservedWordProc
 
 add_call_v3_test(test_query_ir_call_graphsage CallGraphSAGETest.cpp)
 
+add_call_v3_test(test_query_ir_call_graphsage_row_arguments CallGraphSAGERowArgumentsTest.cpp)
+
 add_call_v3_test(test_query_ir_call_yield_star CallYieldStarTest.cpp)
 
 add_call_v3_test(test_query_ir_call_skip_limit CallSkipLimitTest.cpp)

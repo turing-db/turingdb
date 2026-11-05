@@ -1,12 +1,16 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "ProcedureException.h"
 #include "columns/ColumnConst.h"
+#include "columns/ColumnOptVector.h"
+#include "columns/ColumnVector.h"
+#include "metadata/PropertyNull.h"
 
 namespace db {
 
@@ -46,6 +50,37 @@ public:
             throw ProcedureException(std::string(errorMsg));
         }
         return static_cast<const ColumnConst<T>*>(arg)->getRaw();
+    }
+
+    // The value of an argument at input row `row`, or null for a null row or an omitted
+    // optional argument. A row-aligned argument arrives as a ColumnVector, a ColumnOptVector
+    // when it can be null, or a ColumnConst when the query passed a constant for every row.
+    template <typename T>
+    static std::optional<T> rowArgument(const Column* argument, size_t row, std::string_view errorMessage) {
+        if (!argument) {
+            return std::nullopt;
+        }
+
+        switch (argument->getKind()) {
+            case ColumnConst<T>::staticKind():
+                return static_cast<const ColumnConst<T>*>(argument)->getRaw();
+            break;
+            case ColumnConst<std::optional<T>>::staticKind():
+                return static_cast<const ColumnConst<std::optional<T>>*>(argument)->getRaw();
+            break;
+            case ColumnVector<T>::staticKind():
+                return static_cast<const ColumnVector<T>*>(argument)->getRaw()[row];
+            break;
+            case ColumnOptVector<T>::staticKind():
+                return static_cast<const ColumnOptVector<T>*>(argument)->getRaw()[row];
+            break;
+            case ColumnConst<PropertyNull>::staticKind():
+                return std::nullopt;
+            break;
+            default:
+                throw ProcedureException(std::string(errorMessage));
+            break;
+        }
     }
 };
 

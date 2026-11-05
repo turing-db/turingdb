@@ -22,6 +22,8 @@
 #include "TuringException.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnIDs.h"
+#include "columns/ColumnIndices.h"
+#include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
 #include "list/ListBuffer.h"
 #include "list/ListView.h"
@@ -52,6 +54,15 @@ constexpr size_t stepLimit = 1000;
 struct SAGERun {
     std::vector<size_t> _stepSizes;
     std::array<std::vector<uint64_t>, returnValueCount> _rows;
+};
+
+using SAGEColumns = std::array<std::vector<uint64_t>, returnValueCount>;
+
+// A drive over several input rows, with what it emitted split by the input row each row
+// was reported for
+struct SAGERowsRun {
+    std::vector<size_t> _stepSizes;
+    std::vector<SAGEColumns> _inputRows;
 };
 
 }
@@ -173,10 +184,98 @@ protected:
         return values;
     }
 
-    // PREPARE is where the arguments are validated, so a rejection surfaces there
-    void prepareOnly(const GraphView& view,
-                     const std::vector<int64_t>& seeds,
-                     const std::vector<int64_t>& fanouts) {
+    // Drive the procedure over one input row per entry of seedRows, each with the same
+    // fanouts and RNG seed, as the engine drives a call whose seeds are read per row
+    void runRowsSAGE(const GraphView& view,
+                     const std::vector<std::vector<int64_t>>& seedRows,
+                     const std::vector<int64_t>& fanouts,
+                     int64_t rngSeed,
+                     size_t chunkSize,
+                     SAGERowsRun& run) {
+        const Procedure* procedure = graphSAGE();
+        ASSERT_NE(procedure, nullptr);
+
+        ProcedureContext context;
+        context.setGraph(_graph.get());
+        context.setGraphView(&view);
+        context.setChunkSize(chunkSize);
+
+        ColumnVector<ListView> seedsArg;
+        for (const std::vector<int64_t>& seeds : seedRows) {
+            seedsArg.push_back(intList(seeds));
+        }
+
+        const ColumnConst<ListView> fanoutsArg(intList(fanouts));
+        const ColumnConst<int64_t> rngSeedArg(int64_t {rngSeed});
+
+        std::array<NodeCol, returnValueCount> columns {};
+        ColumnIndices indices;
+
+        ProcedureData* data = procedure->getAllocCallback()();
+
+        IndexedProcedureData* indexedData = dynamic_cast<IndexedProcedureData*>(data);
+        ASSERT_NE(indexedData, nullptr);
+        indexedData->setIndices(&indices);
+
+        data->resizeInputColumns(3);
+        data->setInputColumn(0, &seedsArg);
+        data->setInputColumn(1, &fanoutsArg);
+        data->setInputColumn(2, &rngSeedArg);
+
+        data->resizeReturnColumns(returnValueCount);
+        for (size_t column = 0; column < returnValueCount; column++) {
+            data->setReturnColumn(column, &columns[column]);
+        }
+
+        ProcedureState state;
+        state.setContext(&context);
+        state.setData(data);
+
+        state.setStep(ProcedureState::Step::PREPARE);
+        procedure->getExecCallback()(&state);
+
+        run._inputRows.assign(seedRows.size(), SAGEColumns {});
+
+        while (!state.isFinished() && run._stepSizes.size() < stepLimit) {
+            state.setStep(ProcedureState::Step::EXECUTE);
+            procedure->getExecCallback()(&state);
+
+            collectRowsStep(columns, indices, run);
+        }
+
+        const bool finished = state.isFinished();
+        procedure->getDeallocCallback()(data);
+
+        ASSERT_TRUE(finished);
+    }
+
+    static void collectRowsStep(const std::array<NodeCol, returnValueCount>& columns,
+                                const ColumnIndices& indices,
+                                SAGERowsRun& run) {
+        const size_t stepRows = columns.front().size();
+        ASSERT_EQ(indices.size(), stepRows) << "a row was emitted without its input row";
+
+        run._stepSizes.push_back(stepRows);
+
+        for (size_t row = 0; row < stepRows; row++) {
+            const size_t inputRow = indices[row];
+            ASSERT_LT(inputRow, run._inputRows.size());
+
+            for (size_t column = 0; column < returnValueCount; column++) {
+                ASSERT_EQ(columns[column].size(), stepRows) << "column " << column << " is ragged";
+
+                const NodeID node = columns[column][row];
+                if (node.isValid()) {
+                    run._inputRows[inputRow][column].push_back(node.getValue());
+                }
+            }
+        }
+    }
+
+    // The arguments are read per row, so a rejection surfaces at the step that reads them
+    void runFirstStep(const GraphView& view,
+                      const std::vector<int64_t>& seeds,
+                      const std::vector<int64_t>& fanouts) {
         const Procedure* procedure = graphSAGE();
         ASSERT_NE(procedure, nullptr);
 
@@ -205,10 +304,13 @@ protected:
         ProcedureState state;
         state.setContext(&context);
         state.setData(data);
-        state.setStep(ProcedureState::Step::PREPARE);
 
         // The callback throws through this, so the data is released before it leaves
         try {
+            state.setStep(ProcedureState::Step::PREPARE);
+            procedure->getExecCallback()(&state);
+
+            state.setStep(ProcedureState::Step::EXECUTE);
             procedure->getExecCallback()(&state);
         } catch (...) {
             procedure->getDeallocCallback()(data);
@@ -224,8 +326,8 @@ protected:
     std::unique_ptr<JobSystem> _jobSystem;
 };
 
-// The call takes two constant lists and an optional seed, and answers with three columns
-// per hop. Every argument is constant, so the call is not driven per row.
+// The call takes two lists and an optional seed, all read per row, and answers with three
+// columns per hop. It reports the input row of each row it emits.
 TEST_F(GraphSAGEProcedureTest, registersTheExpectedSignature) {
     const Procedure* procedure = graphSAGE();
     ASSERT_NE(procedure, nullptr);
@@ -235,10 +337,11 @@ TEST_F(GraphSAGEProcedureTest, registersTheExpectedSignature) {
     EXPECT_EQ(procedure->getRequiredArgumentCount(), 2U);
 
     for (const NamedProcedureType& argument : arguments) {
-        EXPECT_TRUE(argument._constant) << argument._name << " is not a constant argument";
+        EXPECT_FALSE(argument._constant) << argument._name << " is a constant argument";
     }
 
-    EXPECT_FALSE(procedure->hasRowAlignedArgument());
+    EXPECT_TRUE(procedure->hasRowAlignedArgument());
+    EXPECT_TRUE(procedure->hasIndices());
 
     const ProcedureTypeVector& returnValues = procedure->returnValues();
     ASSERT_EQ(returnValues.size(), returnValueCount);
@@ -436,9 +539,9 @@ TEST_F(GraphSAGEProcedureTest, rejectsAFanoutListOfTheWrongSize) {
 
     const GraphView& view = reader.getView();
 
-    EXPECT_THROW(prepareOnly(view, {0}, {2, 2}), TuringException);
-    EXPECT_THROW(prepareOnly(view, {0}, {2, 2, 2, 2}), TuringException);
-    EXPECT_THROW(prepareOnly(view, {0}, {}), TuringException);
+    EXPECT_THROW(runFirstStep(view, {0}, {2, 2}), TuringException);
+    EXPECT_THROW(runFirstStep(view, {0}, {2, 2, 2, 2}), TuringException);
+    EXPECT_THROW(runFirstStep(view, {0}, {}), TuringException);
 }
 
 // One node's sample is emitted whole, so a fanout wider than a chunk could not be
@@ -451,11 +554,11 @@ TEST_F(GraphSAGEProcedureTest, rejectsAFanoutWiderThanAChunk) {
 
     const int64_t overWide = static_cast<int64_t>(ChunkConfig::CHUNK_SIZE) + 1;
 
-    EXPECT_THROW(prepareOnly(view, {0}, {overWide, 2, 2}), TuringException);
-    EXPECT_THROW(prepareOnly(view, {0}, {2, overWide, 2}), TuringException);
-    EXPECT_THROW(prepareOnly(view, {0}, {2, 2, overWide}), TuringException);
+    EXPECT_THROW(runFirstStep(view, {0}, {overWide, 2, 2}), TuringException);
+    EXPECT_THROW(runFirstStep(view, {0}, {2, overWide, 2}), TuringException);
+    EXPECT_THROW(runFirstStep(view, {0}, {2, 2, overWide}), TuringException);
 
-    EXPECT_NO_THROW(prepareOnly(view, {0}, {static_cast<int64_t>(ChunkConfig::CHUNK_SIZE), 1, 1}));
+    EXPECT_NO_THROW(runFirstStep(view, {0}, {static_cast<int64_t>(ChunkConfig::CHUNK_SIZE), 1, 1}));
 }
 
 // A fanout of zero samples nothing for that hop, which is a call that returns the seeds
@@ -541,6 +644,64 @@ TEST_F(GraphSAGEProcedureTest, resetRewindsThePreparedCall) {
     ASSERT_TRUE(finishedAgain) << "the call did not finish after a reset";
     EXPECT_EQ(sortedColumn(first, 0), sortedColumn(second, 0))
         << "the seeds were not rebuilt by the reset";
+}
+
+// A row's RNG seed starts afresh, so packing rows into steps of any size leaves each
+// row's sample what it is when the row is called alone
+TEST_F(GraphSAGEProcedureTest, eachRowIsSampledAsItWouldBeAlone) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    const GraphView& view = reader.getView();
+
+    const std::vector<std::vector<int64_t>> seedRows {{0, 8}, {9}, {}, {13}, {1, 11}};
+    const std::vector<int64_t> fanouts {2, 2, 2};
+    constexpr int64_t rngSeed = 17;
+
+    std::vector<SAGERun> alone(seedRows.size());
+    for (size_t row = 0; row < seedRows.size(); row++) {
+        runSAGE(view, seedRows[row], fanouts, rngSeed, ChunkConfig::CHUNK_SIZE, alone[row]);
+    }
+
+    const std::vector<size_t> chunkSizes {2, 3, 4, 8, ChunkConfig::CHUNK_SIZE};
+    for (const size_t chunkSize : chunkSizes) {
+        SAGERowsRun packed;
+        runRowsSAGE(view, seedRows, fanouts, rngSeed, chunkSize, packed);
+
+        for (const size_t stepSize : packed._stepSizes) {
+            EXPECT_LE(stepSize, chunkSize) << "chunk size " << chunkSize << " overran";
+        }
+
+        for (size_t row = 0; row < seedRows.size(); row++) {
+            for (size_t column = 0; column < returnValueCount; column++) {
+                std::vector<uint64_t> values = packed._inputRows[row][column];
+                std::ranges::sort(values);
+
+                EXPECT_EQ(values, sortedColumn(alone[row], column))
+                    << "row " << row << " column " << column << " differs at chunk size " << chunkSize;
+            }
+        }
+    }
+}
+
+// With every fanout zero each row's sample is its one seed, so eight rows fill steps of
+// three rows
+TEST_F(GraphSAGEProcedureTest, aStepPacksTheSamplesOfSeveralRows) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    const std::vector<std::vector<int64_t>> seedRows {{0}, {1}, {8}, {9}, {11}, {12}, {15}, {17}};
+
+    SAGERowsRun run;
+    runRowsSAGE(reader.getView(), seedRows, {0, 0, 0}, 5, 3, run);
+
+    const std::vector<size_t> expectedSteps {3, 3, 2};
+    EXPECT_EQ(run._stepSizes, expectedSteps);
+
+    for (size_t row = 0; row < seedRows.size(); row++) {
+        const std::vector<uint64_t> expected {static_cast<uint64_t>(seedRows[row].front())};
+        EXPECT_EQ(run._inputRows[row][0], expected) << "row " << row << " was reported for another seed";
+    }
 }
 
 int main(int argc, char** argv) {
