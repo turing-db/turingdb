@@ -374,13 +374,9 @@ void CypherAST::addParameterDecl(ParameterDecl* decl) {
     _parameterDeclMap[decl->getName()] = decl;
 }
 
-ParameterDecl* CypherAST::getOrCreateParameterDecl(std::string_view name) {
+ParameterDecl* CypherAST::findParameterDecl(std::string_view name) {
     const auto it = _parameterDeclMap.find(name);
-    if (it != _parameterDeclMap.end()) {
-        return it->second;
-    }
-
-    return ParameterDecl::create(this, name);
+    return it != _parameterDeclMap.end() ? it->second : nullptr;
 }
 
 void CypherAST::addNodePatternData(NodePatternData* data) {
