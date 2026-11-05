@@ -2,11 +2,14 @@
 
 #include <stdint.h>
 #include <string.h>
+#include <type_traits>
 
 #include <spdlog/fmt/fmt.h>
 
 #include "ParameterMap.h"
 #include "CellTag.h"
+#include "metadata/DateTime.h"
+#include "metadata/Duration.h"
 #include "metadata/PropertyType.h"
 
 #include "TuringException.h"
@@ -21,6 +24,8 @@ namespace {
 
 template <typename T>
 T readValue(const char* bytes) {
+    static_assert(std::is_trivially_copyable_v<T>);
+
     T value {};
     memcpy(&value, bytes, sizeof(T));
     return value;
@@ -53,11 +58,18 @@ void readScalar(const char* bytes, db::ParameterValue& slot) {
         case db::CellTag::EdgeID:
             throwUnsupportedType("EdgeID");
         break;
-        case db::CellTag::DateTime:
-            throwUnsupportedType("DateTime");
+        case db::CellTag::DateTime: {
+            const db::DateTime instant = readValue<db::types::DateTime::Primitive>(value);
+            if (!db::DateTime::isRenderable(instant)) {
+                throw TuringException(fmt::format("A DateTime parameter of {} microseconds names no instant the engine can spell",
+                                                  instant.getMicroseconds()));
+            }
+
+            slot.setDateTime(instant);
+        }
         break;
         case db::CellTag::Duration:
-            throwUnsupportedType("Duration");
+            slot.setDuration(readValue<db::types::Duration::Primitive>(value));
         break;
         default:
             throw TuringException(fmt::format("Invalid value tag {} in a parameter", static_cast<uint32_t>(tag)));

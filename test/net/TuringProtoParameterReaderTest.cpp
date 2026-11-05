@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -250,4 +251,53 @@ TEST_F(TuringProtoParameterReaderTest, readsTheMapTheNpmClientWrites) {
     ASSERT_EQ(platforms.size(), 2u);
     EXPECT_EQ(platforms[0].getInt64(), 1);
     EXPECT_EQ(platforms[1].getInt64(), 2);
+}
+
+TEST_F(TuringProtoParameterReaderTest, aDurationAndADateTimeComeBack) {
+    ParameterMap source;
+
+    ParameterValue value;
+    value.setDuration(Duration {3'600'000'000});
+    source.set("wait", value);
+    value.setDateTime(DateTime {1'762'351'500'000'000});
+    source.set("when", value);
+
+    ParameterMap decoded;
+    roundTrip(source, decoded);
+
+    EXPECT_EQ(decoded.get("wait")->getDuration(), Duration {3'600'000'000});
+    EXPECT_EQ(decoded.get("when")->getDateTime(), DateTime {1'762'351'500'000'000});
+}
+
+TEST_F(TuringProtoParameterReaderTest, aNestedDurationAndDateTimeComeBack) {
+    ParameterMap source;
+
+    ParameterValue waits;
+    ParameterValue::List& list = waits.setList();
+    list.emplace_back().setDuration(Duration {3'600'000'000});
+    list.emplace_back().setDateTime(DateTime {1'762'351'500'000'000});
+    source.set("waits", waits);
+
+    ParameterValue entries;
+    entries.setMap()["when"].setDateTime(DateTime {1'762'351'500'000'000});
+    source.set("entries", entries);
+
+    ParameterMap decoded;
+    roundTrip(source, decoded);
+
+    const ParameterValue::List& decodedList = decoded.get("waits")->getList();
+    ASSERT_EQ(decodedList.size(), 2u);
+    EXPECT_EQ(decodedList[0].getDuration(), Duration {3'600'000'000});
+    EXPECT_EQ(decodedList[1].getDateTime(), DateTime {1'762'351'500'000'000});
+    EXPECT_EQ(decoded.get("entries")->getMap().at("when").getDateTime(), DateTime {1'762'351'500'000'000});
+}
+
+TEST_F(TuringProtoParameterReaderTest, anInstantTheEngineCannotSpellIsRefused) {
+    ParameterMap source;
+    ParameterValue value;
+    value.setDateTime(DateTime {std::numeric_limits<int64_t>::max()});
+    source.set("when", value);
+
+    ParameterMap decoded;
+    EXPECT_THROW(roundTrip(source, decoded), TuringException);
 }

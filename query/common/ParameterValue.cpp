@@ -102,9 +102,15 @@ ValueType ParameterValue::getType() const {
         return ValueType::String;
     } else if (std::holds_alternative<List>(_value)) {
         return ValueType::List;
-    } else {
+    } else if (std::holds_alternative<Map>(_value)) {
         return ValueType::Map;
+    } else if (std::holds_alternative<Duration>(_value)) {
+        return ValueType::Duration;
+    } else if (std::holds_alternative<DateTime>(_value)) {
+        return ValueType::DateTime;
     }
+
+    bioassert(false, "A parameter holds a value of no known kind");
 }
 
 std::string_view ParameterValue::getTypeName() const {
@@ -141,6 +147,16 @@ const ParameterValue::Map& ParameterValue::getMap() const {
     return std::get<Map>(_value);
 }
 
+Duration ParameterValue::getDuration() const {
+    bioassert(std::holds_alternative<Duration>(_value), "Parameter is not a Duration");
+    return std::get<Duration>(_value);
+}
+
+DateTime ParameterValue::getDateTime() const {
+    bioassert(std::holds_alternative<DateTime>(_value), "Parameter is not a DateTime");
+    return std::get<DateTime>(_value);
+}
+
 void ParameterValue::setNull() {
     _value.emplace<std::monostate>();
 }
@@ -171,6 +187,14 @@ ParameterValue::List& ParameterValue::setList() {
 
 ParameterValue::Map& ParameterValue::setMap() {
     return _value.emplace<Map>();
+}
+
+void ParameterValue::setDuration(Duration value) {
+    _value.emplace<Duration>(value);
+}
+
+void ParameterValue::setDateTime(DateTime value) {
+    _value.emplace<DateTime>(value);
 }
 
 void ParameterValue::detachContainer(std::vector<Variant>& worklist) {
