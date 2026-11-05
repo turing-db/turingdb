@@ -72,7 +72,7 @@ public:
 
     static bool partNamed(std::string_view name, DurationPart& part);
 
-    static bool fromMap(const MapView& map, Duration& out);
+    static void fromMap(const MapView& map, Duration& out);
 
     static void format(std::string& out, Duration value);
 

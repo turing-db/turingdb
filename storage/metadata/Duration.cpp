@@ -300,13 +300,8 @@ bool Duration::partNamed(std::string_view name, DurationPart& part) {
     return true;
 }
 
-bool Duration::fromMap(const MapView& map, Duration& out) {
-    Duration sum {0};
-    bool holdsANullCount = false;
-
-    for (const MapEntryView entry : map) {
-        const std::string_view unit = entry.getKey();
-
+void Duration::fromMap(const MapView& map, Duration& out) {
+    const auto microsecondsOf = [](std::string_view unit) {
         DurationPart part {DurationPart::Years};
         const bool namesAPart = partNamed(unit, part);
         const int64_t microseconds = namesAPart ? microsecondsPerUnit(part) : 0;
@@ -315,7 +310,18 @@ bool Duration::fromMap(const MapView& map, Duration& out) {
             throw TuringException(fmt::format("Unknown duration component: {}", unit));
         }
 
-        const Duration perUnit(microseconds);
+        return microseconds;
+    };
+
+    for (const MapEntryView entry : map) {
+        microsecondsOf(entry.getKey());
+    }
+
+    Duration sum {0};
+
+    for (const MapEntryView entry : map) {
+        const std::string_view unit = entry.getKey();
+        const Duration perUnit(microsecondsOf(unit));
         const CellTag tag = entry.getValue().getTag();
 
         if (tag == CellTag::Int) {
@@ -330,20 +336,12 @@ bool Duration::fromMap(const MapView& map, Duration& out) {
             sum = sum + perUnit * static_cast<int64_t>(count);
         } else if (tag == CellTag::Double) {
             sum = sum + perUnit * entry.getValue().getAs<double>();
-        } else if (tag == CellTag::Null) {
-            holdsANullCount = true;
         } else {
             throw TuringException(fmt::format("duration() reads a number for the unit '{}', not '{}'", unit, queryTypeName(tag)));
         }
     }
 
-    if (holdsANullCount) {
-        return false;
-    }
-
     out = sum;
-
-    return true;
 }
 
 void Duration::format(std::string& out, Duration value) {
