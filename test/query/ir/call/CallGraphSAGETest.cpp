@@ -210,6 +210,19 @@ TEST_F(CallGraphSAGETest, aYieldedNodeFlowsIntoAMatch) {
     EXPECT_EQ(sink.getRows(), expected);
 }
 
+// Remy has four out-edges
+TEST_F(CallGraphSAGETest, aYieldedNodeAnchorsAPattern) {
+    StringRowSink sink;
+    runQuery("CALL gnn.graphSAGE([0], [2, 2, 2], 42) YIELD dst_nodes0 "
+             "WHERE dst_nodes0 IS NOT NULL "
+             "MATCH (dst_nodes0)-->(m) "
+             "RETURN count(m)",
+             sink);
+
+    const std::vector<StringRowSink::Row> expected {{"4"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
 // Two columns of a hop are row aligned, so a projection reading both sees one edge per
 // row rather than an unrelated pairing. A hop draws in-edges, so its targets are the seed.
 TEST_F(CallGraphSAGETest, aHopsSourceAndTargetAreRowAligned) {
