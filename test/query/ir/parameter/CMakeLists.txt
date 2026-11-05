@@ -7,6 +7,8 @@ add_ir_tests(test_query_ir_parameter_attribute ParameterAttributeTest.cpp)
 
 add_ir_tests(test_query_ir_parameter_argument_name ParameterArgumentNameTest.cpp)
 
+add_call_v3_test(test_query_ir_null_parameter_comparison NullParameterComparisonTest.cpp)
+
 add_ir_tests(test_query_ir_label_parameter_binding LabelParameterBindingTest.cpp)
 target_sources(test_query_ir_label_parameter_binding PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp ${PARAMETER_TEST_DIR}/ParameterBindingTest.cpp ${PARAMETER_TEST_DIR}/ParameterTestHelpers.cpp)
 
@@ -21,3 +23,5 @@ add_call_v3_test(test_query_ir_edge_type_parameter EdgeTypeParameterTest.cpp)
 target_sources(test_query_ir_edge_type_parameter PRIVATE ${PARAMETER_TEST_DIR}/ParameterTestHelpers.cpp)
 
 add_ir_tests(test_query_ir_parameter_argument ParameterArgumentTest.cpp)
+
+add_call_v3_test(test_query_ir_expression_parameter ExpressionParameterTest.cpp)

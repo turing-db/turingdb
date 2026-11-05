@@ -71,6 +71,13 @@ namespace storage = mlir::storage;
 
 namespace {
 
+template <typename Primitive>
+Column* allocBoundConstant(LocalMemory* memory, const Primitive& held) {
+    ColumnConst<Primitive>* column = memory->alloc<ColumnConst<Primitive>>();
+    column->set(held);
+    return column;
+}
+
 // A chunk holding the single row a reduction collapsed the whole relation to, or a
 // computation over such rows and constants: like a constant, it holds one value for
 // every row of the step that reads it, whichever loop that step belongs to.
@@ -750,6 +757,8 @@ void NLTranslator::translate(const mlir::func::FuncOp& function) {
     if (!bodyRegion.hasOneBlock()) {
         throw IRException("NLTranslator expects a function with a single block");
     }
+
+    bindParameterArguments(function);
 
     translateBlock(bodyRegion.front(), _program->getStmts());
 }
@@ -1571,6 +1580,68 @@ void NLTranslator::bindParameterSchemaNames(mlir::storage::ParameterAttr paramet
                                       name,
                                       ValueTypeName::value(type),
                                       nouns._withArticle));
+    }
+}
+
+void NLTranslator::bindParameterArguments(mlir::func::FuncOp function) {
+    for (const mlir::BlockArgument argument : function.getArguments()) {
+        const unsigned index = argument.getArgNumber();
+        const mlir::StringAttr nameAttr = function.getArgAttrOfType<mlir::StringAttr>(index, storage::PARAMETER_NAME_ATTRIBUTE);
+        if (!nameAttr) {
+            throw IRException(fmt::format("Argument {} of main names no parameter", index));
+        }
+
+        const llvm::StringRef name = nameAttr.getValue();
+        const ParameterValue& value = lookupParameter(name);
+        const mlir::Type elementType = mlir::cast<nl::ChunkType>(argument.getType()).getElementType();
+
+        _valueSlots[argument] = boundParameterColumn(name, elementType, value);
+    }
+}
+
+Column* NLTranslator::boundParameterColumn(llvm::StringRef name, mlir::Type elementType, const ParameterValue& value) {
+    if (mlir::isNullLiteralType(elementType)) {
+        if (!value.isNull()) {
+            throw IRException(fmt::format("Parameter ${} is typed as null but holds a {}", name, value.getTypeName()));
+        }
+
+        return _memory->alloc<ColumnConst<PropertyNull>>();
+    }
+
+    const ValueType argumentType = elementTypeToValueType(elementType);
+    if (value.isNull()) {
+        throw IRException(fmt::format("Parameter ${} is typed {} but holds a null", name, ValueTypeName::value(argumentType)));
+    } else if (value.getType() != argumentType) {
+        throw IRException(fmt::format("Parameter ${} is typed {} but holds a {}",
+                                      name,
+                                      ValueTypeName::value(argumentType),
+                                      value.getTypeName()));
+    }
+
+    switch (argumentType) {
+        case ValueType::Int64:
+            return allocBoundConstant<types::Int64::Primitive>(_memory, value.getInt64());
+        break;
+        case ValueType::Double:
+            return allocBoundConstant<types::Double::Primitive>(_memory, value.getDouble());
+        break;
+        case ValueType::Bool:
+            return allocBoundConstant<types::Bool::Primitive>(_memory, CustomBool {value.getBool()});
+        break;
+        case ValueType::String:
+            return allocBoundConstant<types::String::Primitive>(_memory, ownedCharacters(value.getString()));
+        break;
+        case ValueType::Duration:
+            return allocBoundConstant<types::Duration::Primitive>(_memory, value.getDuration());
+        break;
+        case ValueType::DateTime:
+            return allocBoundConstant<types::DateTime::Primitive>(_memory, value.getDateTime());
+        break;
+        default:
+            throw IRException(fmt::format("Parameter ${} is a {}, which a parameter in an expression does not take yet",
+                                          name,
+                                          ValueTypeName::value(argumentType)));
+        break;
     }
 }
 
