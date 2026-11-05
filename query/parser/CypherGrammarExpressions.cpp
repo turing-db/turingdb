@@ -17,6 +17,8 @@
 #include "WhereClause.h"
 #include "expr/All.h"
 
+#include "BioAssert.h"
+
 using namespace db;
 
 namespace {
@@ -918,11 +920,18 @@ Expr* CypherGrammar::parseReduceExpr() {
 
     Symbol* variable = parseName();
     expect(CypherTokenKind::IN);
-    Expr* list = parseExpr(ExprFollower::PIPE);
-    expect(CypherTokenKind::PIPE);
 
-    Expr* step = parseExpr(ExprFollower::NONE);
-    expect(CypherTokenKind::CPAREN);
+    Expr* list = nullptr;
+    Expr* step = nullptr;
+    parseChoosingBar([this, &list, &step] {
+        list = parseExpr(ExprFollower::PIPE);
+        expect(CypherTokenKind::PIPE);
+
+        step = parseExpr(ExprFollower::NONE);
+        expect(CypherTokenKind::CPAREN);
+
+        return true;
+    });
 
     Expr* reduce = ReduceExpr::create(_ast, accumulator, initial, variable, list, step);
     locate(reduce, start);
@@ -942,13 +951,21 @@ Expr* CypherGrammar::parseAllReduceExpr() {
 
     Symbol* variable = parseName();
     expect(CypherTokenKind::IN);
-    Expr* list = parseExpr(ExprFollower::PIPE);
-    expect(CypherTokenKind::PIPE);
 
-    Expr* step = parseExpr(ExprFollower::NONE);
-    expect(CypherTokenKind::COMMA);
-    Expr* predicate = parseExpr(ExprFollower::NONE);
-    expect(CypherTokenKind::CPAREN);
+    Expr* list = nullptr;
+    Expr* step = nullptr;
+    Expr* predicate = nullptr;
+    parseChoosingBar([this, &list, &step, &predicate] {
+        list = parseExpr(ExprFollower::PIPE);
+        expect(CypherTokenKind::PIPE);
+
+        step = parseExpr(ExprFollower::NONE);
+        expect(CypherTokenKind::COMMA);
+        predicate = parseExpr(ExprFollower::NONE);
+        expect(CypherTokenKind::CPAREN);
+
+        return true;
+    });
 
     Expr* reduce = AllReduceExpr::create(_ast, accumulator, initial, variable, list, step, predicate);
     locate(reduce, start);
@@ -1032,25 +1049,39 @@ Expr* CypherGrammar::parseBracketExpr() {
         return expr;
     }
 
-    const SourcePosition firstStart = currentPosition();
+    Expr* bracket = nullptr;
     const bool opensListComprehension = CypherToken::isSymbol(peek(0)._kind) && peek(1)._kind == CypherTokenKind::IN;
-    Expr* first = parseExpr(opensListComprehension ? ExprFollower::PIPE_OR_COMMA : ExprFollower::NONE);
+
+    if (!opensListComprehension) {
+        parseBracketBody(start, ExprFollower::NONE, bracket);
+        return bracket;
+    }
+
+    parseChoosingBar([this, &start, &bracket] {
+        return parseBracketBody(start, ExprFollower::PIPE, bracket);
+    });
+
+    return bracket;
+}
+
+bool CypherGrammar::parseBracketBody(const SourcePosition& start, ExprFollower follower, Expr*& bracket) {
+    const SourcePosition firstStart = currentPosition();
+    Expr* first = parseExpr(follower);
     const SourceLocation firstLocation = locationFrom(firstStart);
 
     if (check(CypherTokenKind::WHERE) || check(CypherTokenKind::PIPE)) {
         const std::pair<WhereClause*, Expr*> tail = parseComprehensionTail();
-        expect(CypherTokenKind::CBRACK);
 
-        Expr* comprehension = ParserUtils::createComprehension(_ast, first, tail.first, tail.second, firstLocation);
-        if (!comprehension) {
+        bracket = ParserUtils::createComprehension(_ast, first, tail.first, tail.second, firstLocation);
+        if (bracket) {
+            locate(bracket, start);
+        } else {
             reportSemanticError(firstLocation,
                                 "Invalid comprehension. Expected 'variable IN list', or a path '(...)-[...]-(...)' followed by '|'");
-            return first;
+            bracket = first;
         }
 
-        locate(comprehension, start);
-
-        return comprehension;
+        return tail.second != nullptr;
     }
 
     ListLiteral* list = parseListLiteralItems(first, firstLocation);
@@ -1058,26 +1089,31 @@ Expr* CypherGrammar::parseBracketExpr() {
 
     locate(list, start);
 
-    Expr* expr = ParserUtils::createListOrComprehension(_ast, list);
-    locate(expr, start);
+    bracket = ParserUtils::createListOrComprehension(_ast, list);
+    locate(bracket, start);
 
-    return expr;
+    return false;
 }
 
 std::pair<WhereClause*, Expr*> CypherGrammar::parseComprehensionTail() {
     if (check(CypherTokenKind::WHERE)) {
-        WhereClause* where = parseWhereClause(ExprFollower::PIPE);
+        WhereClause* where = nullptr;
+        Expr* projection = nullptr;
 
-        if (accept(CypherTokenKind::PIPE)) {
-            Expr* projection = parseExpr(ExprFollower::NONE);
-            return std::make_pair(where, projection);
-        }
+        parseChoosingBar([this, &where, &projection] {
+            where = parseWhereClause(ExprFollower::PIPE);
+            projection = accept(CypherTokenKind::PIPE) ? parseExpr(ExprFollower::NONE) : nullptr;
+            expect(CypherTokenKind::CBRACK);
 
-        return std::make_pair(where, nullptr);
+            return projection != nullptr;
+        });
+
+        return std::make_pair(where, projection);
     }
 
     expect(CypherTokenKind::PIPE);
     Expr* projection = parseExpr(ExprFollower::NONE);
+    expect(CypherTokenKind::CBRACK);
 
     return std::make_pair(nullptr, projection);
 }
@@ -1464,56 +1500,22 @@ bool CypherGrammar::isOpensDetailLabels(size_t offset) {
     return startsLabelAtom(next) && next != CypherTokenKind::IS;
 }
 
-// Both readings of [x IN l WHERE x:A|B] parse. Neo4j's grammar reads the bar there, so a `|`
-// disjoins labels only when an operator or the end of the expression follows the labels after it,
-// and at its depth, outside a CASE, another `|` can close the expression or a `,` ends a list item
 bool CypherGrammar::pipeDisjoinsLabels() {
-    const bool commaEndsAnItem = isFollowedBy(ExprFollower::PIPE_OR_COMMA);
-
-    if (!isFollowedBy(ExprFollower::PIPE) && !commaEndsAnItem) {
+    if (!isFollowedBy(ExprFollower::PIPE)) {
         return true;
     } else if (peek(0)._kind != CypherTokenKind::PIPE) {
         return false;
     }
 
-    const size_t labels = peek(1)._kind == CypherTokenKind::COLON ? 2 : 1;
-    size_t position = skipLabelConjunction(labels);
-    if (position == 0 || !canFollowLabels(peek(position)._kind)) {
-        return false;
+    const auto reading = _pipeReadings.find(_consumedCount);
+    if (reading != _pipeReadings.end()) {
+        return reading->second == PipeReading::DISJUNCTION;
     }
 
-    size_t openCases = 0;
-    while (true) {
-        const CypherTokenKind kind = peek(position)._kind;
-        const CypherTokenKind previous = peek(position - 1)._kind;
-        const bool isAName = previous == CypherTokenKind::DOT
-                             || previous == CypherTokenKind::COLON
-                             || previous == CypherTokenKind::DOLLAR
-                             || previous == CypherTokenKind::PIPE
-                             || previous == CypherTokenKind::AMPERSAND
-                             || previous == CypherTokenKind::EXCLAMATION
-                             || previous == CypherTokenKind::IS;
-        const bool endsTheOperand = kind == CypherTokenKind::PIPE || (kind == CypherTokenKind::COMMA && commaEndsAnItem);
+    bioassert(!_speculations.empty(), "A bar may follow a label outside parseChoosingBar");
+    _speculations.back()._tentativePipes.push_back(_consumedCount);
 
-        if (endsTheOperand && openCases == 0) {
-            return true;
-        } else if (CypherToken::opensBracket(kind)) {
-            position = skipBalanced(position);
-            if (position == 0) {
-                return false;
-            }
-        } else if (kind == CypherTokenKind::CASE && !isAName && opensConstruct(position, false)) {
-            openCases++;
-            position++;
-        } else if (kind == CypherTokenKind::END && openCases > 0 && !isAName) {
-            openCases--;
-            position++;
-        } else if (CypherToken::closesBracket(kind) || kind == CypherTokenKind::PROG_END || kind == CypherTokenKind::LEXER_ERROR) {
-            return false;
-        } else {
-            position++;
-        }
-    }
+    return true;
 }
 
 CypherGrammar::ParenthesizedAtom CypherGrammar::classifyParenthesis() {
@@ -1664,23 +1666,6 @@ bool CypherGrammar::isInfixWord(CypherTokenKind kind) {
            || kind == CypherTokenKind::STARTS
            || kind == CypherTokenKind::ENDS
            || kind == CypherTokenKind::CONTAINS;
-}
-
-bool CypherGrammar::canFollowLabels(CypherTokenKind kind) {
-    return isInfixWord(kind)
-           || isComparisonSign(kind)
-           || kind == CypherTokenKind::IS_VALUE_TEST
-           || kind == CypherTokenKind::PLUS
-           || kind == CypherTokenKind::SUB
-           || kind == CypherTokenKind::MULT
-           || kind == CypherTokenKind::DIV
-           || kind == CypherTokenKind::MOD
-           || kind == CypherTokenKind::CARET
-           || kind == CypherTokenKind::CONCAT
-           || kind == CypherTokenKind::PIPE
-           || kind == CypherTokenKind::COMMA
-           || kind == CypherTokenKind::WHERE
-           || CypherToken::closesBracket(kind);
 }
 
 bool CypherGrammar::startsOperandOfKeyword(CypherTokenKind next, bool aliasMayFollow) {

@@ -25,6 +25,13 @@ public:
         setLocation((uintptr_t)obj, loc);
     }
 
+    void eraseLocation(uintptr_t obj);
+
+    template <typename T>
+    void eraseLocation(const T* obj) {
+        eraseLocation((uintptr_t)obj);
+    }
+
     const SourceLocation* getLocation(uintptr_t obj) const;
     std::string_view getQueryString() const { return _queryString; }
 

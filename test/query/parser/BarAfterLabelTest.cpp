@@ -82,6 +82,22 @@ TEST_F(BarAfterLabelTest, readsTheBarWhenTheOtherBarIsInsideACase) {
                                                          integer(0))))}))});
 }
 
+TEST_F(BarAfterLabelTest, readsTheBarWhenACaseTestsAVariableNamedEnd) {
+    expectParse("MATCH (x) RETURN [y IN [x] WHERE y:A | B = CASE WHEN end THEN y:C|D ELSE false END]",
+                {query({match({._pattern = pattern({path({node({._symbol = "x"})})})})},
+                       returning({listComprehension("y",
+                                                    list({symbol("x")}),
+                                                    entityType("y", labels({"A"})),
+                                                    binary(BinaryOperator::Equal,
+                                                           symbol("B"),
+                                                           caseExpr(nullptr,
+                                                                    {{._tests = {{._value = symbol("end")}},
+                                                                      ._then = entityType("y",
+                                                                                          labelOr({labels({"C"}),
+                                                                                                   labels({"D"})}))}},
+                                                                    boolean(false))))}))});
+}
+
 TEST_F(BarAfterLabelTest, readsAKeywordLabelBeforeTheBarAsADisjunction) {
     expectParse("MATCH (x) RETURN [y IN [x] WHERE y:A|SET | y]",
                 {query({match({._pattern = pattern({path({node({._symbol = "x"})})})})},

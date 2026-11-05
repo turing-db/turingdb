@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n:Person) WITH n, true AS end, true AS Sales RETURN n.name, [x IN [n] WHERE x:Founder | Sales = CASE WHEN end THEN x:Founder|Sales ELSE false END]",
+  "expect": {
+    "result": "n.name,[x IN [n] WHERE x:Founder | Sales = CASE WHEN end THEN x:Founder|Sales ELSE false END]\nRemy,[true]\nAdam,[true]\nMaxime,[]\nLuc,[]\nMartina,[]\nSuhas,[]\nCyrus,[]\nDoruk,[]"
+  },
+  "tags": [
+    "comprehension",
+    "labels",
+    "return"
+  ],
+  "write-required": false
+}

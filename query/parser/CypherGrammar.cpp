@@ -5,6 +5,7 @@
 #include "CypherAST.h"
 #include "CypherLexer.h"
 #include "CypherParser.h"
+#include "ParserException.h"
 #include "SourceManager.h"
 
 #include "BioAssert.h"
@@ -33,11 +34,13 @@ CypherGrammar::~CypherGrammar() {
 }
 
 const CypherToken& CypherGrammar::peek(size_t offset) {
-    while (_window.size() <= offset) {
+    const size_t position = _consumedCount - _windowStart + offset;
+
+    while (_window.size() <= position) {
         _lexer->lex(_window.emplace_back());
     }
 
-    return _window[offset];
+    return _window[position];
 }
 
 const CypherToken& CypherGrammar::examine() {
@@ -88,7 +91,7 @@ bool CypherGrammar::checkSymbol() {
 }
 
 void CypherGrammar::consume() {
-    if (_holdsError) {
+    if (_holdsError && _speculations.empty()) {
         _lexer->throwSyntaxError(_heldErrorLocation, _heldErrorMessage);
     }
 
@@ -104,7 +107,11 @@ void CypherGrammar::consume() {
 
     _previous = token;
     _consumedCount++;
-    _window.pop_front();
+
+    if (_speculations.empty()) {
+        _window.pop_front();
+        _windowStart++;
+    }
 
     _expected = _pending;
     _pending.reset();
@@ -173,7 +180,7 @@ void CypherGrammar::throwUnexpectedTokenAt(size_t offset, const TokenKinds& kind
 }
 
 void CypherGrammar::reportSemanticError(const SourceLocation& location, std::string_view message) {
-    if (!_examined) {
+    if (!_examined && _speculations.empty()) {
         _lexer->throwSyntaxError(location, message);
     } else if (!_holdsError) {
         _holdsError = true;
@@ -183,7 +190,7 @@ void CypherGrammar::reportSemanticError(const SourceLocation& location, std::str
 }
 
 void CypherGrammar::reportNotImplemented(const SourceLocation& location, std::string_view what) {
-    if (!_examined) {
+    if (!_examined && _speculations.empty()) {
         _lexer->throwNotImplemented(location, what);
     }
 
@@ -244,6 +251,117 @@ void CypherGrammar::leaveNesting() {
 
 bool CypherGrammar::isFollowedBy(ExprFollower follower) const {
     return _follower == follower && _followerDepth == _depth;
+}
+
+// Attempts hold their semantic errors, so that syntax alone chooses the reading. The reading
+// chosen is parsed again outside the speculation when it raised one, to report it as usual
+void CypherGrammar::parseChoosingBar(const std::function<bool()>& parseRest) {
+    if (!_searchedConstructs.insert(_consumedCount).second) {
+        parseRest();
+        return;
+    }
+
+    openSpeculation();
+    const size_t speculation = _speculations.size() - 1;
+    const bool lastAttemptChosen = chooseBar(speculation, parseRest);
+
+    if (lastAttemptChosen && !_holdsError) {
+        closeSpeculation();
+        return;
+    }
+
+    rewind(speculation);
+    closeSpeculation();
+    parseRest();
+}
+
+// Both readings of [x IN l WHERE x:A|B] parse. As in Neo4j, a `|` after a label is a disjunction
+// while a later bar can still close the construct: the reading kept is the one whose bar comes
+// last, or the one with no bar when no bar can be read
+bool CypherGrammar::chooseBar(size_t speculation, const std::function<bool()>& parseRest) {
+    const ReadingOutcome disjunctions = attemptReading(speculation, parseRest);
+    const std::vector<size_t> pipes = _speculations[speculation]._tentativePipes;
+
+    if (disjunctions == ReadingOutcome::PARSED_WITH_BAR || pipes.empty()) {
+        decidePipes(pipes, pipes.size());
+        return disjunctions != ReadingOutcome::FAILED;
+    }
+
+    for (size_t bar = pipes.size(); bar > 0; bar--) {
+        rewind(speculation);
+        decidePipes(pipes, bar - 1);
+
+        if (attemptReading(speculation, parseRest) != ReadingOutcome::FAILED) {
+            return true;
+        }
+    }
+
+    decidePipes(pipes, pipes.size());
+
+    return false;
+}
+
+CypherGrammar::ReadingOutcome CypherGrammar::attemptReading(size_t speculation, const std::function<bool()>& parseRest) {
+    _speculations[speculation]._tentativePipes.clear();
+
+    try {
+        return parseRest() ? ReadingOutcome::PARSED_WITH_BAR : ReadingOutcome::PARSED_WITHOUT_BAR;
+    } catch (const ParserException&) {
+        return ReadingOutcome::FAILED;
+    }
+}
+
+void CypherGrammar::openSpeculation() {
+    Speculation& speculation = _speculations.emplace_back();
+
+    _ast->saveCheckpoint(speculation._checkpoint);
+    speculation._previous = _previous;
+    speculation._expected = _expected;
+    speculation._pending = _pending;
+    speculation._heldErrorLocation = _heldErrorLocation;
+    speculation._heldErrorMessage = _heldErrorMessage;
+    speculation._consumedCount = _consumedCount;
+    speculation._depth = _depth;
+    speculation._followerDepth = _followerDepth;
+    speculation._operatorCount = _operators.size();
+    speculation._operandCount = _operands.size();
+    speculation._follower = _follower;
+    speculation._examined = _examined;
+    speculation._holdsError = _holdsError;
+}
+
+void CypherGrammar::rewind(size_t speculation) {
+    const Speculation& saved = _speculations[speculation];
+
+    _ast->rollback(saved._checkpoint);
+    _previous = saved._previous;
+    _expected = saved._expected;
+    _pending = saved._pending;
+    _heldErrorLocation = saved._heldErrorLocation;
+    _heldErrorMessage = saved._heldErrorMessage;
+    _consumedCount = saved._consumedCount;
+    _depth = saved._depth;
+    _followerDepth = saved._followerDepth;
+    _operators.resize(saved._operatorCount);
+    _operands.resize(saved._operandCount);
+    _follower = saved._follower;
+    _examined = saved._examined;
+    _holdsError = saved._holdsError;
+}
+
+void CypherGrammar::closeSpeculation() {
+    _speculations.pop_back();
+
+    if (_speculations.empty()) {
+        _window.erase(_window.begin(), _window.begin() + (_consumedCount - _windowStart));
+        _windowStart = _consumedCount;
+    }
+}
+
+void CypherGrammar::decidePipes(std::span<const size_t> pipes, size_t bar) {
+    for (size_t index = 0; index < pipes.size(); index++) {
+        _pipeReadings[pipes[index]] = index == bar ? PipeReading::BAR : PipeReading::DISJUNCTION;
+    }
 }
 
 size_t CypherGrammar::skipBalanced(size_t offset) {
