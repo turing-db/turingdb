@@ -5,8 +5,9 @@
 using namespace db;
 using namespace turing::test;
 
-// Where a bar may close the expression, a `|` after a label is the bar unless another `|`
-// follows at the same depth, as in Neo4j: [x IN l WHERE x:A|B] projects B
+// Where a bar may close the expression, Neo4j reads a `|` after a label as the latest bar with
+// which the construct parses, or as a disjunction when no bar can be read: [x IN l WHERE x:A|B]
+// projects B
 class LabelDisjunctionOrBarTest : public ExpectedASTTest {
 };
 
@@ -113,6 +114,27 @@ TEST_F(LabelDisjunctionOrBarTest, readsAPipeAsALabelDisjunctionWhenTheBarFollows
                                                       set({setProperty(property({"x", "y"}), integer(1))})}),
                                       ._scope = true,
                                       ._importsEverything = true})})});
+}
+
+TEST_F(LabelDisjunctionOrBarTest, readsAPipeAsALabelDisjunctionWhenNoBarCanBeRead) {
+    expectParse("MATCH (y) RETURN [x IN y:A | B WHERE true]",
+                {query({match({._pattern = pattern({path({node({._symbol = "y"})})})})},
+                       returning({listComprehension("x",
+                                                    entityType("y", labelOr({labels({"A"}), labels({"B"})})),
+                                                    boolean(true))}))});
+}
+
+TEST_F(LabelDisjunctionOrBarTest, readsTheLatestBarThatParses) {
+    expectParse("MATCH (y) RETURN [x IN [y] WHERE x:A | B = y:C | !D]",
+                {query({match({._pattern = pattern({path({node({._symbol = "y"})})})})},
+                       returning({listComprehension("x",
+                                                    list({symbol("y")}),
+                                                    entityType("x", labels({"A"})),
+                                                    binary(BinaryOperator::Equal,
+                                                           symbol("B"),
+                                                           entityType("y",
+                                                                      labelOr({labels({"C"}),
+                                                                               labelNot(labels({"D"}))}))))}))});
 }
 
 TEST_F(LabelDisjunctionOrBarTest, looksOnlyAtPipesOfItsOwnDepth) {

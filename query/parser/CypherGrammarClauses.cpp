@@ -753,10 +753,17 @@ CallSubqueryStmt* CypherGrammar::parseForeachStmt() {
 
     Symbol* variable = parseName();
     expect(CypherTokenKind::IN);
-    Expr* list = parseExpr(ExprFollower::PIPE);
-    expect(CypherTokenKind::PIPE);
-    StmtContainer* updates = parseForeachUpdates();
-    expect(CypherTokenKind::CPAREN);
+
+    Expr* list = nullptr;
+    StmtContainer* updates = nullptr;
+    parseChoosingBar([this, &list, &updates] {
+        list = parseExpr(ExprFollower::PIPE);
+        expect(CypherTokenKind::PIPE);
+        updates = parseForeachUpdates();
+        expect(CypherTokenKind::CPAREN);
+
+        return true;
+    });
 
     return ParserUtils::createForeach(_ast, variable, list, updates, locationFrom(start));
 }

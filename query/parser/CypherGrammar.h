@@ -4,15 +4,19 @@
 #include <stdint.h>
 #include <bitset>
 #include <deque>
+#include <functional>
 #include <initializer_list>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "ChangeOp.h"
 #include "ConditionalQuery.h"
+#include "CypherAST.h"
 #include "CypherToken.h"
 #include "JsonlImportSpecs.h"
 #include "ParserUtils.h"
@@ -35,7 +39,6 @@ class CreateGraphQuery;
 class CreateNodePropertyIndexQuery;
 class CreateStmt;
 class CreateVectorIndexQuery;
-class CypherAST;
 class CypherLexer;
 class DeleteStmt;
 class DeleteVectorIndexQuery;
@@ -123,7 +126,17 @@ private:
         NONE,
         AS,
         PIPE,
-        PIPE_OR_COMMA,
+    };
+
+    enum class PipeReading : uint8_t {
+        DISJUNCTION,
+        BAR,
+    };
+
+    enum class ReadingOutcome : uint8_t {
+        FAILED,
+        PARSED_WITHOUT_BAR,
+        PARSED_WITH_BAR,
     };
 
     enum class AdminQuery : uint8_t {
@@ -197,14 +210,35 @@ private:
         bool _chained {false};
     };
 
+    struct Speculation {
+        CypherToken _previous;
+        TokenKinds _expected;
+        TokenKinds _pending;
+        SourceLocation _heldErrorLocation;
+        std::string _heldErrorMessage;
+        CypherAST::Checkpoint _checkpoint;
+        std::vector<size_t> _tentativePipes;
+        size_t _consumedCount {0};
+        size_t _depth {0};
+        size_t _followerDepth {0};
+        size_t _operatorCount {0};
+        size_t _operandCount {0};
+        ExprFollower _follower {ExprFollower::NONE};
+        bool _examined {false};
+        bool _holdsError {false};
+    };
+
     CypherAST* _ast {nullptr};
     SourceManager* _sourceManager {nullptr};
     CypherLexer* _lexer {nullptr};
 
     /* ***** Parser State ***** */
 
-    // Tokens lexed ahead and not consumed yet; the front is the current token
+    // Tokens lexed ahead, and while a speculation is open the tokens it consumed
     std::deque<CypherToken> _window;
+
+    // Index in the query of the front of _window
+    size_t _windowStart {0};
 
     // The last consumed token, where the location of the node being built ends
     CypherToken _previous;
@@ -231,14 +265,14 @@ private:
     // Frame address of parseScript(), from which enterNesting() measures the stack in use
     uintptr_t _stackBase {0};
 
-    // What may follow the current expression: AS before an alias, a PIPE that ends it, or in the
-    // first item of a bracket, the PIPE of a comprehension or the COMMA of a list
+    // What may follow the current expression: AS before an alias, or the PIPE of a
+    // comprehension, reduce or FOREACH
     ExprFollower _follower {ExprFollower::NONE};
 
     // Nesting depth where _follower was set; _follower applies only at that depth
     size_t _followerDepth {0};
 
-    // True if a semantic error waits for the next consume() to throw it
+    // True if a semantic error waits for the next consume() outside a speculation to throw it
     bool _holdsError {false};
 
     // Location of the held semantic error
@@ -252,6 +286,15 @@ private:
 
     // Operands that parseExpr has read and not reduced yet, shared by all nesting levels
     std::vector<PendingOperand> _operands;
+
+    // Parser state where each open speculation started, innermost last
+    std::vector<Speculation> _speculations;
+
+    // Reading chosen for each PIPE after a label where a bar may follow, by token index
+    std::unordered_map<size_t, PipeReading> _pipeReadings;
+
+    // Constructs whose readings parseChoosingBar has chosen, by the token index their rest starts at
+    std::unordered_set<size_t> _searchedConstructs;
 
     const CypherToken& peek(size_t offset);
     const CypherToken& examine();
@@ -279,6 +322,14 @@ private:
     void enterNesting(const SourceLocation& location);
     void leaveNesting();
     bool isFollowedBy(ExprFollower follower) const;
+
+    void parseChoosingBar(const std::function<bool()>& parseRest);
+    bool chooseBar(size_t speculation, const std::function<bool()>& parseRest);
+    ReadingOutcome attemptReading(size_t speculation, const std::function<bool()>& parseRest);
+    void openSpeculation();
+    void rewind(size_t speculation);
+    void closeSpeculation();
+    void decidePipes(std::span<const size_t> pipes, size_t bar);
 
     static const TokenKinds& getNameKinds();
     static const TokenKinds& getSymbolKinds();
@@ -485,6 +536,7 @@ private:
     void parseMapProjectionItems(MapProjectionExpr::Items& items);
     MapProjectionExpr::Item parseMapProjectionItem();
     Expr* parseBracketExpr();
+    bool parseBracketBody(const SourcePosition& start, ExprFollower follower, Expr*& bracket);
     std::pair<WhereClause*, Expr*> parseComprehensionTail();
     ListLiteral* parseListLiteralItems(Expr* firstItem, const SourceLocation& firstItemLocation);
     Expr* parseListLiteralItem();
@@ -531,7 +583,6 @@ private:
     static bool startsExpr(CypherTokenKind kind);
     static bool startsLabelAtom(CypherTokenKind kind);
     static bool isInfixWord(CypherTokenKind kind);
-    static bool canFollowLabels(CypherTokenKind kind);
     static bool startsOperandOfKeyword(CypherTokenKind next, bool aliasMayFollow);
     static Expr* getExpr(const PendingOperand& operand);
 };

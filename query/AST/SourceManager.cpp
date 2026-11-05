@@ -14,6 +14,10 @@ void SourceManager::setLocation(uintptr_t obj, const SourceLocation& loc) {
     _locations[obj] = loc;
 }
 
+void SourceManager::eraseLocation(uintptr_t obj) {
+    _locations.erase(obj);
+}
+
 std::string_view SourceManager::getStringRepr(uintptr_t obj) const {
     const SourceLocation* loc = getLocation(obj);
     if (!loc) {

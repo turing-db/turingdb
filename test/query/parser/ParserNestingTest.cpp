@@ -18,6 +18,9 @@ constexpr Nesting CASES {"RETURN ", "CASE WHEN true THEN ", "1", " END", 0, 4};
 constexpr Nesting CALL_SUBQUERIES {"", "CALL { ", "RETURN 1", " }", 5};
 constexpr Nesting LABELS {"RETURN n:", "(", "A", ")"};
 constexpr Nesting EXISTS_SUBQUERIES {"RETURN ", "EXISTS { RETURN ", "true", " }", 7};
+constexpr Nesting COMPREHENSIONS {"RETURN ", "[x IN ", "xs", " | x]"};
+constexpr Nesting REDUCES {"RETURN ", "reduce(s = 0, x IN ", "xs", " | s)", 6};
+constexpr Nesting LABEL_BARS {"RETURN ", "[x IN xs WHERE x:A | B + ", "1", "]"};
 
 }
 
@@ -114,4 +117,28 @@ TEST_F(ParserNestingTest, parsesExistsSubqueriesAtTheMaximumDepth) {
 
 TEST_F(ParserNestingTest, rejectsExistsSubqueriesOneLevelDeeper) {
     expectNestingErrorAtTheLevelPast(EXISTS_SUBQUERIES);
+}
+
+TEST_F(ParserNestingTest, parsesComprehensionsAtTheMaximumDepth) {
+    expectNoNestingError(COMPREHENSIONS);
+}
+
+TEST_F(ParserNestingTest, rejectsComprehensionsOneLevelDeeper) {
+    expectNestingErrorAtTheLevelPast(COMPREHENSIONS);
+}
+
+TEST_F(ParserNestingTest, parsesReducesAtTheMaximumDepth) {
+    expectNoNestingError(REDUCES);
+}
+
+TEST_F(ParserNestingTest, rejectsReducesOneLevelDeeper) {
+    expectNestingErrorAtTheLevelPast(REDUCES);
+}
+
+TEST_F(ParserNestingTest, parsesLabelBarsAtTheMaximumDepth) {
+    expectNoNestingError(LABEL_BARS);
+}
+
+TEST_F(ParserNestingTest, rejectsLabelBarsOneLevelDeeper) {
+    expectNestingErrorAtTheLevelPast(LABEL_BARS);
 }
