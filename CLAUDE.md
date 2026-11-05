@@ -273,6 +273,64 @@ this worklist already. For a pass over filters, use `runFilterWorklist` in
 `query/ir/dialect/db/DBPasses.cpp`. Collecting all matches first and then rewriting them
 is fine only when no rewrite can touch another's match.
 
+## Ops with a body declare how columns enter and leave it
+
+**An op with a region says, through `ColumnCarrierOpInterface`, which columns come into
+the region and which come back out. A pass reads that layout from the interface. It never
+works it out from the op's name.** The layout is a fact about the op, so the op states it,
+once. A pass that switches over op kinds to compute argument positions holds a second copy
+of that fact, and that copy covers only the ops its author thought of.
+
+The interface (`query/ir/dialect/db/DBInterfaces.td`) has two methods for regions, beside
+`getCarrySet` and `getRowSource`, which describe an op's results:
+- `getRegionCarrySet(region, RegionCarrySet&)`: `_count` operands from `_operandOffset`
+  come into the region as the arguments from `_argumentOffset`. `_handsBack` says the op
+  also returns them as its first results. `_yieldsBack` says those results come from the
+  region's yield, which then leads with them, as the region left them.
+- `getYieldedResultOffset(region, offset)`: the columns the region yields come out as the
+  results from `offset` on, one row for each row the region yields. It returns false where
+  the op pads or merges what a region yields.
+
+```text
+op                                      into the region                   back out
+CASE, coalesce, list ops                trailing operands, trailing args  -
+EXISTS, COUNT, COLLECT, [(n)-->(m)|..]  inputs, leading args, row tag      -
+CALL run once per row                   inputs, all args                  inputs, then yields
+CALL carrying its scope                 inputs, leading args              its yield, inputs first
+OPTIONAL MATCH, optional CALL           inputs, leading args              inputs only: own columns pad
+cross product, hash join                -                                 each factor's yield in turn
+```
+
+A body run once per row has no row tag; one carrying its scope may have one after its
+carried arguments, which is why the arguments are counted from `_argumentOffset` rather
+than from the end.
+
+Rules:
+- A new op with a region implements `getRegionCarrySet`, and `getYieldedResultOffset` when
+  its results are a region's yield row for row. An op that implements neither is opaque:
+  no pass carries a column into its body or out of it. That is correct, but every
+  optimisation stops at the op.
+- `getYieldedResultOffset` returning false is a correctness statement. A row an optional
+  op's body missed comes back with its own columns null, so a column carried out through
+  the yield would turn that row's real value into null.
+- In a pass, go through the helpers in `DBPasses.cpp`: `matchRegionCarrySet`,
+  `carriedColumnOf`, `carriedArgument`, `carryIntoRegions`. Never write
+  `isa<CallSubquery, OptionalMatch>` next to argument arithmetic. A pass that handles only
+  some ops, as `trim_unread_columns` handles CASE and the list ops, keeps that choice as a
+  predicate over op kinds and still reads the layout from the interface.
+- This is MLIR's own answer: `RegionBranchOpInterface::getEntrySuccessorOperands` says
+  which operands flow into which region arguments, and `RegionBranchTerminatorOpInterface`
+  which yielded values flow to which results.
+
+Worked example: TUR-390 (#1348). `reuse_property_reads` reached into CASE, coalesce and
+the list ops through `matchRegionCarrySet`, a switch that knew their trailing layout.
+Subquery bodies take their inputs first, ahead of a row tag, so
+`MATCH (n:Person) RETURN n.age, COUNT { MATCH (n)-->(m) WHERE m.age = n.age }` read
+`n.age` a second time inside the body. A sixth case in the switch would have fixed COUNT
+and left EXISTS, COLLECT, CALL, OPTIONAL MATCH, pattern comprehensions and cross products.
+Instead the layout moved onto the ops: 14 ops implement one or both methods, and the pass
+walks into and out of all of them with one generic step each way.
+
 ## C++ Coding Style
 
 Please read `CODING_STYLE.md` for guidelines before any new work.
