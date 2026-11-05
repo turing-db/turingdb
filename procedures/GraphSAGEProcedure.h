@@ -5,7 +5,7 @@
 #include <tuple>
 
 #include "ID.h"
-#include "columns/ColumnOptVector.h"
+#include "columns/ColumnIDs.h"
 
 #include "samplers/GraphSAGESampler.h"
 
@@ -23,15 +23,15 @@ struct GraphSAGEProcedure {
     static constexpr size_t numHops = GraphSAGESampler::hops;
 
     using Returns = std::tuple<
-        ColumnOptVector<NodeID>,
-        ColumnOptVector<NodeID>,
-        ColumnOptVector<NodeID>,
-        ColumnOptVector<NodeID>,
-        ColumnOptVector<NodeID>,
-        ColumnOptVector<NodeID>,
-        ColumnOptVector<NodeID>,
-        ColumnOptVector<NodeID>,
-        ColumnOptVector<NodeID>
+        ColumnNodeIDs,
+        ColumnNodeIDs,
+        ColumnNodeIDs,
+        ColumnNodeIDs,
+        ColumnNodeIDs,
+        ColumnNodeIDs,
+        ColumnNodeIDs,
+        ColumnNodeIDs,
+        ColumnNodeIDs
     >;
 
     static constexpr size_t numReturns = std::tuple_size_v<Returns>;

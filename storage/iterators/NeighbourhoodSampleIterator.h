@@ -8,7 +8,6 @@
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnIndices.h"
-#include "columns/ColumnOptVector.h"
 
 #include "datapart/EdgeRecord.h"
 
@@ -93,6 +92,5 @@ private:
 };
 
 using NeighbourhoodSampleWriter = NeighbourhoodSampleChunkWriter<ColumnNodeIDs>;
-using NullableNeighbourhoodSampleWriter = NeighbourhoodSampleChunkWriter<ColumnOptVector<NodeID>>;
 
 }

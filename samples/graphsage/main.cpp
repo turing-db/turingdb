@@ -76,13 +76,13 @@ bool parseSize(std::string_view text, size_t& value) {
     return result.ec == std::errc {} && result.ptr == end;
 }
 
-void formatNode(std::string& out, const std::optional<NodeID>& node, const NodeNames& names) {
-    if (!node.has_value()) {
+void formatNode(std::string& out, NodeID node, const NodeNames& names) {
+    if (!node.isValid()) {
         out = "null";
         return;
     }
 
-    const uint64_t value = node->getValue();
+    const uint64_t value = node.getValue();
     const NodeNames::const_iterator it = names.find(value);
     const std::string_view name = (it == names.cend()) ? "?" : it->second;
 
@@ -106,8 +106,8 @@ void printEdgeColumns(const NodeCol& srcs, const NodeCol& tgts, const NodeNames&
     std::string src;
     std::string tgt;
     for (size_t row = 0; row < rows; row++) {
-        const std::optional<NodeID> srcNode = (row < srcs.size()) ? srcs[row] : std::optional<NodeID> {};
-        const std::optional<NodeID> tgtNode = (row < tgts.size()) ? tgts[row] : std::optional<NodeID> {};
+        const NodeID srcNode = (row < srcs.size()) ? srcs[row] : NodeID();
+        const NodeID tgtNode = (row < tgts.size()) ? tgts[row] : NodeID();
 
         formatNode(src, srcNode, names);
         formatNode(tgt, tgtNode, names);

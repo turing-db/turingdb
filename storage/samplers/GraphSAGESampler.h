@@ -8,13 +8,11 @@
 #include "columns/ColumnIDs.h"
 #include "iterators/NeighbourhoodSampleIterator.h"
 
-#include "columns/ColumnOptVector.h"
-
 namespace db {
 
 class GraphSAGESampler {
 public:
-    using NodeCol = ColumnOptVector<NodeID>;
+    using NodeCol = ColumnNodeIDs;
     constexpr static size_t hops = 3;
     using Fanouts = std::array<size_t, hops>;
     static constexpr size_t NOSEED = std::numeric_limits<size_t>::max();
@@ -52,7 +50,7 @@ private:
         // by index, so it picks up nodes that arrive after it reached the end
         ColumnNodeIDs _frontier;
         std::unordered_set<uint64_t> _seen;
-        std::unique_ptr<NullableNeighbourhoodSampleWriter> _writer;
+        std::unique_ptr<NeighbourhoodSampleWriter> _writer;
 
         // A frontier node is one dst_nodes row but up to _fanout edge rows, so the two
         // fill at different rates and dst_nodes needs a cursor of its own
@@ -80,7 +78,6 @@ private:
 
     void pushNode(HopData& data, NodeID node);
     void pushFrontier(size_t hop, const ColumnNodeIDs* nodes);
-    void pushFrontier(size_t hop, const NodeCol* nodes);
     size_t emitFrontier(size_t hop, size_t maxRows);
     size_t expandHop(size_t hop, size_t maxRows);
 };

@@ -41,41 +41,41 @@ using namespace turing::test;
 
 namespace {
 
-using OptNodeColumn = ColumnOptVector<NodeID>;
+using OptEdgeTypeColumn = ColumnOptVector<EdgeTypeID>;
 
-struct NeighbourData : public ProcedureData {};
+struct EdgeTypeData : public ProcedureData {};
 
-// test.maybeNeighbour yields four rows as one chunk: node 0, no node, node 1, no node
-void neighbourExecuteImpl(ProcedureState* procedureState) {
-    NeighbourData& data = procedureState->data<NeighbourData>();
+// test.maybeEdgeType yields four rows as one chunk: edge type 0, none, edge type 1, none
+void edgeTypeExecuteImpl(ProcedureState* procedureState) {
+    EdgeTypeData& data = procedureState->data<EdgeTypeData>();
 
-    auto* neighbours = static_cast<OptNodeColumn*>(data.getReturnColumn(0));
-    neighbours->clear();
-    neighbours->push_back(NodeID(0));
-    neighbours->push_back(std::nullopt);
-    neighbours->push_back(NodeID(1));
-    neighbours->push_back(std::nullopt);
+    OptEdgeTypeColumn* edgeTypes = static_cast<OptEdgeTypeColumn*>(data.getReturnColumn(0));
+    edgeTypes->clear();
+    edgeTypes->push_back(EdgeTypeID(0));
+    edgeTypes->push_back(std::nullopt);
+    edgeTypes->push_back(EdgeTypeID(1));
+    edgeTypes->push_back(std::nullopt);
 
     procedureState->finish();
 }
 
-void neighbourExecute(ProcedureState* procedureState) {
+void edgeTypeExecute(ProcedureState* procedureState) {
     switch (procedureState->getStep()) {
         case ProcedureState::Step::PREPARE:
         case ProcedureState::Step::RESET:
         break;
 
         case ProcedureState::Step::EXECUTE:
-        neighbourExecuteImpl(procedureState);
+        edgeTypeExecuteImpl(procedureState);
         break;
     }
 }
 
-ProcedureData* neighbourAlloc() {
-    return new NeighbourData();
+ProcedureData* edgeTypeAlloc() {
+    return new EdgeTypeData();
 }
 
-void neighbourDealloc(ProcedureData* data) {
+void edgeTypeDealloc(ProcedureData* data) {
     delete data;
 }
 
@@ -90,12 +90,12 @@ protected:
 
         ProcedureNamespace* testNamespace = _procedures.createNamespace("test");
 
-        Procedure* neighbourProcedure = new Procedure("maybeNeighbour");
-        neighbourProcedure->setAllocCallback(&neighbourAlloc);
-        neighbourProcedure->setDeallocCallback(&neighbourDealloc);
-        neighbourProcedure->setExecuteCallback(&neighbourExecute);
-        neighbourProcedure->addNullableReturnValue("neighbour", ProcedureType::NODE);
-        testNamespace->addProcedure(neighbourProcedure);
+        Procedure* edgeTypeProcedure = new Procedure("maybeEdgeType");
+        edgeTypeProcedure->setAllocCallback(&edgeTypeAlloc);
+        edgeTypeProcedure->setDeallocCallback(&edgeTypeDealloc);
+        edgeTypeProcedure->setExecuteCallback(&edgeTypeExecute);
+        edgeTypeProcedure->addNullableReturnValue("edgeType", ProcedureType::EDGE_TYPE_ID);
+        testNamespace->addProcedure(edgeTypeProcedure);
 
         _graph = Graph::create();
         SimpleGraph::createSimpleGraph(_graph.get());
@@ -167,19 +167,19 @@ protected:
 };
 
 // Remy is one input row and the body yields its four for it
-TEST_F(OptionalSubqueryNullableYieldTest, handsTheNullableNodesBackThroughTheDrain) {
+TEST_F(OptionalSubqueryNullableYieldTest, handsTheNullableIDsBackThroughTheDrain) {
     expectRows("MATCH (p:Person {name: 'Remy'}) "
-               "OPTIONAL CALL { CALL test.maybeNeighbour() YIELD neighbour RETURN neighbour } "
-               "RETURN p.name, neighbour",
+               "OPTIONAL CALL { CALL test.maybeEdgeType() YIELD edgeType RETURN edgeType } "
+               "RETURN p.name, edgeType",
                {{"Remy", "0"}, {"Remy", "null"}, {"Remy", "1"}, {"Remy", "null"}});
 }
 
 // Only Remy and Adam are 32, so the body yields nothing for the six other Persons and each
-// of them comes back once with no node
-TEST_F(OptionalSubqueryNullableYieldTest, padsTheInputRowsTheBodyYieldedNoNodeFor) {
+// of them comes back once with no edge type
+TEST_F(OptionalSubqueryNullableYieldTest, padsTheInputRowsTheBodyYieldedNoIDFor) {
     expectRows("MATCH (p:Person) "
-               "OPTIONAL CALL (p) { CALL test.maybeNeighbour() YIELD neighbour WHERE p.age = 32 RETURN neighbour } "
-               "RETURN p.name, neighbour",
+               "OPTIONAL CALL (p) { CALL test.maybeEdgeType() YIELD edgeType WHERE p.age = 32 RETURN edgeType } "
+               "RETURN p.name, edgeType",
                {{"Remy", "0"}, {"Remy", "null"}, {"Remy", "1"}, {"Remy", "null"},
                 {"Adam", "0"}, {"Adam", "null"}, {"Adam", "1"}, {"Adam", "null"},
                 {"Maxime", "null"},

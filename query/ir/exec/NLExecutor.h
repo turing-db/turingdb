@@ -624,7 +624,7 @@ public:
     static NLMaskSurvivorFunction selectMaskSurvivorFunction(bool nullable, bool untypedNull, bool taggedCells);
 
     // The fetch for an nl.fetch_nodes reading its IDs out of nodes, integers or tagged cells
-    static NLFetchNodesFunction selectNodeFetchFunction(bool nullable);
+    static NLFetchNodesFunction selectNodeFetchFunction();
     static NLFetchNodesFunction selectIntegerFetchFunction(ValueType valueType, bool nullable);
     static NLFetchNodesFunction selectTaggedFetchFunction(bool nullable);
 

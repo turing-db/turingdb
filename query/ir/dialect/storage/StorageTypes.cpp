@@ -10,6 +10,15 @@ using namespace mlir::storage;
 
 #include "StorageEnums.cpp.inc"
 
+mlir::LogicalResult NullableType::verify(llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
+                                         mlir::Type valueType) {
+    if (isa<NodeIDType, EdgeIDType>(valueType)) {
+        return emitError() << "a node or edge column holds its own null as an invalid ID, so it is never nullable";
+    }
+
+    return mlir::success();
+}
+
 bool mlir::storage::reducesToADouble(AggregateKind kind, Type values) {
     const bool averagesNumbers = kind == AggregateKind::Avg && !isa<DurationType, AnyType>(values);
 

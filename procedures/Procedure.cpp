@@ -71,6 +71,12 @@ void Procedure::addReturnValue(std::string_view name, ProcedureType type) {
 }
 
 void Procedure::addNullableReturnValue(std::string_view name, ProcedureType type) {
+    const bool isEntity = type == ProcedureType::NODE || type == ProcedureType::EDGE;
+    if (isEntity) {
+        throw ProcedureException("Return value '" + std::string(name) + "' is a node or an edge, whose "
+                                 "column holds its own null as an invalid ID, so it is never declared nullable");
+    }
+
     _returnValues.addNullable(name, type);
 }
 

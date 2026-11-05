@@ -185,9 +185,7 @@ TEST_F(CallGraphSAGETest, paddingIsVisibleToIsNull) {
 }
 
 // A yielded node is a node, so its properties read like any other node's.
-// A property read off a nullable node column fails to lower: "DBLowering produced an
-// invalid nl function". Enable once db.get_node_property accepts a nullable node chunk.
-TEST_F(CallGraphSAGETest, DISABLED_aYieldedNodeCarriesItsProperties) {
+TEST_F(CallGraphSAGETest, aYieldedNodeCarriesItsProperties) {
     StringRowSink sink;
     runQuery("CALL gnn.graphSAGE([0], [2, 2, 2], 42) YIELD dst_nodes0 "
              "WHERE dst_nodes0 IS NOT NULL "
@@ -213,9 +211,8 @@ TEST_F(CallGraphSAGETest, aYieldedNodeFlowsIntoAMatch) {
 }
 
 // Two columns of a hop are row aligned, so a projection reading both sees one edge per
-// row rather than an unrelated pairing.
-// Blocked on the same nullable-node property read as dst_nodes0.name.
-TEST_F(CallGraphSAGETest, DISABLED_aHopsSourceAndTargetAreRowAligned) {
+// row rather than an unrelated pairing. A hop draws in-edges, so its targets are the seed.
+TEST_F(CallGraphSAGETest, aHopsSourceAndTargetAreRowAligned) {
     StringRowSink sink;
     runQuery("CALL gnn.graphSAGE([0], [4, 1, 1], 42) YIELD src_nodes0, tgt_nodes0 "
              "WHERE src_nodes0 IS NOT NULL "
@@ -226,8 +223,8 @@ TEST_F(CallGraphSAGETest, DISABLED_aHopsSourceAndTargetAreRowAligned) {
 
     for (const StringRowSink::Row& row : sink.getRows()) {
         ASSERT_EQ(row.size(), 2U);
-        EXPECT_EQ(row[0], "Remy") << "hop 0 sampled a node that was not the seed";
-        EXPECT_NE(row[1], "null") << "a source with no target";
+        EXPECT_NE(row[0], "null") << "a target with no source";
+        EXPECT_EQ(row[1], "Remy") << "hop 0 drew an edge into a node that was not the seed";
     }
 }
 

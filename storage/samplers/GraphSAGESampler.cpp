@@ -7,7 +7,6 @@
 #include "iterators/NeighbourhoodSampleIterator.h"
 
 #include "columns/ColumnIDs.h"
-#include "columns/ColumnOptVector.h"
 
 using namespace db;
 
@@ -123,19 +122,6 @@ void GraphSAGESampler::pushFrontier(size_t hop, const ColumnNodeIDs* nodes) {
     }
 }
 
-void GraphSAGESampler::pushFrontier(size_t hop, const NodeCol* nodes) {
-    bioassert(hop < hops, "Tried to seed an OOB hop");
-    HopData& data = _sampleData[hop];
-
-    for (const std::optional<NodeID>& node : *nodes) {
-        if (!node.has_value()) {
-            continue;
-        }
-
-        pushNode(data, *node);
-    }
-}
-
 size_t GraphSAGESampler::emitFrontier(size_t hop, size_t maxRows) {
     HopData& data = _sampleData[hop];
 
@@ -166,11 +152,11 @@ size_t GraphSAGESampler::expandHop(size_t hop, size_t maxRows) {
     if (!data._writer) {
         const bool haveSeed = _seed != NOSEED;
         data._writer = haveSeed
-            ? std::make_unique<NullableNeighbourhoodSampleWriter>(_view, &data._frontier, data._fanout, _seed)
-            : std::make_unique<NullableNeighbourhoodSampleWriter>(_view, &data._frontier, data._fanout);
+            ? std::make_unique<NeighbourhoodSampleWriter>(_view, &data._frontier, data._fanout, _seed)
+            : std::make_unique<NeighbourhoodSampleWriter>(_view, &data._frontier, data._fanout);
     }
 
-    std::unique_ptr<NullableNeighbourhoodSampleWriter>& writer = data._writer;
+    std::unique_ptr<NeighbourhoodSampleWriter>& writer = data._writer;
 
     if (writer->isDone()) {
         return 0;

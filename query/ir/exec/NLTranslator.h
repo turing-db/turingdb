@@ -1249,7 +1249,7 @@ private:
 
     static bool isEntityIDElement(mlir::Type elementType);
 
-    static bool isIDElement(mlir::Type elementType);
+    static bool isNullableIDValue(mlir::Type valueType);
     Column* allocOptIDColumn(NLChunkKind kind);
 
     static bool isPlainValueElementType(mlir::Type elementType);

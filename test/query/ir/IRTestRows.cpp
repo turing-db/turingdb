@@ -44,10 +44,8 @@ void renderEntityCell(ID id, std::string& out) {
     out = std::to_string(id.getValue());
 }
 
-// An entity column a procedure declared nullable holds the absence itself, rather than
-// the invalid ID an OPTIONAL MATCH pads with
 template <typename ID>
-bool renderOptEntityCell(const Column* column, size_t row, std::string& out) {
+bool renderOptIDCell(const Column* column, size_t row, std::string& out) {
     const auto* ids = dynamic_cast<const ColumnOptVector<ID>*>(column);
     if (!ids) {
         return false;
@@ -332,10 +330,8 @@ void turing::test::renderCell(const Column* column, size_t row, std::string& out
     } else if (const auto* maps = dynamic_cast<const ColumnVector<MapView>*>(column)) {
         out.clear();
         renderMap((*maps)[row], out);
-    } else if (renderOptEntityCell<NodeID>(column, row, out)
-               || renderOptEntityCell<EdgeID>(column, row, out)
-               || renderOptEntityCell<EdgeTypeID>(column, row, out)) {
-        // Rendered by the helper for whichever entity type matched
+    } else if (renderOptIDCell<EdgeTypeID>(column, row, out)) {
+        // Rendered by the helper
     } else if (renderValueCell<int64_t>(column, row, out)
                || renderValueCell<uint64_t>(column, row, out)
                || renderValueCell<double>(column, row, out)
