@@ -5,10 +5,12 @@
 
 #cmakedefine HEAD_COMMIT_HASH ${HEAD_COMMIT_HASH}
 #cmakedefine HEAD_COMMIT_TIMESTAMP ${HEAD_COMMIT_TIMESTAMP}
+#cmakedefine TURINGDB_VERSION ${TURINGDB_VERSION}
 
 #define __my_xstr(X) __my_str(X)
 #define __my_str(X) #X
 #define HEAD_COMMIT_STRING __my_xstr(HEAD_COMMIT_HASH)
+#define TURINGDB_VERSION_STRING __my_xstr(TURINGDB_VERSION)
 
 #cmakedefine BUILD_TIMESTAMP ${BUILD_TIMESTAMP}
 
@@ -17,4 +19,3 @@
 #cmakedefine TIME_BOMB_DAYS ${TIME_BOMB_DAYS}
 
 #endif
-
