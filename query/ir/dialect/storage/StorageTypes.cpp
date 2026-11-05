@@ -20,7 +20,7 @@ mlir::LogicalResult NullableType::verify(llvm::function_ref<mlir::InFlightDiagno
 }
 
 bool mlir::storage::reducesToADouble(AggregateKind kind, Type values) {
-    const bool averagesNumbers = kind == AggregateKind::Avg && !isa<DurationType, AnyType>(values);
+    const bool averagesNumbers = kind == AggregateKind::Avg && !isa<DurationType, PointType, AnyType>(values);
 
     return averagesNumbers
         || kind == AggregateKind::StDev

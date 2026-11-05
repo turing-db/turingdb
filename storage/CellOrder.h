@@ -173,8 +173,8 @@ std::strong_ordering operator<=>(CellView element, types::Point::Primitive value
 
 /**
  * @brief Compares an element of a @ref ListByteBuffer as <, <=, > and >= do. Unlike the order
- * above, only two numbers, strings, booleans, datetimes, durations or lists compare: any other
- * pair, a null on either side included, is absent. A NaN is unordered against every number.
+ * above, only two numbers, strings, booleans, datetimes, durations, points or lists compare: any
+ * other pair, a null on either side included, is absent. A NaN is unordered against every number.
  */
 std::optional<std::partial_ordering> comparisonOrder(CellView lhs, CellView rhs);
 std::optional<std::partial_ordering> comparisonOrder(ListView lhs, ListView rhs);
@@ -186,5 +186,6 @@ std::optional<std::partial_ordering> comparisonOrder(CellView element, types::St
 std::optional<std::partial_ordering> comparisonOrder(CellView element, types::Bool::Primitive value);
 std::optional<std::partial_ordering> comparisonOrder(CellView element, types::DateTime::Primitive value);
 std::optional<std::partial_ordering> comparisonOrder(CellView element, types::Duration::Primitive value);
+std::optional<std::partial_ordering> comparisonOrder(CellView element, types::Point::Primitive value);
 
 }

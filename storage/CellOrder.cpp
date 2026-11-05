@@ -357,6 +357,10 @@ std::optional<std::partial_ordering> taggedComparisonOrder(const Lhs lhs, const 
             return sameTypeComparisonOrder(lhs, rhsTag, valueOf<types::Duration::Primitive>(rhs));
         break;
 
+        case CellTag::Point:
+            return sameTypeComparisonOrder(lhs, rhsTag, valueOf<types::Point::Primitive>(rhs));
+        break;
+
         case CellTag::ListView:
             return sameTypeComparisonOrder(lhs, rhsTag, valueOf<ListView>(rhs));
         break;
@@ -604,6 +608,10 @@ std::optional<std::partial_ordering> db::comparisonOrder(const CellView element,
 
 std::optional<std::partial_ordering> db::comparisonOrder(const CellView element, const types::Duration::Primitive value) {
     return sameTypeComparisonOrder(element, CellTag::Duration, value);
+}
+
+std::optional<std::partial_ordering> db::comparisonOrder(const CellView element, const types::Point::Primitive value) {
+    return sameTypeComparisonOrder(element, CellTag::Point, value);
 }
 
 std::optional<std::partial_ordering> db::comparisonOrder(const CellView element, const ListView value) {

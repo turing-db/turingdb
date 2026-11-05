@@ -277,6 +277,9 @@ struct PairRestrictions<Op> {
 
         OptionalKindPairs<types::Duration::Primitive, types::Duration::Primitive>::Pairs,
 
+        // A point orders against another point, across CRSs as ORDER BY sorts them
+        OptionalKindPairs<types::Point::Primitive, types::Point::Primitive>::Pairs,
+
         OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs,
 
         // Lexicographic ordering of strings, whether each side borrows its characters
@@ -296,6 +299,7 @@ struct PairRestrictions<Op> {
         CellKindPairs<types::Bool::Primitive>::Pairs,
         CellKindPairs<types::DateTime::Primitive>::Pairs,
         CellKindPairs<types::Duration::Primitive>::Pairs,
+        CellKindPairs<types::Point::Primitive>::Pairs,
         OptionalKindPairs<CellView, CellView>::Pairs,
 
         // A map value is a type-erased cell too, and orders the same way

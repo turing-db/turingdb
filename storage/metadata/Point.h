@@ -77,6 +77,11 @@ public:
     // Nullopt unless the three points share a CRS
     static std::optional<bool> withinBBox(Point value, Point lowerLeft, Point upperRight);
 
+    // The mean of @param count points whose mean is @param mean, and @param value. A mean
+    // of valid points of one CRS is a valid point of it, so a running mean is a Point.
+    // Raises for a value in another CRS.
+    static Point addToMean(Point mean, uint64_t count, Point value);
+
     static void format(std::string& out, Point value);
 
 private:

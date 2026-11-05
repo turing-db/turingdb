@@ -19,3 +19,6 @@ target_sources(test_query_ir_load_parquet_point PRIVATE ${IR_TEST_DIR}/StringRow
 target_include_directories(test_query_ir_load_parquet_point PRIVATE ${IR_TEST_DIR})
 target_compile_definitions(test_query_ir_load_parquet_point
     PRIVATE PARQUET_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/import/parquet")
+
+add_turing_test(test_query_ir_point_order_and_aggregate PointOrderAndAggregateTest.cpp)
+target_include_directories(test_query_ir_point_order_and_aggregate PRIVATE ${IR_TEST_DIR})

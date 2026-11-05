@@ -376,6 +376,17 @@ void FunctionDecls::initDefault() {
     minDuration->setReturnTypes({{EvaluatedType::Duration}});
     minDuration->setIsAggregate(true);
 
+    // Points order by SRID, then by coordinates, as ORDER BY sorts them
+    FunctionSignature* minPoint = createFunction("min");
+    minPoint->setArguments({EvaluatedType::Point});
+    minPoint->setReturnTypes({{EvaluatedType::Point}});
+    minPoint->setIsAggregate(true);
+
+    FunctionSignature* maxPoint = createFunction("max");
+    maxPoint->setArguments({EvaluatedType::Point});
+    maxPoint->setReturnTypes({{EvaluatedType::Point}});
+    maxPoint->setIsAggregate(true);
+
     FunctionSignature* maxDuration = createFunction("max");
     maxDuration->setArguments({EvaluatedType::Duration});
     maxDuration->setReturnTypes({{EvaluatedType::Duration}});
@@ -445,10 +456,16 @@ void FunctionDecls::initDefault() {
     avgDuration->setReturnTypes({{EvaluatedType::Duration}});
     avgDuration->setIsAggregate(true);
 
+    // The centroid of points of one CRS, coordinate by coordinate
+    FunctionSignature* avgPoint = createFunction("avg");
+    avgPoint->setArguments({EvaluatedType::Point});
+    avgPoint->setReturnTypes({{EvaluatedType::Point}});
+    avgPoint->setIsAggregate(true);
+
     // avg over a type-erased column of tagged cells - what a list mixing numeric types,
     // holding a null or holding nothing unwinds into. Each cell is read through its tag:
-    // the mean of numbers is a double and the mean of durations a duration, so the
-    // average is a cell too.
+    // the mean of numbers is a double, the mean of durations a duration and the mean of
+    // points a point, so the average is a cell too.
     FunctionSignature* avgAnyValues = createFunction("avg");
     avgAnyValues->setArguments({EvaluatedType::Any});
     avgAnyValues->setReturnTypes({{EvaluatedType::Any}});

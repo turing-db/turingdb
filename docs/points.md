@@ -59,9 +59,21 @@ under the `POINT` column kind.
 
 # Comparing
 
-Two points are equal when they share a CRS and every coordinate. `<`, `<=`, `>` and `>=` between
-points are null, as they are between maps. ORDER BY, DISTINCT and grouping order points by SRID,
-then by x, y and z. Between types, points sort after paths and before datetimes, as in Neo4j.
+Two points are equal when they share a CRS and every coordinate. Points have one total order, by
+SRID, then by x, y and z: ORDER BY, DISTINCT, grouping, `min()`, `max()` and `<`, `<=`, `>` and
+`>=` all follow it, so every wgs-84 point (4326) is less than every cartesian one (7203). Neo4j
+answers null for `<` between two different points. A point against a value of another type
+compares to null. Between types, ORDER BY sorts points after paths and before datetimes, as in
+Neo4j.
+
+# Aggregating
+
+`count`, `collect`, `min` and `max` take points, over a property, over the points a list holds,
+per group and with DISTINCT. `avg` of points is their centroid, coordinate by coordinate: a point
+of the CRS they share. Points of two CRSs raise, as points mixed with numbers do, and no point
+averages to null. A geographic centroid is the mean of the longitudes and of the latitudes, not a
+spherical mean, so points on both sides of the 180th meridian average to a longitude near 0.
+`sum` takes no point.
 
 # Distance and bounding boxes
 

@@ -1403,7 +1403,7 @@ LogicalResult AggregateUpdate::verify() {
         const Type inputValueType = untypedNull ? IntegerType::get(getContext(), 64) : declaredValueType;
 
         if (!foldsIntoDouble && inputValueType != accumulatorType) {
-            return emitOpError("sum/min/max and avg of durations must fold into an accumulator of the input's value type");
+            return emitOpError("sum/min/max and avg of durations or points must fold into an accumulator of the input's value type");
         }
     }
 

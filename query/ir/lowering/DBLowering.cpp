@@ -430,6 +430,7 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
     const bool isString = mlir::isa<storage::StringType>(inputElement);
     const bool isDateTime = mlir::isa<storage::DateTimeType>(inputElement);
     const bool isDuration = mlir::isa<storage::DurationType>(inputElement);
+    const bool isPoint = mlir::isa<storage::PointType>(inputElement);
     const bool isTaggedCell = mlir::isa<storage::AnyType>(inputElement);
 
     // An untyped null holds no value to reduce - a name no property in the graph carries,
@@ -455,8 +456,8 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
         break;
 
         case storage::AggregateKind::Avg: {
-            if (!isNumeric && !isDuration && !isTaggedCell) {
-                throw IRException("db.avg requires a numeric or a duration column");
+            if (!isNumeric && !isDuration && !isPoint && !isTaggedCell) {
+                throw IRException("db.avg requires a numeric, a duration or a point column");
             }
             return storage::reducesToADouble(kind, inputElement) ? builder.getF64Type() : inputElement;
         }
@@ -474,12 +475,12 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
         case storage::AggregateKind::Min:
         case storage::AggregateKind::Max: {
             // min/max order the values, so anything Cypher orders is fine - numbers,
-            // strings, bools, instants, lists, maps, and cells of different types - but
-            // an embedding has no order.
+            // strings, bools, instants, points, lists, maps, and cells of different types -
+            // but an embedding has no order.
             const bool isList = mlir::isa<storage::ListType>(inputElement);
             const bool isMap = mlir::isa<storage::MapType>(inputElement);
             const bool isOrderable = isNumeric || isString || isBool || isDateTime || isDuration
-                                  || isList || isMap || isTaggedCell;
+                                  || isPoint || isList || isMap || isTaggedCell;
             if (!isOrderable) {
                 throw IRException("db.min/db.max requires an orderable column");
             }

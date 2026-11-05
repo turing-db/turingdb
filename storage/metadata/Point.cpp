@@ -587,6 +587,26 @@ std::optional<bool> Point::withinBBox(Point value, Point lowerLeft, Point upperR
         && withinHeights;
 }
 
+Point Point::addToMean(Point mean, uint64_t count, Point value) {
+    if (count == 0) {
+        return value;
+    }
+
+    const PointCRS crs = mean.getCRS();
+    if (value.getCRS() != crs) {
+        throw TuringException(fmt::format("avg() reads points of one CRS, not {} and {}",
+                                          getCRSName(crs),
+                                          getCRSName(value.getCRS())));
+    }
+
+    const double total = static_cast<double>(count + 1);
+    const double x = mean.getX() + (value.getX() - mean.getX()) / total;
+    const double y = mean.getY() + (value.getY() - mean.getY()) / total;
+    const double z = mean.getZ() + (value.getZ() - mean.getZ()) / total;
+
+    return Point(crs, x, y, z);
+}
+
 void Point::format(std::string& out, Point value) {
     ValueTextScratch scratch;
     const auto output = std::back_inserter(out);

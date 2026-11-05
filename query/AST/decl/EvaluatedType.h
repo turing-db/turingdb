@@ -281,7 +281,7 @@ inline EvaluatedType commonType(EvaluatedType carried, EvaluatedType value) {
 }
 
 // The types <, <=, > and >= take: every value, entities and paths included, though only
-// numbers, strings, booleans, datetimes, durations and lists have an order
+// numbers, strings, booleans, datetimes, durations, points and lists have an order
 inline bool namesAnOrderingOperand(EvaluatedType e) {
     return namesAnEqualityOperand(e);
 }
@@ -301,6 +301,7 @@ inline std::optional<EvaluatedType> orderClassOf(EvaluatedType e) {
         case EvaluatedType::Bool:
         case EvaluatedType::DateTime:
         case EvaluatedType::Duration:
+        case EvaluatedType::Point:
         case EvaluatedType::List:
             return e;
         break;

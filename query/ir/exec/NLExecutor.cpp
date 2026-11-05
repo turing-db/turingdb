@@ -3478,14 +3478,22 @@ Primitive numericAdd(Primitive accumulator, Primitive value) {
     }
 }
 
+// A number sums as an f64 and a point keeps its running mean. A duration's total is the
+// state's 128-bit one.
 template <typename Primitive>
-using AverageTotal = std::conditional_t<std::is_same_v<Primitive, types::Duration::Primitive>,
-                                        types::Duration::Primitive,
+using AverageTotal = std::conditional_t<std::is_same_v<Primitive, types::Duration::Primitive>
+                                            || std::is_same_v<Primitive, types::Point::Primitive>,
+                                        Primitive,
                                         types::Double::Primitive>;
 
+// @param count is how many values @param total already holds, which a running mean needs
 template <typename Primitive>
-types::Double::Primitive addToAverageTotal(types::Double::Primitive total, Primitive value) {
-    return total + static_cast<types::Double::Primitive>(value);
+AverageTotal<Primitive> addToAverageTotal(AverageTotal<Primitive> total, Primitive value, uint64_t count) {
+    if constexpr (std::is_same_v<Primitive, types::Point::Primitive>) {
+        return Point::addToMean(total, count, value);
+    } else {
+        return total + static_cast<types::Double::Primitive>(value);
+    }
 }
 
 types::Double::Primitive averageOf(types::Double::Primitive total, uint64_t count) {
@@ -3511,6 +3519,10 @@ types::Duration::Primitive durationOfTotal(__int128 total) {
     return types::Duration::Primitive(static_cast<int64_t>(total));
 }
 
+types::Point::Primitive averageOf(types::Point::Primitive mean, uint64_t count) {
+    return mean;
+}
+
 template <typename Select>
 void dispatchAverageTotal(ValueType totalType, Select&& select) {
     switch (totalType) {
@@ -3522,8 +3534,12 @@ void dispatchAverageTotal(ValueType totalType, Select&& select) {
             select.template operator()<types::Duration::Primitive>();
         break;
 
+        case ValueType::Point:
+            select.template operator()<types::Point::Primitive>();
+        break;
+
         default:
-            throw IRException("avg answers a double or a duration");
+            throw IRException("avg answers a double, a duration or a point");
         break;
     }
 }
@@ -3855,16 +3871,24 @@ constexpr std::byte DURATION_ZERO_CELL[sizeof(CellTag) + sizeof(types::Duration:
 };
 
 // The running sum of tagged cells, as Cypher adds them: an integer while every number
-// summed is one, a float from the first float on, and a duration over durations. A null
-// sum has summed nothing yet. Integers wrap as a typed column's sum does. The sum is its
-// cell plus a 128-bit total of microseconds: durations add into the total, and the cell
-// of a duration sum is PT0S, so its tag still names what the sum holds.
+// summed is one, a float from the first float on, a duration over durations, and the
+// running mean of the points an average reads. A null sum has summed nothing yet. Integers
+// wrap as a typed column's sum does. The sum is its cell plus a 128-bit total of
+// microseconds: durations add into the total, and the cell of a duration sum is PT0S, so
+// its tag still names what the sum holds.
 class NLTaggedSum {
 public:
     NLTaggedSum(const std::optional<CellView>& sum, __int128 durationTotal)
         : _durationTotal(durationTotal)
     {
-        if (sum.has_value()) {
+        if (!sum.has_value()) {
+            return;
+        }
+
+        if (sum->getTag() == CellTag::Point) {
+            _tag = CellTag::Point;
+            _point = sum->getAs<types::Point::Primitive>();
+        } else {
             add(*sum);
         }
     }
@@ -3895,13 +3919,16 @@ public:
         }
     }
 
-    // An average reads every number as a float, as it does over a typed column
-    void addToAverage(CellView value) {
+    // An average reads every number as a float, as it does over a typed column. @param count
+    // is how many cells the average already holds, which the running mean of points needs.
+    void addToAverage(CellView value, uint64_t count) {
         const CellTag tag = value.getTag();
         const bool isNumber = tag == CellTag::Int || tag == CellTag::UInt || tag == CellTag::Double;
 
         if (isNumber) {
             addReal(tag, taggedNumericValue(value));
+        } else if (tag == CellTag::Point) {
+            addPoint(value.getAs<types::Point::Primitive>(), count);
         } else {
             add(value);
         }
@@ -3916,6 +3943,8 @@ public:
             return CellView {DURATION_ZERO_CELL};
         } else if (_tag == CellTag::Double) {
             item = _real;
+        } else if (_tag == CellTag::Point) {
+            item = _point;
         }
 
         return values.ownCell(item);
@@ -3940,6 +3969,8 @@ public:
             return std::nullopt;
         } else if (_tag == CellTag::Duration) {
             return stagedCell(&cells, averageOf(_durationTotal, count));
+        } else if (_tag == CellTag::Point) {
+            return stagedCell(&cells, _point);
         }
 
         bioassert(_tag == CellTag::Double, "An average sums its numbers as floats");
@@ -3952,10 +3983,17 @@ private:
     types::Int64::Primitive _integer {0};
     types::Double::Primitive _real {0.0};
     __int128 _durationTotal {0};
+    types::Point::Primitive _point {};
+
+    // Numbers sum together, and a duration or a point only with its own kind
+    static CellTag sumKind(CellTag tag) {
+        const bool sumsAlone = tag == CellTag::Duration || tag == CellTag::Point;
+        return sumsAlone ? tag : CellTag::Double;
+    }
 
     void throwIfMixing(CellTag tag) const {
         const bool summedAny = _tag != CellTag::Null;
-        const bool mixes = (_tag == CellTag::Duration) != (tag == CellTag::Duration);
+        const bool mixes = sumKind(_tag) != sumKind(tag);
 
         if (summedAny && mixes) {
             throw IRException(fmt::format("sum() and avg() cannot add '{}' to a sum of '{}'",
@@ -3992,6 +4030,13 @@ private:
         _tag = CellTag::Duration;
         _durationTotal += value.getMicroseconds();
     }
+
+    void addPoint(types::Point::Primitive value, uint64_t count) {
+        throwIfMixing(CellTag::Point);
+
+        _tag = CellTag::Point;
+        _point = Point::addToMean(_point, count, value);
+    }
 };
 
 // Fold a chunk of tagged cells into the running sum of a sum or an average, which is
@@ -4013,7 +4058,7 @@ void aggregateUpdateTaggedSum(NLAggregateState* state, const Column* input) {
         }
 
         if constexpr (Averages) {
-            sum.addToAverage(*value);
+            sum.addToAverage(*value, state->getCount() + added);
         } else {
             sum.add(*value);
         }
@@ -4091,7 +4136,7 @@ void aggregateUpdateAvg(NLAggregateState* state, const Column* input) {
     size_t seen = 0;
     for (const std::optional<Primitive>& value : inputRaw) {
         if (value.has_value()) {
-            running = addToAverageTotal(running, *value);
+            running = addToAverageTotal(running, *value, state->getCount() + seen);
             seen++;
         }
     }
@@ -4194,8 +4239,12 @@ NLAggregateUpdateFunction selectAvgUpdate(ValueType inputType) {
             return &aggregateUpdateDurationTotal;
         break;
 
+        case ValueType::Point:
+            return &aggregateUpdateAvg<types::Point::Primitive>;
+        break;
+
         default:
-            throw IRException("avg requires a numeric or a duration column");
+            throw IRException("avg requires a numeric, a duration or a point column");
         break;
     }
 
@@ -4235,6 +4284,10 @@ NLAggregateUpdateFunction selectMinMaxUpdate(ValueType inputType) {
 
         case ValueType::Duration:
             return &aggregateUpdateMinMax<types::Duration::Primitive, IsMax>;
+        break;
+
+        case ValueType::Point:
+            return &aggregateUpdateMinMax<types::Point::Primitive, IsMax>;
         break;
 
         case ValueType::List:
@@ -4492,7 +4545,7 @@ void groupFoldTaggedSum(Column* accumulator,
         NLTaggedSum sum(running, durationTotal);
 
         if constexpr (Averages) {
-            sum.addToAverage(*value);
+            sum.addToAverage(*value, counts[group]);
             counts[group]++;
         } else {
             sum.add(*value);
@@ -4629,7 +4682,7 @@ void groupFoldAvg(Column* accumulator,
         if (value.has_value()) {
             const size_t group = groups[row];
             std::optional<Total>& running = raw[group];
-            running = addToAverageTotal(running.value(), *value);
+            running = addToAverageTotal(running.value(), *value, counts[group]);
             counts[group]++;
         }
     }
@@ -4667,7 +4720,7 @@ void groupFoldAvgDistinct(Column* accumulator,
         }
 
         std::optional<Total>& running = raw[group];
-        running = addToAverageTotal(running.value(), *value);
+        running = addToAverageTotal(running.value(), *value, counts[group]);
         counts[group]++;
     }
 }
@@ -6516,8 +6569,12 @@ NLGroupAggregateFoldFunction selectGroupAvgFold(ValueType inputType) {
             return &groupFoldDurationTotal</*Distinct=*/false, /*Averages=*/true>;
         break;
 
+        case ValueType::Point:
+            return &groupFoldAvg<types::Point::Primitive>;
+        break;
+
         default:
-            throw IRException("avg requires a numeric or a duration column");
+            throw IRException("avg requires a numeric, a duration or a point column");
         break;
     }
 
@@ -6544,8 +6601,12 @@ NLGroupAggregateFoldFunction selectGroupAvgDistinctFold(ValueType inputType) {
             return &groupFoldDurationTotal</*Distinct=*/true, /*Averages=*/true>;
         break;
 
+        case ValueType::Point:
+            return &groupFoldAvgDistinct<types::Point::Primitive>;
+        break;
+
         default:
-            throw IRException("avg requires a numeric or a duration column");
+            throw IRException("avg requires a numeric, a duration or a point column");
         break;
     }
 
@@ -6584,6 +6645,10 @@ NLGroupAggregateFoldFunction selectGroupMinMaxFold(ValueType inputType) {
 
         case ValueType::Duration:
             return &groupFoldMinMax<types::Duration::Primitive, IsMax>;
+        break;
+
+        case ValueType::Point:
+            return &groupFoldMinMax<types::Point::Primitive, IsMax>;
         break;
 
         case ValueType::List:

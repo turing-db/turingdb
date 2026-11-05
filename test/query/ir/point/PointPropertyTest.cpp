@@ -288,8 +288,8 @@ TEST_F(PointPropertyTest, equatesAZeroToANegativeZero) {
                {{"point({x: 0.0, y: 0.0, crs: 'cartesian'})"}});
 }
 
-TEST_F(PointPropertyTest, ordersNoPointBeforeAnother) {
-    expectRows("RETURN point({x: 1, y: 2}) < point({x: 3, y: 4})", {{"null"}});
+TEST_F(PointPropertyTest, ordersAPointBeforeAnother) {
+    expectRows("RETURN point({x: 1, y: 2}) < point({x: 3, y: 4})", {{"true"}});
 }
 
 TEST_F(PointPropertyTest, ordersBySRIDThenByCoordinates) {
