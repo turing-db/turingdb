@@ -7,6 +7,8 @@
 #include <variant>
 #include <vector>
 
+#include "metadata/DateTime.h"
+#include "metadata/Duration.h"
 #include "metadata/PropertyType.h"
 
 namespace db {
@@ -15,7 +17,7 @@ class ParameterValue {
 public:
     using List = std::vector<ParameterValue>;
     using Map = std::map<std::string, ParameterValue>;
-    using Variant = std::variant<std::monostate, int64_t, double, bool, std::string, List, Map>;
+    using Variant = std::variant<std::monostate, int64_t, double, bool, std::string, List, Map, Duration, DateTime>;
 
     ParameterValue();
     ParameterValue(const ParameterValue& other);
@@ -35,6 +37,8 @@ public:
     const std::string& getString() const;
     const List& getList() const;
     const Map& getMap() const;
+    Duration getDuration() const;
+    DateTime getDateTime() const;
 
     void setNull();
     void setInt64(int64_t value);
@@ -44,6 +48,8 @@ public:
     std::string& setString();
     List& setList();
     Map& setMap();
+    void setDuration(Duration value);
+    void setDateTime(DateTime value);
 
 private:
     Variant _value;

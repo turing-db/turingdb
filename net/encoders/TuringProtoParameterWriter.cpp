@@ -48,6 +48,12 @@ void toStoredScalar(const db::ParameterValue& value, Item& item) {
         case db::ValueType::String:
             item = db::types::String::Primitive {value.getString()};
         break;
+        case db::ValueType::Duration:
+            item = value.getDuration();
+        break;
+        case db::ValueType::DateTime:
+            item = value.getDateTime();
+        break;
         default:
             bioassert(false, "Parameter of type {} is not a scalar", value.getTypeName());
         break;

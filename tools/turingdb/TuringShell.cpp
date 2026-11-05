@@ -726,6 +726,12 @@ void asString(std::string& out, const ParameterValue& root) {
             case ValueType::String:
                 out += value.getString();
             break;
+            case ValueType::Duration:
+                asString(out, value.getDuration());
+            break;
+            case ValueType::DateTime:
+                asString(out, value.getDateTime());
+            break;
             case ValueType::List: {
                 const ParameterValue::List& list = value.getList();
 

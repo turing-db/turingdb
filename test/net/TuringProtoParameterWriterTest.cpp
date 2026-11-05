@@ -227,3 +227,28 @@ TEST_F(TuringProtoParameterWriterTest, aDeeplyNestedParameterIsWritten) {
     ASSERT_EQ(list.size(), 1u);
     EXPECT_EQ(list.front().getAs<Int64>(), 7);
 }
+
+TEST_F(TuringProtoParameterWriterTest, aDurationAndADateTimeKeepTheirTags) {
+    ParameterMap parameters;
+
+    ParameterValue value;
+    value.setDuration(Duration {3'600'000'000});
+    parameters.set("wait", value);
+    value.setDateTime(DateTime {1'762'351'500'000'000});
+    parameters.set("when", value);
+
+    write(parameters);
+
+    MapView view;
+    decode(view);
+    ASSERT_EQ(view.size(), 2u);
+
+    auto entry = view.begin();
+    EXPECT_EQ(entry->getKey(), "wait");
+    ASSERT_EQ(entry->getValue().getTag(), CellTag::Duration);
+    EXPECT_EQ(entry->getValue().getAs<Duration>(), Duration {3'600'000'000});
+    ++entry;
+    EXPECT_EQ(entry->getKey(), "when");
+    ASSERT_EQ(entry->getValue().getTag(), CellTag::DateTime);
+    EXPECT_EQ(entry->getValue().getAs<DateTime>(), DateTime {1'762'351'500'000'000});
+}

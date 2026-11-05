@@ -9,6 +9,7 @@
 
 #include "GraphPath.h"
 #include "LocalMemory.h"
+#include "PyTimeTypes.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/DataframeManager.h"
 #include "dataframe/NamedColumn.h"
@@ -188,24 +189,14 @@ namespace {
 // expectation. Nesting recurses through view() -> element()/entry() -> operator(); keeping
 // them as members of one struct lets them call each other without a forward declaration.
 struct ValueToPyObject {
-    mutable nb::object _timedelta;
-    mutable nb::object _epoch;
+    mutable PyTimeTypes _times;
 
     nb::object duration(db::Duration value) const {
-        if (!_timedelta.is_valid()) {
-            _timedelta = nb::module_::import_("datetime").attr("timedelta");
-        }
-
-        return _timedelta(nb::arg("microseconds") = value.getMicroseconds());
+        return _times.getTimedelta()(nb::arg("microseconds") = value.getMicroseconds());
     }
 
     nb::object dateTime(db::DateTime value) const {
-        if (!_epoch.is_valid()) {
-            const nb::module_ datetime = nb::module_::import_("datetime");
-            _epoch = datetime.attr("datetime")(1970, 1, 1, nb::arg("tzinfo") = datetime.attr("timezone").attr("utc"));
-        }
-
-        return _epoch + duration(db::Duration {value.getMicroseconds()});
+        return _times.getEpoch() + duration(db::Duration {value.getMicroseconds()});
     }
 
     nb::object view(const db::ListView& listView) const {

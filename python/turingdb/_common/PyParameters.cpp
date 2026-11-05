@@ -1,5 +1,7 @@
 #include "PyParameters.h"
 
+#include <stdint.h>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -8,6 +10,9 @@
 
 #include "ParameterMap.h"
 #include "ParameterValue.h"
+#include "PyTimeTypes.h"
+#include "metadata/DateTime.h"
+#include "metadata/Duration.h"
 
 #include "TuringException.h"
 
@@ -16,6 +21,37 @@ namespace pybindings {
 namespace {
 
 using Item = std::pair<nb::handle, db::ParameterValue*>;
+
+// Whether @param value != value holds, as it does for pandas.NaT. PyObject_RichCompareBool,
+// and so nanobind's equal(), answer by identity first and never ask.
+bool isUnequalToItself(nb::handle value) {
+    const nb::object unequal = nb::steal(PyObject_RichCompare(value.ptr(), value.ptr(), Py_NE));
+    if (!unequal.is_valid()) {
+        throw nb::python_error();
+    }
+
+    return nb::cast<bool>(unequal);
+}
+
+int64_t microsecondsOf(nb::handle delta) {
+    constexpr int64_t MICROSECONDS_PER_DAY = 86'400'000'000;
+    constexpr int64_t MAX_DAYS = std::numeric_limits<int64_t>::max() / MICROSECONDS_PER_DAY - 1;
+
+    const int64_t days = nb::cast<int64_t>(delta.attr("days"));
+    const int64_t seconds = nb::cast<int64_t>(delta.attr("seconds"));
+    const int64_t microseconds = nb::cast<int64_t>(delta.attr("microseconds"));
+
+    if (days > MAX_DAYS || days < -MAX_DAYS) {
+        throw TuringException("A timedelta of " + std::to_string(days) + " days exceeds the Duration range");
+    }
+
+    const bool hasNanoseconds = nb::hasattr(delta, "nanoseconds") && nb::cast<int64_t>(delta.attr("nanoseconds")) != 0;
+    if (hasNanoseconds) {
+        throw TuringException("A parameter cannot hold nanoseconds: a Duration and a DateTime count microseconds");
+    }
+
+    return (days * 86'400 + seconds) * 1'000'000 + microseconds;
+}
 
 std::string getTypeName(nb::handle value) {
     return nb::type_name(value.type()).c_str();
@@ -30,7 +66,7 @@ std::string getKey(nb::handle key) {
 }
 
 // A bool is checked before an int: in Python, bool is a subclass of int.
-void readValue(nb::handle source, db::ParameterValue& target, std::vector<Item>& worklist) {
+void readValue(nb::handle source, db::ParameterValue& target, PyTimeTypes& times, std::vector<Item>& worklist) {
     if (source.is_none()) {
         target.setNull();
     } else if (nb::isinstance<nb::bool_>(source)) {
@@ -62,6 +98,18 @@ void readValue(nb::handle source, db::ParameterValue& target, std::vector<Item>&
         for (const auto& [key, value] : nb::borrow<nb::dict>(source)) {
             worklist.emplace_back(value, &map[getKey(key)]);
         }
+    } else if (nb::isinstance(source, times.getTimedelta())) {
+        target.setDuration(db::Duration {microsecondsOf(source)});
+    } else if (nb::isinstance(source, times.getDatetime())) {
+        // pandas.NaT is a datetime unequal to itself: the missing instant, as None is
+        if (isUnequalToItself(source)) {
+            target.setNull();
+        } else if (source.attr("utcoffset")().is_none()) {
+            // What datetime itself calls naive: no tzinfo, or one that names no offset
+            throw TuringException("A datetime parameter must carry a timezone: a naive datetime names no instant");
+        } else {
+            target.setDateTime(db::DateTime {microsecondsOf(source - times.getEpoch())});
+        }
     } else {
         throw TuringException("A parameter cannot hold a Python " + getTypeName(source));
     }
@@ -74,6 +122,8 @@ void readParameters(nb::handle source, db::ParameterMap& parameters) {
         throw TuringException("The query parameters must be a dict, not " + getTypeName(source));
     }
 
+    PyTimeTypes times;
+
     std::vector<Item> worklist;
     for (const auto& [name, value] : nb::borrow<nb::dict>(source)) {
         worklist.emplace_back(value, &parameters.insert(getKey(name)));
@@ -83,7 +133,7 @@ void readParameters(nb::handle source, db::ParameterMap& parameters) {
         const auto [value, target] = worklist.back();
         worklist.pop_back();
 
-        readValue(value, *target, worklist);
+        readValue(value, *target, times, worklist);
     }
 }
 

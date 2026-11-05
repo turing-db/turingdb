@@ -143,3 +143,19 @@ TEST(ParameterValueTest, aDeepValueIsMovedOverAnotherDeepValue) {
     }
     EXPECT_EQ(level->getInt64(), 7);
 }
+
+TEST(ParameterValueTest, aDurationAndADateTimeKeepTheirMicroseconds) {
+    ParameterValue wait;
+    wait.setDuration(Duration {3'600'000'000});
+
+    ParameterValue when;
+    when.setDateTime(DateTime {1'762'351'500'000'000});
+
+    EXPECT_EQ(wait.getType(), ValueType::Duration);
+    EXPECT_EQ(wait.getDuration().getMicroseconds(), 3'600'000'000);
+    EXPECT_EQ(when.getType(), ValueType::DateTime);
+    EXPECT_EQ(when.getDateTime().getMicroseconds(), 1'762'351'500'000'000);
+
+    const ParameterValue copy(when);
+    EXPECT_EQ(copy.getDateTime(), when.getDateTime());
+}
