@@ -126,7 +126,8 @@ bool ParquetImportVisitor::onBoolValues(size_t columnIndex, std::span<const bool
 
 void ParquetImportVisitor::discoverPropertyColumn(size_t columnIndex,
                                                   const std::string& path,
-                                                  const parquet::ColumnDescriptor& descriptor) {
+                                                  const parquet::ColumnDescriptor& descriptor,
+                                                  const ParquetGeometry& geometry) {
     MetadataBuilder& metadataBuilder = _builder->metadata();
 
     const parquet::Type::type physicalType = descriptor.physical_type();
@@ -194,6 +195,16 @@ void ParquetImportVisitor::discoverPropertyColumn(size_t columnIndex,
         valueType = ValueType::Duration;
     }
 
+    ParquetGeometryCRS geometryCRS {ParquetGeometryCRS::Geographic};
+    const bool holdsGeometries = geometry.findColumn(name, descriptor, geometryCRS);
+    if (holdsGeometries) {
+        if (physicalType != parquet::Type::BYTE_ARRAY) {
+            throw TuringException(fmt::format("Geometry column '{}' must be a BYTE_ARRAY column of WKB.", name));
+        }
+
+        valueType = ValueType::Point;
+    }
+
     if (isList) {
         valueType = ValueType::List;
     }
@@ -218,7 +229,9 @@ void ParquetImportVisitor::discoverPropertyColumn(size_t columnIndex,
                         .maxDefLevel = maxDefLevel,
                         .maxRepLevel = maxRepLevel,
                         .timeUnit = timeUnit,
-                        .holdsDurations = holdsDurations};
+                        .holdsDurations = holdsDurations,
+                        .holdsGeometries = holdsGeometries,
+                        .geometryCRS = geometryCRS};
 
     if (isList) {
         collectListDefLevels(descriptor, col.listDefLevels);
@@ -459,8 +472,20 @@ ListContainer::ListItemVariant ParquetImportVisitor::listElement(const PropertyC
         case parquet::Type::BOOLEAN:
             return types::Bool::Primitive(_propListBoolVals.at(columnIndex).at(valueIndex) != 0);
         break;
-        case parquet::Type::BYTE_ARRAY:
-            return types::String::Primitive {_propByteArrayVals.at(columnIndex).at(valueIndex)};
+        case parquet::Type::BYTE_ARRAY: {
+            const std::string& bytes = _propByteArrayVals.at(columnIndex).at(valueIndex);
+
+            if (prop.holdsGeometries) {
+                Point point;
+                if (!ParquetGeometry::readPoint(prop.name, bytes, prop.geometryCRS, point)) {
+                    return PropertyNull {};
+                }
+
+                return point;
+            }
+
+            return types::String::Primitive {bytes};
+        }
         break;
 
         case parquet::Type::FLOAT:

@@ -13,3 +13,9 @@ target_include_directories(test_query_ir_point_spatial_functions PRIVATE ${IR_TE
 add_turing_test(test_query_ir_load_jsonl_point LoadJsonlPointTest.cpp)
 target_sources(test_query_ir_load_jsonl_point PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
 target_include_directories(test_query_ir_load_jsonl_point PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_load_parquet_point LoadParquetPointTest.cpp)
+target_sources(test_query_ir_load_parquet_point PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_load_parquet_point PRIVATE ${IR_TEST_DIR})
+target_compile_definitions(test_query_ir_load_parquet_point
+    PRIVATE PARQUET_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/import/parquet")

@@ -30,6 +30,7 @@ namespace rv = ranges::views;
 bool ParquetEdgeVisitor::onFileStart(const parquet::FileMetaData& metadata) {
     const parquet::SchemaDescriptor* schema = metadata.schema();
     const int numColumns = metadata.num_columns();
+    const ParquetGeometry geometry(metadata);
 
     for (int columnIndex = 0; columnIndex < numColumns; columnIndex++) {
         const parquet::ColumnDescriptor* desc = schema->Column(columnIndex);
@@ -59,7 +60,7 @@ bool ParquetEdgeVisitor::onFileStart(const parquet::FileMetaData& metadata) {
 
             _edgetypeColIdx = columnIndex;
         } else {
-            discoverPropertyColumn(columnIndex, path, *desc);
+            discoverPropertyColumn(columnIndex, path, *desc, geometry);
         }
     }
 
@@ -278,12 +279,21 @@ void ParquetEdgeVisitor::addEdgeProperty(const EdgeRecord& edge,
         }
         break;
 
+        case ValueType::Point: {
+            const std::string& wkb = _propByteArrayVals.at(columnIndex).at(valueIndex);
+
+            Point point;
+            if (ParquetGeometry::readPoint(prop.name, wkb, prop.geometryCRS, point)) {
+                builder.addEdgeProperty<types::Point>(edge, prop.propertyTypeID, point);
+            }
+        }
+        break;
+
         // Handled by applyEdgeListProperty, which groups the repeated values into lists
         // before any row reaches here
         case ValueType::List:
         // ValueTypes that aren't represented in Parquet
         case ValueType::Map:
-        case ValueType::Point:
         case ValueType::UInt64:
         case ValueType::Embedding:
         case ValueType::Invalid:

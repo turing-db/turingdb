@@ -90,3 +90,18 @@ LOAD JSONL '/data/cities.jsonl' AS cities WITH POINTS [at]
 A JSON null leaves the property unset. An object naming no point, or holding a null, raises.
 `WITH POINTS`, `WITH DATETIMES` and `WITH DURATIONS` fill one `TypedPropertySpec`, which maps
 each name to the type it is read as, and a name given two types is rejected.
+
+`LOAD PARQUET` reads points out of a geometry column with no clause of its own: a column
+Parquet's GEOMETRY or GEOGRAPHY logical type marks, or one GeoParquet's `geo` file metadata names
+with the WKB encoding (`io/parquet/ParquetGeometry.h`). Each value is a WKB point, little- or
+big-endian, ISO or EWKB: a 2D point or a 3D one, and an empty point reads as null. A list of
+geometries reads as a list of points.
+
+```
+CRS of the column                                 points
+OGC:CRS84, EPSG:4326, EPSG:4979, the default      wgs-84, or wgs-84-3d for a 3D point
+GeoParquet "crs": null                            cartesian, or cartesian-3d
+any other                                         rejected
+```
+
+A geometry that is no point, a point with a measure, and bytes that are no WKB are rejected.

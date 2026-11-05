@@ -11,6 +11,7 @@
 
 #include <parquet/types.h>
 
+#include "ParquetGeometry.h"
 #include "ParquetReader.h"
 
 #include "ID.h"
@@ -63,6 +64,9 @@ protected:
         parquet::LogicalType::TimeUnit::unit timeUnit {parquet::LogicalType::TimeUnit::UNKNOWN};
 
         bool holdsDurations {false};
+
+        bool holdsGeometries {false};
+        ParquetGeometryCRS geometryCRS {ParquetGeometryCRS::Geographic};
 
         // Indexed by repetition depth: the definition level a value must reach for the
         // list at that depth to hold an element. Index 0 is unused.
@@ -125,7 +129,8 @@ protected:
     // Infers a property column value type and registers property type
     void discoverPropertyColumn(size_t columnIndex,
                                 const std::string& path,
-                                const parquet::ColumnDescriptor& descriptor);
+                                const parquet::ColumnDescriptor& descriptor,
+                                const ParquetGeometry& geometry);
 
     // Capture helpers for property columns, called by the derived value callbacks
     // once they have handled their entity-specific columns.
