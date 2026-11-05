@@ -58,6 +58,8 @@ target_include_directories(test_query_ir_list_element_operand PRIVATE ${IR_TEST_
 add_turing_test(test_query_ir_list_scalar_concat ListScalarConcatTest.cpp)
 target_include_directories(test_query_ir_list_scalar_concat PRIVATE ${IR_TEST_DIR})
 
+add_call_v3_test(test_query_ir_list_plus_null ListPlusNullTest.cpp)
+
 add_turing_test(test_query_ir_list_slice ListSliceTest.cpp)
 target_include_directories(test_query_ir_list_slice PRIVATE ${IR_TEST_DIR})
 

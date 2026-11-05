@@ -1237,15 +1237,19 @@ mlir::Value DBProgramGenerator::translateListLiteral(const ListLiteral* list) {
     return constant.getResult();
 }
 
-mlir::Value DBProgramGenerator::singletonList(mlir::Value column) {
+mlir::Value DBProgramGenerator::joinedListOperand(mlir::Value column) {
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::Type elementType = mlir::cast<mlir::db::ColumnType>(column.getType()).getType();
     const mlir::Type listType = mlir::storage::ListType::get(_mlirCtxt, elementType);
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
 
-    mlir::db::MakeList makeList = _opBuilder.create<mlir::db::MakeList>(_opBuilder.getUnknownLoc(),
+    mlir::db::MakeList makeList = _opBuilder.create<mlir::db::MakeList>(loc,
                                                                         allocColumnType(listType),
                                                                         mlir::ValueRange {column});
 
-    return makeList.getResult();
+    const mlir::Value holdsAValue = _opBuilder.create<mlir::db::IsNotNullOp>(loc, boolType, column).getResult();
+
+    return createCase(mlir::ValueRange {holdsAValue}, mlir::ValueRange {makeList.getResult()}, mlir::Value {});
 }
 
 mlir::Value DBProgramGenerator::translateListOfColumns(const ListLiteral* list) {
@@ -9447,14 +9451,14 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
             const bool isConcatenation = !addsACell && (joinsAsText || joinsAsList);
 
             if (isConcatenation) {
-                // A scalar concatenated with a list joins it as the one-element list it
-                // stands for, so both sides of the concatenation are lists
+                // A scalar concatenated with a list joins it as the list it stands for, so
+                // both sides of the concatenation are lists
                 const bool concatenatesLists = resultType == EvaluatedType::List;
                 const bool lhsJoinsAList = concatenatesLists && lhsExpr->getType() != EvaluatedType::List;
                 const bool rhsJoinsAList = concatenatesLists && rhsExpr->getType() != EvaluatedType::List;
 
-                const mlir::Value lhsColumn = lhsJoinsAList ? singletonList(lhs) : lhs;
-                const mlir::Value rhsColumn = rhsJoinsAList ? singletonList(rhs) : rhs;
+                const mlir::Value lhsColumn = lhsJoinsAList ? joinedListOperand(lhs) : lhs;
+                const mlir::Value rhsColumn = rhsJoinsAList ? joinedListOperand(rhs) : rhs;
 
                 _part._exprMap[expr] = _opBuilder.create<mlir::db::ConcatOp>(loc, noneType, lhsColumn, rhsColumn).getResult();
             } else {

@@ -124,12 +124,12 @@ TEST_F(ParameterOperandTypingTest, aParameterOperandIsNarrowedToTheBindsThatType
     EXPECT_EQ(typing._rightAccepted, EvaluatedTypeSet {EvaluatedType::Integer});
 }
 
-TEST_F(ParameterOperandTypingTest, aNullResultIsOneOfTheBindsOutcomes) {
+TEST_F(ParameterOperandTypingTest, aSumWithNullIsNullWhateverTheBind) {
     BinaryTyping typing;
     typePair(EvaluatedType::Parameter, BinaryOperator::Add, EvaluatedType::Null, typing);
 
     ASSERT_TRUE(typing.isValid()) << typing._error;
-    EXPECT_EQ(typing._result._type, EvaluatedType::Parameter);
-    EXPECT_EQ(typing._result._candidates, (EvaluatedTypeSet {EvaluatedType::List, EvaluatedType::Null}));
+    EXPECT_EQ(typing._result._type, EvaluatedType::Null);
+    EXPECT_TRUE(typing._result._candidates.isEmpty());
     EXPECT_EQ(typing._leftAccepted, PARAMETER_VALUE_TYPES);
 }

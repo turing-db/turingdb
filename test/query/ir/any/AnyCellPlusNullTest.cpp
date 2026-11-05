@@ -24,14 +24,14 @@ TEST_F(AnyCellPlusNullTest, addsNullToAScalarCellOnEveryRow) {
     expectRows("UNWIND [[1, 'a'], [2, 'b']] AS xs RETURN xs[0] + null, null + xs[1]", {{"null", "null"}, {"null", "null"}});
 }
 
-TEST_F(AnyCellPlusNullTest, appendsNullToAListCellOnEveryRow) {
+TEST_F(AnyCellPlusNullTest, addsNullToAListCellOnEveryRow) {
     expectRows("UNWIND [{l: [1, 2]}, {l: [3]}] AS m RETURN m.l + null, null + m.l",
-               {{"[1, 2, null]", "[null, 1, 2]"}, {"[3, null]", "[null, 3]"}});
+               {{"null", "null"}, {"null", "null"}});
 }
 
-TEST_F(AnyCellPlusNullTest, appendsNullToAMixedListCellOnEveryRow) {
+TEST_F(AnyCellPlusNullTest, addsNullToAMixedListCellOnEveryRow) {
     expectRows("UNWIND [[[1], 'a'], ['b', [2]]] AS xs RETURN xs[0] + null",
-               {{"[1, null]"}, {"null"}});
+               {{"null"}, {"null"}});
 }
 
 int main(int argc, char** argv) {

@@ -20,21 +20,17 @@ protected:
     }
 };
 
-TEST_F(AnyListConcatenationNullTest, joinsATypedListAndNull) {
-    expectRows("RETURN [1] + null, null + [1]", {{"[1, null]", "[null, 1]"}});
+TEST_F(AnyListConcatenationNullTest, answersNullForAListCellAndTheNullLiteral) {
+    expectRows("WITH [[1], null, 'a'] AS xs RETURN xs[0] + null, null + xs[0]", {{"null", "null"}});
 }
 
-TEST_F(AnyListConcatenationNullTest, joinsAListCellAndTheNullLiteral) {
-    expectRows("WITH [[1], null, 'a'] AS xs RETURN xs[0] + null, null + xs[0]", {{"[1, null]", "[null, 1]"}});
+TEST_F(AnyListConcatenationNullTest, answersNullForAListCellAndANullCell) {
+    expectRows("WITH [[1], null, 'a'] AS xs RETURN xs[0] + xs[1], xs[1] + xs[0]", {{"null", "null"}});
 }
 
-TEST_F(AnyListConcatenationNullTest, joinsAListCellAndANullCell) {
-    expectRows("WITH [[1], null, 'a'] AS xs RETURN xs[0] + xs[1], xs[1] + xs[0]", {{"[1, null]", "[null, 1]"}});
-}
-
-TEST_F(AnyListConcatenationNullTest, joinsAListCellAndNullOnEveryRow) {
+TEST_F(AnyListConcatenationNullTest, answersNullForAListCellAndNullOnEveryRow) {
     expectRows("UNWIND [[[1], null], [[2], null]] AS xs RETURN xs[0] + null",
-               {{"[1, null]"}, {"[2, null]"}});
+               {{"null"}, {"null"}});
 }
 
 int main(int argc, char** argv) {

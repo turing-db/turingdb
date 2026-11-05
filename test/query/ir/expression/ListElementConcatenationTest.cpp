@@ -142,8 +142,8 @@ TEST_F(ListElementConcatenationTest, answersNullForANullNestedList) {
     expectRows("WITH [[1, 2], null] AS l RETURN l[0] || l[1] AS a, l[1] || [3] AS b", {{"null", "null"}});
 }
 
-TEST_F(ListElementConcatenationTest, appendsANullElementToANestedList) {
-    expectRows("WITH [[1, 2], 'a', null] AS l RETURN l[0] + l[2] AS a, l[1] + l[2] AS b", {{"[1, 2, null]", "null"}});
+TEST_F(ListElementConcatenationTest, addsANullElementToANestedListAsNull) {
+    expectRows("WITH [[1, 2], 'a', null] AS l RETURN l[0] + l[2] AS a, l[1] + l[2] AS b", {{"null", "null"}});
 }
 
 TEST_F(ListElementConcatenationTest, convertsNoNumberAnElementHolds) {

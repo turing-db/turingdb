@@ -1158,8 +1158,9 @@ private:
 
     mlir::Value createCase(mlir::ValueRange conditions, mlir::ValueRange values, mlir::Value defaultValue);
 
-    // The one-element list a column makes, the shape a scalar takes to join a list
-    mlir::Value singletonList(mlir::Value column);
+    // The list a scalar joins a list as under '+': the one-element list it makes, and null
+    // where it is null
+    mlir::Value joinedListOperand(mlir::Value column);
 
     // The comparison of two types that can never hold equal values: false where both
     // operands hold a value, and null where either is absent, since nothing compares to a

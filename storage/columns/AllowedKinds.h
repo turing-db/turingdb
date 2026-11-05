@@ -433,22 +433,6 @@ struct CellListKindPairs<OP_ADD> {
     using Pairs = CellKindPairs<ListView>::Pairs;
 };
 
-// A cell meets the null literal under '+' alone, which appends it to the list the cell holds
-template <ColumnOperator Op>
-struct CellNullKindPairs {
-    using Pairs = std::tuple<>;
-};
-
-template <>
-struct CellNullKindPairs<OP_ADD> {
-    using Pairs = std::tuple<
-        KindPair<CellView, PropertyNull>,
-        KindPair<std::optional<CellView>, PropertyNull>,
-        KindPair<PropertyNull, CellView>,
-        KindPair<PropertyNull, std::optional<CellView>>
-    >;
-};
-
 template <ColumnOperator Op>
     requires (Op == OP_ADD) || (Op == OP_SUB) || (Op == OP_MUL) || (Op == OP_DIV)
           || (Op == OP_MOD) || (Op == OP_POW)
@@ -474,8 +458,7 @@ struct PairRestrictions<Op> {
         typename TemporalArithmeticKindPairs<Op>::Pairs,
 
         typename CellTextKindPairs<Op>::Pairs,
-        typename CellListKindPairs<Op>::Pairs,
-        typename CellNullKindPairs<Op>::Pairs
+        typename CellListKindPairs<Op>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<>;

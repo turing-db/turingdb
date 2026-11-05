@@ -309,9 +309,9 @@ template <typename T, typename U>
                                       operandTypeName(b)));
 }
 
-// The list an operand of a '+' that joins a list stands for: the list a cell holds, or the
-// one-element list of any other value, a null among them. The list buffer keeps a string
-// as a view, so a string owning its characters is copied into @param stringBuffer first.
+// The list a non-null operand of a '+' that joins a list stands for: the list a cell holds,
+// or the one-element list of any other value. The list buffer keeps a string as a view, so
+// a string owning its characters is copied into @param stringBuffer first.
 template <typename T>
 inline ListView joinedListOperand(QueryListBuffer* listBuffer, StringBuffer* stringBuffer, const T& value) {
     using Decayed = std::decay_t<T>;
@@ -331,9 +331,7 @@ inline ListView joinedListOperand(QueryListBuffer* listBuffer, StringBuffer* str
 
         item = CellTagDispatcher {value.getTag()}.execute(read, value);
     } else if constexpr (TypeUtils::is_optional_v<Decayed>) {
-        if (value.has_value()) {
-            return joinedListOperand(listBuffer, stringBuffer, *value);
-        }
+        return joinedListOperand(listBuffer, stringBuffer, *value);
     } else if constexpr (std::is_same_v<Decayed, types::String::OwningPrimitive>) {
         item = stringBuffer->insert(value);
     } else {
@@ -409,8 +407,6 @@ inline std::optional<CellView> visitArithmeticOperand(const T& value, Visit&& vi
 
     } else if constexpr (TypeUtils::is_optional_v<T>) {
         return value.has_value() ? visitArithmeticOperand(*value, visit, reject) : std::nullopt;
-    } else if constexpr (std::is_same_v<Decayed, PropertyNull>) {
-        return std::nullopt;
     } else if constexpr (std::is_arithmetic_v<Decayed> || Temporal<Decayed>) {
         return visit(arithmeticOperand(value));
     } else {
@@ -603,11 +599,13 @@ struct BinaryOp {
     inline std::optional<CellView> operator()(T&& a, U&& b) const {
         bioassert(_listBuffer, "Arithmetic over a type-erased cell has no list buffer to stage its result in");
 
+        if (holdsNull(a) || holdsNull(b)) {
+            return std::nullopt;
+        }
+
         if constexpr (std::is_same_v<F, std::plus<>>) {
             if (holdsAList(a) || holdsAList(b)) {
                 return stagedCell(_listBuffer, joinedList(a, b));
-            } else if (holdsNull(a) || holdsNull(b)) {
-                return std::nullopt;
             } else if (holdsAString(a) || holdsAString(b)) {
                 bioassert(_stringBuffer, "A '+' over a string cell has no string buffer to join its text in");
 
@@ -618,8 +616,6 @@ struct BinaryOp {
 
                 return stagedCell(_listBuffer, *text);
             }
-        } else if (holdsNull(a) || holdsNull(b)) {
-            return std::nullopt;
         }
 
         const auto reject = [&a, &b]() -> std::optional<CellView> {
@@ -642,14 +638,13 @@ struct BinaryOp {
     }
 
     // A list beside a cell joins the list the cell holds, or takes the cell as one more
-    // element. Only an absent list makes the result null.
+    // element. A null on either side makes the result null.
     template <typename T, typename U>
         requires AddsAListToATaggedCell<F, T, U>
     inline std::optional<ListView> operator()(T&& a, U&& b) const {
         bioassert(_listBuffer, "A '+' over a type-erased cell has no list buffer to join its list in");
 
-        const bool joinsAnAbsentList = (ListTyped<T> && !holdsAList(a)) || (ListTyped<U> && !holdsAList(b));
-        if (joinsAnAbsentList) {
+        if (holdsNull(a) || holdsNull(b)) {
             return std::nullopt;
         }
 
@@ -673,8 +668,8 @@ struct BinaryOp {
         return F {}(*lhs, *rhs);
     }
 
-    // The list '+' makes of two values one of which holds a list: the two lists joined, or
-    // the other value appended or prepended as one element
+    // The list '+' makes of two non-null values one of which holds a list: the two lists
+    // joined, or the other value appended or prepended as one element
     template <typename T, typename U>
     ListView joinedList(const T& a, const U& b) const {
         return _listBuffer->concatenate(joinedListOperand(_listBuffer, _stringBuffer, a),

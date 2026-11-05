@@ -30,5 +30,5 @@ TEST_F(NullTemporalOperandTest, answersNullBesideAnOperandSomeValueTakes) {
     expectRows("RETURN datetime('2024-01-01T00:00:00Z') - null, null - datetime('2024-01-01T00:00:00Z')",
                {{"null", "null"}});
     expectRows("RETURN 2 - null, null / 2, null % 2, 2 ^ null, null + 'a', [1] + null",
-               {{"null", "null", "null", "null", "null", "[1, null]"}});
+               {{"null", "null", "null", "null", "null", "null"}});
 }

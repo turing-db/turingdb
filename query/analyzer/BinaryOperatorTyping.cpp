@@ -37,11 +37,10 @@ bool computesTimeOverAny(TypePairBitset pair) {
 }
 
 // The types a scalar operand of '+' joins a list as: whatever an element of a list can be,
-// a tagged cell and a null included - appending a null leaves a list with a null in it.
+// a tagged cell included
 bool joinsAList(EvaluatedType type) {
     return namesAListElementType(type)
         || type == EvaluatedType::Char
-        || type == EvaluatedType::Null
         || type == EvaluatedType::Any;
 }
 
@@ -154,14 +153,17 @@ RuleResult additionType(EvaluatedType a, EvaluatedType b) {
     const bool oneSideIsAList = leftIsAList || b == EvaluatedType::List;
     const EvaluatedType scalar = leftIsAList ? b : a;
 
-    // A cell meets a string, a boolean or a null row by row: holding text or a number it
-    // joins it as text, holding a list it takes it as an element
+    // A cell meets a string or a boolean row by row: holding text or a number it joins it
+    // as text, holding a list it takes it as an element
     const bool addsToAny = pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::String)
                         || pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Char)
-                        || pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Bool)
-                        || pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Null);
+                        || pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Bool);
 
-    if (pair == TypePairBitset(EvaluatedType::String, EvaluatedType::String)) {
+    const bool eitherNull = a == EvaluatedType::Null || b == EvaluatedType::Null;
+
+    if (eitherNull) {
+        return valid(EvaluatedType::Null);
+    } else if (pair == TypePairBitset(EvaluatedType::String, EvaluatedType::String)) {
         return valid(EvaluatedType::String);
     } else if (oneSideIsAList && joinsAList(scalar)) {
         return valid(EvaluatedType::List);
@@ -199,9 +201,6 @@ RuleResult concatenationType(EvaluatedType a, EvaluatedType b) {
     } else if (pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Any)) {
         return valid(EvaluatedType::Any);
     } else if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
-        // '||' joins two strings or two lists, so an unknown value is no side of one
-        // rather than an element to append: [1, 2] || null is null where [1, 2] + null
-        // is [1, 2, null]
         return valid(EvaluatedType::Null);
     }
 
