@@ -814,43 +814,87 @@ SplitFunction::SplitFunction(QueryListBuffer* listBuffer)
 {
 }
 
-SplitFunction::ResultType SplitFunction::operator()(types::String::Primitive string, types::String::Primitive delimiter) {
+SplitFunction::ResultType SplitFunction::operator()(types::String::Primitive string, std::span<const types::String::Primitive> delimiters) {
     _parts.clear();
+
+    const auto isTheString = [string](const types::String::Primitive delimiter) {
+        return delimiter == string;
+    };
+
+    const auto isEmpty = [](const types::String::Primitive delimiter) {
+        return delimiter.empty();
+    };
 
     if (string.empty()) {
         _parts.emplace_back(string);
-        return _listBuffer->insert(_parts);
+    } else if (std::ranges::any_of(delimiters, isTheString)) {
+        _parts.emplace_back(string.substr(0, 0));
+        _parts.emplace_back(string.substr(string.size()));
+    } else if (std::ranges::any_of(delimiters, isEmpty)) {
+        splitIntoCharacters(string, delimiters);
+    } else {
+        splitAtDelimiters(string, delimiters);
     }
 
-    if (delimiter.empty()) {
-        size_t partStart = 0;
+    return _listBuffer->insert(_parts);
+}
 
-        while (partStart < string.size()) {
-            const types::String::Primitive rest = string.substr(partStart);
-            const size_t charSize = characterOffset(rest, 1);
-
-            _parts.emplace_back(rest.substr(0, charSize));
-            partStart += charSize;
-        }
-        return _listBuffer->insert(_parts);
-    }
+void SplitFunction::splitAtDelimiters(types::String::Primitive string, std::span<const types::String::Primitive> delimiters) {
+    _nextMatches.resize(delimiters.size());
+    std::ranges::transform(delimiters, _nextMatches.begin(), [string](const types::String::Primitive delimiter) {
+        return string.find(delimiter);
+    });
 
     size_t partStart = 0;
-    size_t delimiterStart = string.find(delimiter);
 
-    while (delimiterStart != std::string_view::npos) {
-        const size_t partSize = delimiterStart - partStart;
+    while (true) {
+        size_t cut = std::string_view::npos;
+        size_t cutSize = 0;
 
-        const std::string_view subsec = string.substr(partStart, partSize);
-        _parts.emplace_back(subsec);
+        for (size_t delimiterIndex = 0; delimiterIndex < delimiters.size(); delimiterIndex++) {
+            const types::String::Primitive delimiter = delimiters[delimiterIndex];
+            size_t& match = _nextMatches[delimiterIndex];
 
-        partStart = delimiterStart + delimiter.size();
-        delimiterStart = string.find(delimiter, partStart);
+            if (match < partStart) {
+                match = string.find(delimiter, partStart);
+            }
+
+            if (match < cut) {
+                cut = match;
+                cutSize = delimiter.size();
+            }
+        }
+
+        if (cut == std::string_view::npos) {
+            break;
+        }
+
+        _parts.emplace_back(string.substr(partStart, cut - partStart));
+        partStart = cut + cutSize;
     }
 
     _parts.emplace_back(string.substr(partStart));
+}
 
-    return _listBuffer->insert(_parts);
+void SplitFunction::splitIntoCharacters(types::String::Primitive string, std::span<const types::String::Primitive> delimiters) {
+    size_t partStart = 0;
+
+    while (partStart < string.size()) {
+        const types::String::Primitive rest = string.substr(partStart);
+        const auto startsTheRest = [rest](const types::String::Primitive delimiter) {
+            return !delimiter.empty() && rest.starts_with(delimiter);
+        };
+
+        const auto removed = std::ranges::find_if(delimiters, startsTheRest);
+        if (removed != delimiters.end()) {
+            partStart += removed->size();
+        } else {
+            const size_t characterSize = characterOffset(rest, 1);
+
+            _parts.emplace_back(rest.substr(0, characterSize));
+            partStart += characterSize;
+        }
+    }
 }
 
 LeftFunction::ResultType LeftFunction::operator()(types::String::Primitive string, types::Int64::Primitive length) const {

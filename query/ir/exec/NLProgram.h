@@ -4284,18 +4284,28 @@ private:
     IntegerArgument _length;
 };
 
+using NLStringListArgumentRead = bool (*)(const Column* input,
+                                          size_t row,
+                                          std::string_view functionName,
+                                          std::vector<types::String::Primitive>& strings);
+
 class NLSplitData : public NLFunctionData {
 public:
     using StringArgument = NLSubstringData::StringArgument;
 
+    struct DelimitersArgument {
+        const Column* _column {nullptr};
+        NLStringListArgumentRead _read {nullptr};
+    };
+
     NLSplitData(Column* result,
                 NLStepBuffers* stepBuffers,
                 const StringArgument& string,
-                const StringArgument& delimiter)
+                const DelimitersArgument& delimiters)
         : _result(result),
         _stepBuffers(stepBuffers),
         _string(string),
-        _delimiter(delimiter)
+        _delimiters(delimiters)
     {
     }
 
@@ -4303,13 +4313,13 @@ public:
     NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
     const StringArgument& getString() const { return _string; }
-    const StringArgument& getDelimiter() const { return _delimiter; }
+    const DelimitersArgument& getDelimiters() const { return _delimiters; }
 
 private:
     Column* _result {nullptr};
     NLStepBuffers* _stepBuffers {nullptr};
     StringArgument _string;
-    StringArgument _delimiter;
+    DelimitersArgument _delimiters;
 };
 
 class NLStringEndData : public NLFunctionData {

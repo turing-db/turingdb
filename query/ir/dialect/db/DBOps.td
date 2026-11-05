@@ -3139,11 +3139,14 @@ def Substring : TuringOp<"substring", [MayRaise, ConstantThroughOperands, Declar
 }
 
 def Split : TuringOp<"split", [MayRaise, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
-  let summary = "Split on delimiter";
+  let summary = "Split on a delimiter, or on every delimiter of a list";
 
   let description = [{
       %parts = db.split(%name, %delimiter) : (!db.column<!storage.string>, !db.column<!storage.string>)
                                            -> !db.column<!storage.list<!storage.string>>
+      %parts = db.split(%name, %delimiters) : (!db.column<!storage.string>,
+                                               !db.column<!storage.list<!storage.string>>)
+                                            -> !db.column<!storage.list<!storage.string>>
   }];
 
   let arguments = (ins Column:$string, Column:$delimiter);

@@ -807,8 +807,10 @@ void FunctionDecls::initDefault() {
         substring->setReturnTypes({{EvaluatedType::String}});
     }
 
+    const std::vector<FunctionArgumentType> delimiters = {EvaluatedType::String, EvaluatedType::List, EvaluatedType::Any};
+
     std::vector<FunctionSignature*> splits;
-    createOverloads("split", {stringOrCell, stringOrCell}, splits);
+    createOverloads("split", {stringOrCell, delimiters}, splits);
 
     for (FunctionSignature* split : splits) {
         split->setReturnTypes({{EvaluatedType::List}});

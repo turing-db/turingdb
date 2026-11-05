@@ -1085,12 +1085,11 @@ LogicalResult RowConstant::verify() {
 }
 
 LogicalResult Split::verify() {
-    const bool readsStrings = llvm::isa<storage::StringType, storage::AnyType>(
-                                  valueElementOf(getString().getType()))
-                           && llvm::isa<storage::StringType, storage::AnyType>(
-                                  valueElementOf(getDelimiter().getType()));
-    if (!readsStrings) {
-        return emitOpError("operands must be string chunks or chunks of tagged cells");
+    const bool readsAString = llvm::isa<storage::StringType, storage::AnyType>(valueElementOf(getString().getType()));
+    const bool readsDelimiters = llvm::isa<storage::StringType, storage::ListType, storage::AnyType>(
+                                     valueElementOf(getDelimiter().getType()));
+    if (!readsAString || !readsDelimiters) {
+        return emitOpError("operands must be a string chunk and a string or list chunk, or chunks of tagged cells");
     }
 
     const storage::ListType listType = llvm::dyn_cast<storage::ListType>(valueElementOf(getResult().getType()));

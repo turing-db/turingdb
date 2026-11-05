@@ -3999,9 +3999,9 @@ void NLTranslator::translateSplit(nl::Split split, NLStmtContainer* body) {
     const Column* const delimiter = getColumn(split.getDelimiter());
 
     const NLSplitData::StringArgument stringArgument {string, NLExecutor::selectStringArgumentRead(string)};
-    const NLSplitData::StringArgument delimiterArgument {delimiter, NLExecutor::selectStringArgumentRead(delimiter)};
+    const NLSplitData::DelimitersArgument delimitersArgument {delimiter, NLExecutor::selectStringListArgumentRead(delimiter)};
 
-    NLSplitData* data = _program->allocFunctionData<NLSplitData>(result, _program->allocStepBuffers(), stringArgument, delimiterArgument);
+    NLSplitData* data = _program->allocFunctionData<NLSplitData>(result, _program->allocStepBuffers(), stringArgument, delimitersArgument);
 
     if (resultNullable) {
         body->emplaceStmt(&NLExecutor::runSplit<std::optional<ListView>>, data);

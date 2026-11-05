@@ -99,7 +99,16 @@ TEST_F(StringFunctionHeldTypeErrorTest, takesAnEnd) {
 TEST_F(StringFunctionHeldTypeErrorTest, splits) {
     expectRows("UNWIND ['a', null, 1] AS x WITH x LIMIT 2 RETURN split(x, ','), split('a,b', x)", {{"[a]", "[, ,b]"}, {"null", "null"}});
     expectRaisesOnEveryNonString("split(x, ',')", "split");
-    expectRaisesOnEveryNonString("split('a,b', x)", "split");
+    expectError("UNWIND ['a', [1]] AS x RETURN split('a,b', x)", "split() reads a string, not 'Integer'");
+
+    for (const HeldValue& held : NON_STRINGS) {
+        if (held._typeName == "List") {
+            continue;
+        }
+
+        expectError(fmt::format("{}UNWIND ['a', {}] AS x RETURN split('a,b', x)", held._match, held._value),
+                    fmt::format("split() reads a string or a list of strings, not '{}'", held._typeName));
+    }
 }
 
 TEST_F(StringFunctionHeldTypeErrorTest, countsCharacters) {

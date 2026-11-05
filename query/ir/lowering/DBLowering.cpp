@@ -2838,7 +2838,9 @@ void DBLowering::lowerSplit(mlir::db::Split split) {
     const mlir::Type delimiterChunkType = mapValue(split.getDelimiter()).getType();
 
     const bool stringMayBeNull = mayHoldANull(stringChunkType);
-    const bool delimiterMayBeNull = mayHoldANull(delimiterChunkType);
+
+    // A list may hold a null whatever its element type, and a null delimiter splits into null
+    const bool delimiterMayBeNull = mayHoldANull(delimiterChunkType) || isListChunk(delimiterChunkType);
 
     llvm::SmallVector<mlir::Value, 2> arguments;
     containerCellChunks(split->getOperands(), arguments);

@@ -471,6 +471,7 @@ public:
     static NLStringReadFunction selectStringRead(const Column* input);
 
     static NLStringArgumentRead selectStringArgumentRead(const Column* input);
+    static NLStringListArgumentRead selectStringListArgumentRead(const Column* input);
     static NLIntegerArgumentRead selectIntegerArgumentRead(const Column* input);
 
     // Build one list per row (nl.list_comprehension): the body runs over the elements of

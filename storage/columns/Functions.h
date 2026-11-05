@@ -5,6 +5,7 @@
 #include <limits>
 #include <numbers>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -1259,11 +1260,15 @@ public:
 
     explicit SplitFunction(QueryListBuffer* listBuffer);
 
-    ResultType operator()(types::String::Primitive string, types::String::Primitive delimiter);
+    ResultType operator()(types::String::Primitive string, std::span<const types::String::Primitive> delimiters);
 
 private:
     QueryListBuffer* _listBuffer {nullptr};
     std::vector<QueryListBuffer::ListItemVariant> _parts;
+    std::vector<size_t> _nextMatches;
+
+    void splitAtDelimiters(types::String::Primitive string, std::span<const types::String::Primitive> delimiters);
+    void splitIntoCharacters(types::String::Primitive string, std::span<const types::String::Primitive> delimiters);
 };
 
 class LeftFunction {

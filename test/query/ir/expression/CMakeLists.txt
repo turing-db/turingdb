@@ -71,6 +71,8 @@ add_turing_test(test_query_ir_string_function StringFunctionTest.cpp)
 
 add_turing_test(test_query_ir_string_argument_function StringArgumentFunctionTest.cpp)
 
+add_turing_test(test_query_ir_split_on_delimiter_list SplitOnDelimiterListTest.cpp)
+
 add_turing_test(test_query_ir_untyped_element_function UntypedElementFunctionTest.cpp)
 
 add_turing_test(test_query_ir_function_argument_source FunctionArgumentSourceTest.cpp)

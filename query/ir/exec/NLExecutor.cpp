@@ -5702,6 +5702,74 @@ std::optional<types::String::Primitive> cellStringArgument(const Column* input, 
     return cellString(*cell, functionName);
 }
 
+bool listStrings(const ListView list, std::string_view functionName, std::vector<types::String::Primitive>& strings) {
+    for (const CellView element : list) {
+        const std::optional<types::String::Primitive> string = cellString(element, functionName);
+        if (!string.has_value()) {
+            return false;
+        }
+
+        strings.push_back(*string);
+    }
+
+    return true;
+}
+
+template <typename ColumnT>
+bool stringAsStringListArgument(const Column* input,
+                                size_t row,
+                                std::string_view,
+                                std::vector<types::String::Primitive>& strings) {
+    strings.clear();
+
+    const std::optional<types::String::Primitive> string = (*static_cast<const ColumnT*>(input))[row];
+    if (!string.has_value()) {
+        return false;
+    }
+
+    strings.push_back(*string);
+
+    return true;
+}
+
+template <typename ColumnT>
+bool listAsStringListArgument(const Column* input,
+                              size_t row,
+                              std::string_view functionName,
+                              std::vector<types::String::Primitive>& strings) {
+    strings.clear();
+
+    const std::optional<ListView> list = (*static_cast<const ColumnT*>(input))[row];
+
+    return list.has_value() && listStrings(*list, functionName, strings);
+}
+
+template <typename ColumnT>
+bool cellAsStringListArgument(const Column* input,
+                              size_t row,
+                              std::string_view functionName,
+                              std::vector<types::String::Primitive>& strings) {
+    strings.clear();
+
+    const std::optional<CellView> cell = (*static_cast<const ColumnT*>(input))[row];
+    if (!cell.has_value()) {
+        return false;
+    }
+
+    const CellTag tag = cell->getTag();
+
+    if (tag == CellTag::String) {
+        strings.push_back(cell->getAs<types::String::Primitive>());
+        return true;
+    } else if (tag == CellTag::ListView) {
+        return listStrings(cell->getAs<ListView>(), functionName, strings);
+    } else if (tag == CellTag::Null) {
+        return false;
+    }
+
+    throwCellTypeError(functionName, "a string or a list of strings", tag);
+}
+
 std::optional<types::Int64::Primitive> integerValueArgument(const Column* input, size_t row, std::string_view) {
     return (*static_cast<const ColumnOptVector<types::Int64::Primitive>*>(input))[row];
 }
@@ -9781,10 +9849,10 @@ void NLExecutor::runSplit(NLExecutionContext*, NLFunctionData* data) {
     const NLSplitData* split = static_cast<NLSplitData*>(data);
 
     const NLSplitData::StringArgument& string = split->getString();
-    const NLSplitData::StringArgument& delimiter = split->getDelimiter();
+    const NLSplitData::DelimitersArgument& delimiters = split->getDelimiters();
 
     const size_t rowCount = string._column->size();
-    bioassert(delimiter._column->size() == rowCount, "Delimiter column of a split is not row-aligned with its string.");
+    bioassert(delimiters._column->size() == rowCount, "Delimiter column of a split is not row-aligned with its string.");
 
     std::vector<Result>& outputRaw = static_cast<ColumnVector<Result>*>(split->getResult())->getRaw();
     outputRaw.resize(rowCount);
@@ -9795,13 +9863,15 @@ void NLExecutor::runSplit(NLExecutionContext*, NLFunctionData* data) {
     SplitFunction function(&stepBuffers->listBuffer());
     constexpr std::string_view name = SplitFunction::NAME;
 
+    std::vector<types::String::Primitive> separators;
+
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
         const std::optional<types::String::Primitive> text = string._read(string._column, rowIndex, name);
-        const std::optional<types::String::Primitive> separator = delimiter._read(delimiter._column, rowIndex, name);
+        const bool readsSeparators = delimiters._read(delimiters._column, rowIndex, name, separators);
 
-        const bool readsANull = !text.has_value() || !separator.has_value();
+        const bool readsANull = !text.has_value() || !readsSeparators;
         if (!readsANull) {
-            outputRaw[rowIndex] = function(*text, *separator);
+            outputRaw[rowIndex] = function(*text, separators);
         } else if constexpr (TypeUtils::is_optional_v<Result>) {
             outputRaw[rowIndex] = std::nullopt;
         } else {
@@ -10276,6 +10346,38 @@ NLStringArgumentRead NLExecutor::selectStringArgumentRead(const Column* input) {
     }
 
     throw IRException("a string function reads a string argument out of a nullable string column, or a column of tagged cells");
+}
+
+NLStringListArgumentRead NLExecutor::selectStringListArgumentRead(const Column* input) {
+    using String = types::String::Primitive;
+
+    const ColumnKind::Code kind = input->getKind();
+
+    if (kind == ColumnOptVector<String>::staticKind()) {
+        return &stringAsStringListArgument<ColumnOptVector<String>>;
+    } else if (kind == ColumnConst<String>::staticKind()) {
+        return &stringAsStringListArgument<ColumnConst<String>>;
+    } else if (kind == ColumnConst<std::optional<String>>::staticKind()) {
+        return &stringAsStringListArgument<ColumnConst<std::optional<String>>>;
+    } else if (kind == ColumnVector<ListView>::staticKind()) {
+        return &listAsStringListArgument<ColumnVector<ListView>>;
+    } else if (kind == ColumnOptVector<ListView>::staticKind()) {
+        return &listAsStringListArgument<ColumnOptVector<ListView>>;
+    } else if (kind == ColumnConst<ListView>::staticKind()) {
+        return &listAsStringListArgument<ColumnConst<ListView>>;
+    } else if (kind == ColumnConst<std::optional<ListView>>::staticKind()) {
+        return &listAsStringListArgument<ColumnConst<std::optional<ListView>>>;
+    } else if (kind == ColumnVector<CellView>::staticKind()) {
+        return &cellAsStringListArgument<ColumnVector<CellView>>;
+    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
+        return &cellAsStringListArgument<ColumnOptVector<CellView>>;
+    } else if (kind == ColumnConst<CellView>::staticKind()) {
+        return &cellAsStringListArgument<ColumnConst<CellView>>;
+    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
+        return &cellAsStringListArgument<ColumnConst<std::optional<CellView>>>;
+    }
+
+    throw IRException("a string function reads a list of strings out of a nullable string column, a list column, or a column of tagged cells");
 }
 
 NLIntegerArgumentRead NLExecutor::selectIntegerArgumentRead(const Column* input) {

@@ -2473,9 +2473,12 @@ LogicalResult Replace::verify() {
 }
 
 LogicalResult Split::verify() {
-    const bool readsStrings = isStringColumn(getString().getType()) && isStringColumn(getDelimiter().getType());
-    if (!readsStrings) {
-        return emitOpError("operands must be string columns");
+    const Value delimiter = getDelimiter();
+
+    const bool readsAString = isStringColumn(getString().getType());
+    const bool readsDelimiters = isStringColumn(delimiter.getType()) || isa<storage::ListType>(columnElement(delimiter));
+    if (!readsAString || !readsDelimiters) {
+        return emitOpError("operands must be a string column, then a string or list column");
     }
 
     const ColumnType resultColumn = llvm::dyn_cast<ColumnType>(getResult().getType());
@@ -3187,9 +3190,13 @@ Speculation::Speculatability Replace::getSpeculatability() {
 
 Speculation::Speculatability Split::getSpeculatability() {
     const bool readsAString = isa<storage::StringType>(columnElement(getString()));
-    const bool splitsOnAString = isa<storage::StringType>(columnElement(getDelimiter()));
 
-    return speculatableWhen(readsAString && splitsOnAString);
+    const Type delimiter = columnElement(getDelimiter());
+    const storage::ListType delimiterList = dyn_cast<storage::ListType>(delimiter);
+    const Type delimiterElement = delimiterList ? delimiterList.getElementType() : delimiter;
+    const bool splitsOnStrings = isa<storage::StringType>(delimiterElement);
+
+    return speculatableWhen(readsAString && splitsOnStrings);
 }
 
 Speculation::Speculatability AndOp::getSpeculatability() {

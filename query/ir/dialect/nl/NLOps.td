@@ -3238,7 +3238,7 @@ def Substring : NLOp<"substring", [Pure, RowAlignedThroughOperands]> {
 }
 
 def Split : NLOp<"split", [Pure, RowAlignedThroughOperands]> {
-  let summary = "Row-wise split on delimiter";
+  let summary = "Row-wise split on a delimiter, or on every delimiter of a list";
 
   let arguments = (ins NLChunk:$string, NLChunk:$delimiter);
   let results   = (outs NLChunk:$result);
