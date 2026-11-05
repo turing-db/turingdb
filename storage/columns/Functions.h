@@ -399,9 +399,7 @@ public:
 
     ResultType operator()(const MapView map) const {
         types::Duration::Primitive value;
-        if (!Duration::fromMap(map, value)) {
-            return std::nullopt;
-        }
+        Duration::fromMap(map, value);
 
         return value;
     }

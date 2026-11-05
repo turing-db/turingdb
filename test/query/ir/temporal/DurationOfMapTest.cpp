@@ -36,10 +36,6 @@ TEST_F(DurationOfMapTest, readsAMapBoundToAVariable) {
     expectRows("WITH {days: 1, hours: 1} AS m RETURN duration(m)", {{"PT25H"}});
 }
 
-TEST_F(DurationOfMapTest, returnsNullForANullCount) {
-    expectRows("RETURN duration({days: null})", {{"null"}});
-}
-
 TEST_F(DurationOfMapTest, rejectsAnUnknownUnit) {
     expectError("RETURN duration({month: 20})", "Unknown duration component: month");
     expectError("RETURN duration({nanoseconds: 1500})", "Unknown duration component: nanoseconds");

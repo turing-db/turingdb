@@ -534,8 +534,9 @@ export const JOURNEY_PLUS_CASES: Case[] = [
     {
         name: "times each leg on the clock",
         query: LEGS_FROM_OXFORD +
-            `RETURN firstStop.service, ${MIDNIGHT} + duration({minutes: firstStop.depart}) AS departs, ` +
-            `${MIDNIGHT} + duration({minutes: lastStop.arrive}) AS arrives`,
+            "RETURN firstStop.service, " +
+            `CASE WHEN firstStop.depart IS NULL THEN null ELSE ${MIDNIGHT} + duration({minutes: firstStop.depart}) END AS departs, ` +
+            `CASE WHEN lastStop.arrive IS NULL THEN null ELSE ${MIDNIGHT} + duration({minutes: lastStop.arrive}) END AS arrives`,
         types: ["STRING", "DATE_TIME", "DATE_TIME"],
         rows: [
             ["S1", at("2026-11-04T08:00:00Z"), at("2026-11-04T09:05:00Z")],
