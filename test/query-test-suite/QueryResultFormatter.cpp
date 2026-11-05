@@ -106,6 +106,13 @@ template <int I, int Radix>
     return result;
 }
 
+[[maybe_unused]] std::string valueToString(const db::Point& value) {
+    std::string result;
+    db::Point::format(result, value);
+
+    return result;
+}
+
 [[maybe_unused]] std::string valueToString(const db::CommitBuilder* value) {
     return value ? "commit_builder_ptr" : "null";
 }

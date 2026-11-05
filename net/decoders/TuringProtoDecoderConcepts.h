@@ -16,6 +16,7 @@ concept TrivialInternalTypes = std::is_same_v<T, db::types::UInt64::Primitive>
 || std::is_same_v<T, db::types::Bool::Primitive>
 || std::is_same_v<T, db::types::DateTime::Primitive>
 || std::is_same_v<T, db::types::Duration::Primitive>
+|| std::is_same_v<T, db::types::Point::Primitive>
 || std::is_same_v<T, db::ValueType>
 || std::is_same_v<T, db::NodeID>
 || std::is_same_v<T, db::EdgeID>

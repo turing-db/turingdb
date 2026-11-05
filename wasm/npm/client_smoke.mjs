@@ -8,7 +8,7 @@
 
 import assert from "assert";
 
-import { Column, TuringClient, TuringQueryError, double } from "./TuringClient.mjs";
+import { Column, Point, TuringClient, TuringQueryError, double } from "./TuringClient.mjs";
 
 const MESSAGE_CHUNK_HEADER = 0;
 const MESSAGE_CHUNK = 1;
@@ -26,6 +26,7 @@ const TYPE_NODE_ID = 9;
 const TYPE_PROPERTY_NULL = 17;
 const TYPE_MAP_VIEW = 18;
 const TYPE_GRAPH_PATH = 21;
+const TYPE_POINT = 22;
 
 const ENCODING_VECTOR = 0;
 const ENCODING_OPTIONAL_VECTOR = 1;
@@ -40,6 +41,10 @@ const TAG_LIST_VIEW = 6;
 const TAG_NULL = 7;
 const TAG_NODE_ID = 8;
 const TAG_MAP_VIEW = 11;
+const TAG_POINT = 14;
+
+const CRS_CARTESIAN = 0;
+const CRS_WGS84_3D = 3;
 
 const encoder = new TextEncoder();
 
@@ -95,6 +100,14 @@ class Writer {
     }
     raw(byteArray) {
         this.bytes.push(...byteArray);
+    }
+    // A point as the server stores it: x, y and z, then its CRS ordinal and 7 bytes of padding
+    point(crs, x, y, z) {
+        this.f64(x);
+        this.f64(y);
+        this.f64(z);
+        this.u8(crs);
+        this.raw(new Uint8Array(7));
     }
     toUint8Array() {
         return Uint8Array.from(this.bytes);
@@ -751,6 +764,52 @@ async function testNullGraphPath() {
     assert.deepStrictEqual(data, [[[[7], null]]]);
 }
 
+// A point reads as a Point, in a column of its own and inside a list. A 2D point has no z.
+async function testPoints() {
+    const header = makeHeader([
+        { name: "at", typeCode: TYPE_POINT, encoding: ENCODING_VECTOR },
+        { name: "route", typeCode: TYPE_LIST_VIEW, encoding: ENCODING_VECTOR },
+    ]);
+
+    const chunk = new Writer();
+    chunk.u32(2);
+    chunk.point(CRS_CARTESIAN, 1.5, -2, 0);
+    chunk.point(CRS_WGS84_3D, 2.3522, 48.8566, 35);
+
+    chunk.u32(2);
+    chunk.u32(1);
+    chunk.u32(32);
+    chunk.u8(TAG_POINT);
+    chunk.point(CRS_WGS84_3D, 2.3522, 48.8566, 35);
+    chunk.u32(0);
+    chunk.u32(0);
+
+    const bytes = concatPackets([frame(MESSAGE_CHUNK_HEADER, header), frame(MESSAGE_CHUNK, chunk), makeEndChunk(2), makeEnd(1.0)]);
+    const { chunks } = await new TuringClient({ fetch: makeFakeFetch(bytes, {}) }).query("RETURN 1");
+    const [at, route] = chunks[0].columns;
+
+    const cartesian = at.get(0);
+    assert.ok(cartesian instanceof Point);
+    assert.strictEqual(cartesian.srid, 7203);
+    assert.strictEqual(cartesian.crs, "cartesian");
+    assert.strictEqual(cartesian.x, 1.5);
+    assert.strictEqual(cartesian.y, -2);
+    assert.strictEqual(cartesian.z, undefined);
+
+    const paris = at.get(1);
+    assert.strictEqual(paris.srid, 4979);
+    assert.strictEqual(paris.crs, "wgs-84-3d");
+    assert.deepStrictEqual([paris.x, paris.y, paris.z], [2.3522, 48.8566, 35]);
+
+    const [inList] = route.get(0);
+    assert.ok(inList instanceof Point);
+    assert.deepStrictEqual([inList.srid, inList.x, inList.y, inList.z], [4979, 2.3522, 48.8566, 35]);
+    assert.deepStrictEqual(route.get(1), []);
+
+    const data = await new TuringClient({ fetch: makeFakeFetch(bytes, {}) }).queryData("RETURN 1");
+    assert.ok(data[0][0][0] instanceof Point);
+}
+
 await testQuery();
 await testParameters();
 await testRejectsParametersAQueryCannotHold();
@@ -767,5 +826,6 @@ await testMaps(true);
 await testRaggedQueryData();
 await testGraphPathIdsStayExact();
 await testNullGraphPath();
+await testPoints();
 
-console.log("wasm client smoke test passed: query, parameters, buffer growth, constant nulls, optional constant lists, queryData, multi-byte body, error, rejected request, error without packets, maps, ragged, paths, null paths");
+console.log("wasm client smoke test passed: query, parameters, buffer growth, constant nulls, optional constant lists, queryData, multi-byte body, error, rejected request, error without packets, maps, ragged, paths, null paths, points");

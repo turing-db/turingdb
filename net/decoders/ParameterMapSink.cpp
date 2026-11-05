@@ -71,6 +71,9 @@ void readScalar(const char* bytes, db::ParameterValue& slot) {
         case db::CellTag::Duration:
             slot.setDuration(readValue<db::types::Duration::Primitive>(value));
         break;
+        case db::CellTag::Point:
+            throwUnsupportedType("Point");
+        break;
         default:
             throw TuringException(fmt::format("Invalid value tag {} in a parameter", static_cast<uint32_t>(tag)));
         break;

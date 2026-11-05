@@ -140,6 +140,11 @@ void renderCellView(const CellView& element, std::string& out) {
             return;
         break;
 
+        case CellTag::Point:
+            Point::format(out, element.getAs<types::Point::Primitive>());
+            return;
+        break;
+
         case CellTag::MapView:
             renderMap(element.getAs<MapView>(), out);
             return;
@@ -204,6 +209,9 @@ void renderValue(const T& value, std::string& out) {
     } else if constexpr (std::is_same_v<T, types::Duration::Primitive>) {
         out.clear();
         Duration::format(out, value);
+    } else if constexpr (std::is_same_v<T, types::Point::Primitive>) {
+        out.clear();
+        Point::format(out, value);
     } else {
         out = std::to_string(value);
     }
@@ -339,7 +347,8 @@ void turing::test::renderCell(const Column* column, size_t row, std::string& out
                || renderValueCell<std::string_view>(column, row, out)
                || renderValueCell<std::string>(column, row, out)
                || renderValueCell<types::DateTime::Primitive>(column, row, out)
-               || renderValueCell<types::Duration::Primitive>(column, row, out)) {
+               || renderValueCell<types::Duration::Primitive>(column, row, out)
+               || renderValueCell<types::Point::Primitive>(column, row, out)) {
         // Rendered by the helper for whichever value type matched
     } else {
         throw std::runtime_error("IRTestRows: unsupported output column type");

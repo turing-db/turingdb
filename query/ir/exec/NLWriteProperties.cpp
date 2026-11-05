@@ -372,6 +372,9 @@ void stageCellAsItsType(const CellView cell,
         case ValueType::Duration:
             value = std::optional {cell.getAs<types::Duration::Primitive>()};
         break;
+        case ValueType::Point:
+            value = std::optional {cell.getAs<types::Point::Primitive>()};
+        break;
         case ValueType::String:
             value = std::optional<types::String::OwningPrimitive> {std::in_place, cell.getAs<types::String::Primitive>()};
         break;

@@ -45,6 +45,7 @@ using Bool = db::types::Bool::Primitive;
 using Embedding = db::types::Embedding::Primitive;
 using DateTime = db::types::DateTime::Primitive;
 using Duration = db::types::Duration::Primitive;
+using Point = db::types::Point::Primitive;
 
 struct FramedPacket {
     net::proto::MessageTypes _type;
@@ -490,6 +491,77 @@ TEST(TuringProtoRoundTripTest, RoundTripsDurationColumnsAcrossChunkSizes) {
                                                   std::nullopt,
                                                   Duration {2 * microsecondsPerMinute},
                                                   std::nullopt}));
+    }
+}
+
+TEST(TuringProtoRoundTripTest, RoundTripsPointColumnsAcrossChunkSizes) {
+    using OptionalPoint = std::optional<Point>;
+
+    const Point cartesian(db::PointCRS::Cartesian, 1.5, -2.0, 0.0);
+    const Point cartesian3D(db::PointCRS::Cartesian3D, 1.5, -2.0, 3.25);
+    const Point wgs84(db::PointCRS::WGS84, 2.3522, 48.8566, 0.0);
+    const Point wgs84With3D(db::PointCRS::WGS84_3D, 2.3522, 48.8566, 35.0);
+
+    for (const size_t chunkSize : std::array<size_t, 4> {48, 64, 97, 256}) {
+        SCOPED_TRACE(::testing::Message() << "chunkSize=" << chunkSize);
+
+        db::LocalMemory localMem;
+        db::DataframeManager dfMan;
+        db::Dataframe source;
+
+        auto* at = localMem.alloc<db::ColumnVector<Point>>();
+        at->push_back(cartesian);
+        at->push_back(cartesian3D);
+        at->push_back(wgs84);
+        at->push_back(wgs84With3D);
+        addColumn(&dfMan, &source, "at", at);
+
+        auto* home = localMem.alloc<db::ColumnOptVector<Point>>();
+        home->push_back(wgs84);
+        home->push_back(std::nullopt);
+        home->push_back(cartesian3D);
+        home->push_back(std::nullopt);
+        addColumn(&dfMan, &source, "home", home);
+
+        std::vector<db::ListBuffer<>::ListItemVariant> items;
+        items.emplace_back(cartesian);
+        items.emplace_back(wgs84With3D);
+
+        auto* route = localMem.alloc<db::ColumnConst<db::ListView>>();
+        route->set(localMem.listBuffer().insert(items));
+        addColumn(&dfMan, &source, "route", route);
+
+        const auto packets = encodeDataframeWithChunkSize(source, chunkSize);
+        expectPacketSequence(packets, true);
+
+        net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<uint64_t> pathBuffer;
+        net::proto::ChunkedBuffer<char> stringBuffer;
+        db::ListBuffer<> listBuffer;
+        db::MapBuffer<> mapBuffer;
+        db::Dataframe decoded;
+        std::vector<net::proto::DecodedColumnSchema> schemas;
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+
+        ASSERT_EQ(decoded.cols().size(), 3u);
+        EXPECT_EQ(decoded.getLogicalRowCount(), 4u);
+
+        const auto* decodedAt = decoded.cols().at(0)->as<db::ColumnVector<Point>>();
+        const auto* decodedHome = decoded.cols().at(1)->as<db::ColumnOptVector<Point>>();
+        const auto* decodedRoute = decoded.cols().at(2)->as<db::ColumnConst<db::ListView>>();
+        ASSERT_NE(decodedAt, nullptr);
+        ASSERT_NE(decodedHome, nullptr);
+        ASSERT_NE(decodedRoute, nullptr);
+
+        EXPECT_EQ(decodedAt->getRaw(), (std::vector<Point> {cartesian, cartesian3D, wgs84, wgs84With3D}));
+        EXPECT_EQ(decodedHome->getRaw(), (std::vector<OptionalPoint> {wgs84, std::nullopt, cartesian3D, std::nullopt}));
+
+        const std::span<const db::CellView> elements = decodedRoute->at(0).elements();
+        ASSERT_EQ(elements.size(), 2u);
+        ASSERT_EQ(elements[0].getTag(), db::CellTag::Point);
+        EXPECT_EQ(elements[0].getAs<Point>(), cartesian);
+        ASSERT_EQ(elements[1].getTag(), db::CellTag::Point);
+        EXPECT_EQ(elements[1].getAs<Point>(), wgs84With3D);
     }
 }
 

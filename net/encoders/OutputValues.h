@@ -85,6 +85,9 @@ concept IsDateTime = std::is_same_v<TypeUtils::unwrap_optional_t<T>, types::Date
 template <typename T>
 concept IsDuration = std::is_same_v<TypeUtils::unwrap_optional_t<T>, types::Duration::Primitive>;
 
+template <typename T>
+concept IsPoint = std::is_same_v<TypeUtils::unwrap_optional_t<T>, types::Point::Primitive>;
+
 struct ColumnTypeGenerator {
     std::string& _name;
 
@@ -96,6 +99,8 @@ struct ColumnTypeGenerator {
             _name = fmt::format("DateTime");
         } else if constexpr (IsDuration<T>) {
             _name = fmt::format("Duration");
+        } else if constexpr (IsPoint<T>) {
+            _name = fmt::format("Point");
         } else if constexpr (IsUInt64<T>) {
             _name = fmt::format("UInt64");
         } else if constexpr (IsInt64<T>) {

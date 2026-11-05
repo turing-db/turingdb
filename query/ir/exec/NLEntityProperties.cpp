@@ -57,6 +57,9 @@ MapBuffer<>::MapItemVariant storedValue(const PropertyContainer& container, Enti
         case ValueType::Duration:
             return container.cast<types::Duration>().get(entity);
         break;
+        case ValueType::Point:
+            return container.cast<types::Point>().get(entity);
+        break;
         case ValueType::Invalid:
         case ValueType::_SIZE:
         break;
@@ -112,6 +115,9 @@ MapBuffer<>::MapItemVariant writtenValue(NLWrittenValues& written,
         break;
         case ValueType::Duration:
             return readWritten<types::Duration>(written, readValues, value);
+        break;
+        case ValueType::Point:
+            return readWritten<types::Point>(written, readValues, value);
         break;
         case ValueType::Invalid:
         case ValueType::_SIZE:

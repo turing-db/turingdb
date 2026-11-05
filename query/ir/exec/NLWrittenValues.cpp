@@ -155,5 +155,6 @@ template std::optional<types::List::Primitive> NLWrittenValues::read<types::List
 template std::optional<types::Map::Primitive> NLWrittenValues::read<types::Map>(const Value& value, NLValueStore& values);
 template std::optional<types::DateTime::Primitive> NLWrittenValues::read<types::DateTime>(const Value& value, NLValueStore& values);
 template std::optional<types::Duration::Primitive> NLWrittenValues::read<types::Duration>(const Value& value, NLValueStore& values);
+template std::optional<types::Point::Primitive> NLWrittenValues::read<types::Point>(const Value& value, NLValueStore& values);
 
 }

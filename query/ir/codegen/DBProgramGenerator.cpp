@@ -513,6 +513,7 @@ const std::unordered_map<std::string_view, UnaryFunctionEmitter> unaryFunctionEm
     {"toBooleanOrNull", &emitUnaryFunction<mlir::db::ToBooleanOrNull>},
     {"datetime", &emitUnaryFunction<mlir::db::ToDateTime>},
     {"duration", &emitUnaryFunction<mlir::db::ToDuration>},
+    {"point", &emitUnaryFunction<mlir::db::ToPoint>},
     {"size", &emitUnaryFunction<mlir::db::Size>},
     {"length", &emitUnaryFunction<mlir::db::Size>},
     {"isEmpty", &emitUnaryFunction<mlir::db::IsEmpty>},

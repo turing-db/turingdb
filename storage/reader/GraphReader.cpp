@@ -580,6 +580,7 @@ template std::optional<const types::Embedding::Primitive*> GraphReader::tryGetNo
 template std::optional<const types::List::Primitive*> GraphReader::tryGetNodeProperty<types::List>(PropertyTypeID ptID, NodeID nodeID) const;
 template std::optional<const types::DateTime::Primitive*> GraphReader::tryGetNodeProperty<types::DateTime>(PropertyTypeID ptID, NodeID nodeID) const;
 template std::optional<const types::Duration::Primitive*> GraphReader::tryGetNodeProperty<types::Duration>(PropertyTypeID ptID, NodeID nodeID) const;
+template std::optional<const types::Point::Primitive*> GraphReader::tryGetNodeProperty<types::Point>(PropertyTypeID ptID, NodeID nodeID) const;
 template std::optional<const types::Map::Primitive*> GraphReader::tryGetNodeProperty<types::Map>(PropertyTypeID ptID, NodeID nodeID) const;
 
 template std::optional<const types::UInt64::Primitive*> GraphReader::tryGetEdgeProperty<types::UInt64>(PropertyTypeID ptID, EdgeID edgeID) const;
@@ -591,4 +592,5 @@ template std::optional<const types::Embedding::Primitive*> GraphReader::tryGetEd
 template std::optional<const types::List::Primitive*> GraphReader::tryGetEdgeProperty<types::List>(PropertyTypeID ptID, EdgeID edgeID) const;
 template std::optional<const types::DateTime::Primitive*> GraphReader::tryGetEdgeProperty<types::DateTime>(PropertyTypeID ptID, EdgeID edgeID) const;
 template std::optional<const types::Duration::Primitive*> GraphReader::tryGetEdgeProperty<types::Duration>(PropertyTypeID ptID, EdgeID edgeID) const;
+template std::optional<const types::Point::Primitive*> GraphReader::tryGetEdgeProperty<types::Point>(PropertyTypeID ptID, EdgeID edgeID) const;
 template std::optional<const types::Map::Primitive*> GraphReader::tryGetEdgeProperty<types::Map>(PropertyTypeID ptID, EdgeID edgeID) const;

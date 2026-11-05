@@ -283,6 +283,7 @@ template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::Embedding>(st
 template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::List>(std::string_view indexName, PropertyTypeID ptID);
 template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::DateTime>(std::string_view indexName, PropertyTypeID ptID);
 template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::Duration>(std::string_view indexName, PropertyTypeID ptID);
+template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::Point>(std::string_view indexName, PropertyTypeID ptID);
 template WeakArc<Index> CommitBuilder::newNodePropertyIndex<types::Map>(std::string_view indexName, PropertyTypeID ptID);
 
 template WeakArc<Index> CommitBuilder::newEdgePropertyIndex<types::Int64>(std::string_view indexName, PropertyTypeID ptID);
@@ -294,5 +295,6 @@ template WeakArc<Index> CommitBuilder::newEdgePropertyIndex<types::Embedding>(st
 template WeakArc<Index> CommitBuilder::newEdgePropertyIndex<types::List>(std::string_view indexName, PropertyTypeID ptID);
 template WeakArc<Index> CommitBuilder::newEdgePropertyIndex<types::DateTime>(std::string_view indexName, PropertyTypeID ptID);
 template WeakArc<Index> CommitBuilder::newEdgePropertyIndex<types::Duration>(std::string_view indexName, PropertyTypeID ptID);
+template WeakArc<Index> CommitBuilder::newEdgePropertyIndex<types::Point>(std::string_view indexName, PropertyTypeID ptID);
 template WeakArc<Index> CommitBuilder::newEdgePropertyIndex<types::Map>(std::string_view indexName, PropertyTypeID ptID);
 }

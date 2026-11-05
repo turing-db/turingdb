@@ -184,6 +184,15 @@ public:
                 break;
             }
 
+            case ValueType::Point: {
+                if (!TypedPropertyContainerComparator<types::Point>::same(
+                        a->cast<types::Point>(),
+                        b->cast<types::Point>())) {
+                    return false;
+                }
+                break;
+            }
+
             case ValueType::Map: {
                 if (!TypedPropertyContainerComparator<types::Map>::same(a->cast<types::Map>(), b->cast<types::Map>())) {
                     return false;

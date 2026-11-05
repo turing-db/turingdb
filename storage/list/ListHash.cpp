@@ -68,6 +68,9 @@ size_t db::hashCell(CellView element) {
         case CellTag::Duration:
             return combine(seed, hashValue(element.getAs<types::Duration::Primitive>()));
         break;
+        case CellTag::Point:
+            return combine(seed, hashValue(element.getAs<types::Point::Primitive>()));
+        break;
         case CellTag::Embedding: {
             size_t hash = seed;
             for (const float value : element.getAs<types::Embedding::Primitive>()) {

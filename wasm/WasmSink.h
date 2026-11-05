@@ -56,6 +56,8 @@ consteval ColumnType wireCodeOfElement() {
         return ColumnType::DATE_TIME;
     } else if constexpr (std::is_same_v<Element, db::types::Duration::Primitive>) {
         return ColumnType::DURATION;
+    } else if constexpr (std::is_same_v<Element, db::types::Point::Primitive>) {
+        return ColumnType::POINT;
     } else if constexpr (std::is_same_v<Element, db::GraphPath>) {
         return ColumnType::GRAPH_PATH;
     } else if constexpr (std::is_same_v<Element, ListView>) {

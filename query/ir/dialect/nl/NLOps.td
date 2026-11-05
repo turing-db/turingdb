@@ -3123,6 +3123,7 @@ def ToFloat : NLUnaryFunctionOp<"to_float", [ConstantThroughOperands]>;
 def ToBoolean : NLUnaryFunctionOp<"to_boolean", [ConstantThroughOperands]>;
 def ToDateTime : NLUnaryFunctionOp<"to_datetime", [ConstantThroughOperands]>;
 def ToDuration : NLUnaryFunctionOp<"to_duration", [ConstantThroughOperands]>;
+def ToPoint : NLUnaryFunctionOp<"to_point", [ConstantThroughOperands]>;
 def ToString : NLUnaryFunctionOp<"to_string", [ConstantThroughOperands]>;
 
 def ToIntegerOrNull : NLUnaryFunctionOp<"to_integer_or_null", [ConstantThroughOperands]>;

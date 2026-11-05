@@ -38,6 +38,11 @@ int main() {
             Duration::format(formatted, value);
 
             spdlog::info("element: {}", formatted);
+        } else if constexpr (std::is_same_v<T, types::Point::Primitive>) {
+            std::string formatted;
+            Point::format(formatted, value);
+
+            spdlog::info("element: {}", formatted);
         } else {
             spdlog::info("element: {}", value);
         }

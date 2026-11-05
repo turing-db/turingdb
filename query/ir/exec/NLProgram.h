@@ -84,6 +84,7 @@ enum class NLChunkKind {
     Path,
     DateTime,
     Duration,
+    Point,
     PathRef,
 };
 
@@ -159,6 +160,10 @@ void dispatchChunkKind(NLChunkKind kind, Handler&& handler) {
 
         case NLChunkKind::Duration:
             return handler.template operator()<types::Duration::Primitive>();
+        break;
+
+        case NLChunkKind::Point:
+            return handler.template operator()<types::Point::Primitive>();
         break;
 
         case NLChunkKind::PathRef:

@@ -485,6 +485,14 @@ private:
             }
             break;
 
+            case CellTag::Point: {
+                std::string formatted;
+                Point::format(formatted, element.getAs<types::Point::Primitive>());
+
+                std::cout << formatted;
+            }
+            break;
+
             case CellTag::MapView:
             case CellTag::Path:
             case CellTag::INVALID:

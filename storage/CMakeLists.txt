@@ -45,6 +45,7 @@ set(storage_sources
         metadata/PropertyTypeMap.cpp
         metadata/LabelMap.cpp
         metadata/LabelSetMap.cpp
+        metadata/Point.cpp
 
         views/EntityPropertyView.cpp
         views/GraphView.cpp

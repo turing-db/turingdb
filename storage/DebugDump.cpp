@@ -62,6 +62,13 @@ void DebugDump::dump(std::ostream& out, CellView view, bool isInList) {
     dumper.execute(dumpTyped, view);
 }
 
+void DebugDump::dump(std::ostream& out, Point value) {
+    std::string text;
+    Point::format(text, value);
+
+    out << text;
+}
+
 void DebugDump::dump(std::ostream& out, ListView list) {
     if (list.empty()) {
         out << "[]\n";

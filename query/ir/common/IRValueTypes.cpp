@@ -68,6 +68,10 @@ mlir::Type db::valueTypeToElementType(mlir::OpBuilder& builder, ValueType valueT
             return mlir::storage::DurationType::get(builder.getContext());
         break;
 
+        case ValueType::Point:
+            return mlir::storage::PointType::get(builder.getContext());
+        break;
+
         case ValueType::Map:
             return mlir::storage::MapType::get(builder.getContext());
         break;
@@ -92,6 +96,8 @@ ValueType db::elementTypeToValueType(mlir::Type elementType) {
         return ValueType::DateTime;
     } else if (mlir::isa<mlir::storage::DurationType>(elementType)) {
         return ValueType::Duration;
+    } else if (mlir::isa<mlir::storage::PointType>(elementType)) {
+        return ValueType::Point;
     } else if (mlir::isa<mlir::storage::MapType>(elementType)) {
         return ValueType::Map;
     } else if (mlir::isa<mlir::Float64Type>(elementType)) {

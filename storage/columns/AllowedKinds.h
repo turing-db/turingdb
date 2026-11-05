@@ -106,6 +106,7 @@ struct SearchedValueKindPairs {
         typename SearchPairs<types::Bool::Primitive>::Pairs,
         typename SearchPairs<types::DateTime::Primitive>::Pairs,
         typename SearchPairs<types::Duration::Primitive>::Pairs,
+        typename SearchPairs<types::Point::Primitive>::Pairs,
         typename SearchPairs<types::Embedding::Primitive>::Pairs,
         typename SearchPairs<NodeID>::Pairs,
         typename SearchPairs<EdgeID>::Pairs,
@@ -189,6 +190,7 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::Embedding::Primitive, types::Embedding::Primitive>::Pairs,
         OptionalKindPairs<types::DateTime::Primitive, types::DateTime::Primitive>::Pairs,
         OptionalKindPairs<types::Duration::Primitive, types::Duration::Primitive>::Pairs,
+        OptionalKindPairs<types::Point::Primitive, types::Point::Primitive>::Pairs,
         OptionalKindPairs<ListView, ListView>::Pairs,
         OptionalKindPairs<MapView, MapView>::Pairs,
 
@@ -200,6 +202,7 @@ struct PairRestrictions<Op> {
         CellKindPairs<types::Bool::Primitive>::Pairs,
         CellKindPairs<types::DateTime::Primitive>::Pairs,
         CellKindPairs<types::Duration::Primitive>::Pairs,
+        CellKindPairs<types::Point::Primitive>::Pairs,
         CellKindPairs<types::Embedding::Primitive>::Pairs,
         OptionalKindPairs<CellView, CellView>::Pairs,
         CellKindPairs<ListView>::Pairs,
@@ -730,6 +733,7 @@ struct OutputtedTypes {
         types::Embedding::Primitive,
         types::DateTime::Primitive,
         types::Duration::Primitive,
+        types::Point::Primitive,
         std::optional<types::Int64::Primitive>,
         std::optional<types::Int64::Primitive>,
         std::optional<types::UInt64::Primitive>,
@@ -739,6 +743,7 @@ struct OutputtedTypes {
         std::optional<types::Embedding::Primitive>,
         std::optional<types::DateTime::Primitive>,
         std::optional<types::Duration::Primitive>,
+        std::optional<types::Point::Primitive>,
         PropertyNull,
 
         std::optional<std::string>,
@@ -823,6 +828,7 @@ struct WriteProcessorPropertyTypes {
         types::Embedding::Primitive,
         types::DateTime::Primitive,
         types::Duration::Primitive,
+        types::Point::Primitive,
         ListView,
         MapView,
 
@@ -834,6 +840,7 @@ struct WriteProcessorPropertyTypes {
         std::optional<types::Embedding::Primitive>,
         std::optional<types::DateTime::Primitive>,
         std::optional<types::Duration::Primitive>,
+        std::optional<types::Point::Primitive>,
         std::optional<ListView>,
         std::optional<MapView>,
 
@@ -853,6 +860,7 @@ struct WriteProcessorPropertyTypes {
         types::Embedding::Primitive,
         types::DateTime::Primitive,
         types::Duration::Primitive,
+        types::Point::Primitive,
         ListView,
         MapView,
 
@@ -864,6 +872,7 @@ struct WriteProcessorPropertyTypes {
         std::optional<types::Embedding::Primitive>,
         std::optional<types::DateTime::Primitive>,
         std::optional<types::Duration::Primitive>,
+        std::optional<types::Point::Primitive>,
         std::optional<ListView>,
 
         std::string // For LOAD CSV inputs
@@ -1002,6 +1011,9 @@ struct CartesianProductKinds {
 
         types::Duration::Primitive,
         std::optional<types::Duration::Primitive>,
+
+        types::Point::Primitive,
+        std::optional<types::Point::Primitive>,
 
         // Entities and metadata
         NodeID,

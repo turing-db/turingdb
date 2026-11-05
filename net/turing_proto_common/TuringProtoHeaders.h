@@ -80,6 +80,7 @@ enum class ColumnInternalKind : uint32_t {
     DATE_TIME,
     DURATION,
     GRAPH_PATH,
+    POINT,
 };
 
 enum class ColumnKind : uint8_t {

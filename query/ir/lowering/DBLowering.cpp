@@ -208,6 +208,7 @@ const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionL
     {"db.to_boolean", {&emitNLUnaryFunction<nl::ToBoolean>, ResultNullability::AlwaysNullable}},
     {"db.to_datetime", {&emitNLUnaryFunction<nl::ToDateTime>, ResultNullability::AlwaysNullable}},
     {"db.to_duration", {&emitNLUnaryFunction<nl::ToDuration>, ResultNullability::AlwaysNullable}},
+    {"db.to_point",    {&emitNLUnaryFunction<nl::ToPoint>, ResultNullability::AlwaysNullable}},
 
     // A calendar field of an instant is always readable, so the field is null exactly
     // where the instant it was read off is

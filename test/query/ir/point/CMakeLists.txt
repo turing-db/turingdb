@@ -1,0 +1,5 @@
+add_turing_test(test_query_ir_point_property PointPropertyTest.cpp)
+target_include_directories(test_query_ir_point_property PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_point_value_flow PointValueFlowTest.cpp)
+target_include_directories(test_query_ir_point_value_flow PRIVATE ${IR_TEST_DIR})

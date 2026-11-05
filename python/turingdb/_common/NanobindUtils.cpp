@@ -190,6 +190,7 @@ namespace {
 // them as members of one struct lets them call each other without a forward declaration.
 struct ValueToPyObject {
     mutable PyTimeTypes _times;
+    mutable nb::object _point;
 
     nb::object duration(db::Duration value) const {
         return _times.getTimedelta()(nb::arg("microseconds") = value.getMicroseconds());
@@ -197,6 +198,30 @@ struct ValueToPyObject {
 
     nb::object dateTime(db::DateTime value) const {
         return _times.getEpoch() + duration(db::Duration {value.getMicroseconds()});
+    }
+
+    nb::object point(const db::Point& value) const {
+        if (!_point.is_valid()) {
+            _point = nb::module_::import_("turingdb.point").attr("Point");
+        }
+
+        const db::PointCRS crs = value.getCRS();
+        const nb::object z = db::Point::getDimension(crs) == 3 ? nb::cast(value.getZ()) : nb::none();
+
+        return _point(db::Point::getSRID(crs), value.getX(), value.getY(), z);
+    }
+
+    nb::object point(const std::optional<db::Point>& value) const {
+        return value.has_value() ? point(*value) : nb::none();
+    }
+
+    template <typename T>
+    nb::object pointColumn(const std::vector<T>& src) const {
+        nb::list out;
+        for (const T& value : src) {
+            out.append(point(value));
+        }
+        return out;
     }
 
     nb::object view(const db::ListView& listView) const {
@@ -241,6 +266,8 @@ struct ValueToPyObject {
             return duration(element.getAs<T>());
         } else if constexpr (std::is_same_v<T, db::types::DateTime::Primitive>) {
             return dateTime(element.getAs<T>());
+        } else if constexpr (std::is_same_v<T, db::types::Point::Primitive>) {
+            return point(element.getAs<T>());
         } else if constexpr (std::is_same_v<T, db::PathView>) {
             nb::list ids;
             for (const uint64_t id : element.getAs<T>().getIDs()) {
@@ -365,6 +392,12 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 const auto& src = static_cast<const db::ColumnVector<db::types::Duration::Primitive>*>(col)->getRaw();
                 value = temporalColumnAsNdarray(src);
                 dtypeName = "Duration";
+                break;
+            }
+            case db::ColumnVector<db::types::Point::Primitive>::staticKind(): {
+                const auto& src = static_cast<const db::ColumnVector<db::types::Point::Primitive>*>(col)->getRaw();
+                value = listVisitor.pointColumn(src);
+                dtypeName = "Point";
                 break;
             }
             case db::ColumnVector<db::types::Embedding::Primitive>::staticKind(): {
@@ -533,6 +566,13 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 break;
             }
 
+            case db::ColumnOptVector<db::types::Point::Primitive>::staticKind(): {
+                const auto& src = static_cast<const db::ColumnOptVector<db::types::Point::Primitive>*>(col)->getRaw();
+                value = listVisitor.pointColumn(src);
+                dtypeName = "Point";
+                break;
+            }
+
             case db::ColumnConst<db::types::UInt64::Primitive>::staticKind(): {
                 const auto& v = static_cast<const db::ColumnConst<db::types::UInt64::Primitive>*>(col)->getRaw();
                 value = repeatValueAsNdarray(v, rowCount);
@@ -612,6 +652,28 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 const auto& v = static_cast<const db::ColumnConst<std::optional<db::types::Duration::Primitive>>*>(col)->getRaw();
                 value = repeatValueAsNdarray(temporalMicroseconds(v), rowCount);
                 dtypeName = "Duration";
+                break;
+            }
+            case db::ColumnConst<db::types::Point::Primitive>::staticKind(): {
+                const auto& v = static_cast<const db::ColumnConst<db::types::Point::Primitive>*>(col)->getRaw();
+                const nb::object pointObj = listVisitor.point(v);
+                nb::list lst;
+                for (size_t i = 0; i < rowCount; ++i) {
+                    lst.append(pointObj);
+                }
+                value = lst;
+                dtypeName = "Point";
+                break;
+            }
+            case db::ColumnConst<std::optional<db::types::Point::Primitive>>::staticKind(): {
+                const auto& v = static_cast<const db::ColumnConst<std::optional<db::types::Point::Primitive>>*>(col)->getRaw();
+                const nb::object pointObj = listVisitor.point(v);
+                nb::list lst;
+                for (size_t i = 0; i < rowCount; ++i) {
+                    lst.append(pointObj);
+                }
+                value = lst;
+                dtypeName = "Point";
                 break;
             }
             case db::ColumnConst<db::types::Embedding::Primitive>::staticKind(): {

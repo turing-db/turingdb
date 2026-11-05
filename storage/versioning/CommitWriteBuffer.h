@@ -46,6 +46,7 @@ public:
         std::optional<types::List::OwningPrimitive>,
         std::optional<types::DateTime::Primitive>,
         std::optional<types::Duration::Primitive>,
+        std::optional<types::Point::Primitive>,
         std::optional<types::Map::OwningPrimitive>
      >;
      using UntypedProperties = std::vector<UntypedProperty>;

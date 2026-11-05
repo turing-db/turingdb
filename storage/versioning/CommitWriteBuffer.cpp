@@ -60,6 +60,10 @@ struct PrimitiveToTag<types::Duration::Primitive> {
     using Type = types::Duration;
 };
 template <>
+struct PrimitiveToTag<types::Point::Primitive> {
+    using Type = types::Point;
+};
+template <>
 struct PrimitiveToTag<types::Embedding::OwningPrimitive> {
     using Type = types::Embedding;
 };

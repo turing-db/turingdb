@@ -72,6 +72,10 @@ mlir::Type durationElement(mlir::MLIRContext* context, mlir::Type inputElement) 
     return storage::DurationType::get(context);
 }
 
+mlir::Type pointElement(mlir::MLIRContext* context, mlir::Type inputElement) {
+    return storage::PointType::get(context);
+}
+
 // A list function reads a list cell, or the type-erased cell an unwind of a list of lists
 // hands its nested lists on as
 bool readsAList(mlir::Type inputElement) {
@@ -142,6 +146,7 @@ const std::unordered_map<std::string_view, ElementRule> elementRules = {
     {"db.to_boolean",  &booleanElement},
     {"db.to_datetime", &dateTimeElement},
     {"db.to_duration", &durationElement},
+    {"db.to_point",    &pointElement},
 
     {"db.datetime_year",        &integerElement},
     {"db.datetime_month",       &integerElement},

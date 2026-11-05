@@ -1491,6 +1491,8 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
             return vt == ValueType::DateTime;
         case EvaluatedType::Duration:
             return vt == ValueType::Duration;
+        case EvaluatedType::Point:
+            return vt == ValueType::Point;
         case EvaluatedType::Map:
             return vt == ValueType::Map;
         case EvaluatedType::Wildcard:

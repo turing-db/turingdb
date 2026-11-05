@@ -111,6 +111,15 @@ def Duration : StorageType<"Duration", "duration"> {
     }];
 }
 
+def Point : StorageType<"Point", "point"> {
+    let summary = "A point property value";
+    let description = [{
+        The element type of a chunk holding one location per row - storage's
+        ColumnVector<Point>. It holds x, y and z and the coordinate reference system
+        they are given in.
+    }];
+}
+
 def Nullable : StorageType<"Nullable", "nullable"> {
     let summary = "A nullable property value";
     let description = [{

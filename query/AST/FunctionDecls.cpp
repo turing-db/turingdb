@@ -157,6 +157,11 @@ void FunctionDecls::initDefault() {
     countDurations->setReturnTypes({{EvaluatedType::Integer}});
     countDurations->setIsAggregate(true);
 
+    FunctionSignature* countPoints = createFunction("count");
+    countPoints->setArguments({EvaluatedType::Point});
+    countPoints->setReturnTypes({{EvaluatedType::Integer}});
+    countPoints->setIsAggregate(true);
+
     FunctionSignature* countAnyValues = createFunction("count");
     countAnyValues->setArguments({EvaluatedType::Any});
     countAnyValues->setReturnTypes({{EvaluatedType::Integer}});
@@ -199,6 +204,12 @@ void FunctionDecls::initDefault() {
     collectDurations->setReturnTypes({{EvaluatedType::List}});
     collectDurations->setIsAggregate(true);
     collectDurations->setCollectsItsArgument(true);
+
+    FunctionSignature* collectPoints = createFunction("collect");
+    collectPoints->setArguments({EvaluatedType::Point});
+    collectPoints->setReturnTypes({{EvaluatedType::List}});
+    collectPoints->setIsAggregate(true);
+    collectPoints->setCollectsItsArgument(true);
 
     FunctionSignature* collectNodes = createFunction("collect");
     collectNodes->setArguments({EvaluatedType::NodePattern});
@@ -658,7 +669,8 @@ void FunctionDecls::initDefault() {
             EvaluatedType::Integer,
             {EvaluatedType::String, EvaluatedType::Integer, EvaluatedType::Double, EvaluatedType::Bool},
             {EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
-             EvaluatedType::GraphPath, EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Embedding},
+             EvaluatedType::GraphPath, EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Point,
+             EvaluatedType::Embedding},
         },
         {
             "toFloat",
@@ -666,7 +678,8 @@ void FunctionDecls::initDefault() {
             EvaluatedType::Double,
             {EvaluatedType::String, EvaluatedType::Integer, EvaluatedType::Double},
             {EvaluatedType::Bool, EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
-             EvaluatedType::GraphPath, EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Embedding},
+             EvaluatedType::GraphPath, EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Point,
+             EvaluatedType::Embedding},
         },
         {
             "toBoolean",
@@ -674,14 +687,15 @@ void FunctionDecls::initDefault() {
             EvaluatedType::Bool,
             {EvaluatedType::String, EvaluatedType::Integer, EvaluatedType::Bool},
             {EvaluatedType::Double, EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
-             EvaluatedType::GraphPath, EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Embedding},
+             EvaluatedType::GraphPath, EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Point,
+             EvaluatedType::Embedding},
         },
         {
             "toString",
             "toStringOrNull",
             EvaluatedType::String,
             {EvaluatedType::String, EvaluatedType::Integer, EvaluatedType::Double, EvaluatedType::Bool,
-             EvaluatedType::DateTime, EvaluatedType::Duration},
+             EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Point},
             {EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
              EvaluatedType::GraphPath, EvaluatedType::Embedding},
         },
@@ -742,6 +756,14 @@ void FunctionDecls::initDefault() {
     FunctionSignature* durationOfCell = createFunction("duration");
     durationOfCell->setArguments({EvaluatedType::Any});
     durationOfCell->setReturnTypes({{EvaluatedType::Duration}});
+
+    FunctionSignature* pointOfMap = createFunction("point");
+    pointOfMap->setArguments({EvaluatedType::Map});
+    pointOfMap->setReturnTypes({{EvaluatedType::Point}});
+
+    FunctionSignature* pointOfCell = createFunction("point");
+    pointOfCell->setArguments({EvaluatedType::Any});
+    pointOfCell->setReturnTypes({{EvaluatedType::Point}});
 
     // Numeric functions
     for (const EvaluatedType numberType : {EvaluatedType::Integer, EvaluatedType::Double, EvaluatedType::Any}) {
@@ -837,7 +859,7 @@ void FunctionDecls::initDefault() {
     const std::vector<FunctionArgumentType> nonString = {
         EvaluatedType::Integer, EvaluatedType::Double, EvaluatedType::Bool, EvaluatedType::List,
         EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern, EvaluatedType::GraphPath,
-        EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Embedding,
+        EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Point, EvaluatedType::Embedding,
     };
 
     const std::vector<FunctionArgumentType> normalForm = {EvaluatedType::NormalForm};
@@ -901,6 +923,7 @@ void FunctionDecls::initCollectionFunctions() {
         EvaluatedType::Bool,
         EvaluatedType::DateTime,
         EvaluatedType::Duration,
+        EvaluatedType::Point,
         EvaluatedType::Embedding,
         EvaluatedType::NodePattern,
         EvaluatedType::EdgePattern,

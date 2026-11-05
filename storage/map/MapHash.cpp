@@ -63,6 +63,9 @@ size_t hashMapValue(MapEntryView entry) {
         case CellTag::Duration:
             return combine(seed, hashValue(entry.getValue().getAs<types::Duration::Primitive>()));
         break;
+        case CellTag::Point:
+            return combine(seed, hashValue(entry.getValue().getAs<types::Point::Primitive>()));
+        break;
         case CellTag::Embedding: {
             size_t hash = seed;
             for (const float value : entry.getValue().getAs<types::Embedding::Primitive>()) {
@@ -128,6 +131,9 @@ bool sameMapValue(MapEntryView lhs, MapEntryView rhs) {
         break;
         case CellTag::Duration:
             return lhs.getValue().getAs<types::Duration::Primitive>() == rhs.getValue().getAs<types::Duration::Primitive>();
+        break;
+        case CellTag::Point:
+            return lhs.getValue().getAs<types::Point::Primitive>() == rhs.getValue().getAs<types::Point::Primitive>();
         break;
         case CellTag::Embedding: {
             const types::Embedding::Primitive lhsValues = lhs.getValue().getAs<types::Embedding::Primitive>();

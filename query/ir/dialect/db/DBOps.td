@@ -3005,6 +3005,10 @@ def ToFloat : ConversionFunctionOp<"to_float">;
 def ToBoolean : ConversionFunctionOp<"to_boolean">;
 def ToDateTime : TypedUnaryFunctionOp<"to_datetime", "::mlir::storage::StringType">;
 def ToDuration : TypedUnaryFunctionOp<"to_duration", "::mlir::IntegerType">;
+
+// Any map can name an invalid point - a latitude past 90, an unknown crs - so it is never
+// speculatable
+def ToPoint : UnaryFunctionOp<"to_point", [MayRaise]>;
 def ToString : ConversionFunctionOp<"to_string">;
 
 def ToIntegerOrNull : UnaryFunctionOp<"to_integer_or_null", [Pure]>;

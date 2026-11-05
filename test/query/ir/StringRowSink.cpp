@@ -24,6 +24,7 @@
 #include "map/MapView.h"
 #include "metadata/DateTime.h"
 #include "metadata/Duration.h"
+#include "metadata/Point.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "versioning/CommitHash.h"
@@ -90,6 +91,10 @@ void appendValueText(DateTime value, std::string& text) {
 
 void appendValueText(Duration value, std::string& text) {
     Duration::format(text, value);
+}
+
+void appendValueText(Point value, std::string& text) {
+    Point::format(text, value);
 }
 
 void appendValueText(PropertyNull value, std::string& text) {

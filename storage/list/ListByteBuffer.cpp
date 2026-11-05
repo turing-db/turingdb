@@ -127,4 +127,5 @@ template CellView ListByteBuffer<>::write(CellTag, const types::DateTime::Primit
 template CellView ListByteBuffer<>::write(CellTag, const types::Duration::Primitive&);
 template CellView ListByteBuffer<>::write(CellTag, const MapView&);
 template CellView ListByteBuffer<>::write(CellTag, const PathView&);
+template CellView ListByteBuffer<>::write(CellTag, const types::Point::Primitive&);
 }

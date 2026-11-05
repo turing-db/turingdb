@@ -116,6 +116,11 @@ inline bool operator==(const CellView element, const types::Duration::Primitive 
         && element.getAs<types::Duration::Primitive>() == value;
 }
 
+inline bool operator==(const CellView element, const types::Point::Primitive value) {
+    return element.getTag() == CellTag::Point
+        && element.getAs<types::Point::Primitive>() == value;
+}
+
 inline bool operator==(const CellView element, const types::Embedding::Primitive value) {
     return element.getTag() == CellTag::Embedding
         && EmbeddingEqual {}(element.getAs<types::Embedding::Primitive>(), value);
@@ -164,6 +169,7 @@ std::strong_ordering operator<=>(CellView element, types::String::Primitive valu
 std::strong_ordering operator<=>(CellView element, types::Bool::Primitive value);
 std::strong_ordering operator<=>(CellView element, types::DateTime::Primitive value);
 std::strong_ordering operator<=>(CellView element, types::Duration::Primitive value);
+std::strong_ordering operator<=>(CellView element, types::Point::Primitive value);
 
 /**
  * @brief Compares an element of a @ref ListByteBuffer as <, <=, > and >= do. Unlike the order

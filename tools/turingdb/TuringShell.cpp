@@ -569,6 +569,10 @@ void asString(std::string& out, const db::Duration v) {
     db::Duration::format(out, v);
 }
 
+void asString(std::string& out, const db::Point v) {
+    db::Point::format(out, v);
+}
+
 template <int I, int Radix>
 void asString(std::string& out, const TemplateCommitHash<I, Radix>& hash) {
     hash.appendString(out);

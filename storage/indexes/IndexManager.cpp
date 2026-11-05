@@ -56,6 +56,7 @@ template WeakArc<Index> IndexManager::createNodeIndex<types::Embedding>(std::str
 template WeakArc<Index> IndexManager::createNodeIndex<types::List>(std::string_view indexName, PropertyTypeID ptID);
 template WeakArc<Index> IndexManager::createNodeIndex<types::DateTime>(std::string_view indexName, PropertyTypeID ptID);
 template WeakArc<Index> IndexManager::createNodeIndex<types::Duration>(std::string_view indexName, PropertyTypeID ptID);
+template WeakArc<Index> IndexManager::createNodeIndex<types::Point>(std::string_view indexName, PropertyTypeID ptID);
 template WeakArc<Index> IndexManager::createNodeIndex<types::Map>(std::string_view indexName, PropertyTypeID ptID);
 
 template WeakArc<Index> IndexManager::createEdgeIndex<types::Int64>(std::string_view indexName, PropertyTypeID ptID);
@@ -67,5 +68,6 @@ template WeakArc<Index> IndexManager::createEdgeIndex<types::Embedding>(std::str
 template WeakArc<Index> IndexManager::createEdgeIndex<types::List>(std::string_view indexName, PropertyTypeID ptID);
 template WeakArc<Index> IndexManager::createEdgeIndex<types::DateTime>(std::string_view indexName, PropertyTypeID ptID);
 template WeakArc<Index> IndexManager::createEdgeIndex<types::Duration>(std::string_view indexName, PropertyTypeID ptID);
+template WeakArc<Index> IndexManager::createEdgeIndex<types::Point>(std::string_view indexName, PropertyTypeID ptID);
 template WeakArc<Index> IndexManager::createEdgeIndex<types::Map>(std::string_view indexName, PropertyTypeID ptID);
 }

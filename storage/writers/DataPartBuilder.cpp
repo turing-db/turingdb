@@ -306,4 +306,5 @@ INSTANTIATE(types::Bool);
 INSTANTIATE(types::List);
 INSTANTIATE(types::DateTime);
 INSTANTIATE(types::Duration);
+INSTANTIATE(types::Point);
 INSTANTIATE(types::Map);

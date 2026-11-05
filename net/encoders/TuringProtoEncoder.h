@@ -60,6 +60,8 @@ struct ColInternalKindToProtoEnum {
             return Enum::DATE_TIME;
         } else if constexpr (db::IsDuration<T>) {
             return Enum::DURATION;
+        } else if constexpr (db::IsPoint<T>) {
+            return Enum::POINT;
         } else if constexpr (db::IsListView<T>) {
             return Enum::LIST_VIEW;
         } else if constexpr (db::IsMap<T>) {

@@ -21,6 +21,7 @@ enum class CellTag : uint8_t {
     MapView,
     Duration,
     Path,
+    Point,
 
     INVALID,
 };
@@ -39,5 +40,6 @@ static_assert(static_cast<uint8_t>(CellTag::DateTime) == 10);
 static_assert(static_cast<uint8_t>(CellTag::MapView) == 11);
 static_assert(static_cast<uint8_t>(CellTag::Duration) == 12);
 static_assert(static_cast<uint8_t>(CellTag::Path) == 13);
+static_assert(static_cast<uint8_t>(CellTag::Point) == 14);
 
 }

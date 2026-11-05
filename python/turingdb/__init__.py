@@ -6,13 +6,14 @@ from .turing_db import TuringDB
 from .binary_client import BinaryClient
 from .embedded_client import EmbeddedClient
 from .exceptions import TuringDBException
+from .point import Point
 
 try:
     from ._version import version as __version__
 except ImportError:
     __version__ = "unknown"
 
-__all__ = ["TuringDB", "BinaryClient", "EmbeddedClient", "TuringDBException", "__version__"]
+__all__ = ["TuringDB", "BinaryClient", "EmbeddedClient", "TuringDBException", "Point", "__version__"]
 
 def get_executable_path(executable_name="turingdb"):
     """Get the path to a compiled C++ executable shipped with the package."""

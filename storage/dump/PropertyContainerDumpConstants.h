@@ -5,6 +5,7 @@
 #include <type_traits>
 
 #include "ID.h"
+#include "metadata/Point.h"
 #include "metadata/SupportedType.h"
 #include "DumpConfig.h"
 #include "StringBucket.h"
@@ -19,6 +20,9 @@ static_assert(std::is_trivially_copyable_v<EntityID>, "Dump format writes Entity
 static_assert(sizeof(StringBucket::StringLimits) == 2 * sizeof(uint32_t), "Dump format writes StringLimits object bytes as packed uint32 pairs");
 static_assert(offsetof(StringBucket::StringLimits, _offset) == 0, "Loaders read StringLimits as offset then count");
 static_assert(offsetof(StringBucket::StringLimits, _count) == sizeof(uint32_t), "Loaders read StringLimits as offset then count");
+static_assert(sizeof(Point) == 4 * sizeof(double), "Dump format writes a Point as x, y, z, then its CRS ordinal and padding");
+static_assert(std::is_trivially_copyable_v<Point>, "Dump format writes Point object bytes");
+static_assert(std::is_trivially_default_constructible_v<Point>, "Loaders read Point values straight out of the mapped page");
 
 template <SupportedType T>
 class TrivialPropertyContainerDumpConstants {

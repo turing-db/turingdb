@@ -61,6 +61,9 @@ struct CellTagDispatcher {
             case CellTag::Path:
                 return executor.template operator()<PathView>(view);
             break;
+            case CellTag::Point:
+                return executor.template operator()<types::Point::Primitive>(view);
+            break;
 
             case CellTag::INVALID:
             break;
@@ -141,6 +144,11 @@ struct TypeToCellTag<MapView> {
 template <>
 struct TypeToCellTag<PathView> {
     static constexpr CellTag Tag = CellTag::Path;
+};
+
+template <>
+struct TypeToCellTag<types::Point::Primitive> {
+    static constexpr CellTag Tag = CellTag::Point;
 };
 
 }

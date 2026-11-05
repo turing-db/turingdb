@@ -378,6 +378,7 @@ const std::unordered_map<std::string_view, NLUnaryFunctionSelector> unaryFunctio
     {"nl.to_string_or_null",  &NLExecutor::selectOrNull<&NLExecutor::selectConversion<ToStringFunction>, TaggedToStringOrNullFunction>},
     {"nl.to_datetime", &NLExecutor::selectConversion<ToDateTimeFunction>},
     {"nl.to_duration", &NLExecutor::selectConversion<ToDurationFunction>},
+    {"nl.to_point", &NLExecutor::selectConversion<ToPointFunction>},
 
     {"nl.datetime_year",        &NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Year>>},
     {"nl.datetime_month",       &NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Month>>},
@@ -6890,6 +6891,10 @@ Column* NLTranslator::allocValueColumnForValueType(ValueType valueType) {
             return _memory->alloc<ColumnVector<types::Duration::Primitive>>();
         break;
 
+        case ValueType::Point:
+            return _memory->alloc<ColumnVector<types::Point::Primitive>>();
+        break;
+
         default:
             throw IRException("collect does not support this value type");
         break;
@@ -8020,6 +8025,8 @@ NLChunkKind NLTranslator::chunkKindFromElementType(mlir::Type elementType) {
         return NLChunkKind::DateTime;
     } else if (mlir::isa<storage::DurationType>(elementType)) {
         return NLChunkKind::Duration;
+    } else if (mlir::isa<storage::PointType>(elementType)) {
+        return NLChunkKind::Point;
     } else if (mlir::isa<storage::PathRefType>(elementType)) {
         return NLChunkKind::PathRef;
     } else if (mlir::isa<storage::BoolType>(elementType)) {

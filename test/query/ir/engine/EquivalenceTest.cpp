@@ -122,6 +122,13 @@ std::string valueToString(const DateTime value) {
     return result;
 }
 
+std::string valueToString(const Point value) {
+    std::string result;
+    Point::format(result, value);
+
+    return result;
+}
+
 std::string valueToString(const Duration value) {
     std::string result;
     Duration::format(result, value);

@@ -10,6 +10,7 @@
 #include "map/MapContainer.h"
 #include "metadata/DateTime.h"
 #include "metadata/Duration.h"
+#include "metadata/Point.h"
 #include "metadata/PropertyNull.h"
 #include "FileHash.h"
 #include "FilePageReader.h"
@@ -129,6 +130,74 @@ TEST_F(CellTagDumpFormatTest, mapHoldingEveryCellTag) {
 
         const auto& loaded = result.value()->cast<types::Map>();
         ASSERT_TRUE(PropertyContainerComparator::same(&original, &loaded));
+    }
+}
+
+TEST_F(CellTagDumpFormatTest, listAndMapHoldingAPointOfEveryCRS) {
+    const fs::Path outDir(_outDir.c_str());
+    const fs::Path listPath = outDir / "point_lists";
+    const fs::Path mapPath = outDir / "point_maps";
+
+    ListContainer lists;
+    const std::vector<ListItem> items = {Point(PointCRS::Cartesian, 1.5, -2.0, 0.0),
+                                         Point(PointCRS::Cartesian3D, 1.5, -2.0, 3.25),
+                                         Point(PointCRS::WGS84, 2.3522, 48.8566, 0.0),
+                                         Point(PointCRS::WGS84_3D, 2.3522, 48.8566, 35.0)};
+
+    TypedPropertyContainer<types::List> originalLists;
+    originalLists.add(EntityID(0), lists.insert(items));
+
+    MapContainer maps;
+    const std::vector<MapEntry> entries = {{"a", Point(PointCRS::Cartesian, 1.5, -2.0, 0.0)},
+                                           {"b", Point(PointCRS::Cartesian3D, 1.5, -2.0, 3.25)},
+                                           {"c", Point(PointCRS::WGS84, 2.3522, 48.8566, 0.0)},
+                                           {"d", Point(PointCRS::WGS84_3D, 2.3522, 48.8566, 35.0)}};
+
+    TypedPropertyContainer<types::Map> originalMaps;
+    originalMaps.add(EntityID(0), maps.insert(entries));
+
+    {
+        auto writer = fs::FilePageWriter::open(listPath);
+        ASSERT_TRUE(writer);
+        ListPropertyContainerDumper dumper(writer.value());
+        ASSERT_TRUE(dumper.dump(originalLists));
+    }
+
+    {
+        auto writer = fs::FilePageWriter::open(mapPath);
+        ASSERT_TRUE(writer);
+        MapPropertyContainerDumper dumper(writer.value());
+        ASSERT_TRUE(dumper.dump(originalMaps));
+    }
+
+    uint64_t listHash = 0;
+    hashDumpFileContent(listPath, listHash);
+    EXPECT_EQ(listHash, 1837138699016962021ull);
+
+    uint64_t mapHash = 0;
+    hashDumpFileContent(mapPath, mapHash);
+    EXPECT_EQ(mapHash, 8917834194145396159ull);
+
+    {
+        auto reader = fs::FilePageReader::open(listPath, DumpConfig::PAGE_SIZE);
+        ASSERT_TRUE(reader);
+        ListPropertyContainerLoader loader(reader.value());
+        auto result = loader.load();
+        ASSERT_TRUE(result);
+
+        const auto& loaded = result.value()->cast<types::List>();
+        ASSERT_TRUE(PropertyContainerComparator::same(&originalLists, &loaded));
+    }
+
+    {
+        auto reader = fs::FilePageReader::open(mapPath, DumpConfig::PAGE_SIZE);
+        ASSERT_TRUE(reader);
+        MapPropertyContainerLoader loader(reader.value());
+        auto result = loader.load();
+        ASSERT_TRUE(result);
+
+        const auto& loaded = result.value()->cast<types::Map>();
+        ASSERT_TRUE(PropertyContainerComparator::same(&originalMaps, &loaded));
     }
 }
 

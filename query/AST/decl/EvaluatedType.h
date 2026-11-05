@@ -39,6 +39,7 @@ enum class EvaluatedType : uint8_t {
     EdgeType,
     DateTime,
     Duration,
+    Point,
     NormalForm,
 
     _SIZE,
@@ -93,11 +94,12 @@ using EvaluatedTypeName = EnumToString<EvaluatedType>::Create<
     EnumStringPair<EvaluatedType::EdgeType, "EdgeType">,
     EnumStringPair<EvaluatedType::DateTime, "DateTime">,
     EnumStringPair<EvaluatedType::Duration, "Duration">,
+    EnumStringPair<EvaluatedType::Point, "Point">,
     EnumStringPair<EvaluatedType::NormalForm, "NormalForm">>;
 
 // Evaluated Type to ValueType conversion
 static constexpr size_t VALUE_TYPE_COUNT = std::to_underlying(ValueType::_SIZE);
-static_assert(VALUE_TYPE_COUNT == 11, "ValueType added: please update below map.");
+static_assert(VALUE_TYPE_COUNT == 12, "ValueType added: please update below map.");
 
 static constexpr std::pair<ValueType, EvaluatedType> EVConversions[VALUE_TYPE_COUNT + 1] = {
     {ValueType::Int64,     EvaluatedType::Integer  },
@@ -109,6 +111,7 @@ static constexpr std::pair<ValueType, EvaluatedType> EVConversions[VALUE_TYPE_CO
     {ValueType::List,      EvaluatedType::List     },
     {ValueType::DateTime,  EvaluatedType::DateTime },
     {ValueType::Duration,  EvaluatedType::Duration },
+    {ValueType::Point,     EvaluatedType::Point    },
     {ValueType::Map,       EvaluatedType::Map      },
 
     {ValueType::Invalid,   EvaluatedType::Invalid  },
@@ -170,6 +173,7 @@ inline bool namesAComparableValue(EvaluatedType e) {
         || e == EvaluatedType::List
         || e == EvaluatedType::DateTime
         || e == EvaluatedType::Duration
+        || e == EvaluatedType::Point
         || e == EvaluatedType::Map;
 }
 

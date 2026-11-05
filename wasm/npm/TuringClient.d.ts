@@ -24,6 +24,7 @@ export declare const ColumnType: Readonly<{
     DATE_TIME: 19;
     DURATION: 20;
     GRAPH_PATH: 21;
+    POINT: 22;
 }>;
 
 export type ColumnTypeName = keyof typeof ColumnType;
@@ -38,6 +39,16 @@ export declare const ColumnEncoding: Readonly<{
 
 export type ColumnEncodingCode = (typeof ColumnEncoding)[keyof typeof ColumnEncoding];
 
+/** A point a query returns. z is undefined for a 2D point. */
+export declare class Point {
+    private constructor();
+    readonly srid: 7203 | 9157 | 4326 | 4979;
+    readonly x: number;
+    readonly y: number;
+    readonly z: number | undefined;
+    readonly crs: "cartesian" | "cartesian-3d" | "wgs-84" | "wgs-84-3d";
+}
+
 /** A row value as Column.get and Column.toArray return it. A path is its node IDs. */
 export type Value =
     | bigint
@@ -46,6 +57,7 @@ export type Value =
     | string
     | null
     | Float32Array
+    | Point
     | Value[]
     | { [key: string]: Value };
 
@@ -56,6 +68,7 @@ export type NumberValue =
     | string
     | null
     | Float32Array
+    | Point
     | NumberValue[]
     | { [key: string]: NumberValue };
 

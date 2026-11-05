@@ -610,6 +610,8 @@ db::ValueType WriteStmtAnalyzer::evaluatedToValueType(EvaluatedType type) {
             return ValueType::DateTime;
         case EvaluatedType::Duration:
             return ValueType::Duration;
+        case EvaluatedType::Point:
+            return ValueType::Point;
         case EvaluatedType::Map:
             return ValueType::Map;
         case EvaluatedType::Null:

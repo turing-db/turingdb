@@ -419,6 +419,25 @@ public:
     }
 };
 
+// point() over a map, the only value it reads. A map holding a null reads as null.
+class ToPointFunction {
+public:
+    using ArgType = MapView;
+    using ResultType = std::optional<types::Point::Primitive>;
+    using TaggedCounterpart = TaggedConversionFunction<ToPointFunction, UnconvertibleCell::Raise>;
+
+    static constexpr std::string_view NAME = "point";
+
+    ResultType operator()(const MapView map) const {
+        types::Point::Primitive value;
+        if (!Point::fromMap(map, value)) {
+            return std::nullopt;
+        }
+
+        return value;
+    }
+};
+
 class MapToDateTimeFunction {
 public:
     using ArgType = MapView;
@@ -600,20 +619,20 @@ public:
     }
 };
 
-template <typename Temporal>
-class ToStringFromTemporalFunction {
+template <typename Formatted>
+class ToStringFromFormattedFunction {
 public:
-    using ArgType = Temporal;
+    using ArgType = Formatted;
     using ResultType = types::String::Primitive;
 
-    explicit ToStringFromTemporalFunction(StringBuffer* stringBuffer)
+    explicit ToStringFromFormattedFunction(StringBuffer* stringBuffer)
         : _stringBuffer(stringBuffer)
     {
     }
 
-    ResultType operator()(const Temporal value) {
+    ResultType operator()(const Formatted value) {
         _formatted.clear();
-        Temporal::format(_formatted, value);
+        Formatted::format(_formatted, value);
 
         return _stringBuffer->insert(_formatted);
     }
@@ -632,9 +651,11 @@ concept ConvertibleToBool = std::is_same_v<Argument, types::Int64::Primitive>
                             || std::is_same_v<Argument, types::UInt64::Primitive>
                             || std::is_same_v<Argument, types::Bool::Primitive>;
 
+// A value whose text is the one its type's format writes
 template <typename Argument>
-concept TemporalValue = std::is_same_v<Argument, types::DateTime::Primitive>
-                        || std::is_same_v<Argument, types::Duration::Primitive>;
+concept FormattedValue = std::is_same_v<Argument, types::DateTime::Primitive>
+                         || std::is_same_v<Argument, types::Duration::Primitive>
+                         || std::is_same_v<Argument, types::Point::Primitive>;
 
 // The element a column of the given type converts, with any optional unwrapped: what a
 // conversion is applied to row by row.
@@ -668,9 +689,9 @@ struct ConversionFunctorFor<ToStringFunction, types::Bool::Primitive> {
     using Type = ToStringFromValueFunction<types::Bool::Primitive>;
 };
 
-template <TemporalValue Argument>
+template <FormattedValue Argument>
 struct ConversionFunctorFor<ToStringFunction, Argument> {
-    using Type = ToStringFromTemporalFunction<Argument>;
+    using Type = ToStringFromFormattedFunction<Argument>;
 };
 
 template <>
@@ -769,7 +790,8 @@ public:
         _fromString(stringBuffer),
         _fromDateTime(stringBuffer),
         _fromDuration(stringBuffer),
-        _fromMap(stringBuffer)
+        _fromMap(stringBuffer),
+        _fromPoint(stringBuffer)
     {
     }
 
@@ -800,6 +822,9 @@ public:
             break;
             case CellTag::MapView:
                 return convert<MapView>(cell, _fromMap);
+            break;
+            case CellTag::Point:
+                return convert<types::Point::Primitive>(cell, _fromPoint);
             break;
             case CellTag::Null:
                 return std::nullopt;
@@ -832,6 +857,7 @@ private:
     ConversionRule<Rule<types::DateTime::Primitive>> _fromDateTime;
     ConversionRule<Rule<types::Duration::Primitive>> _fromDuration;
     ConversionRule<Rule<MapView>> _fromMap;
+    ConversionRule<Rule<types::Point::Primitive>> _fromPoint;
 
     template <typename Element>
     ResultType convert(const ArgType cell, ConversionRule<Rule<Element>>& rule) {

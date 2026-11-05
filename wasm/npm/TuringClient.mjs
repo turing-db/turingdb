@@ -57,6 +57,7 @@ export const ColumnType = Object.freeze({
     DATE_TIME: 19,
     DURATION: 20,
     GRAPH_PATH: 21,
+    POINT: 22,
 });
 
 // The column types whose values the nested reader walks out of the flat nested bytes
@@ -84,6 +85,12 @@ const CELL_TAG_DATETIME = 10;
 const CELL_TAG_MAP_VIEW = 11;
 const CELL_TAG_DURATION = 12;
 const CELL_TAG_PATH = 13;
+const CELL_TAG_POINT = 14;
+
+// Mirrors db::PointCRS (storage/metadata/Point.h): the SRID of each CRS ordinal.
+const POINT_SRIDS = [7203, 9157, 4326, 4979];
+const POINT_CRS_NAMES = { 7203: "cartesian", 9157: "cartesian-3d", 4326: "wgs-84", 4979: "wgs-84-3d" };
+const POINT_SIZE = 32;
 
 // Mirrors db::QueryStatus::Status (base/QueryStatus.h); the ERROR packet's first
 // payload byte indexes into this.
@@ -269,6 +276,30 @@ export function double(value) {
     return new DoubleValue(value);
 }
 
+// A point a query returns. z is undefined for a 2D point.
+export class Point {
+    constructor(srid, x, y, z) {
+        this.srid = srid;
+        this.x = x;
+        this.y = y;
+        this.z = z;
+        Object.freeze(this);
+    }
+
+    get crs() {
+        return POINT_CRS_NAMES[this.srid];
+    }
+}
+
+// A point's 32 bytes: x, y and z as doubles, then the ordinal of its CRS
+function readPoint(view, offset) {
+    const srid = POINT_SRIDS[view.getUint8(offset + 24)];
+    const isThreeDimensional = srid === 9157 || srid === 4979;
+    const z = isThreeDimensional ? view.getFloat64(offset + 16, true) : undefined;
+
+    return new Point(srid, view.getFloat64(offset, true), view.getFloat64(offset + 8, true), z);
+}
+
 function throwParameterError(path, message) {
     throw new TuringQueryError("PARAMETER_ERROR", `Parameter ${path} ${message}`);
 }
@@ -415,6 +446,7 @@ const FIXED_WIDTH_KINDS = {
     // count is handed over as it arrived so no precision is lost on the way
     [ColumnType.DATE_TIME]: { size: 8, wrap: (buffer) => new BigInt64Array(buffer) },
     [ColumnType.DURATION]: { size: 8, wrap: (buffer) => new BigInt64Array(buffer) },
+    [ColumnType.POINT]: { size: POINT_SIZE, wrap: (buffer) => new DataView(buffer), read: (view, index) => readPoint(view, index * POINT_SIZE) },
 };
 
 // Strings are decoded with one TextDecoder call over the whole column and sliced by
@@ -509,6 +541,9 @@ export class NestedReader {
             case CELL_TAG_DOUBLE:
                 this._cursor = payload + 8;
                 return this._view.getFloat64(payload, true);
+            case CELL_TAG_POINT:
+                this._cursor = payload + POINT_SIZE;
+                return readPoint(this._view, payload);
             case CELL_TAG_BOOL:
                 this._cursor = payload + 1;
                 return this._bytes[payload] !== 0;

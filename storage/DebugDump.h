@@ -78,6 +78,8 @@ public:
 
     static void dump(std::ostream& out, PathView path);
 
+    static void dump(std::ostream& out, Point value);
+
 private:
     static void dumpImpl(std::ostream& out, uint64_t data);
 };

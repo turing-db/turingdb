@@ -46,6 +46,9 @@ std::string_view db::queryTypeName(CellTag tag) {
         case CellTag::Path:
             return "GraphPath";
         break;
+        case CellTag::Point:
+            return "Point";
+        break;
         case CellTag::INVALID:
             return "Invalid";
         break;
@@ -83,6 +86,9 @@ std::string_view db::queryTypeName(ValueType type) {
         break;
         case ValueType::Duration:
             return "Duration";
+        break;
+        case ValueType::Point:
+            return "Point";
         break;
         case ValueType::Invalid:
         case ValueType::_SIZE:

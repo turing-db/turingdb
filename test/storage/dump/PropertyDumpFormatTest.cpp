@@ -5,6 +5,7 @@
 #include "dump/PropertyContainerLoader.h"
 #include "comparators/PropertyContainerComparator.h"
 #include "embedding/EmbeddingBucket.h"
+#include "metadata/Point.h"
 #include "FileHash.h"
 #include "FilePageReader.h"
 #include "FilePageWriter.h"
@@ -140,6 +141,43 @@ TEST_F(PropertyDumpFormatTest, embeddingDumpBytes) {
         ASSERT_TRUE(result);
 
         const auto& loaded = result.value()->cast<types::Embedding>();
+        ASSERT_TRUE(PropertyContainerComparator::same(&original, &loaded));
+    }
+}
+
+TEST_F(PropertyDumpFormatTest, pointDumpBytes) {
+    const fs::Path outDir(_outDir.c_str());
+    const fs::Path path = outDir / "points";
+
+    // 40'000 points of 32 bytes span several value pages, and cycle through every CRS so
+    // the ordinal each is written with shows in the bytes
+    constexpr PointCRS systems[] = {PointCRS::Cartesian, PointCRS::Cartesian3D, PointCRS::WGS84, PointCRS::WGS84_3D};
+
+    TypedPropertyContainer<types::Point> original;
+    for (size_t i = 0; i < 40'000; i++) {
+        const double coordinate = static_cast<double>(i % 180) - 89.5;
+        original.add(EntityID(i), Point(systems[i % 4], coordinate, coordinate, static_cast<double>(i)));
+    }
+
+    {
+        auto writer = fs::FilePageWriter::open(path);
+        ASSERT_TRUE(writer);
+        TrivialPropertyContainerDumper<types::Point> dumper(writer.value());
+        ASSERT_TRUE(dumper.dump(original));
+    }
+
+    uint64_t hash = 0;
+    hashDumpFileContent(path, hash);
+    EXPECT_EQ(hash, 934115674187105631ull);
+
+    {
+        auto reader = fs::FilePageReader::open(path, DumpConfig::PAGE_SIZE);
+        ASSERT_TRUE(reader);
+        TrivialPropertyContainerLoader<types::Point> loader(reader.value());
+        auto result = loader.load();
+        ASSERT_TRUE(result);
+
+        const auto& loaded = result.value()->cast<types::Point>();
         ASSERT_TRUE(PropertyContainerComparator::same(&original, &loaded));
     }
 }

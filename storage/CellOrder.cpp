@@ -30,6 +30,7 @@ enum class CellOrderClass {
     Edge,
     List,
     Path,
+    Point,
     DateTime,
     Duration,
     String,
@@ -88,6 +89,10 @@ CellOrderClass orderClassOf(CellTag tag) {
 
         case CellTag::Path:
             return CellOrderClass::Path;
+        break;
+
+        case CellTag::Point:
+            return CellOrderClass::Point;
         break;
 
         case CellTag::INVALID:
@@ -209,6 +214,10 @@ std::strong_ordering compareValues(const Lhs lhs, const Rhs rhs) {
 
             return std::lexicographical_compare_three_way(lhsIDs.begin(), lhsIDs.end(), rhsIDs.begin(), rhsIDs.end());
         }
+        break;
+
+        case CellOrderClass::Point:
+            return valueOf<types::Point::Primitive>(lhs) <=> valueOf<types::Point::Primitive>(rhs);
         break;
 
         case CellOrderClass::String:
@@ -617,4 +626,13 @@ std::strong_ordering db::operator<=>(const CellView element, const types::Durati
     }
 
     return element.getAs<types::Duration::Primitive>() <=> value;
+}
+
+std::strong_ordering db::operator<=>(const CellView element, const types::Point::Primitive value) {
+    const CellOrderClass elementClass = orderClassOf(element.getTag());
+    if (elementClass != CellOrderClass::Point) {
+        return elementClass <=> CellOrderClass::Point;
+    }
+
+    return element.getAs<types::Point::Primitive>() <=> value;
 }

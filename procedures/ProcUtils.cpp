@@ -92,6 +92,13 @@ void appendCell(std::string& out, CellView element) {
             ProcUtils::appendJsonString(out, formatted);
         }
         break;
+        case CellTag::Point: {
+            std::string formatted;
+            Point::format(formatted, element.getAs<types::Point::Primitive>());
+
+            ProcUtils::appendJsonString(out, formatted);
+        }
+        break;
         case CellTag::MapView:
             appendMapValue(out, element.getAs<MapView>());
         break;
@@ -170,6 +177,11 @@ void appendPropertyValue(std::string& out, const PropertyVariant& value) {
             } else if constexpr (std::is_same_v<V, Duration>) {
                 std::string formatted;
                 Duration::format(formatted, *ptr);
+
+                ProcUtils::appendJsonString(out, formatted);
+            } else if constexpr (std::is_same_v<V, Point>) {
+                std::string formatted;
+                Point::format(formatted, *ptr);
 
                 ProcUtils::appendJsonString(out, formatted);
             } else if constexpr (std::is_same_v<V, MapView>) {

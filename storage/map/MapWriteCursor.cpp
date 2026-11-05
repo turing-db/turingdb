@@ -72,4 +72,5 @@ template MapEntryView MapWriteCursor::writeValue(CellTag, const NodeID&);
 template MapEntryView MapWriteCursor::writeValue(CellTag, const EdgeID&);
 template MapEntryView MapWriteCursor::writeValue(CellTag, const types::DateTime::Primitive&);
 template MapEntryView MapWriteCursor::writeValue(CellTag, const types::Duration::Primitive&);
+template MapEntryView MapWriteCursor::writeValue(CellTag, const types::Point::Primitive&);
 }

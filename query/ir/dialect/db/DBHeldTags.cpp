@@ -61,6 +61,8 @@ CellTag elementTag(mlir::Type element) {
         return CellTag::DateTime;
     } else if (mlir::isa<storage::DurationType>(element)) {
         return CellTag::Duration;
+    } else if (mlir::isa<storage::PointType>(element)) {
+        return CellTag::Point;
     } else if (mlir::isa<storage::EmbeddingType>(element)) {
         return CellTag::Embedding;
     }

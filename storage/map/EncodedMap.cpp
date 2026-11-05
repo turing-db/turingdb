@@ -61,6 +61,9 @@ void encodeValue(MapEntryView entry, std::vector<std::byte>& out) {
         case CellTag::Duration:
             appendValue(out, entry.getValue().getAs<types::Duration::Primitive>());
         break;
+        case CellTag::Point:
+            appendValue(out, entry.getValue().getAs<types::Point::Primitive>());
+        break;
         case CellTag::Null:
         break;
         case CellTag::String: {
@@ -208,6 +211,9 @@ private:
             break;
             case CellTag::Duration:
                 return read<types::Duration::Primitive>();
+            break;
+            case CellTag::Point:
+                return read<types::Point::Primitive>();
             break;
             case CellTag::Null:
                 return PropertyNull {};
