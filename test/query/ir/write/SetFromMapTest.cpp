@@ -126,11 +126,6 @@ TEST_F(SetFromMapTest, rejectsAMapLiteralEntryOfAnotherType) {
                      "types 'Int64' and 'String' are incompatible");
 }
 
-TEST_F(SetFromMapTest, rejectsAPropertyCreatedFromAMapReadPerRow) {
-    expectWriteError("UNWIND [{fresh: 1}] AS m MATCH (n:Person {name: 'Remy'}) SET n = m",
-                     "Cannot create property 'fresh' from a value whose type is only known per row");
-}
-
 TEST_F(SetFromMapTest, readsAPropertyAMapLiteralCreatesInTheSameQuery) {
     expectWriteRows("MATCH (n:Person {name: 'Remy'}) SET n = {name: 'Remy', rank: 1} RETURN n.rank", {{"1"}});
 }
@@ -153,11 +148,6 @@ TEST_F(SetFromMapTest, skipsANullEntryForAPropertyNoEntityHolds) {
 TEST_F(SetFromMapTest, skipsANullEntryOfAMapReadPerRowForAPropertyNoEntityHolds) {
     applyWrite("UNWIND [{name: 'R', nickname: null}] AS m MATCH (n:Person {name: 'Remy'}) SET n = m");
     expectRows("MATCH (n:Person {name: 'R'}) RETURN size(keys(n))", {{"1"}});
-}
-
-TEST_F(SetFromMapTest, rejectsAPropertyAMapBoundToAVariableCreates) {
-    expectWriteError("WITH {name: 'Remy', rank: 2} AS m MATCH (n:Person {name: 'Remy'}) SET n = m RETURN n.rank",
-                     "Cannot create property 'rank' from a value whose type is only known per row");
 }
 
 TEST_F(SetFromMapTest, rejectsTheListOfAVariableLengthPath) {

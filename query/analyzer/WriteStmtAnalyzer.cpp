@@ -558,8 +558,8 @@ void WriteStmtAnalyzer::analyzeMapLiteralProperties(const Expr* value, std::vect
         const bool isTypedPerRow = hasNoType && exprType == EvaluatedType::Any;
 
         if (isTypedPerRow) {
-            throwError(fmt::format("Cannot create property '{}' from a value whose type is only known per row", propertyName),
-                       expr);
+            _exprAnalyzer->addCellCreatedProperty(propertyName);
+            continue;
         } else if (hasNoType) {
             throwError(fmt::format("Cannot evaluate property: unsupported type '{}'", EvaluatedTypeName::value(exprType)),
                        expr);

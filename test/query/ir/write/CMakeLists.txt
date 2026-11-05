@@ -67,6 +67,8 @@ add_turing_test(test_query_ir_map_value_write MapValueWriteTest.cpp)
 
 add_turing_test(test_query_ir_set_from_map SetFromMapTest.cpp)
 
+add_turing_test(test_query_ir_set_from_map_creates_property SetFromMapCreatesPropertyTest.cpp)
+
 add_turing_test(test_query_ir_set_merge_from_map SetMergeFromMapTest.cpp)
 
 add_turing_test(test_query_ir_set_from_null SetFromNullTest.cpp)
