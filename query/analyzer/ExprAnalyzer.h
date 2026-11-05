@@ -132,11 +132,6 @@ public:
     // which a read later in the query reads as such a value
     void addCellCreatedProperty(std::string_view name);
 
-    // Narrows @param value, a parameter written to the property @param name, to the types the
-    // property takes. Answers that type, or Invalid where the property is new and its bind
-    // decides it, in which case the property takes the candidates the writes of it share.
-    ValueType narrowParameterWrite(std::string_view name, Expr* value);
-
     static bool propTypeCompatible(ValueType vt, EvaluatedType exprType);
 
     // The type property @param name has in this query: the graph's, or the one a write
@@ -145,10 +140,6 @@ public:
 
     // The value bound to the parameter @param name, or an error at @param obj when none is
     const ParameterValue& boundParameterValue(std::string_view name, const void* obj) const;
-
-    // The type of one column the branches of a CASE, a coalesce, a UNION or a WHEN fill
-    // with @param carried and @param value, selected over the types each can be bound to
-    static void selectExprType(const ExprType& carried, const ExprType& value, ExprType& out);
 
     /// Adds an empty declaration for the given NodePattern
     void registerNodePatternDeclaration(const NodePattern* node);
@@ -166,7 +157,6 @@ private:
     const GraphMetadata& _graphMetadata;
 
     std::unordered_map<std::string_view, ValueType> _toBeCreatedTypes;
-    std::unordered_map<std::string_view, EvaluatedTypeSet> _parameterCreatedTypes;
     std::unordered_set<std::string_view> _cellCreatedProperties;
 
     // The LOAD CSV each row variable in scope was bound by
@@ -177,8 +167,6 @@ private:
 
     // The declaration a name reads as, noting it when it came from an enclosing scope
     VarDecl* resolveVariable(std::string_view name);
-
-    void narrowOperand(Expr* operand, EvaluatedTypeSet accepted);
 
     // Lets @param expr and the expressions under it be analyzed again, as a reduce's body
     // is once its accumulator has widened
@@ -195,7 +183,7 @@ private:
 
     // The type a CASE has once @param branch is folded into the type its earlier branches
     // already share, reporting a pair no column type can hold
-    void unifyCaseBranch(const ExprType& carried, const Expr* branch, ExprType& unified) const;
+    EvaluatedType unifyCaseBranch(EvaluatedType carried, const Expr* branch) const;
 
     // Rejects a CASE subject that is not a value
     void requireCaseSubject(const Expr* subject) const;
@@ -206,7 +194,7 @@ private:
 
     // The type the arguments of a call to @param name share, folded the way a CASE folds
     // its branches, reporting a pair no column type can hold
-    void unifiedArgumentType(std::string_view name, std::span<Expr* const> args, ExprType& unified) const;
+    EvaluatedType unifiedArgumentType(std::string_view name, std::span<Expr* const> args) const;
 
     // row[i] over a LOAD CSV row, which reads a field rather than an element. A constant
     // index names the field the load publishes it under; a computed one names none

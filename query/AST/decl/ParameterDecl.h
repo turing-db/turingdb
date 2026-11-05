@@ -10,8 +10,8 @@ namespace db {
 class CypherAST;
 class ParameterValue;
 
-// One per parameter name in a query: every $name reads it, so a use that narrows the
-// types the parameter can take narrows them for all the others
+// One per parameter name in a query: every $name reads it, and it holds the type of
+// the value bound to the parameter
 class ParameterDecl {
 public:
     friend CypherAST;
@@ -27,15 +27,10 @@ public:
     std::optional<ValueType> getValueType() const;
     EvaluatedType getType() const { return _type; }
 
-    EvaluatedTypeSet getCandidateTypes() const { return _candidateTypes; }
-
-    void narrow(EvaluatedTypeSet accepted) { _candidateTypes &= accepted; }
-
 private:
     std::string_view _name;
     const ParameterValue* _value {nullptr};
     EvaluatedType _type {EvaluatedType::Invalid};
-    EvaluatedTypeSet _candidateTypes {PARAMETER_VALUE_TYPES};
 
     ParameterDecl(std::string_view name, const ParameterValue& value);
     ~ParameterDecl();

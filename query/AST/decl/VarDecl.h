@@ -45,8 +45,6 @@ public:
 
     EvaluatedType getType() const { return _exprType._type; }
 
-    EvaluatedTypeSet getCandidateTypes() const { return _exprType._candidates; }
-
     // How deeply a List-typed variable nests and what its innermost elements are. A
     // barrier publishes it beside the type, so an UNWIND behind the barrier binds its
     // variable to the elements' own type rather than to tagged scalars.
@@ -77,7 +75,7 @@ private:
     bool _isCastToAnEntity {false};
 
     VarDecl(EvaluatedType type, std::string_view name)
-        : _exprType {type, {}, {}},
+        : _exprType {type},
         _name(name)
     {
     }

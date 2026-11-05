@@ -10,8 +10,6 @@ namespace db {
 // What a binary expression evaluates to, or why its operands do not combine
 struct BinaryTyping {
     ExprType _result;
-    EvaluatedTypeSet _leftAccepted;
-    EvaluatedTypeSet _rightAccepted;
     std::string _error;
 
     bool isValid() const { return _error.empty(); }

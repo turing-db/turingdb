@@ -55,8 +55,6 @@ public:
 
     virtual EvaluatedType getType() const { return _exprType._type; }
 
-    EvaluatedTypeSet getCandidateTypes() const { return _exprType._candidates; }
-
     // How deeply a List-typed expression nests and what its innermost elements are.
     // What an UNWIND of this expression binds its variable to.
     const ListShape& getListShape() const { return _exprType._shape; }
@@ -74,8 +72,6 @@ public:
     }
 
     void setType(EvaluatedType type) { _exprType._type = type; }
-
-    void setCandidateTypes(EvaluatedTypeSet types) { _exprType._candidates = types; }
 
     void setListShape(const ListShape& shape) { _exprType._shape = shape; }
 
