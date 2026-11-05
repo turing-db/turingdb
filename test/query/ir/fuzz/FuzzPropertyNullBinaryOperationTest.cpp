@@ -89,6 +89,13 @@ protected:
         EXPECT_TRUE(everyRowHasEveryColumn) << "query: " << query;
     }
 
+    void expectError(std::string_view query, std::string_view expectedError) {
+        RowSink sink;
+        const QueryStatus status = runQuery(query, &sink);
+        ASSERT_FALSE(status.isOk()) << "query: " << query << "\nexpected it to fail";
+        EXPECT_NE(status.getError().find(expectedError), std::string::npos) << "query: " << query << "\nerror: " << status.getError();
+    }
+
     std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<QueryInterpreterV3> _interpreter;
     std::string _graphName {"simpledb"};
@@ -96,7 +103,8 @@ protected:
 };
 
 TEST_F(FuzzPropertyNullBinaryOperationTest, Where000024) {
-    expectNoRows("MATCH (n) WHERE NOT (n.hasPhD OR (n.h AND (NOT n.isRe^n.isReal))) RETURN n");
+    expectError("MATCH (n) WHERE NOT (n.hasPhD OR (n.h AND (NOT n.isRe^n.isReal))) RETURN n",
+                "Operands are not valid and compatible numeric types: 'Null' and 'Bool'");
 }
 
 TEST_F(FuzzPropertyNullBinaryOperationTest, Where000031) {
