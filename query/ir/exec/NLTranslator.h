@@ -358,6 +358,8 @@ private:
                                   const SchemaNameNouns& nouns,
                                   llvm::SmallVectorImpl<llvm::StringRef>& names) const;
     const ParameterValue& lookupParameter(llvm::StringRef name) const;
+    void bindParameterArguments(mlir::func::FuncOp function);
+    Column* boundParameterColumn(llvm::StringRef name, mlir::Type elementType, const ParameterValue& value);
     llvm::StringRef boundSchemaName(llvm::StringRef parameterName,
                                     const SchemaNameNouns& nouns,
                                     const std::string& name) const;
