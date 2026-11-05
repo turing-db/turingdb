@@ -5568,6 +5568,9 @@ NLKeyedValue readKeyedCell(const CellView cell) {
         case CellTag::Duration:
             return cell.getAs<Duration>();
         break;
+        case CellTag::Point:
+            return cell.getAs<Point>();
+        break;
         case CellTag::Null:
             return std::monostate {};
         break;
@@ -5579,7 +5582,6 @@ NLKeyedValue readKeyedCell(const CellView cell) {
         case CellTag::Embedding:
         case CellTag::ListView:
         case CellTag::Path:
-        case CellTag::Point:
             return NLKeylessValue {tag};
         break;
         case CellTag::INVALID:
@@ -5672,8 +5674,34 @@ CellView componentCell(Owner value,
     return map.front().getValue();
 }
 
+// componentCell's sibling for a point, whose components differ in type: a coordinate is a
+// double, the CRS a name, the SRID an integer
+CellView pointComponentCell(const Point value,
+                            std::optional<PointPart> part,
+                            std::string_view key,
+                            MapBuffer<>& mapBuffer) {
+    if (!part) {
+        throw IRException(fmt::format("'{}' is not a component of a point", key));
+    }
+
+    MapBuffer<>::MapKeyValuePair component {.key = key, .value = PropertyNull {}};
+
+    if (*part == PointPart::CRS) {
+        component.value = Point::getCRSName(value.getCRS());
+    } else if (*part == PointPart::SRID) {
+        component.value = Point::getSRID(value.getCRS());
+    } else {
+        component.value = Point::coordinate(value, *part);
+    }
+
+    const MapView map = mapBuffer.insert(std::span<const MapBuffer<>::MapKeyValuePair> {&component, 1});
+
+    return map.front().getValue();
+}
+
 // The value a property read finds in @param keyed: a key of its map, a property of its node
-// or edge, or a component of its instant or duration. Null where it holds null or no such key.
+// or edge, or a component of its instant, duration or point. Null where it holds null or no
+// such key.
 CellView readStaticKey(const NLKeyedValue& keyed,
                        const NLStaticMapKeyData* mapKey,
                        NLEntityProperties& properties,
@@ -5684,6 +5712,8 @@ CellView readStaticKey(const NLKeyedValue& keyed,
         return componentCell(*instant, mapKey->getDateTimePart(), key, "datetime", mapBuffer);
     } else if (const Duration* duration = std::get_if<Duration>(&keyed)) {
         return componentCell(*duration, mapKey->getDurationPart(), key, "duration", mapBuffer);
+    } else if (const Point* point = std::get_if<Point>(&keyed)) {
+        return pointComponentCell(*point, mapKey->getPointPart(), key, mapBuffer);
     } else if (const NLKeylessValue* keyless = std::get_if<NLKeylessValue>(&keyed)) {
         throw IRException(fmt::format("Type mismatch: a value of type '{}' has no property '{}'",
                                       queryTypeName(keyless->_tag),
@@ -11418,6 +11448,14 @@ template NLUnaryFunctionKernel NLExecutor::selectFunction<DurationComponentFunct
 template NLUnaryFunctionKernel NLExecutor::selectFunction<DurationComponentFunction<DurationPart::SecondsOfMinute>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<DurationComponentFunction<DurationPart::MillisecondsOfSecond>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<DurationComponentFunction<DurationPart::MicrosecondsOfSecond>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<PointComponentFunction<PointPart::X>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<PointComponentFunction<PointPart::Y>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<PointComponentFunction<PointPart::Z>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<PointComponentFunction<PointPart::Longitude>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<PointComponentFunction<PointPart::Latitude>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<PointComponentFunction<PointPart::Height>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<PointComponentFunction<PointPart::CRS>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<PointComponentFunction<PointPart::SRID>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ListHeadFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ListLastFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ListTailFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);

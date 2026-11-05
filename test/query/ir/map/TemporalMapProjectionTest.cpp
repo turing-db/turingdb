@@ -184,7 +184,7 @@ TEST_F(TemporalMapProjectionTest, rejectsANameNoComponentOfATypedTemporalHas) {
 
 TEST_F(TemporalMapProjectionTest, rejectsAValueWithNoComponents) {
     expectRejected("WITH 1 AS d RETURN d {.hours}",
-                   "A map projection reads a node, a relationship, a map, a datetime or a duration, and 'd' is 'Integer'");
+                   "A map projection reads a node, a relationship, a map, a datetime, a duration or a point, and 'd' is 'Integer'");
 }
 
 TEST_F(TemporalMapProjectionTest, raisesOnEveryPropertyOfATemporalCell) {

@@ -3048,6 +3048,18 @@ def DurationSecondsOfMinute : TypedUnaryFunctionOp<"duration_seconds_of_minute",
 def DurationMillisecondsOfSecond : TypedUnaryFunctionOp<"duration_milliseconds_of_second", "::mlir::storage::DurationType">;
 def DurationMicrosecondsOfSecond : TypedUnaryFunctionOp<"duration_microseconds_of_second", "::mlir::storage::DurationType">;
 
+// The fields of a point: its coordinates as float columns, the name of its CRS as a string
+// column and its SRID as an integer column. A 2D point has no z or height and a cartesian
+// one no longitude, latitude or height, so those four raise over a column of points too.
+def PointX : TypedUnaryFunctionOp<"point_x", "::mlir::storage::PointType">;
+def PointY : TypedUnaryFunctionOp<"point_y", "::mlir::storage::PointType">;
+def PointZ : UnaryFunctionOp<"point_z", [MayRaise]>;
+def PointLongitude : UnaryFunctionOp<"point_longitude", [MayRaise]>;
+def PointLatitude : UnaryFunctionOp<"point_latitude", [MayRaise]>;
+def PointHeight : UnaryFunctionOp<"point_height", [MayRaise]>;
+def PointCRSName : TypedUnaryFunctionOp<"point_crs", "::mlir::storage::PointType">;
+def PointSRID : TypedUnaryFunctionOp<"point_srid", "::mlir::storage::PointType">;
+
 def CurrentDateTime : TuringOp<"current_datetime", [Pure, ConstantThroughOperands]> {
   let summary = "The instant the query runs, as a constant column";
   let description = [{

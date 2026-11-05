@@ -9858,6 +9858,8 @@ mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propEx
         return emitDateTimeComponent(propExpr->getDateTimePart(), value);
     } else if (propExpr->readsADurationComponent()) {
         return emitDurationComponent(propExpr->getDurationPart(), value);
+    } else if (propExpr->readsAPointComponent()) {
+        return emitPointComponent(propExpr->getPointPart(), value);
     }
 
     return value;
@@ -9884,6 +9886,8 @@ mlir::Value DBProgramGenerator::translatePropertyLookupExpr(const PropertyLookup
         return emitDateTimeComponent(lookupExpr->getDateTimePart(), baseColumn);
     } else if (lookupExpr->readsADurationComponent()) {
         return emitDurationComponent(lookupExpr->getDurationPart(), baseColumn);
+    } else if (lookupExpr->readsAPointComponent()) {
+        return emitPointComponent(lookupExpr->getPointPart(), baseColumn);
     } else if (readType == EvaluatedType::Any) {
         return emitStaticMapKey(baseColumn, lookupExpr->getPropName());
     }
@@ -9961,6 +9965,47 @@ mlir::Value DBProgramGenerator::emitDateTimeComponent(DateTimePart part, mlir::V
 
         case DateTimePart::Microsecond:
             return _opBuilder.create<mlir::db::DateTimeMicrosecond>(loc, noneType, instant).getResult();
+        break;
+    }
+
+    return mlir::Value();
+}
+
+mlir::Value DBProgramGenerator::emitPointComponent(PointPart part, mlir::Value point) {
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    switch (part) {
+        case PointPart::X:
+            return _opBuilder.create<mlir::db::PointX>(loc, noneType, point).getResult();
+        break;
+
+        case PointPart::Y:
+            return _opBuilder.create<mlir::db::PointY>(loc, noneType, point).getResult();
+        break;
+
+        case PointPart::Z:
+            return _opBuilder.create<mlir::db::PointZ>(loc, noneType, point).getResult();
+        break;
+
+        case PointPart::Longitude:
+            return _opBuilder.create<mlir::db::PointLongitude>(loc, noneType, point).getResult();
+        break;
+
+        case PointPart::Latitude:
+            return _opBuilder.create<mlir::db::PointLatitude>(loc, noneType, point).getResult();
+        break;
+
+        case PointPart::Height:
+            return _opBuilder.create<mlir::db::PointHeight>(loc, noneType, point).getResult();
+        break;
+
+        case PointPart::CRS:
+            return _opBuilder.create<mlir::db::PointCRSName>(loc, noneType, point).getResult();
+        break;
+
+        case PointPart::SRID:
+            return _opBuilder.create<mlir::db::PointSRID>(loc, noneType, point).getResult();
         break;
     }
 
@@ -10053,12 +10098,13 @@ mlir::Value DBProgramGenerator::translatePropertyRead(const PropertyExpr* propEx
     const std::string_view varName = entityDecl->getName();
     const std::string_view propName = propExpr->getPropName();
 
-    // d.year, d.hours and m.key name no property: the value the component or the key is
-    // read off is the column the variable itself was bound to
+    // d.year, d.hours, p.x and m.key name no property: the value the component or the key
+    // is read off is the column the variable itself was bound to
     const EvaluatedType entityType = entityDecl->getType();
 
     const bool readsOffTheVariableItself = entityType == EvaluatedType::DateTime
                                         || entityType == EvaluatedType::Duration
+                                        || entityType == EvaluatedType::Point
                                         || entityType == EvaluatedType::Map
                                         || entityType == EvaluatedType::Any;
 

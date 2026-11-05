@@ -122,11 +122,15 @@ bool StructuralExpressionComparator::equal(const Expr* lhs, const Expr* rhs) {
             const bool rhsReadsADateTime = rhsProperty->readsADateTimeComponent();
             const bool lhsReadsADuration = lhsProperty->readsADurationComponent();
             const bool rhsReadsADuration = rhsProperty->readsADurationComponent();
+            const bool lhsReadsAPoint = lhsProperty->readsAPointComponent();
+            const bool rhsReadsAPoint = rhsProperty->readsAPointComponent();
 
             const bool neitherReadsAComponent = !lhsReadsADateTime
                                              && !rhsReadsADateTime
                                              && !lhsReadsADuration
-                                             && !rhsReadsADuration;
+                                             && !rhsReadsADuration
+                                             && !lhsReadsAPoint
+                                             && !rhsReadsAPoint;
 
             const bool sameDateTimeComponent = lhsReadsADateTime
                                             && rhsReadsADateTime
@@ -136,7 +140,14 @@ bool StructuralExpressionComparator::equal(const Expr* lhs, const Expr* rhs) {
                                             && rhsReadsADuration
                                             && lhsProperty->getDurationPart() == rhsProperty->getDurationPart();
 
-            const bool sameComponent = neitherReadsAComponent || sameDateTimeComponent || sameDurationComponent;
+            const bool samePointComponent = lhsReadsAPoint
+                                         && rhsReadsAPoint
+                                         && lhsProperty->getPointPart() == rhsProperty->getPointPart();
+
+            const bool sameComponent = neitherReadsAComponent
+                                    || sameDateTimeComponent
+                                    || sameDurationComponent
+                                    || samePointComponent;
 
             // And two keys of one map are two values for the same reason. The key is empty
             // on every read that is not one, so the comparison stands for all of them.

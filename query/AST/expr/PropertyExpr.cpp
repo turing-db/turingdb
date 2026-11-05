@@ -23,6 +23,11 @@ void PropertyExpr::setDurationPart(DurationPart part) {
     _readsADurationComponent = true;
 }
 
+void PropertyExpr::setPointPart(PointPart part) {
+    _pointPart = part;
+    _readsAPointComponent = true;
+}
+
 void PropertyExpr::setMapKey(std::string_view key) {
     _mapKey = key;
     _readsAMapKey = true;

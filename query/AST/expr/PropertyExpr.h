@@ -45,6 +45,10 @@ public:
     DurationPart getDurationPart() const { return _durationPart; }
     void setDurationPart(DurationPart part);
 
+    bool readsAPointComponent() const { return _readsAPointComponent; }
+    PointPart getPointPart() const { return _pointPart; }
+    void setPointPart(PointPart part);
+
     // The key a map variable is read under, m.key. The key is meaningless unless this says so.
     bool readsAMapKey() const { return _readsAMapKey; }
     std::string_view getMapKey() const { return _mapKey; }
@@ -66,9 +70,11 @@ private:
     ValueType _valueType {ValueType::Invalid};
     DateTimePart _dateTimePart {DateTimePart::Year};
     DurationPart _durationPart {DurationPart::Years};
+    PointPart _pointPart {PointPart::X};
     bool _stringTableHeaderAccess {false};
     bool _readsADateTimeComponent {false};
     bool _readsADurationComponent {false};
+    bool _readsAPointComponent {false};
     bool _readsAMapKey {false};
 
     PropertyExpr(QualifiedName* name)

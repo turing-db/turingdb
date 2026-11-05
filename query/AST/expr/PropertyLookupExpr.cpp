@@ -30,6 +30,11 @@ void PropertyLookupExpr::setDurationPart(DurationPart part) {
     _readsADurationComponent = true;
 }
 
+void PropertyLookupExpr::setPointPart(PointPart part) {
+    _pointPart = part;
+    _readsAPointComponent = true;
+}
+
 void PropertyLookupExpr::setReadsAMapKey() {
     _readsAMapKey = true;
 }

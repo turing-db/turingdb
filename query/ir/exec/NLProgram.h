@@ -39,6 +39,7 @@
 #include "list/PathTrie.h"
 #include "metadata/DateTime.h"
 #include "metadata/Duration.h"
+#include "metadata/Point.h"
 #include "metadata/LabelSet.h"
 #include "metadata/LabelSetHandle.h"
 #include "metadata/PropertyType.h"
@@ -4425,9 +4426,9 @@ struct NLKeylessValue {
 };
 
 // What one row of an nl.static_map_key or an nl.dynamic_map_key reads its key in: a map, the
-// node or the edge whose properties are its keys, or the instant or the duration whose
-// components are. Nothing where the row holds null.
-using NLKeyedValue = std::variant<std::monostate, MapView, NodeID, EdgeID, DateTime, Duration, NLKeylessValue>;
+// node or the edge whose properties are its keys, or the instant, the duration or the point
+// whose components are. Nothing where the row holds null.
+using NLKeyedValue = std::variant<std::monostate, MapView, NodeID, EdgeID, DateTime, Duration, Point, NLKeylessValue>;
 
 // The keyed value one column of a map key read holds at @param row. One per column shape,
 // selected during translation.
@@ -4439,8 +4440,8 @@ using NLStringReadFunction = std::optional<types::String::Primitive> (*)(const C
                                                                         size_t row);
 
 // Row-wise map key read (nl.static_map_key): row r of the result views the value row r's map
-// holds under the key, or a null cell where it holds none. The components of an instant and
-// of a duration the key names are resolved during translation.
+// holds under the key, or a null cell where it holds none. The components of an instant, a
+// duration and a point the key names are resolved during translation.
 class NLStaticMapKeyData : public NLFunctionData {
 public:
     NLStaticMapKeyData(const Column* input,
@@ -4449,6 +4450,7 @@ public:
                  std::string_view key,
                  std::optional<DateTimePart> dateTimePart,
                  std::optional<DurationPart> durationPart,
+                 std::optional<PointPart> pointPart,
                  NLStepBuffers* stepBuffers)
         : _input(input),
         _result(result),
@@ -4456,6 +4458,7 @@ public:
         _key(key),
         _dateTimePart(dateTimePart),
         _durationPart(durationPart),
+        _pointPart(pointPart),
         _stepBuffers(stepBuffers)
     {
     }
@@ -4466,6 +4469,7 @@ public:
     std::string_view getKey() const { return _key; }
     std::optional<DateTimePart> getDateTimePart() const { return _dateTimePart; }
     std::optional<DurationPart> getDurationPart() const { return _durationPart; }
+    std::optional<PointPart> getPointPart() const { return _pointPart; }
     NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
 private:
@@ -4475,6 +4479,7 @@ private:
     std::string_view _key {};
     std::optional<DateTimePart> _dateTimePart;
     std::optional<DurationPart> _durationPart;
+    std::optional<PointPart> _pointPart;
     NLStepBuffers* _stepBuffers {nullptr};
 };
 

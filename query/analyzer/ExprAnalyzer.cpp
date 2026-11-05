@@ -42,6 +42,7 @@
 #include "embedding/EmbeddingBucket.h"
 #include "metadata/DateTime.h"
 #include "metadata/Duration.h"
+#include "metadata/Point.h"
 #include "StringBucket.h"
 
 #include "expr/All.h"
@@ -63,6 +64,20 @@ constexpr std::string_view datetimeComponentNotAProperty =
 constexpr std::string_view mapKeyNotAProperty =
     "A map key is a value inside a property, not a property of its own. "
     "Only a property can be set, removed or indexed.";
+
+constexpr std::string_view pointComponentNotAProperty =
+    "A point component is computed from a property, not stored as one. "
+    "Only a property can be set, removed or indexed.";
+
+EvaluatedType pointComponentType(PointPart part) {
+    if (part == PointPart::CRS) {
+        return EvaluatedType::String;
+    } else if (part == PointPart::SRID) {
+        return EvaluatedType::Integer;
+    }
+
+    return EvaluatedType::Double;
+}
 
 // The type a reduce's accumulator takes once it has held @param accumulator and then
 // @param value: their common type, an integer beside a double widening as the arithmetic
@@ -579,12 +594,15 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         throwTargetInsideAProperty(expr, varDecl);
     }
 
-    // d.year or d.hours, where d was bound to an instant or a duration rather than to an entity
+    // d.year, d.hours or p.x, where d or p was bound to an instant, a duration or a point
+    // rather than to an entity
     const bool bindsAValueWithComponents = varType == EvaluatedType::DateTime
-                                        || varType == EvaluatedType::Duration;
+                                        || varType == EvaluatedType::Duration
+                                        || varType == EvaluatedType::Point;
 
     if (bindsAValueWithComponents) {
         const std::string_view name = propName->getName();
+        EvaluatedType componentType = EvaluatedType::Integer;
 
         if (varType == EvaluatedType::DateTime) {
             DateTimePart part {DateTimePart::Year};
@@ -593,22 +611,30 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
             }
 
             expr->setDateTimePart(part);
-        } else {
+        } else if (varType == EvaluatedType::Duration) {
             DurationPart part {DurationPart::Years};
             if (!Duration::partNamed(name, part)) {
                 throwError(fmt::format("'{}' is not a component of a duration", name), expr);
             }
 
             expr->setDurationPart(part);
+        } else {
+            PointPart part {PointPart::X};
+            if (!Point::partNamed(name, part)) {
+                throwError(fmt::format("'{}' is not a component of a point", name), expr);
+            }
+
+            expr->setPointPart(part);
+            componentType = pointComponentType(part);
         }
 
         expr->setEntityVarDecl(varDecl);
-        expr->setType(EvaluatedType::Integer);
+        expr->setType(componentType);
         expr->setDynamic();
 
-        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::Integer));
+        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, componentType));
 
-        return ValueType::Int64;
+        return *toValueType(componentType);
     }
 
     if (varType == EvaluatedType::StringTable) {
@@ -752,8 +778,10 @@ void ExprAnalyzer::throwTargetInsideAProperty(const PropertyExpr* expr, const Va
 
     DateTimePart part {DateTimePart::Year};
     DurationPart durationPart {DurationPart::Years};
+    PointPart pointPart {PointPart::X};
     const bool namesADateTimePart = DateTime::partNamed(componentName, part);
     const bool namesADurationPart = Duration::partNamed(componentName, durationPart);
+    const bool namesAPointPart = Point::partNamed(componentName, pointPart);
 
     const EvaluatedType varType = varDecl->getType();
     const bool readsAMapVariable = varType == EvaluatedType::Map || varType == EvaluatedType::Any;
@@ -765,8 +793,10 @@ void ExprAnalyzer::throwTargetInsideAProperty(const PropertyExpr* expr, const Va
         throwError(datetimeComponentNotAProperty, expr);
     } else if (namesADurationPart) {
         throwError("A duration component cannot name a property.", expr);
+    } else if (namesAPointPart) {
+        throwError(pointComponentNotAProperty, expr);
     } else {
-        throwError(fmt::format("'{}' is not a component of a datetime or a duration", componentName), expr);
+        throwError(fmt::format("'{}' is not a component of a datetime, a duration or a point", componentName), expr);
     }
 }
 
@@ -777,6 +807,8 @@ void ExprAnalyzer::throwIfReadsPartOfAProperty(const PropertyExpr* expr) {
         throwError(datetimeComponentNotAProperty, expr);
     } else if (expr->readsADurationComponent()) {
         throwError("A duration component cannot name a property.", expr);
+    } else if (expr->readsAPointComponent()) {
+        throwError(pointComponentNotAProperty, expr);
     } else if (expr->readsAMapKey()) {
         throwError(mapKeyNotAProperty, expr);
     }
@@ -814,6 +846,14 @@ void ExprAnalyzer::analyzePropertyLookupExpr(PropertyLookupExpr* expr) {
 
         expr->setDurationPart(part);
         type = EvaluatedType::Integer;
+    } else if (baseType == EvaluatedType::Point) {
+        PointPart part {PointPart::X};
+        if (!Point::partNamed(propName, part)) {
+            throwError(fmt::format("'{}' is not a component of a point", propName), expr);
+        }
+
+        expr->setPointPart(part);
+        type = pointComponentType(part);
     } else if (readsAnEntity) {
         const ValueType valueType = resolvePropertyType(propName);
 
@@ -2022,12 +2062,13 @@ void ExprAnalyzer::analyzeMapProjectionExpr(MapProjectionExpr* expr) {
                                || baseType == EvaluatedType::EdgePattern;
     const bool projectsAMap = baseType == EvaluatedType::Map
                            || baseType == EvaluatedType::Any;
-    const bool projectsATemporal = baseType == EvaluatedType::DateTime
-                                || baseType == EvaluatedType::Duration;
+    const bool projectsComponents = baseType == EvaluatedType::DateTime
+                                 || baseType == EvaluatedType::Duration
+                                 || baseType == EvaluatedType::Point;
     const bool projectsNull = baseType == EvaluatedType::Null;
 
-    if (!projectsAnEntity && !projectsAMap && !projectsATemporal && !projectsNull) {
-        throwError(fmt::format("A map projection reads a node, a relationship, a map, a datetime or a duration, "
+    if (!projectsAnEntity && !projectsAMap && !projectsComponents && !projectsNull) {
+        throwError(fmt::format("A map projection reads a node, a relationship, a map, a datetime, a duration or a point, "
                                "and '{}' is '{}'",
                                baseSymbol->getName(),
                                EvaluatedTypeName::value(baseType)),
@@ -2040,7 +2081,7 @@ void ExprAnalyzer::analyzeMapProjectionExpr(MapProjectionExpr* expr) {
         const bool readsAProperty = item._kind == MapProjectionExpr::ItemKind::Property;
         const bool readsEveryProperty = item._kind == MapProjectionExpr::ItemKind::AllProperties;
 
-        if (readsEveryProperty && projectsATemporal) {
+        if (readsEveryProperty && projectsComponents) {
             throwError(fmt::format("A map projection reads .* off a node, a relationship or a map, and '{}' is '{}'",
                                    baseSymbol->getName(),
                                    EvaluatedTypeName::value(baseType)),

@@ -548,6 +548,59 @@ public:
     }
 };
 
+template <PointPart part>
+using PointComponent = std::conditional_t<part == PointPart::CRS,
+                                          types::String::Primitive,
+                                          std::conditional_t<part == PointPart::SRID,
+                                                             types::Int64::Primitive,
+                                                             types::Double::Primitive>>;
+
+template <PointPart part>
+PointComponent<part> readPointComponent(const types::Point::Primitive value) {
+    if constexpr (part == PointPart::CRS) {
+        return Point::getCRSName(value.getCRS());
+    } else if constexpr (part == PointPart::SRID) {
+        return Point::getSRID(value.getCRS());
+    } else {
+        return Point::coordinate(value, part);
+    }
+}
+
+template <PointPart part>
+class TaggedPointComponentFunction {
+public:
+    using ArgType = CellView;
+    using ResultType = std::optional<PointComponent<part>>;
+
+    ResultType operator()(const ArgType cell) const {
+        const CellTag tag = cell.getTag();
+
+        if (tag == CellTag::Point) {
+            return readPointComponent<part>(cell.getAs<types::Point::Primitive>());
+        } else if (tag == CellTag::Null) {
+            return std::nullopt;
+        }
+
+        throw TuringException(fmt::format("a point component reads a point, not '{}'", queryTypeName(tag)));
+    }
+
+    ResultType operator()(const std::optional<ArgType>& cell) const {
+        return cell.has_value() ? (*this)(*cell) : std::nullopt;
+    }
+};
+
+template <PointPart part>
+class PointComponentFunction {
+public:
+    using ArgType = types::Point::Primitive;
+    using ResultType = PointComponent<part>;
+    using TaggedCounterpart = TaggedPointComponentFunction<part>;
+
+    ResultType operator()(const types::Point::Primitive value) {
+        return readPointComponent<part>(value);
+    }
+};
+
 // toInteger() and toFloat() over a number rather than a string. Every conversion keeps an
 // optional result so one column type carries it whatever the argument was, and so a double
 // that no integer can represent reads as null.

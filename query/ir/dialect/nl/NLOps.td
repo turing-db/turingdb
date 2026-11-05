@@ -3163,6 +3163,15 @@ def DurationSecondsOfMinute : NLUnaryFunctionOp<"duration_seconds_of_minute", [C
 def DurationMillisecondsOfSecond : NLUnaryFunctionOp<"duration_milliseconds_of_second", [ConstantThroughOperands]>;
 def DurationMicrosecondsOfSecond : NLUnaryFunctionOp<"duration_microseconds_of_second", [ConstantThroughOperands]>;
 
+def PointX : NLUnaryFunctionOp<"point_x", [ConstantThroughOperands]>;
+def PointY : NLUnaryFunctionOp<"point_y", [ConstantThroughOperands]>;
+def PointZ : NLUnaryFunctionOp<"point_z", [ConstantThroughOperands]>;
+def PointLongitude : NLUnaryFunctionOp<"point_longitude", [ConstantThroughOperands]>;
+def PointLatitude : NLUnaryFunctionOp<"point_latitude", [ConstantThroughOperands]>;
+def PointHeight : NLUnaryFunctionOp<"point_height", [ConstantThroughOperands]>;
+def PointCRSName : NLUnaryFunctionOp<"point_crs", [ConstantThroughOperands]>;
+def PointSRID : NLUnaryFunctionOp<"point_srid", [ConstantThroughOperands]>;
+
 def CurrentDateTime : NLOp<"current_datetime", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "The instant the query runs, as a single-value chunk";
   let description = [{

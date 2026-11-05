@@ -23,6 +23,7 @@
 #include "expr/CaseExpr.h"
 #include "stmt/SetItem.h"
 #include "metadata/DateTime.h"
+#include "metadata/Point.h"
 
 #include "ExplainRequest.h"
 #include "InsertionOrderedMap.h"
@@ -1413,6 +1414,7 @@ private:
     mlir::Value emitDynamicMapKey(mlir::Value map, mlir::Value key);
     mlir::Value emitDateTimeComponent(DateTimePart part, mlir::Value instant);
     mlir::Value emitDurationComponent(DurationPart part, mlir::Value duration);
+    mlir::Value emitPointComponent(PointPart part, mlir::Value point);
     mlir::Value translateEntityTypeExpr(const EntityTypeExpr* typeExpr);
 
     // labels() / type() of an entity the CREATE wrote, as the constant string it reads:

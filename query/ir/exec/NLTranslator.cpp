@@ -408,6 +408,15 @@ const std::unordered_map<std::string_view, NLUnaryFunctionSelector> unaryFunctio
     {"nl.duration_milliseconds_of_second", &NLExecutor::selectFunction<DurationComponentFunction<DurationPart::MillisecondsOfSecond>>},
     {"nl.duration_microseconds_of_second", &NLExecutor::selectFunction<DurationComponentFunction<DurationPart::MicrosecondsOfSecond>>},
 
+    {"nl.point_x",         &NLExecutor::selectFunction<PointComponentFunction<PointPart::X>>},
+    {"nl.point_y",         &NLExecutor::selectFunction<PointComponentFunction<PointPart::Y>>},
+    {"nl.point_z",         &NLExecutor::selectFunction<PointComponentFunction<PointPart::Z>>},
+    {"nl.point_longitude", &NLExecutor::selectFunction<PointComponentFunction<PointPart::Longitude>>},
+    {"nl.point_latitude",  &NLExecutor::selectFunction<PointComponentFunction<PointPart::Latitude>>},
+    {"nl.point_height",    &NLExecutor::selectFunction<PointComponentFunction<PointPart::Height>>},
+    {"nl.point_crs",       &NLExecutor::selectFunction<PointComponentFunction<PointPart::CRS>>},
+    {"nl.point_srid",      &NLExecutor::selectFunction<PointComponentFunction<PointPart::SRID>>},
+
     {"nl.element_id", &NLExecutor::selectId},
     {"nl.size",       &NLExecutor::selectSize},
     {"nl.is_empty",   &NLExecutor::selectIsEmpty},
@@ -4097,6 +4106,7 @@ void NLTranslator::translateStaticMapKey(nl::StaticMapKey mapKey, NLStmtContaine
                                                                    key,
                                                                    componentNamed<DateTimePart, DateTime>(key),
                                                                    componentNamed<DurationPart, Duration>(key),
+                                                                   componentNamed<PointPart, Point>(key),
                                                                    _program->allocStepBuffers());
 
     body->emplaceStmt(&NLExecutor::runStaticMapKey, data);

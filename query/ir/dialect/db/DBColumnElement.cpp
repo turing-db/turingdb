@@ -176,6 +176,15 @@ const std::unordered_map<std::string_view, ElementRule> elementRules = {
     {"db.duration_milliseconds_of_second", &integerElement},
     {"db.duration_microseconds_of_second", &integerElement},
 
+    {"db.point_x",         &floatElement},
+    {"db.point_y",         &floatElement},
+    {"db.point_z",         &floatElement},
+    {"db.point_longitude", &floatElement},
+    {"db.point_latitude",  &floatElement},
+    {"db.point_height",    &floatElement},
+    {"db.point_crs",       &stringElement},
+    {"db.point_srid",      &integerElement},
+
     {"db.to_string",          &stringElement},
     {"db.to_integer_or_null", &integerElement},
     {"db.to_float_or_null",   &floatElement},
