@@ -165,6 +165,22 @@ Value yieldedFactorColumn(Region& leftFactor, Region& rightFactor, size_t result
     return rightYield.getColumns()[resultNumber - leftColumns.size()];
 }
 
+size_t factorResultOffset(Region& leftFactor, Region& factor) {
+    if (&factor == &leftFactor) {
+        return 0;
+    }
+
+    Yield leftYield = cast<Yield>(leftFactor.front().getTerminator());
+
+    return leftYield.getColumns().size();
+}
+
+void fillTrailingRegionCarrySet(Operation* op, Region& region, size_t count, RegionCarrySet& carrySet) {
+    carrySet = RegionCarrySet {._operandOffset = op->getNumOperands() - count,
+                               ._argumentOffset = region.getNumArguments() - count,
+                               ._count = count};
+}
+
 constexpr size_t HOP_FIXED_RESULT_COUNT = 4;
 constexpr size_t PATH_FIXED_RESULT_COUNT = 3;
 
@@ -2934,8 +2950,48 @@ Value CrossProduct::getRowSource(OpResult result) {
     return yieldedFactorColumn(getLeftFactor(), getRightFactor(), result.getResultNumber());
 }
 
+bool CrossProduct::getYieldedResultOffset(Region& region, size_t& resultOffset) {
+    resultOffset = factorResultOffset(getLeftFactor(), region);
+    return true;
+}
+
 Value HashJoin::getRowSource(OpResult result) {
     return yieldedFactorColumn(getLeftFactor(), getRightFactor(), result.getResultNumber());
+}
+
+bool HashJoin::getYieldedResultOffset(Region& region, size_t& resultOffset) {
+    resultOffset = factorResultOffset(getLeftFactor(), region);
+    return true;
+}
+
+bool ListComprehension::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
+    fillTrailingRegionCarrySet(getOperation(), region, getColumnsToFilter().size(), carrySet);
+    return true;
+}
+
+bool ListPredicate::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
+    fillTrailingRegionCarrySet(getOperation(), region, getColumnsToFilter().size(), carrySet);
+    return true;
+}
+
+bool Reduce::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
+    fillTrailingRegionCarrySet(getOperation(), region, getColumnsToFilter().size(), carrySet);
+    return true;
+}
+
+bool AllReduce::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
+    fillTrailingRegionCarrySet(getOperation(), region, getColumnsToFilter().size(), carrySet);
+    return true;
+}
+
+bool PatternComprehension::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
+    carrySet = RegionCarrySet {._count = getInputColumns().size()};
+    return true;
+}
+
+bool OptionalMatch::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
+    carrySet = RegionCarrySet {._count = getInputColumns().size(), ._handsBack = true, ._yieldsBack = true};
+    return true;
 }
 
 void OptionalMatch::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
@@ -2961,16 +3017,49 @@ void CallSubquery::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Valu
     collectCarriedArgument(value, inputs, carried);
 }
 
+bool CallSubquery::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
+    const bool handsBack = !getUnit();
+    carrySet = RegionCarrySet {._count = getInputColumns().size(),
+                               ._handsBack = handsBack,
+                               ._yieldsBack = handsBack && getCarriesScope()};
+    return true;
+}
+
+// A row the body missed comes out of an optional call with what it yields null
+bool CallSubquery::getYieldedResultOffset(Region& region, size_t& resultOffset) {
+    if (getUnit() || getOptional()) {
+        return false;
+    }
+
+    resultOffset = getCarriesScope() ? 0 : getInputColumns().size();
+    return true;
+}
+
 void ExistsSubquery::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
     collectCarriedArgument(value, getInputColumns(), carried);
+}
+
+bool ExistsSubquery::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
+    carrySet = RegionCarrySet {._count = getInputColumns().size()};
+    return true;
 }
 
 void CountSubquery::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
     collectCarriedArgument(value, getInputColumns(), carried);
 }
 
+bool CountSubquery::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
+    carrySet = RegionCarrySet {._count = getInputColumns().size()};
+    return true;
+}
+
 void CollectSubquery::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
     collectCarriedArgument(value, getInputColumns(), carried);
+}
+
+bool CollectSubquery::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
+    carrySet = RegionCarrySet {._count = getInputColumns().size()};
+    return true;
 }
 
 void Union::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
@@ -3008,12 +3097,22 @@ void LazyCase::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& 
     collectCarriedArgument(value, getColumnsToFilter(), carried);
 }
 
+bool LazyCase::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
+    fillTrailingRegionCarrySet(getOperation(), region, getColumnsToFilter().size(), carrySet);
+    return true;
+}
+
 void Coalesce::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
     if (isa<OpResult>(value)) {
         collectSelectedValues(carried);
     }
 
     collectCarriedArgument(value, getColumnsToFilter(), carried);
+}
+
+bool Coalesce::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
+    fillTrailingRegionCarrySet(getOperation(), region, getColumnsToFilter().size(), carrySet);
+    return true;
 }
 
 Speculation::Speculatability Range::getSpeculatability() {
