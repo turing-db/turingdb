@@ -39,13 +39,11 @@ TEST_F(MapHoldingANodeTest, startsAMatchFromANodeAListHolds) {
                {{"Adam"}});
 }
 
-// Disabled: the analyzer takes a key read off the node for a key of a map held by another
-// map, which it rejects, though the same read through a list element runs.
-TEST_F(MapHoldingANodeTest, DISABLED_readsAPropertyOfTheNodeTheMapHolds) {
+TEST_F(MapHoldingANodeTest, readsAPropertyOfTheNodeTheMapHolds) {
     expectRows("MATCH (n:Person {name: 'Remy'}) WITH {person: n} AS m RETURN m.person.name", {{"Remy"}});
 }
 
-TEST_F(MapHoldingANodeTest, DISABLED_readsAPropertyOfTheNodeAnUnwoundMapHolds) {
+TEST_F(MapHoldingANodeTest, readsAPropertyOfTheNodeAnUnwoundMapHolds) {
     expectRows("MATCH (n:Person {name: 'Remy'}) UNWIND [{person: n}] AS m RETURN m.person.name", {{"Remy"}});
 }
 
