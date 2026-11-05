@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timedelta, timezone
 
 import turingdb
 from turingdb.exceptions import TuringDBException
@@ -33,6 +34,32 @@ def check(kind: str, db: turingdb.TuringDB) -> None:
     nested = {"unused": [1, -2.5, True, None, "text", {"key": ["value", {"deep": 3}]}], "label": "Person"}
     people = names(db, "MATCH (n:$label) RETURN n.name ORDER BY n.name", nested)
     assert people == ["Luc", "Remy"], f"{kind}: nested parameters gave {people}"
+
+    matched = names(db, "MATCH (n) WHERE n.name = $name RETURN n.name", {"name": "Luc"})
+    assert matched == ["Luc"], f"{kind}: a value parameter gave {matched}"
+
+    computed = db.query("RETURN $i + 1 AS i, $d * 2.0 AS d, $n IS NULL AS n",
+                        query_parameters={"i": 41, "d": 1.5, "n": None})
+    integer = computed["i"].tolist()
+    real = computed["d"].tolist()
+    null = computed["n"].tolist()
+    assert integer == [42], f"{kind}: an Int64 parameter gave {integer}"
+    assert real == [3.0], f"{kind}: a Double parameter gave {real}"
+    assert null == [True], f"{kind}: a null parameter gave {null}"
+
+    timed = db.query("RETURN $wait + duration({hours: 1}) AS wait, ($when + $wait).year AS year",
+                     query_parameters={"wait": timedelta(hours=1), "when": datetime(2026, 11, 5, 14, 5, tzinfo=timezone.utc)})
+    wait = timed["wait"].tolist()
+    year = timed["year"].tolist()
+    assert wait == [timedelta(hours=2)], f"{kind}: a Duration parameter gave {wait}"
+    assert year == [2026], f"{kind}: a DateTime parameter gave {year}"
+
+    try:
+        db.query("RETURN $when", query_parameters={"when": datetime(2026, 11, 5, 14, 5)})
+    except TuringDBException as error:
+        assert "must carry a timezone" in str(error), f"{kind}: a naive datetime gave {error}"
+    else:
+        raise AssertionError(f"{kind}: a naive datetime parameter was accepted")
 
     try:
         db.query("MATCH (n:$label) RETURN n")
