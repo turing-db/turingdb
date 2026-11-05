@@ -173,3 +173,7 @@ add_ir_tests(test_query_ir_coalesce_raise_effect CoalesceRaiseEffectTest.cpp)
 add_ir_tests(test_query_ir_selection_region_reads SelectionRegionReadsTest.cpp)
 
 add_ir_tests(test_query_ir_selection_region_reads_cypher SelectionRegionReadsCypherTest.cpp)
+
+add_ir_tests(test_query_ir_subquery_property_reads SubqueryPropertyReadsTest.cpp)
+
+add_ir_tests(test_query_ir_subquery_property_reads_cypher SubqueryPropertyReadsCypherTest.cpp)

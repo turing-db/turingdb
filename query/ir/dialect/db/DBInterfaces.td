@@ -30,7 +30,17 @@ def ColumnCarrierOpInterface : OpInterface<"ColumnCarrierOpInterface"> {
       "Append the columns `value`, a result of the op or an argument of one of its regions, carries; none where the op makes it",
       "void", "collectCarriedColumns",
       (ins "::mlir::Value":$value, "::llvm::SmallVectorImpl<::mlir::Value>&":$carried), [{}],
-      [{ ::mlir::db::collectRowSource(value, carried); }]>
+      [{ ::mlir::db::collectRowSource(value, carried); }]>,
+    InterfaceMethod<
+      "Fill `carrySet` with the run of operands the op carries into `region` as a run of its arguments; false where it carries none",
+      "bool", "getRegionCarrySet",
+      (ins "::mlir::Region&":$region, "::mlir::db::RegionCarrySet&":$carrySet), [{}],
+      [{ return false; }]>,
+    InterfaceMethod<
+      "Set `resultOffset` to the result the first column `region` yields comes out as, each next one coming out as the next result with the rows the region left it; false where the op pads or merges what its regions yield",
+      "bool", "getYieldedResultOffset",
+      (ins "::mlir::Region&":$region, "size_t&":$resultOffset), [{}],
+      [{ return false; }]>
   ];
 }
 

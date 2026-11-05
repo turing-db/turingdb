@@ -7152,69 +7152,84 @@ void trimElementCarrySet(Operation* op, Value source, OperandRange carried) {
     op->eraseOperands(erasedOperands);
 }
 
-// The columns an op hands its regions are its last operands, from @param offset on. Each
-// comes into every region as the argument at the same position from the end of its arguments.
-bool matchRegionCarrySet(Operation* op, size_t& offset) {
-    const size_t operandCount = op->getNumOperands();
+bool matchRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
+    ColumnCarrierOpInterface carrier = dyn_cast_or_null<ColumnCarrierOpInterface>(region.getParentOp());
 
-    if (isa<LazyCase, Coalesce>(op)) {
-        offset = 0;
-        return true;
-    } else if (ListComprehension comprehension = dyn_cast<ListComprehension>(op)) {
-        offset = operandCount - comprehension.getColumnsToFilter().size();
-        return true;
-    } else if (ListPredicate predicate = dyn_cast<ListPredicate>(op)) {
-        offset = operandCount - predicate.getColumnsToFilter().size();
-        return true;
-    } else if (Reduce reduce = dyn_cast<Reduce>(op)) {
-        offset = operandCount - reduce.getColumnsToFilter().size();
-        return true;
-    } else if (AllReduce allReduce = dyn_cast<AllReduce>(op)) {
-        offset = operandCount - allReduce.getColumnsToFilter().size();
-        return true;
-    }
-
-    return false;
+    return carrier && carrier.getRegionCarrySet(region, carrySet);
 }
 
 // Null for an argument the op binds itself: a list element, an accumulator or a row tag
-Value carriedColumnOf(Operation* op, size_t offset, BlockArgument argument) {
-    const size_t carriedCount = op->getNumOperands() - offset;
-    const size_t firstCarriedArgument = argument.getOwner()->getNumArguments() - carriedCount;
-    const size_t argumentIndex = argument.getArgNumber();
+Value carriedColumnOf(BlockArgument argument) {
+    Region& region = *argument.getParentRegion();
 
-    if (argumentIndex < firstCarriedArgument) {
+    RegionCarrySet carrySet;
+    if (!matchRegionCarrySet(region, carrySet)) {
         return {};
     }
 
-    return op->getOperand(offset + argumentIndex - firstCarriedArgument);
+    const size_t argumentIndex = argument.getArgNumber();
+    const bool isCarried = argumentIndex >= carrySet._argumentOffset
+                        && argumentIndex < carrySet._argumentOffset + carrySet._count;
+    if (!isCarried) {
+        return {};
+    }
+
+    return region.getParentOp()->getOperand(carrySet._operandOffset + argumentIndex - carrySet._argumentOffset);
+}
+
+BlockArgument carriedArgument(Region& region, size_t carriedIndex) {
+    RegionCarrySet carrySet;
+    const bool carries = matchRegionCarrySet(region, carrySet);
+    bioassert(carries, "A region a column is carried into belongs to an op with a carry set");
+
+    return region.front().getArgument(static_cast<unsigned>(carrySet._argumentOffset + carriedIndex));
+}
+
+// The position of @param column in the carry set of @param op into its regions, appended to
+// the run where the op does not carry it yet: as an operand, and as an argument of every region
+size_t carryIntoRegions(Operation* op, Value column, mlir::RewriterBase& rewriter, bool& appended) {
+    RegionCarrySet carrySet;
+    const bool carries = matchRegionCarrySet(op->getRegion(0), carrySet);
+    bioassert(carries, "An op a column is carried into carries columns into its regions");
+
+    const OperandRange carried = op->getOperands().slice(carrySet._operandOffset, carrySet._count);
+    const auto carriedIt = llvm::find(carried, column);
+
+    appended = carriedIt == carried.end();
+    if (!appended) {
+        return static_cast<size_t>(carriedIt - carried.begin());
+    }
+
+    llvm::SmallVector<unsigned, 2> argumentPositions;
+    for (Region& region : op->getRegions()) {
+        RegionCarrySet regionCarrySet;
+        const bool carriesIntoRegion = matchRegionCarrySet(region, regionCarrySet);
+        bioassert(carriesIntoRegion, "An op carrying columns into a region carries them into all of them");
+
+        argumentPositions.push_back(static_cast<unsigned>(regionCarrySet._argumentOffset + regionCarrySet._count));
+    }
+
+    rewriter.modifyOpInPlace(op, [op, column, &carrySet, &argumentPositions] {
+        op->insertOperands(static_cast<unsigned>(carrySet._operandOffset + carrySet._count), column);
+
+        for (size_t regionIndex = 0; regionIndex < argumentPositions.size(); regionIndex++) {
+            Block& body = op->getRegion(static_cast<unsigned>(regionIndex)).front();
+            body.insertArgument(argumentPositions[regionIndex], column.getType(), column.getLoc());
+        }
+    });
+
+    return carrySet._count;
 }
 
 BlockArgument carryIntoRegion(Region& region, Value column, mlir::RewriterBase& rewriter) {
-    Operation* const op = region.getParentOp();
+    bool appended = false;
+    const size_t carriedIndex = carryIntoRegions(region.getParentOp(), column, rewriter, appended);
 
-    size_t offset = 0;
-    const bool carries = matchRegionCarrySet(op, offset);
-    bioassert(carries, "A region a column is carried into belongs to an op with a carry set");
+    return carriedArgument(region, carriedIndex);
+}
 
-    const OperandRange carried = op->getOperands().drop_front(offset);
-    const auto carriedIt = llvm::find(carried, column);
-    const size_t carriedIndex = static_cast<size_t>(carriedIt - carried.begin());
-
-    if (carriedIt == carried.end()) {
-        rewriter.modifyOpInPlace(op, [op, column] {
-            op->insertOperands(op->getNumOperands(), column);
-
-            for (Region& carryingRegion : op->getRegions()) {
-                carryingRegion.front().addArgument(column.getType(), column.getLoc());
-            }
-        });
-    }
-
-    Block& body = region.front();
-    const size_t carriedCount = op->getNumOperands() - offset;
-
-    return body.getArgument(static_cast<unsigned>(body.getNumArguments() - carriedCount + carriedIndex));
+bool trimsItsRegionCarrySet(Operation* op) {
+    return isa<LazyCase, Coalesce, ListComprehension, ListPredicate, Reduce, AllReduce>(op);
 }
 
 struct TrimVisit {
@@ -7248,8 +7263,7 @@ void collectTrimOrder(Operation* root, llvm::SmallVectorImpl<Operation*>& order)
             continue;
         }
 
-        size_t carrySetOffset = 0;
-        if (matchRegionCarrySet(op, carrySetOffset)) {
+        if (trimsItsRegionCarrySet(op)) {
             worklist.push_back(TrimVisit {._op = op, ._regionsVisited = true});
         } else if (trimsColumns(op)) {
             order.push_back(op);
@@ -7475,12 +7489,8 @@ void hoistUnconditionalRegion(Operation* selection, mlir::RewriterBase& rewriter
         rewriter.moveOpBefore(&op, selection);
     }
 
-    size_t offset = 0;
-    const bool carries = matchRegionCarrySet(selection, offset);
-    bioassert(carries, "A CASE or a coalesce carries columns into its regions");
-
     for (const BlockArgument argument : body.getArguments()) {
-        rewriter.replaceAllUsesWith(argument, carriedColumnOf(selection, offset, argument));
+        rewriter.replaceAllUsesWith(argument, carriedColumnOf(argument));
     }
 
     const Value yielded = yield->getOperand(0);
@@ -7780,6 +7790,50 @@ Value carryThrough(Operation* op, Value column, mlir::RewriterBase& rewriter) {
     return appendCarriedColumn(op, column, rewriter);
 }
 
+Value canonicalArgument(Value rows) {
+    BlockArgument argument = dyn_cast<BlockArgument>(rows);
+    const Value carried = argument ? carriedColumnOf(argument) : Value();
+    if (!carried) {
+        return rows;
+    }
+
+    Region& region = *argument.getParentRegion();
+
+    RegionCarrySet carrySet;
+    matchRegionCarrySet(region, carrySet);
+
+    const OperandRange carriedColumns = region.getParentOp()->getOperands().slice(carrySet._operandOffset, carrySet._count);
+    const size_t firstIndex = static_cast<size_t>(llvm::find(carriedColumns, carried) - carriedColumns.begin());
+
+    return carriedArgument(region, firstIndex);
+}
+
+// Two columns hold the same values row for row where they come from the same column: two
+// arguments of a body carrying one column in, and two results of an op mapping rows through,
+// as a hop hands back the node it walks from and carries it where the rows in flight hold it.
+// Both are known as the first of them.
+Value canonicalRows(Value rows) {
+    const OpResult result = dyn_cast<OpResult>(rows);
+    Operation* const owner = result ? result.getOwner() : nullptr;
+    if (!owner || !mapsRowsThrough(owner)) {
+        return canonicalArgument(rows);
+    }
+
+    ColumnCarrierOpInterface carrier = cast<ColumnCarrierOpInterface>(owner);
+    const Value rowSource = carrier.getRowSource(result);
+    if (!rowSource) {
+        return rows;
+    }
+
+    const Value sourceRows = canonicalArgument(rowSource);
+    const auto sibling = llvm::find_if(owner->getResults(), [&carrier, sourceRows](OpResult other) {
+        const Value otherSource = carrier.getRowSource(other);
+        return otherSource && canonicalArgument(otherSource) == sourceRows;
+    });
+
+    return *sibling;
+}
+
 // The property columns reuse_property_reads can hand a later read of the same rows: the
 // reads it kept, each serving the ops after it in its block, and the columns it carried down
 // to a row column, which serve every op reading those rows. Keyed by the row column, so a
@@ -7787,7 +7841,7 @@ Value carryThrough(Operation* op, Value column, mlir::RewriterBase& rewriter) {
 class KnownPropertyColumns {
 public:
     Value find(Value rows, StringAttr property, bool nodeProperty, Operation* useSite) const {
-        const auto rowsIt = _columns.find(rows);
+        const auto rowsIt = _columns.find(canonicalRows(rows));
         if (rowsIt == _columns.end()) {
             return {};
         }
@@ -7814,23 +7868,23 @@ public:
     }
 
     void addRead(Operation* read, StringAttr property, bool nodeProperty) {
-        _columns[read->getOperand(0)].push_back(KnownProperty {property, nodeProperty, read->getResult(0), read});
+        _columns[canonicalRows(read->getOperand(0))].push_back(KnownProperty {property, nodeProperty, read->getResult(0), read});
     }
 
     void addCarried(Value rows, StringAttr property, bool nodeProperty, Value column) {
-        _columns[rows].push_back(KnownProperty {property, nodeProperty, column, nullptr});
+        _columns[canonicalRows(rows)].push_back(KnownProperty {property, nodeProperty, column, nullptr});
     }
 
-    // Moves what is known of @param replacedResults, the results of an op since widened
-    // into @param widened, onto the results of @param widened at the same positions
-    void rebind(llvm::ArrayRef<Value> replacedResults, Operation* widened) {
-        llvm::DenseMap<Value, size_t> replacedIndices;
-        for (size_t index = 0; index < replacedResults.size(); index++) {
-            replacedIndices[replacedResults[index]] = index;
+    // Moves what is known of @param replaced, the results of an op since rebuilt, onto
+    // @param replacements, the results standing for them in the op rebuilt
+    void rebind(llvm::ArrayRef<Value> replaced, llvm::ArrayRef<Value> replacements) {
+        llvm::DenseMap<Value, Value> replacementOf;
+        for (size_t index = 0; index < replaced.size(); index++) {
+            replacementOf[replaced[index]] = replacements[index];
         }
 
-        for (size_t index = 0; index < replacedResults.size(); index++) {
-            const auto rowsIt = _columns.find(replacedResults[index]);
+        for (size_t index = 0; index < replaced.size(); index++) {
+            const auto rowsIt = _columns.find(replaced[index]);
             if (rowsIt == _columns.end()) {
                 continue;
             }
@@ -7839,13 +7893,13 @@ public:
             _columns.erase(rowsIt);
 
             for (KnownProperty& property : known) {
-                const auto columnIt = replacedIndices.find(property._column);
-                if (columnIt != replacedIndices.end()) {
-                    property._column = widened->getResult(columnIt->second);
+                const auto columnIt = replacementOf.find(property._column);
+                if (columnIt != replacementOf.end()) {
+                    property._column = columnIt->second;
                 }
             }
 
-            _columns[widened->getResult(index)] = known;
+            _columns[replacements[index]] = known;
         }
     }
 
@@ -7860,37 +7914,43 @@ private:
     llvm::DenseMap<Value, llvm::SmallVector<KnownProperty, 1>> _columns;
 };
 
-// The rows come out of _op as its result at _position or, when _op carries columns into its
-// regions, as the argument at _position of _region. _outerRows are the rows they come from.
+enum class RowsStepKind {
+    MapsRows,
+    IntoRegion,
+    ReadsRowConstant,
+    LaysOutConstant,
+    OutOfRegion,
+    RunConstantOutOfRegion,
+    HandsBack,
+};
+
+// The rows _rows come from _outerRows across one op: _op maps them through or reads them as a
+// run constant, or they come into _body, out of its yield, or out of the op holding it. Into
+// the body and handed back, _position is the column's place in the op's region carry set.
 struct RowsStep {
+    RowsStepKind _kind {RowsStepKind::MapsRows};
     Operation* _op {nullptr};
-    Region* _region {nullptr};
+    Block* _body {nullptr};
     size_t _position {0};
+    Value _rows;
     Value _outerRows;
 };
 
-bool matchRegionStep(BlockArgument argument, RowsStep& step) {
-    Operation* const carrier = argument.getOwner()->getParentOp();
+MutableOperandRange yieldedColumnsOf(Block& body) {
+    Operation* const terminator = body.getTerminator();
 
-    size_t offset = 0;
-    if (!carrier || !matchRegionCarrySet(carrier, offset)) {
-        return false;
+    if (Yield yield = dyn_cast<Yield>(terminator)) {
+        return yield.getColumnsMutable();
+    } else if (SubqueryYield yield = dyn_cast<SubqueryYield>(terminator)) {
+        return yield.getColumnsMutable();
     }
 
-    const Value carried = carriedColumnOf(carrier, offset, argument);
-    if (!carried) {
-        return false;
-    }
+    OptionalYield yield = cast<OptionalYield>(terminator);
 
-    step = RowsStep {._op = carrier,
-                     ._region = argument.getParentRegion(),
-                     ._position = argument.getArgNumber(),
-                     ._outerRows = carried};
-
-    return true;
+    return yield.getColumnsMutable();
 }
 
-bool matchRowMappingStep(OpResult result, RowsStep& step) {
+bool matchMapsRowsStep(OpResult result, RowsStep& step) {
     Operation* const carrier = result.getOwner();
     if (!mapsRowsThrough(carrier)) {
         return false;
@@ -7901,67 +7961,783 @@ bool matchRowMappingStep(OpResult result, RowsStep& step) {
         return false;
     }
 
-    step = RowsStep {._op = carrier, ._position = result.getResultNumber(), ._outerRows = rowSource};
+    step = RowsStep {._op = carrier, ._position = result.getResultNumber(), ._rows = result, ._outerRows = rowSource};
 
     return true;
 }
 
-bool matchRowsStep(Value rows, RowsStep& step) {
-    if (const BlockArgument argument = dyn_cast<BlockArgument>(rows)) {
-        return matchRegionStep(argument, step);
+bool matchHandedBackResult(OpResult result, RowsStep& step) {
+    Operation* const op = result.getOwner();
+    if (op->getNumRegions() == 0) {
+        return false;
     }
 
-    return matchRowMappingStep(cast<OpResult>(rows), step);
+    Region& region = op->getRegion(0);
+
+    RegionCarrySet carrySet;
+    const size_t carriedIndex = result.getResultNumber();
+    const bool handsBack = matchRegionCarrySet(region, carrySet) && carrySet._handsBack && carriedIndex < carrySet._count;
+    if (!handsBack) {
+        return false;
+    }
+
+    step = RowsStep {._kind = RowsStepKind::HandsBack,
+                     ._body = &region.front(),
+                     ._position = carriedIndex,
+                     ._rows = result,
+                     ._outerRows = op->getOperand(carrySet._operandOffset + carriedIndex)};
+
+    return true;
 }
 
-// The column holding `property` for the rows of `column`, read before `useSite` and carried
-// down to it through the ops between: the ops mapping rows through, and the ops carrying
-// columns into the regions `useSite` sits in. Null when there is none: this adds no read.
-Value propertyColumnOf(Value column,
-                       StringAttr property,
-                       bool nodeProperty,
-                       Operation* useSite,
-                       KnownPropertyColumns& knownColumns,
-                       mlir::RewriterBase& rewriter) {
-    llvm::SmallVector<RowsStep> steps;
-    Value propertyColumn = knownColumns.find(column, property, nodeProperty, useSite);
+// The steps from the column @param body yields back for its carried column at @param carriedIndex
+// down to the argument it comes in as, nearest the yield first: ops mapping rows through, and
+// ops handing back a column they carry in
+bool matchHandedBackChain(Block& body, size_t carriedIndex, llvm::SmallVectorImpl<RowsStep>& chain) {
+    const Value argument = canonicalArgument(carriedArgument(*body.getParent(), carriedIndex));
+    const OperandRange yielded = yieldedColumnsOf(body);
 
-    RowsStep step;
-    Value rows = column;
-    while (!propertyColumn && matchRowsStep(rows, step)) {
-        steps.push_back(step);
+    Value rows = yielded[carriedIndex];
+    while (canonicalArgument(rows) != argument) {
+        const OpResult result = dyn_cast<OpResult>(rows);
+
+        RowsStep step;
+        const bool stepsInTheBody = result && result.getOwner()->getBlock() == &body
+                                 && (matchMapsRowsStep(result, step) || matchHandedBackResult(result, step));
+        if (!stepsInTheBody) {
+            return false;
+        }
+
+        chain.push_back(step);
         rows = step._outerRows;
-        propertyColumn = knownColumns.find(rows, property, nodeProperty, step._op);
     }
 
-    if (!propertyColumn) {
-        return {};
+    return true;
+}
+
+// Whether a column carried in alongside the one at @param carriedIndex can be handed back: along
+// the steps the body hands that one back through, and through the body of each op among them
+// that yields its carried columns back too
+bool handsBackAlong(Block& body, const RegionCarrySet& carrySet, size_t carriedIndex) {
+    if (!carrySet._yieldsBack) {
+        return true;
     }
 
-    for (size_t stepIndex = steps.size(); stepIndex > 0; stepIndex--) {
-        const RowsStep& carrier = steps[stepIndex - 1];
+    llvm::SmallVector<std::pair<Block*, size_t>> pending {{&body, carriedIndex}};
+    while (!pending.empty()) {
+        const auto [handingBody, handedIndex] = pending.pop_back_val();
 
-        if (carrier._region) {
-            propertyColumn = carryIntoRegion(*carrier._region, propertyColumn, rewriter);
+        llvm::SmallVector<RowsStep> chain;
+        if (!matchHandedBackChain(*handingBody, handedIndex, chain)) {
+            return false;
+        }
 
-            const Value carriedRows = carrier._region->front().getArgument(static_cast<unsigned>(carrier._position));
-            knownColumns.addCarried(carriedRows, property, nodeProperty, propertyColumn);
-        } else {
-            const llvm::SmallVector<Value> carrierResults(carrier._op->getResults());
-
-            propertyColumn = carryThrough(carrier._op, propertyColumn, rewriter);
-
-            Operation* const carrying = propertyColumn.getDefiningOp();
-            if (carrying != carrier._op) {
-                knownColumns.rebind(carrierResults, carrying);
+        for (const RowsStep& step : chain) {
+            RegionCarrySet stepCarrySet;
+            const bool yieldsBack = step._kind == RowsStepKind::HandsBack
+                                 && matchRegionCarrySet(*step._body->getParent(), stepCarrySet)
+                                 && stepCarrySet._yieldsBack;
+            if (yieldsBack) {
+                pending.push_back({step._body, step._position});
             }
-
-            knownColumns.addCarried(carrying->getResult(carrier._position), property, nodeProperty, propertyColumn);
         }
     }
 
-    return propertyColumn;
+    return true;
 }
+
+bool matchRowConstantStep(OpResult result, RowsStep& step) {
+    RowConstant constant = dyn_cast<RowConstant>(result.getOwner());
+    if (!constant) {
+        return false;
+    }
+
+    step = RowsStep {._kind = RowsStepKind::ReadsRowConstant,
+                     ._op = constant.getOperation(),
+                     ._rows = result,
+                     ._outerRows = constant.getRow()};
+
+    return true;
+}
+
+bool matchIntoRegionStep(BlockArgument argument, RowsStep& step) {
+    const Value carried = carriedColumnOf(argument);
+    if (!carried) {
+        return false;
+    }
+
+    Block* const body = argument.getOwner();
+
+    RegionCarrySet carrySet;
+    matchRegionCarrySet(*body->getParent(), carrySet);
+
+    const size_t carriedIndex = argument.getArgNumber() - carrySet._argumentOffset;
+    if (!handsBackAlong(*body, carrySet, carriedIndex)) {
+        return false;
+    }
+
+    step = RowsStep {._kind = RowsStepKind::IntoRegion,
+                     ._body = body,
+                     ._position = carriedIndex,
+                     ._rows = argument,
+                     ._outerRows = carried};
+
+    return true;
+}
+
+bool matchOutOfRegionStep(OpResult result, RowsStep& step) {
+    Operation* const op = result.getOwner();
+    ColumnCarrierOpInterface carrier = dyn_cast<ColumnCarrierOpInterface>(op);
+    if (!carrier) {
+        return false;
+    }
+
+    const size_t resultIndex = result.getResultNumber();
+    for (Region& region : op->getRegions()) {
+        size_t resultOffset = 0;
+        if (!carrier.getYieldedResultOffset(region, resultOffset)) {
+            continue;
+        }
+
+        Block& body = region.front();
+        const OperandRange yielded = yieldedColumnsOf(body);
+
+        const bool comesOutOfTheRegion = resultIndex >= resultOffset && resultIndex < resultOffset + yielded.size();
+        if (comesOutOfTheRegion) {
+            const size_t yieldIndex = resultIndex - resultOffset;
+            step = RowsStep {._kind = RowsStepKind::OutOfRegion,
+                             ._body = &body,
+                             ._position = yieldIndex,
+                             ._rows = result,
+                             ._outerRows = yielded[yieldIndex]};
+
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool matchHandsBackStep(OpResult result, RowsStep& step) {
+    if (!matchHandedBackResult(result, step)) {
+        return false;
+    }
+
+    Block& body = *step._body;
+
+    RegionCarrySet carrySet;
+    matchRegionCarrySet(*body.getParent(), carrySet);
+
+    return handsBackAlong(body, carrySet, step._position);
+}
+
+Value runConstantArgument(Value column) {
+    RowConstant constant = column ? column.getDefiningOp<RowConstant>() : RowConstant();
+
+    return constant ? canonicalArgument(constant.getRow()) : Value();
+}
+
+// The column of the rows @param value holds one value for: itself, or for a value computed per
+// row, the first column it is computed over that is not a constant
+Value rowsOf(Value value, Block& body) {
+    Value rows = value;
+    while (true) {
+        Operation* const op = rows.getDefiningOp();
+        if (!op || op->getBlock() != &body || !computesAValuePerRow(op)) {
+            return rows;
+        }
+
+        const OperandRange operands = op->getOperands();
+        const auto rowOperand = llvm::find_if(operands, [](Value operand) {
+            return !::db::yieldsConstantColumn(operand);
+        });
+        if (rowOperand == operands.end()) {
+            return rows;
+        }
+
+        rows = *rowOperand;
+    }
+}
+
+// The argument whose run constant @param column holds on every row, mapped down from it by the
+// ops of @param body; null where it holds none
+Value heldRunConstantArgument(Value column, Block& body) {
+    Value rows = column;
+    while (rows) {
+        if (const Value argument = runConstantArgument(rows)) {
+            return argument;
+        }
+
+        const OpResult result = dyn_cast<OpResult>(rows);
+        Operation* const op = result ? result.getOwner() : nullptr;
+
+        const bool mapsRowsInTheBody = op && op->getBlock() == &body && mapsRowsThrough(op);
+        if (!mapsRowsInTheBody) {
+            return {};
+        }
+
+        rows = cast<ColumnCarrierOpInterface>(op).getRowSource(result);
+    }
+
+    return {};
+}
+
+Value runConstantOf(Block& body, Value argument) {
+    for (const BlockArgument candidate : body.getArguments()) {
+        if (canonicalArgument(candidate) != argument) {
+            continue;
+        }
+
+        for (Operation* const user : candidate.getUsers()) {
+            if (RowConstant constant = dyn_cast<RowConstant>(user)) {
+                return constant.getResult();
+            }
+        }
+    }
+
+    return {};
+}
+
+// The rows @param body yields, as the first yielded column holding one value per row is over
+Value yieldedRowsOf(Block& body) {
+    const OperandRange yielded = yieldedColumnsOf(body);
+    for (const Value column : yielded) {
+        const Value rows = rowsOf(column, body);
+        if (!::db::yieldsConstantColumn(rows)) {
+            return rows;
+        }
+    }
+
+    return {};
+}
+
+// The ops mapping rows through from the rows of @param yielded, a column @param body yields,
+// down to the first with a result holding the run constant read off @param argument, which
+// @param holder is set to; nearest the yield first
+bool matchRunConstantChain(Block& body, Value yielded, Value argument, llvm::SmallVectorImpl<Operation*>& chain, Value& holder) {
+    Value rows = rowsOf(yielded, body);
+    while (rows) {
+        const OpResult result = dyn_cast<OpResult>(rows);
+        Operation* const op = result ? result.getOwner() : nullptr;
+
+        const bool mapsRowsInTheBody = op && op->getBlock() == &body && mapsRowsThrough(op);
+        if (!mapsRowsInTheBody) {
+            return false;
+        }
+
+        const auto holding = llvm::find_if(op->getResults(), [&body, argument](OpResult other) {
+            return heldRunConstantArgument(other, body) == argument;
+        });
+
+        if (holding != op->getResults().end()) {
+            holder = *holding;
+            return true;
+        }
+
+        rows = cast<ColumnCarrierOpInterface>(op).getRowSource(result);
+        chain.push_back(op);
+    }
+
+    return false;
+}
+
+// The steps from the rows a body run per row yields down to a column holding the run constant
+// its carried column at @param carriedIndex is read as, along the first yielded column they
+// lead from. Where no column holds it, @param holder is the run constant itself, which is laid
+// out over the yielded rows.
+bool matchRunConstantChainOf(Block& body, size_t carriedIndex, llvm::SmallVectorImpl<Operation*>& chain, Value& holder) {
+    const Value argument = canonicalArgument(carriedArgument(*body.getParent(), carriedIndex));
+
+    const OperandRange yielded = yieldedColumnsOf(body);
+    for (const Value column : yielded) {
+        chain.clear();
+        if (matchRunConstantChain(body, column, argument, chain, holder)) {
+            return true;
+        }
+    }
+
+    chain.clear();
+    holder = runConstantOf(body, argument);
+
+    return holder && yieldedRowsOf(body);
+}
+
+// A body run per row yields rows of one run, so the carried column a result hands back holds
+// on each of them the run constant the body reads it as. The rows come out of the body from
+// a column holding that constant, which the yielded rows map from.
+bool matchRunConstantOutOfRegionStep(OpResult result, RowsStep& step) {
+    RowsStep handsBack;
+    if (!matchHandedBackResult(result, handsBack)) {
+        return false;
+    }
+
+    Block& body = *handsBack._body;
+    Region& region = *body.getParent();
+
+    RegionCarrySet carrySet;
+    matchRegionCarrySet(region, carrySet);
+
+    size_t resultOffset = 0;
+    ColumnCarrierOpInterface carrier = cast<ColumnCarrierOpInterface>(result.getOwner());
+    const bool yieldsRowForRow = !carrySet._yieldsBack && carrier.getYieldedResultOffset(region, resultOffset);
+    if (!yieldsRowForRow) {
+        return false;
+    }
+
+    llvm::SmallVector<Operation*> chain;
+    Value holder;
+    if (!matchRunConstantChainOf(body, handsBack._position, chain, holder)) {
+        return false;
+    }
+
+    step = RowsStep {._kind = RowsStepKind::RunConstantOutOfRegion,
+                     ._op = chain.empty() ? body.getTerminator() : chain.back(),
+                     ._body = &body,
+                     ._position = handsBack._position,
+                     ._rows = result,
+                     ._outerRows = holder};
+
+    return true;
+}
+
+// A non-optional CALL hands its carried columns back out of its body, so a result doing both
+// steps out of the body: a read there reaches it, and a read before the op through the body
+bool matchRowsStep(Value rows, RowsStep& step) {
+    if (const BlockArgument argument = dyn_cast<BlockArgument>(rows)) {
+        return matchIntoRegionStep(argument, step);
+    }
+
+    const OpResult result = cast<OpResult>(rows);
+
+    return matchMapsRowsStep(result, step)
+        || matchRowConstantStep(result, step)
+        || matchOutOfRegionStep(result, step)
+        || matchRunConstantOutOfRegionStep(result, step)
+        || matchHandsBackStep(result, step);
+}
+
+// A walk into a body through the run constant a result hands back, and out of it through the
+// argument that constant is read off, only passes the op: one step handing the column back
+void collapseRunConstantRoundTrips(llvm::SmallVectorImpl<RowsStep>& steps) {
+    for (size_t stepIndex = 0; stepIndex < steps.size(); stepIndex++) {
+        if (steps[stepIndex]._kind != RowsStepKind::RunConstantOutOfRegion) {
+            continue;
+        }
+
+        Block* const body = steps[stepIndex]._body;
+        const auto exitIt = std::find_if(steps.begin() + stepIndex + 1, steps.end(), [body](const RowsStep& step) {
+            return step._kind == RowsStepKind::IntoRegion && step._body == body;
+        });
+        if (exitIt == steps.end()) {
+            continue;
+        }
+
+        RowsStep handsBack;
+        const bool handsBackTheColumn = matchHandedBackResult(cast<OpResult>(steps[stepIndex]._rows), handsBack);
+        bioassert(handsBackTheColumn, "A run constant comes out of a body as a column its op hands back");
+
+        steps.erase(steps.begin() + stepIndex + 1, exitIt + 1);
+        steps[stepIndex] = handsBack;
+    }
+}
+
+// The op a column of the rows a step reaches has to stand before
+Operation* outerUseSite(const RowsStep& step) {
+    switch (step._kind) {
+        case RowsStepKind::MapsRows:
+        case RowsStepKind::ReadsRowConstant:
+        case RowsStepKind::RunConstantOutOfRegion:
+            return step._op;
+        break;
+        case RowsStepKind::IntoRegion:
+        case RowsStepKind::HandsBack:
+            return step._body->getParentOp();
+        break;
+        case RowsStepKind::OutOfRegion:
+            return step._body->getTerminator();
+        break;
+        case RowsStepKind::LaysOutConstant:
+            return nullptr;
+        break;
+    }
+
+    return nullptr;
+}
+
+// A run constant holds its one value for every row of its body, so a column read off it
+// reaches the rows mapped from it without being carried, laid out over the rows the walk
+// mapped down from
+void layOutRunConstant(llvm::SmallVectorImpl<RowsStep>& steps) {
+    size_t firstMapping = steps.size();
+    while (firstMapping > 0 && steps[firstMapping - 1]._kind == RowsStepKind::MapsRows) {
+        firstMapping--;
+    }
+
+    if (firstMapping == steps.size()) {
+        return;
+    }
+
+    const Value entryRows = steps[firstMapping]._rows;
+    steps.truncate(firstMapping);
+    steps.push_back(RowsStep {._kind = RowsStepKind::LaysOutConstant, ._rows = entryRows});
+}
+
+// An op handing back the column it carries in at _carriedIndex for the rows of the one at
+// _rowsIndex, and that column carried up _chain toward the body's yield, _nextStep steps of
+// it still to go
+struct HandBack {
+    Operation* _op {nullptr};
+    size_t _carriedIndex {0};
+    size_t _rowsIndex {0};
+    llvm::SmallVector<RowsStep> _chain;
+    size_t _nextStep {0};
+    Value _column;
+};
+
+// Hands a read the column holding its property for its rows: one read before it, or one read
+// of rows its own come from, carried down to it through the ops between
+class PropertyColumnWalk {
+public:
+    PropertyColumnWalk(KnownPropertyColumns& known, mlir::RewriterBase& rewriter)
+        : _known(known),
+          _rewriter(rewriter)
+    {
+    }
+
+    // Null where there is none: this adds no read. A walk starts again once handing a column
+    // back through a region has rebuilt ops a step of it stood on.
+    Value propertyColumnOf(Operation* read, StringAttr property, bool nodeProperty) {
+        _property = property;
+        _nodeProperty = nodeProperty;
+
+        Value propertyColumn;
+        bool rebuilt = true;
+        while (rebuilt) {
+            llvm::SmallVector<RowsStep> steps;
+            propertyColumn = findKnownColumn(read, steps);
+            if (!propertyColumn) {
+                return {};
+            }
+
+            rebuilt = false;
+            for (size_t stepIndex = steps.size(); stepIndex > 0 && !rebuilt; stepIndex--) {
+                propertyColumn = carryBack(steps[stepIndex - 1], propertyColumn, rebuilt);
+            }
+        }
+
+        return propertyColumn;
+    }
+
+private:
+    KnownPropertyColumns& _known;
+    mlir::RewriterBase& _rewriter;
+    StringAttr _property;
+    bool _nodeProperty {false};
+
+    Value findKnownColumn(Operation* read, llvm::SmallVectorImpl<RowsStep>& steps) {
+        Value rows = read->getOperand(0);
+        Operation* useSite = read;
+
+        while (true) {
+            if (isa_and_present<RowConstant>(rows.getDefiningOp())) {
+                layOutRunConstant(steps);
+            }
+
+            const Value known = _known.find(rows, _property, _nodeProperty, useSite);
+            if (known) {
+                collapseRunConstantRoundTrips(steps);
+                return known;
+            }
+
+            RowsStep step;
+            if (!matchRowsStep(rows, step)) {
+                return {};
+            }
+
+            steps.push_back(step);
+            rows = step._outerRows;
+            useSite = outerUseSite(step);
+        }
+    }
+
+    Value carryBack(const RowsStep& step, Value column, bool& rebuilt) {
+        switch (step._kind) {
+            case RowsStepKind::MapsRows:
+                return carryThroughRows(step, column);
+            break;
+            case RowsStepKind::IntoRegion:
+                return carryIntoBody(step, column, rebuilt);
+            break;
+            case RowsStepKind::ReadsRowConstant:
+                return readAsRowConstant(step, column);
+            break;
+            case RowsStepKind::LaysOutConstant:
+                return layOutConstant(step, column);
+            break;
+            case RowsStepKind::OutOfRegion:
+                return carryOutOf(*step._body, column);
+            break;
+            case RowsStepKind::RunConstantOutOfRegion:
+                return carryRunConstantOutOfBody(step, column);
+            break;
+            case RowsStepKind::HandsBack:
+                return carryThroughBody(step, column);
+            break;
+        }
+
+        return column;
+    }
+
+    Value carryThroughRows(const RowsStep& step, Value column) {
+        const Value carried = carryThroughOp(step._op, column);
+        Operation* const carrying = carried.getDefiningOp();
+
+        _known.addCarried(carrying->getResult(static_cast<unsigned>(step._position)), _property, _nodeProperty, carried);
+
+        return carried;
+    }
+
+    Value carryThroughOp(Operation* carrier, Value column) {
+        const llvm::SmallVector<Value> carrierResults(carrier->getResults());
+
+        const Value carried = carryThrough(carrier, column, _rewriter);
+
+        Operation* const carrying = carried.getDefiningOp();
+        if (carrying != carrier) {
+            const ResultRange replacements = carrying->getResults();
+            _known.rebind(carrierResults, llvm::SmallVector<Value>(replacements.take_front(carrierResults.size())));
+        }
+
+        return carried;
+    }
+
+    Value carryIntoBody(const RowsStep& step, Value column, bool& rebuilt) {
+        Block& body = *step._body;
+        Operation* const op = body.getParentOp();
+
+        bool appended = false;
+        const size_t carriedIndex = carryIntoRegions(op, column, _rewriter, appended);
+
+        RegionCarrySet carrySet;
+        matchRegionCarrySet(*body.getParent(), carrySet);
+
+        if (appended && carrySet._handsBack) {
+            handBack(op, carriedIndex, step._position);
+            rebuilt = carrySet._yieldsBack;
+        }
+
+        const BlockArgument argument = carriedArgument(*body.getParent(), carriedIndex);
+        _known.addCarried(step._rows, _property, _nodeProperty, argument);
+
+        return argument;
+    }
+
+    Value carryThroughBody(const RowsStep& step, Value column) {
+        Operation* op = step._body->getParentOp();
+
+        bool appended = false;
+        const size_t carriedIndex = carryIntoRegions(op, column, _rewriter, appended);
+        if (appended) {
+            op = handBack(op, carriedIndex, step._position);
+        }
+
+        return op->getResult(static_cast<unsigned>(carriedIndex));
+    }
+
+    // @param op hands back the column it has just carried in at @param carriedIndex as a new
+    // result. A body yielding its carried columns back yields it along the one at
+    // @param rowsIndex, carried through each step between, and an op among them handing back
+    // what it carries in hands this column back the same way before the steps above it go on.
+    Operation* handBack(Operation* op, size_t carriedIndex, size_t rowsIndex) {
+        llvm::SmallVector<HandBack> handBacks;
+        pushHandBack(op, carriedIndex, rowsIndex, handBacks);
+
+        while (true) {
+            HandBack& current = handBacks.back();
+
+            if (current._nextStep == 0) {
+                const size_t handedIndex = current._carriedIndex;
+                Operation* const rebuilt = finishHandBack(current);
+
+                handBacks.pop_back();
+                if (handBacks.empty()) {
+                    return rebuilt;
+                }
+
+                handBacks.back()._column = rebuilt->getResult(static_cast<unsigned>(handedIndex));
+                continue;
+            }
+
+            current._nextStep--;
+            const RowsStep step = current._chain[current._nextStep];
+
+            if (step._kind == RowsStepKind::MapsRows) {
+                current._column = carryThroughOp(step._op, current._column);
+                continue;
+            }
+
+            Operation* const handing = step._body->getParentOp();
+
+            bool appended = false;
+            const size_t handedIndex = carryIntoRegions(handing, current._column, _rewriter, appended);
+            if (appended) {
+                pushHandBack(handing, handedIndex, step._position, handBacks);
+            } else {
+                current._column = handing->getResult(static_cast<unsigned>(handedIndex));
+            }
+        }
+    }
+
+    void pushHandBack(Operation* op, size_t carriedIndex, size_t rowsIndex, llvm::SmallVectorImpl<HandBack>& handBacks) {
+        Region& region = op->getRegion(0);
+
+        RegionCarrySet carrySet;
+        matchRegionCarrySet(region, carrySet);
+
+        HandBack handBack {._op = op, ._carriedIndex = carriedIndex, ._rowsIndex = rowsIndex};
+        if (carrySet._yieldsBack) {
+            const bool chained = matchHandedBackChain(region.front(), rowsIndex, handBack._chain);
+            bioassert(chained, "A column is carried into a body only along one it yields back");
+
+            handBack._nextStep = handBack._chain.size();
+            handBack._column = carriedArgument(region, carriedIndex);
+        }
+
+        handBacks.push_back(handBack);
+    }
+
+    Operation* finishHandBack(const HandBack& handBack) {
+        Operation* const op = handBack._op;
+        Region& region = op->getRegion(0);
+
+        RegionCarrySet carrySet;
+        matchRegionCarrySet(region, carrySet);
+
+        if (carrySet._yieldsBack) {
+            insertYieldedColumn(region.front(), handBack._carriedIndex, handBack._column);
+        }
+
+        const Value column = op->getOperand(static_cast<unsigned>(carrySet._operandOffset + handBack._carriedIndex));
+        Operation* const rebuilt = insertResult(op, handBack._carriedIndex, column.getType());
+
+        _known.addCarried(rebuilt->getResult(static_cast<unsigned>(handBack._rowsIndex)),
+                          _property,
+                          _nodeProperty,
+                          rebuilt->getResult(static_cast<unsigned>(handBack._carriedIndex)));
+
+        return rebuilt;
+    }
+
+    Value readAsRowConstant(const RowsStep& step, Value column) {
+        _rewriter.setInsertionPointAfter(step._op);
+        const Value constant = _rewriter.create<RowConstant>(step._op->getLoc(), column).getResult();
+
+        _known.addCarried(step._rows, _property, _nodeProperty, constant);
+
+        return constant;
+    }
+
+    Value layOutConstant(const RowsStep& step, Value constant) {
+        _rewriter.setInsertionPointAfterValue(step._rows);
+        const Value laidOut = _rewriter.create<BroadcastConstant>(step._rows.getLoc(), constant, step._rows).getResult();
+
+        _known.addCarried(step._rows, _property, _nodeProperty, laidOut);
+
+        return laidOut;
+    }
+
+    Value carryRunConstantOutOfBody(const RowsStep& step, Value column) {
+        Block& body = *step._body;
+
+        llvm::SmallVector<Operation*> chain;
+        Value holder;
+        const bool chained = matchRunConstantChainOf(body, step._position, chain, holder);
+        bioassert(chained, "A run constant comes out of a body along the rows it yields");
+
+        if (runConstantArgument(holder)) {
+            Operation* const terminator = body.getTerminator();
+            _rewriter.setInsertionPoint(terminator);
+
+            const Value rows = yieldedRowsOf(body);
+            const Value laidOut = _rewriter.create<BroadcastConstant>(terminator->getLoc(), column, rows).getResult();
+
+            return carryOutOf(body, laidOut);
+        }
+
+        Value carried = column;
+        for (size_t chainIndex = chain.size(); chainIndex > 0; chainIndex--) {
+            carried = carryThroughOp(chain[chainIndex - 1], carried);
+        }
+
+        return carryOutOf(body, carried);
+    }
+
+    Value carryOutOf(Block& body, Value column) {
+        Operation* op = body.getParentOp();
+
+        size_t resultOffset = 0;
+        const bool yields = cast<ColumnCarrierOpInterface>(op).getYieldedResultOffset(*body.getParent(), resultOffset);
+        bioassert(yields, "A column comes out of a region whose yield the op's results stand for");
+
+        const OperandRange yielded = yieldedColumnsOf(body);
+        const auto yieldedIt = llvm::find(yielded, column);
+        const size_t yieldIndex = static_cast<size_t>(yieldedIt - yielded.begin());
+
+        if (yieldedIt == yielded.end()) {
+            insertYieldedColumn(body, yieldIndex, column);
+            op = insertResult(op, resultOffset + yieldIndex, column.getType());
+        }
+
+        return op->getResult(static_cast<unsigned>(resultOffset + yieldIndex));
+    }
+
+    void insertYieldedColumn(Block& body, size_t yieldIndex, Value column) {
+        MutableOperandRange yielded = yieldedColumnsOf(body);
+        const OperandRange current = yielded;
+
+        llvm::SmallVector<Value> columns(current.begin(), current.end());
+        columns.insert(columns.begin() + yieldIndex, column);
+
+        _rewriter.modifyOpInPlace(body.getTerminator(), [&yielded, &columns] {
+            yielded.assign(columns);
+        });
+    }
+
+    // Rebuilds @param op with a result of @param type at @param resultIndex, the ones from there
+    // on moving up one, and its regions moved over
+    Operation* insertResult(Operation* op, size_t resultIndex, Type type) {
+        llvm::SmallVector<Type> types(op->getResultTypes());
+        types.insert(types.begin() + resultIndex, type);
+
+        const unsigned regionCount = op->getNumRegions();
+
+        OperationState state(op->getLoc(), op->getName());
+        state.addOperands(op->getOperands());
+        state.addTypes(types);
+        state.addAttributes(op->getAttrs());
+        for (unsigned regionIndex = 0; regionIndex < regionCount; regionIndex++) {
+            state.addRegion();
+        }
+
+        _rewriter.setInsertionPoint(op);
+        Operation* const rebuilt = _rewriter.create(state);
+        for (unsigned regionIndex = 0; regionIndex < regionCount; regionIndex++) {
+            rebuilt->getRegion(regionIndex).takeBody(op->getRegion(regionIndex));
+        }
+
+        const llvm::SmallVector<Value> replaced(op->getResults());
+        llvm::SmallVector<Value> replacements;
+        for (size_t index = 0; index < replaced.size(); index++) {
+            const size_t rebuiltIndex = index < resultIndex ? index : index + 1;
+            replacements.push_back(rebuilt->getResult(static_cast<unsigned>(rebuiltIndex)));
+        }
+
+        _known.rebind(replaced, replacements);
+        _rewriter.replaceOp(op, replacements);
+
+        return rebuilt;
+    }
+};
 
 struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyReads> {
     void runOnOperation() override {
@@ -7995,6 +8771,7 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
 
         mlir::IRRewriter rewriter(&getContext());
         KnownPropertyColumns knownColumns;
+        PropertyColumnWalk walk(knownColumns, rewriter);
         for (Operation* const read : reads) {
             StringAttr property;
             bool nodeProperty = false;
@@ -8009,7 +8786,7 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
                 continue;
             }
 
-            const Value reused = propertyColumnOf(read->getOperand(0), property, nodeProperty, read, knownColumns, rewriter);
+            const Value reused = walk.propertyColumnOf(read, property, nodeProperty);
             if (!reused) {
                 knownColumns.addRead(read, property, nodeProperty);
                 continue;
