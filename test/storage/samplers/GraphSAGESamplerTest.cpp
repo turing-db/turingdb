@@ -3,14 +3,12 @@
 #include <algorithm>
 #include <map>
 #include <memory>
-#include <optional>
 #include <set>
 #include <vector>
 
 #include "Graph.h"
 #include "JobSystem.h"
 #include "columns/ColumnIDs.h"
-#include "columns/ColumnOptVector.h"
 #include "datapart/EdgeRecord.h"
 #include "iterators/ChunkConfig.h"
 #include "reader/GraphReader.h"
@@ -153,24 +151,24 @@ protected:
                            const NodeCol& dstNodes,
                            HopRows& out) {
         for (size_t row = 0; row < srcs.size(); row++) {
-            const std::optional<NodeID>& src = srcs[row];
-            const std::optional<NodeID>& tgt = tgts[row];
+            const NodeID src = srcs[row];
+            const NodeID tgt = tgts[row];
 
-            ASSERT_EQ(src.has_value(), tgt.has_value()) << "half a padded edge row";
+            ASSERT_EQ(src.isValid(), tgt.isValid()) << "half a padded edge row";
 
-            if (!src.has_value()) {
+            if (!src.isValid()) {
                 continue;
             }
 
-            out._edges.push_back(SampledEdge {src->getValue(), tgt->getValue()});
+            out._edges.push_back(SampledEdge {src.getValue(), tgt.getValue()});
         }
 
-        for (const std::optional<NodeID>& node : dstNodes) {
-            if (!node.has_value()) {
+        for (const NodeID node : dstNodes) {
+            if (!node.isValid()) {
                 continue;
             }
 
-            out._dstNodes.push_back(node->getValue());
+            out._dstNodes.push_back(node.getValue());
         }
     }
 
@@ -661,15 +659,15 @@ TEST_F(GraphSAGESamplerTest, unwiredColumnsAreSkipped) {
 
         ASSERT_LE(steps, fullStats._steps) << "the wired run outlasted the full one";
 
-        for (const std::optional<NodeID>& node : firstDstNodes) {
-            if (node.has_value()) {
-                dstNodes.push_back(node->getValue());
+        for (const NodeID node : firstDstNodes) {
+            if (node.isValid()) {
+                dstNodes.push_back(node.getValue());
             }
         }
 
-        for (const std::optional<NodeID>& node : lastTgts) {
-            if (node.has_value()) {
-                targets.push_back(node->getValue());
+        for (const NodeID node : lastTgts) {
+            if (node.isValid()) {
+                targets.push_back(node.getValue());
             }
         }
     }

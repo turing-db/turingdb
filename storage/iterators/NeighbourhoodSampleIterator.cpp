@@ -308,4 +308,3 @@ void NeighbourhoodSampleChunkWriter<NodeColumn>::fill(size_t maxCount) {
 }
 
 template class db::NeighbourhoodSampleChunkWriter<db::ColumnNodeIDs>;
-template class db::NeighbourhoodSampleChunkWriter<db::ColumnOptVector<db::NodeID>>;

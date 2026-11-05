@@ -118,10 +118,12 @@ def Nullable : StorageType<"Nullable", "nullable"> {
         that may be absent, mirroring storage's ColumnOptVector. The wrapped type
         is the concrete primitive the property resolved to during lowering (f64,
         i64, ...), so a property chunk is fully typed before execution. Missing
-        values are null; no row is dropped.
+        values are null; no row is dropped. A node or an edge is never wrapped: its
+        column holds its own null, the invalid ID.
     }];
     let parameters = (ins "::mlir::Type":$valueType);
     let assemblyFormat = "`<` $valueType `>`";
+    let genVerifyDecl = 1;
 }
 
 def Any : StorageType<"Any", "any"> {

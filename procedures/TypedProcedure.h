@@ -7,6 +7,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "ID.h"
 #include "Procedure.h"
 #include "ProcedureData.h"
 #include "ProcedureTypeVector.h"
@@ -25,6 +26,8 @@ struct ProcedureReturnKind<ColumnVector<T>> {
 
 template <typename T>
 struct ProcedureReturnKind<ColumnVector<std::optional<T>>> {
+    static_assert(!TypedInternalID<T>, "A node or edge column holds its own null as an invalid ID");
+
     static constexpr ProcedureType type = ProcedureTypeOf<T>::value;
     static constexpr bool nullable = true;
 };

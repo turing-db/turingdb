@@ -117,14 +117,6 @@ uint64_t untaggedRow(const ColumnVector<uint64_t>* row) {
 template <typename Handler>
 void dispatchIDChunkKind(NLChunkKind kind, Handler&& handler) {
     switch (kind) {
-        case NLChunkKind::NodeID:
-            return handler.template operator()<NodeID>();
-        break;
-
-        case NLChunkKind::EdgeID:
-            return handler.template operator()<EdgeID>();
-        break;
-
         case NLChunkKind::EdgeTypeID:
             return handler.template operator()<EdgeTypeID>();
         break;
@@ -12598,8 +12590,8 @@ NLMaskSurvivorFunction NLExecutor::selectMaskSurvivorFunction(bool nullable, boo
     return &collectMaskSurvivors;
 }
 
-NLFetchNodesFunction NLExecutor::selectNodeFetchFunction(bool nullable) {
-    return nullable ? &fetchNamedNodes<std::optional<NodeID>> : &fetchNamedNodes<NodeID>;
+NLFetchNodesFunction NLExecutor::selectNodeFetchFunction() {
+    return &fetchNamedNodes<NodeID>;
 }
 
 NLFetchNodesFunction NLExecutor::selectIntegerFetchFunction(ValueType valueType, bool nullable) {

@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <memory>
-#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -19,7 +18,7 @@
 #include "ProcedureNamespace.h"
 #include "ProcedureState.h"
 #include "columns/Column.h"
-#include "columns/ColumnOptVector.h"
+#include "columns/ColumnIDs.h"
 #include "iterators/ChunkConfig.h"
 #include "metadata/PropertyType.h"
 #include "versioning/Transaction.h"
@@ -46,21 +45,18 @@ using namespace turing::test;
 
 namespace {
 
-using OptNodeColumn = ColumnOptVector<NodeID>;
-
 struct NeighbourData : public ProcedureData {};
 
-// test.maybeNeighbour yields four rows as one chunk: node 0, no node, node 1, no node.
-// The absent rows are what a plain NODE return value cannot express.
+// test.maybeNeighbour yields four rows as one chunk: Remy (0), no node, Adam (1), no node
 void neighbourExecuteImpl(ProcedureState* procedureState) {
     NeighbourData& data = procedureState->data<NeighbourData>();
 
-    auto* neighbours = static_cast<OptNodeColumn*>(data.getReturnColumn(0));
+    ColumnNodeIDs* neighbours = static_cast<ColumnNodeIDs*>(data.getReturnColumn(0));
     neighbours->clear();
     neighbours->push_back(NodeID(0));
-    neighbours->push_back(std::nullopt);
+    neighbours->push_back(NodeID());
     neighbours->push_back(NodeID(1));
-    neighbours->push_back(std::nullopt);
+    neighbours->push_back(NodeID());
 
     procedureState->finish();
 }
@@ -87,37 +83,35 @@ void neighbourDealloc(ProcedureData* data) {
 
 // Collects the one node column a query emits, and the type name of any chunk that
 // reached the sink as something else
-class OptNodeColumnSink : public NLOutputSink {
+class NodeColumnSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
 
-        const auto* neighbours = dynamic_cast<const OptNodeColumn*>(chunks[0]);
+        const auto* neighbours = dynamic_cast<const ColumnNodeIDs*>(chunks[0]);
         if (!neighbours) {
             _otherKinds.emplace_back(chunks[0]->getTypeName());
             return;
         }
 
-        const std::vector<std::optional<NodeID>>& raw = neighbours->getRaw();
+        const std::vector<NodeID>& raw = neighbours->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
             _values.push_back(raw[rowIndex]);
         }
     }
 
-    const std::vector<std::optional<NodeID>>& values() const { return _values; }
+    const std::vector<NodeID>& values() const { return _values; }
     const std::vector<std::string>& otherKinds() const { return _otherKinds; }
 
 private:
-    std::vector<std::optional<NodeID>> _values;
+    std::vector<NodeID> _values;
     std::vector<std::string> _otherKinds;
 };
 
 }
 
-// A procedure declaring a NODE return value nullable writes it through a
-// ColumnOptVector<NodeID>, and the ops that carry that column on - the cross product,
-// the sort, the dedup, the count - keep it nullable rather than standing an invalid ID
-// in for the rows that have no node.
+// A procedure's NODE return value spells no node as an invalid ID, the null an OPTIONAL
+// MATCH leaves, so every op reads the absent rows as it reads that null.
 class CallNullableYieldTest : public TuringTest {
 protected:
     void initialize() override {
@@ -129,7 +123,7 @@ protected:
         neighbourProcedure->setAllocCallback(&neighbourAlloc);
         neighbourProcedure->setDeallocCallback(&neighbourDealloc);
         neighbourProcedure->setExecuteCallback(&neighbourExecute);
-        neighbourProcedure->addNullableReturnValue("neighbour", ProcedureType::NODE);
+        neighbourProcedure->addReturnValue("neighbour", ProcedureType::NODE);
         testNamespace->addProcedure(neighbourProcedure);
 
         _graph = Graph::create();
@@ -184,8 +178,8 @@ protected:
         interpreter.run();
     }
 
-    void expectNeighbours(const char* query, const std::vector<std::optional<NodeID>>& expected) {
-        OptNodeColumnSink sink;
+    void expectNeighbours(const char* query, const std::vector<NodeID>& expected) {
+        NodeColumnSink sink;
         runQuery(query, sink);
 
         ASSERT_TRUE(sink.otherKinds().empty())
@@ -213,9 +207,9 @@ protected:
     std::unique_ptr<Graph> _graph;
 };
 
-TEST_F(CallNullableYieldTest, yieldsTheNodesAsANullableNodeColumn) {
+TEST_F(CallNullableYieldTest, yieldsTheAbsentNodesAsInvalidIDs) {
     expectNeighbours("CALL test.maybeNeighbour() YIELD neighbour RETURN neighbour",
-                     {NodeID(0), std::nullopt, NodeID(1), std::nullopt});
+                     {NodeID(0), NodeID(), NodeID(1), NodeID()});
 }
 
 TEST_F(CallNullableYieldTest, rendersTheAbsentNodesAsNull) {
@@ -226,13 +220,13 @@ TEST_F(CallNullableYieldTest, rendersTheAbsentNodesAsNull) {
 // ORDER BY puts nulls last, as it does for a nullable value column
 TEST_F(CallNullableYieldTest, sortsTheAbsentNodesLast) {
     expectNeighbours("CALL test.maybeNeighbour() YIELD neighbour RETURN neighbour ORDER BY neighbour",
-                     {NodeID(0), NodeID(1), std::nullopt, std::nullopt});
+                     {NodeID(0), NodeID(1), NodeID(), NodeID()});
 }
 
 // All nulls key the same, so DISTINCT folds the two absent rows into one
 TEST_F(CallNullableYieldTest, dedupsTheAbsentNodesTogether) {
     expectNeighbours("CALL test.maybeNeighbour() YIELD neighbour RETURN DISTINCT neighbour ORDER BY neighbour",
-                     {NodeID(0), NodeID(1), std::nullopt});
+                     {NodeID(0), NodeID(1), NodeID()});
 }
 
 TEST_F(CallNullableYieldTest, testsTheYieldedNodesForNull) {
@@ -252,6 +246,94 @@ TEST_F(CallNullableYieldTest, crossesTheNullableColumnWithTheRowsInFlight) {
     expectRows("MATCH (n:Person) CALL test.maybeNeighbour() YIELD neighbour "
                "RETURN count(*), count(neighbour)",
                {{"32", "16"}});
+}
+
+TEST_F(CallNullableYieldTest, readsTheAbsentNodesPropertyAsNull) {
+    expectRows("CALL test.maybeNeighbour() YIELD neighbour RETURN neighbour.name",
+               {{"Remy"}, {"null"}, {"Adam"}, {"null"}});
+}
+
+TEST_F(CallNullableYieldTest, readsTheAbsentNodesPropertyAfterAWith) {
+    expectRows("CALL test.maybeNeighbour() YIELD neighbour WITH neighbour RETURN neighbour.name",
+               {{"Remy"}, {"null"}, {"Adam"}, {"null"}});
+}
+
+TEST_F(CallNullableYieldTest, ordersByTheAbsentNodesProperty) {
+    RowSink sink;
+    runQuery("CALL test.maybeNeighbour() YIELD neighbour RETURN neighbour.name ORDER BY neighbour.name", sink);
+
+    const Rows expected {{"Adam"}, {"Remy"}, {"null"}, {"null"}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+TEST_F(CallNullableYieldTest, testsTheAbsentNodesLabelAsNull) {
+    expectRows("CALL test.maybeNeighbour() YIELD neighbour RETURN neighbour:Person",
+               {{"true"}, {"null"}, {"true"}, {"null"}});
+}
+
+TEST_F(CallNullableYieldTest, projectsTheAbsentNodesAsNull) {
+    expectRows("CALL test.maybeNeighbour() YIELD neighbour RETURN neighbour {.name}",
+               {{"{name: Remy}"}, {"null"}, {"{name: Adam}"}, {"null"}});
+}
+
+TEST_F(CallNullableYieldTest, readsTheAbsentNodesKeysAsNull) {
+    expectRows("CALL test.maybeNeighbour() YIELD neighbour RETURN keys(neighbour) IS NULL",
+               {{"false"}, {"true"}, {"false"}, {"true"}});
+}
+
+// Luc (9) stands in for the absent rows
+TEST_F(CallNullableYieldTest, coalescesTheAbsentNodes) {
+    expectRows("CALL test.maybeNeighbour() YIELD neighbour "
+               "WITH neighbour MATCH (luc:Person {name: 'Luc'}) "
+               "RETURN coalesce(neighbour, luc)",
+               {{"0"}, {"9"}, {"1"}, {"9"}});
+}
+
+TEST_F(CallNullableYieldTest, listsTheAbsentNodesAsNull) {
+    expectRows("CALL test.maybeNeighbour() YIELD neighbour RETURN [neighbour]",
+               {{"[0]"}, {"[null]"}, {"[1]"}, {"[null]"}});
+}
+
+// Remy has four out-edges and Adam three
+TEST_F(CallNullableYieldTest, comprehendsNoPatternFromTheAbsentNodes) {
+    expectRows("CALL test.maybeNeighbour() YIELD neighbour RETURN size([(neighbour)-->(m) | m])",
+               {{"4"}, {"0"}, {"3"}, {"0"}});
+}
+
+TEST_F(CallNullableYieldTest, matchesNoPatternPredicateFromTheAbsentNodes) {
+    expectRows("CALL test.maybeNeighbour() YIELD neighbour "
+               "WITH neighbour WHERE (neighbour)-->() RETURN neighbour",
+               {{"0"}, {"1"}});
+}
+
+TEST_F(CallNullableYieldTest, findsNoExistsPatternFromTheAbsentNodes) {
+    expectRows("CALL test.maybeNeighbour() YIELD neighbour "
+               "WITH neighbour WHERE EXISTS { (neighbour)-->() } RETURN neighbour",
+               {{"0"}, {"1"}});
+}
+
+// The two absent rows group together, and an OPTIONAL MATCH from them matches nothing
+TEST_F(CallNullableYieldTest, optionallyMatchesNothingFromTheAbsentNodes) {
+    expectRows("CALL test.maybeNeighbour() YIELD neighbour "
+               "WITH neighbour OPTIONAL MATCH (neighbour)-->(m) RETURN neighbour, count(m)",
+               {{"0", "4"}, {"1", "3"}, {"null", "0"}});
+}
+
+TEST_F(CallNullableYieldTest, countsOnlyThePresentNodesPerGroup) {
+    expectRows("CALL test.maybeNeighbour() YIELD neighbour "
+               "RETURN neighbour IS NULL AS absent, count(neighbour)",
+               {{"false", "2"}, {"true", "0"}});
+}
+
+TEST_F(CallNullableYieldTest, countsTheDistinctPresentNodesPerGroup) {
+    expectRows("CALL test.maybeNeighbour() YIELD neighbour "
+               "RETURN neighbour IS NULL AS absent, count(DISTINCT neighbour)",
+               {{"false", "2"}, {"true", "0"}});
+}
+
+TEST_F(CallNullableYieldTest, countsTheDistinctPresentNodes) {
+    expectRows("CALL test.maybeNeighbour() YIELD neighbour RETURN count(DISTINCT neighbour)",
+               {{"2"}});
 }
 
 int main(int argc, char** argv) {

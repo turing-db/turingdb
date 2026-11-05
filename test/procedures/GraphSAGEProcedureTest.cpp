@@ -22,7 +22,6 @@
 #include "TuringException.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnIDs.h"
-#include "columns/ColumnOptVector.h"
 #include "iterators/ChunkConfig.h"
 #include "list/ListBuffer.h"
 #include "list/ListView.h"
@@ -39,7 +38,7 @@ using namespace turing::test;
 
 namespace {
 
-using NodeCol = ColumnOptVector<NodeID>;
+using NodeCol = GraphSAGESampler::NodeCol;
 
 constexpr size_t hops = GraphSAGESampler::hops;
 constexpr size_t returnValuesPerHop = 3;
@@ -156,12 +155,12 @@ protected:
         run._stepSizes.push_back(stepRows);
 
         for (size_t column = 0; column < returnValueCount; column++) {
-            for (const std::optional<NodeID>& node : columns[column]) {
-                if (!node.has_value()) {
+            for (const NodeID node : columns[column]) {
+                if (!node.isValid()) {
                     continue;
                 }
 
-                run._rows[column].push_back(node->getValue());
+                run._rows[column].push_back(node.getValue());
             }
         }
     }
