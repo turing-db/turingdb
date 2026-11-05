@@ -410,7 +410,7 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
             PropertyExpr* lhs = v._propTypeExpr;
             Expr* rhs = v._propValueExpr;
 
-            _exprAnalyzer->analyzeExpr(rhs);
+            _exprAnalyzer->analyzeRootExpr(rhs);
             const EvaluatedType rhsType = rhs->getType();
 
             // writing null cannot create a new property, and a bind types the one it creates
@@ -423,8 +423,6 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
                 _exprAnalyzer->analyzePropertyExpr(lhs, allowCreates, valType);
 
             _exprAnalyzer->throwIfReadsPartOfAProperty(lhs);
-
-            _exprAnalyzer->analyzeRootExpr(v._propValueExpr);
 
             if (rhs->isAggregate()) {
                 throwError("Invalid use of aggregate expression in this context", item);

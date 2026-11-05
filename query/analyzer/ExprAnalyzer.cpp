@@ -142,8 +142,6 @@ ExprAnalyzer::~ExprAnalyzer() {
 }
 
 void ExprAnalyzer::analyzeRootExpr(Expr* expr) {
-    // Each root is walked on its own: a SET analyzes its value expression a second time,
-    // once the property it assigns has been declared, and that walk has to run again
     _analyzedExprs.clear();
 
     analyzeExpr(expr);
