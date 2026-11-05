@@ -374,14 +374,11 @@ TEST_F(ParseEdgeCaseTest, parsesAdministrativeQueries) {
         embeddings.emplace("e", 4);
         load->setEmbeddingSpecs(std::move(embeddings));
 
-        DateTimeSpec dateTimes;
-        dateTimes.emplace("d");
-        dateTimes.emplace("t");
-        load->setDateTimeSpecs(std::move(dateTimes));
-
-        DurationSpec durations;
-        durations.emplace("u");
-        load->setDurationSpecs(std::move(durations));
+        TypedPropertySpec types;
+        types.emplace("d", ValueType::DateTime);
+        types.emplace("t", ValueType::DateTime);
+        types.emplace("u", ValueType::Duration);
+        load->setTypedPropertySpec(std::move(types));
 
         expectParse("LOAD JSONL 'f' WITH EMBEDDINGS [{e, 4}] WITH DATETIMES ['d', t] WITH DURATIONS [u]", {load});
     }
@@ -404,10 +401,10 @@ TEST_F(ParseEdgeCaseTest, parsesAdministrativeQueries) {
         LoadParquetQuery* load = LoadParquetQuery::create(getExpectedAST(), fs::Path(std::string("f")));
         load->setGraphName("g");
 
-        DurationSpec durations;
-        durations.emplace("d");
-        durations.emplace("e");
-        load->setDurationSpecs(std::move(durations));
+        TypedPropertySpec types;
+        types.emplace("d", ValueType::Duration);
+        types.emplace("e", ValueType::Duration);
+        load->setTypedPropertySpec(std::move(types));
 
         expectParse("LOAD PARQUET 'f' AS g WITH DURATIONS [d, 'e']", {load});
     }

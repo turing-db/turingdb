@@ -37,7 +37,7 @@ protected:
 
         Graph* graph = nullptr;
         try {
-            graph = system.importGraph(fs::Path {std::string {fileName}}, "g", {}, {}, {});
+            graph = system.importGraph(fs::Path {std::string {fileName}}, "g", {}, {});
         } catch (const TuringException&) {
         }
 
@@ -66,7 +66,7 @@ TEST_F(FailedImportClearsLoadingTest, aMalformedFileLeavesTheNameFree) {
     }
 
     SystemAccessor system = _env->getSystemManager().accessShared();
-    EXPECT_NE(system.importGraph(fs::Path {"good.jsonl"}, "g", {}, {}, {}), nullptr);
+    EXPECT_NE(system.importGraph(fs::Path {"good.jsonl"}, "g", {}, {}), nullptr);
 }
 
 int main(int argc, char** argv) {

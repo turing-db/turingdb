@@ -180,7 +180,7 @@ void ParquetImportVisitor::discoverPropertyColumn(size_t columnIndex,
     const bool isList = maxRepLevel > 0;
     const std::string name {isList ? listPropertyName(path) : std::string_view {path}};
 
-    const bool holdsDurations = _durationSpecs.contains(name);
+    const bool holdsDurations = _typedProperties.getType(name) == ValueType::Duration;
     if (holdsDurations) {
         const bool hasNoLogicalType = !logicalType || logicalType->is_none();
         const bool isSignedInt = logicalType && logicalType->is_int()

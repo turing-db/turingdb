@@ -15,12 +15,11 @@
 #include "CreateNodePropertyIndexQuery.h"
 #include "CreateVectorIndexQuery.h"
 #include "CypherAST.h"
-#include "DateTimeSpec.h"
 #include "DeleteVectorIndexQuery.h"
 #include "DropIndexQuery.h"
-#include "DurationSpec.h"
 #include "EdgePattern.h"
 #include "EmbeddingsSpec.h"
+#include "TypedPropertySpec.h"
 #include "ExplainRequest.h"
 #include "FunctionInvocation.h"
 #include "InstallExtensionQuery.h"
@@ -648,7 +647,7 @@ void renderBound(int64_t bound, std::string& rendered) {
     fmt::format_to(std::back_inserter(rendered), "{}", bound);
 }
 
-void renderNames(const std::vector<std::string_view>& names, std::string& rendered) {
+void renderTypedNames(const std::vector<std::pair<std::string_view, ValueType>>& names, std::string& rendered) {
     rendered += '{';
 
     for (size_t index = 0; index < names.size(); index++) {
@@ -656,7 +655,9 @@ void renderNames(const std::vector<std::string_view>& names, std::string& render
             rendered += ", ";
         }
 
-        renderQuoted(names[index], rendered);
+        renderQuoted(names[index].first, rendered);
+        rendered += ": ";
+        rendered += ValueTypeName::value(names[index].second);
     }
 
     rendered += '}';
@@ -809,10 +810,11 @@ bool CypherASTComparator::compareEnum(std::string_view field, Enum expected, Enu
     return false;
 }
 
-template <typename Spec>
-bool CypherASTComparator::compareNameSpec(std::string_view field, const Spec& expected, const Spec& actual) {
-    std::vector<std::string_view> expectedNames(expected.begin(), expected.end());
-    std::vector<std::string_view> actualNames(actual.begin(), actual.end());
+bool CypherASTComparator::compareTypedPropertySpec(std::string_view field,
+                                                   const TypedPropertySpec& expected,
+                                                   const TypedPropertySpec& actual) {
+    std::vector<std::pair<std::string_view, ValueType>> expectedNames(expected.begin(), expected.end());
+    std::vector<std::pair<std::string_view, ValueType>> actualNames(actual.begin(), actual.end());
 
     std::ranges::sort(expectedNames);
     std::ranges::sort(actualNames);
@@ -822,10 +824,10 @@ bool CypherASTComparator::compareNameSpec(std::string_view field, const Spec& ex
     }
 
     std::string expectedText;
-    renderNames(expectedNames, expectedText);
+    renderTypedNames(expectedNames, expectedText);
 
     std::string actualText;
-    renderNames(actualNames, actualText);
+    renderTypedNames(actualNames, actualText);
 
     const PathScope scope(_path, field);
     reportDifference(expectedText, actualText);
@@ -1183,8 +1185,7 @@ bool CypherASTComparator::compareLoadJsonlQuery(const LoadJsonlQuery* expected, 
     return compareString("filePath", expected->getFilePath().get(), actual->getFilePath().get())
            && compareString("graphName", expected->getGraphName(), actual->getGraphName())
            && compareEmbeddingSpec("embeddingSpecs", expected->getEmbeddingSpecs(), actual->getEmbeddingSpecs())
-           && compareNameSpec("dateTimeSpecs", expected->getDateTimeSpecs(), actual->getDateTimeSpecs())
-           && compareNameSpec("durationSpecs", expected->getDurationSpecs(), actual->getDurationSpecs());
+           && compareTypedPropertySpec("typedPropertySpec", expected->getTypedPropertySpec(), actual->getTypedPropertySpec());
 }
 
 bool CypherASTComparator::compareChangeQuery(const ChangeQuery* expected, const ChangeQuery* actual) {
@@ -1203,7 +1204,7 @@ bool CypherASTComparator::compareLoadGMLQuery(const LoadGMLQuery* expected, cons
 bool CypherASTComparator::compareLoadParquetQuery(const LoadParquetQuery* expected, const LoadParquetQuery* actual) {
     return compareString("filePath", expected->getFilePath().get(), actual->getFilePath().get())
            && compareString("graphName", expected->getGraphName(), actual->getGraphName())
-           && compareNameSpec("durationSpecs", expected->getDurationSpecs(), actual->getDurationSpecs());
+           && compareTypedPropertySpec("typedPropertySpec", expected->getTypedPropertySpec(), actual->getTypedPropertySpec());
 }
 
 bool CypherASTComparator::compareS3ConnectQuery(const S3ConnectQuery* expected, const S3ConnectQuery* actual) {

@@ -16,9 +16,8 @@
 #include "versioning/CommitBuilder.h"
 #include "writers/DataPartBuilder.h"
 
-#include "DateTimeSpec.h"
-#include "DurationSpec.h"
 #include "EmbeddingsSpec.h"
+#include "TypedPropertySpec.h"
 
 #include "Profiler.h"
 #include "writers/MetadataBuilder.h"
@@ -151,9 +150,9 @@ ListView fillList(const json& array, ListContainer& lists) {
 // alone, so a string that happens to read as a date stays the text it was written as.
 JsonlImportResult<std::optional<DateTime>> tryGetDateTime(std::string_view name,
                                                           const json& value,
-                                                          const DateTimeSpec& dateTimeSpecs,
+                                                          const TypedPropertySpec& typedProperties,
                                                           size_t lineNo) {
-    if (!dateTimeSpecs.contains(name)) {
+    if (typedProperties.getType(name) != ValueType::DateTime) {
         return std::optional<DateTime> {};
     }
 
@@ -179,9 +178,9 @@ JsonlImportResult<std::optional<DateTime>> tryGetDateTime(std::string_view name,
 
 JsonlImportResult<std::optional<Duration>> tryGetDuration(std::string_view name,
                                                           const json& value,
-                                                          const DurationSpec& durationSpecs,
+                                                          const TypedPropertySpec& typedProperties,
                                                           size_t lineNumber) {
-    if (!durationSpecs.contains(name)) {
+    if (typedProperties.getType(name) != ValueType::Duration) {
         return std::optional<Duration> {};
     }
 
@@ -215,8 +214,7 @@ std::optional<size_t> tryGetEmbDim(std::string_view name,
 JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                                            std::istream& stream,
                                            const EmbeddingsSpec& embeddingSpecs,
-                                           const DateTimeSpec& dateTimeSpecs,
-                                           const DurationSpec& durationSpecs) {
+                                           const TypedPropertySpec& typedProperties) {
     Profile profile("JsonlParser::parse");
 
     std::string line;
@@ -303,13 +301,13 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                         }
 
                         const JsonlImportResult<std::optional<DateTime>> instant =
-                            tryGetDateTime(ptName, value, dateTimeSpecs, lineNumber);
+                            tryGetDateTime(ptName, value, typedProperties, lineNumber);
                         if (!instant) {
                             return instant.get_unexpected();
                         }
 
                         const JsonlImportResult<std::optional<Duration>> duration =
-                            tryGetDuration(ptName, value, durationSpecs, lineNumber);
+                            tryGetDuration(ptName, value, typedProperties, lineNumber);
                         if (!duration) {
                             return duration.get_unexpected();
                         }
@@ -418,13 +416,13 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                         }
 
                         const JsonlImportResult<std::optional<DateTime>> instant =
-                            tryGetDateTime(ptName, value, dateTimeSpecs, lineNumber);
+                            tryGetDateTime(ptName, value, typedProperties, lineNumber);
                         if (!instant) {
                             return instant.get_unexpected();
                         }
 
                         const JsonlImportResult<std::optional<Duration>> duration =
-                            tryGetDuration(ptName, value, durationSpecs, lineNumber);
+                            tryGetDuration(ptName, value, typedProperties, lineNumber);
                         if (!duration) {
                             return duration.get_unexpected();
                         }

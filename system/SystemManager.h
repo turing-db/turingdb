@@ -6,10 +6,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include "DateTimeSpec.h"
-#include "DurationSpec.h"
 #include "EmbeddingsSpec.h"
 #include "GraphManager.h"
+#include "TypedPropertySpec.h"
 
 #include "SystemAccessor.h"
 
@@ -106,8 +105,7 @@ private:
     Graph* importGraph(const fs::Path& path,
                        std::string_view graphName,
                        const EmbeddingsSpec& embeddingSpecs,
-                       const DateTimeSpec& dateTimeSpecs,
-                       const DurationSpec& durationSpecs);
+                       const TypedPropertySpec& typedProperties);
 
     GraphFileType getGraphFileType(const fs::Path& graphPath) const;
 

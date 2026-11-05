@@ -157,7 +157,7 @@ const DifferenceCase DIFFERENCES[] = {
      "queries[0] CreateGraphQuery > graphName: expected \"alpha\", actual \"beta\""},
     {"LOAD JSONL 'g.jsonl' WITH DURATIONS [a, b]",
      "LOAD JSONL 'g.jsonl' WITH DURATIONS [a]",
-     "queries[0] LoadJsonlQuery > durationSpecs: expected {\"a\", \"b\"}, actual {\"a\"}"},
+     "queries[0] LoadJsonlQuery > typedPropertySpec: expected {\"a\": Duration, \"b\": Duration}, actual {\"a\": Duration}"},
     {"RETURN 1; RETURN 2",
      "RETURN 1",
      "queries: expected size 2, actual size 1"},

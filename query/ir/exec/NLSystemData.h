@@ -5,10 +5,9 @@
 #include <string_view>
 #include <vector>
 
-#include "DateTimeSpec.h"
-#include "DurationSpec.h"
 #include "EmbeddingsSpec.h"
 #include "Path.h"
+#include "TypedPropertySpec.h"
 #include "VecLibMetadata.h"
 
 #include "columns/ColumnVector.h"
@@ -71,22 +70,21 @@ private:
 };
 
 // LOAD JSONL / LOAD GML / LOAD PARQUET: the file to import, the graph to build
-// from it, the per-property embedding dimensions (JSONL alone ever carries any)
-// and the statement to blame when the import fails.
+// from it, the per-property embedding dimensions (JSONL alone ever carries any),
+// the properties it reads as a type the format does not spell, and the statement
+// to blame when the import fails.
 class NLImportGraphData : public NLFunctionData {
 public:
     NLImportGraphData(const fs::Path& path,
                       std::string_view graphName,
                       const EmbeddingsSpec& embeddings,
-                      const DateTimeSpec& dateTimes,
-                      const DurationSpec& durations,
+                      const TypedPropertySpec& typedProperties,
                       std::string_view statement,
                       NLViewColumn* graph)
         : _path(path),
         _graphName(graphName),
         _embeddings(embeddings),
-        _dateTimes(dateTimes),
-        _durations(durations),
+        _typedProperties(typedProperties),
         _statement(statement),
         _graph(graph)
     {
@@ -95,8 +93,7 @@ public:
     const fs::Path& getPath() const { return _path; }
     std::string_view getGraphName() const { return _graphName; }
     const EmbeddingsSpec& getEmbeddings() const { return _embeddings; }
-    const DateTimeSpec& getDateTimes() const { return _dateTimes; }
-    const DurationSpec& getDurations() const { return _durations; }
+    const TypedPropertySpec& getTypedProperties() const { return _typedProperties; }
     std::string_view getStatement() const { return _statement; }
     NLViewColumn* getGraph() const { return _graph; }
 
@@ -104,8 +101,7 @@ private:
     fs::Path _path;
     std::string_view _graphName;
     EmbeddingsSpec _embeddings;
-    DateTimeSpec _dateTimes;
-    DurationSpec _durations;
+    TypedPropertySpec _typedProperties;
     std::string_view _statement;
     NLViewColumn* _graph {nullptr};
 };

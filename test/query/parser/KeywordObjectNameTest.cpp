@@ -139,23 +139,23 @@ TEST_F(KeywordObjectNameTest, importsParquetAsAGraphMatch) {
     const LoadParquetQuery* load = static_cast<const LoadParquetQuery*>(command);
 
     EXPECT_EQ(load->getGraphName(), "match");
-    EXPECT_TRUE(load->getDurationSpecs().contains("commit"));
+    EXPECT_EQ(load->getTypedPropertySpec().getType("commit"), ValueType::Duration);
 }
 
 TEST_F(KeywordObjectNameTest, readsDatetimesCommit) {
     const QueryCommand* command = parseCommand("LOAD JSONL 'f.jsonl' WITH DATETIMES [commit, `created at`]", QueryCommand::Kind::LOAD_JSONL_QUERY);
     const LoadJsonlQuery* load = static_cast<const LoadJsonlQuery*>(command);
 
-    EXPECT_TRUE(load->getDateTimeSpecs().contains("commit"));
-    EXPECT_TRUE(load->getDateTimeSpecs().contains("created at"));
+    EXPECT_EQ(load->getTypedPropertySpec().getType("commit"), ValueType::DateTime);
+    EXPECT_EQ(load->getTypedPropertySpec().getType("created at"), ValueType::DateTime);
 }
 
 TEST_F(KeywordObjectNameTest, readsDurationsMatch) {
     const QueryCommand* command = parseCommand("LOAD JSONL 'f.jsonl' WITH DURATIONS [match, `time spent`]", QueryCommand::Kind::LOAD_JSONL_QUERY);
     const LoadJsonlQuery* load = static_cast<const LoadJsonlQuery*>(command);
 
-    EXPECT_TRUE(load->getDurationSpecs().contains("match"));
-    EXPECT_TRUE(load->getDurationSpecs().contains("time spent"));
+    EXPECT_EQ(load->getTypedPropertySpec().getType("match"), ValueType::Duration);
+    EXPECT_EQ(load->getTypedPropertySpec().getType("time spent"), ValueType::Duration);
 }
 
 TEST_F(KeywordObjectNameTest, readsEmbeddingsEmbedding) {

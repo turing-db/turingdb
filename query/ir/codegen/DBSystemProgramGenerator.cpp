@@ -7,6 +7,7 @@
 #include "mlir/IR/MLIRContext.h"
 
 #include "DBOps.h"
+#include "IRValueTypes.h"
 #include "StorageEnums.h"
 #include "StorageTypes.h"
 
@@ -28,6 +29,7 @@
 #include "QueryCommand.h"
 #include "S3ConnectQuery.h"
 #include "S3TransferQuery.h"
+#include "TypedPropertySpec.h"
 #include "expr/PropertyExpr.h"
 
 #include "BioAssert.h"
@@ -40,18 +42,17 @@ llvm::StringRef toStringRef(std::string_view text) {
     return llvm::StringRef(text.data(), text.size());
 }
 
-// A named property carries no value of its own, so each name is a unit entry. A dictionary
-// rather than an array because it sorts and uniques its own names, which the hash set the
-// spec holds does neither.
-template <typename PropertyNameSpec>
-mlir::DictionaryAttr propertyNamesAttribute(mlir::OpBuilder* builder, const PropertyNameSpec& names) {
-    if (names.empty()) {
+// Each named property maps to the element type it is read as. A dictionary rather than an
+// array because it sorts its names itself, which the hash map the spec holds does not.
+mlir::DictionaryAttr typedPropertiesAttribute(mlir::OpBuilder* builder, const TypedPropertySpec& specs) {
+    if (specs.empty()) {
         return mlir::DictionaryAttr();
     }
 
     llvm::SmallVector<mlir::NamedAttribute, 4> entries;
-    for (const std::string_view propertyName : names) {
-        entries.emplace_back(builder->getStringAttr(toStringRef(propertyName)), builder->getUnitAttr());
+    for (const auto& [propertyName, type] : specs) {
+        const mlir::Type elementType = valueTypeToElementType(*builder, type);
+        entries.emplace_back(builder->getStringAttr(toStringRef(propertyName)), mlir::TypeAttr::get(elementType));
     }
 
     return builder->getDictionaryAttr(entries);
@@ -323,8 +324,7 @@ void DBSystemProgramGenerator::generateLoadJsonl(const LoadJsonlQuery* query) {
                         query->getGraphName(),
                         mlir::storage::GraphImportFormat::Jsonl,
                         embeddings,
-                        propertyNamesAttribute(_opBuilder, query->getDateTimeSpecs()),
-                        propertyNamesAttribute(_opBuilder, query->getDurationSpecs()));
+                        typedPropertiesAttribute(_opBuilder, query->getTypedPropertySpec()));
 }
 
 void DBSystemProgramGenerator::generateLoadGML(const LoadGMLQuery* query) {
@@ -339,24 +339,21 @@ void DBSystemProgramGenerator::generateLoadParquet(const LoadParquetQuery* query
                         query->getGraphName(),
                         mlir::storage::GraphImportFormat::Parquet,
                         mlir::DictionaryAttr(),
-                        mlir::DictionaryAttr(),
-                        propertyNamesAttribute(_opBuilder, query->getDurationSpecs()));
+                        typedPropertiesAttribute(_opBuilder, query->getTypedPropertySpec()));
 }
 
 void DBSystemProgramGenerator::generateImportGraph(std::string_view path,
                                                    std::string_view graphName,
                                                    mlir::storage::GraphImportFormat format,
                                                    mlir::DictionaryAttr embeddings,
-                                                   mlir::DictionaryAttr dateTimes,
-                                                   mlir::DictionaryAttr durations) {
+                                                   mlir::DictionaryAttr types) {
     mlir::db::ImportGraph op = _opBuilder->create<mlir::db::ImportGraph>(_opBuilder->getUnknownLoc(),
                                                         stringColumnType(),
                                                         toStringRef(path),
                                                         toStringRef(graphName),
                                                         format,
                                                         embeddings,
-                                                        dateTimes,
-                                                        durations);
+                                                        types);
 
     emitOutput(op.getGraph(), {"graphName"});
 }

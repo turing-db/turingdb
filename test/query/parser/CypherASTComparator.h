@@ -91,6 +91,7 @@ class StringExpr;
 class Symbol;
 class SymbolChain;
 class SymbolExpr;
+class TypedPropertySpec;
 class UnaryExpr;
 class UnwindStmt;
 class VectorSearchStmt;
@@ -143,8 +144,9 @@ private:
     template <typename Enum>
     bool compareEnum(std::string_view field, Enum expected, Enum actual);
 
-    template <typename Spec>
-    bool compareNameSpec(std::string_view field, const Spec& expected, const Spec& actual);
+    bool compareTypedPropertySpec(std::string_view field,
+                                  const db::TypedPropertySpec& expected,
+                                  const db::TypedPropertySpec& actual);
 
     bool compareSize(std::string_view field, size_t expected, size_t actual);
     bool comparePresence(std::string_view field, const void* expected, const void* actual, std::string_view className);

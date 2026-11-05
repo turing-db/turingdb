@@ -7,13 +7,12 @@
 #include <vector>
 
 #include "ChangeManager.h"
-#include "DateTimeSpec.h"
-#include "DurationSpec.h"
 #include "EmbeddingsSpec.h"
 #include "GraphFileType.h"
 #include "GraphLoadStatus.h"
 #include "ObjectMap.h"
 #include "Path.h"
+#include "TypedPropertySpec.h"
 #include "dump/LoadGraphResult.h"
 
 namespace db {
@@ -52,8 +51,7 @@ public:
                        const fs::Path& filePath,
                        JobSystem* jobSystem,
                        const EmbeddingsSpec& embeddingSpecs = {},
-                       const DateTimeSpec& dateTimeSpecs = {},
-                       const DurationSpec& durationSpecs = {});
+                       const TypedPropertySpec& typedProperties = {});
 
     GraphFileType getGraphFileType(const fs::Path& graphPath) const;
 
@@ -86,8 +84,7 @@ private:
                        const fs::Path& dbPath,
                        JobSystem* jobSystem,
                        const EmbeddingsSpec& embeddingSpecs,
-                       const DateTimeSpec& dateTimeSpecs,
-                       const DurationSpec& durationSpecs);
+                       const TypedPropertySpec& typedProperties);
 
     Graph* loadGmlDB(std::string_view graphName,
                      const fs::Path& dbPath,
@@ -100,6 +97,6 @@ private:
     Graph* loadParquetDB(std::string_view graphName,
                          const fs::Path& dbPath,
                          JobSystem* jobSystem,
-                         const DurationSpec& durationSpecs);
+                         const TypedPropertySpec& typedProperties);
 };
 }

@@ -74,31 +74,28 @@ def ImportGraph : SystemOp<"import_graph"> {
     `LOAD JSONL`: one entry per property that holds a vector, mapping the
     property name to its dimension. The other two formats never carry it.
 
-    `date_times` is its `WITH DATETIMES [prop, ...]` clause: the properties whose
-    strings name an instant rather than text. A datetime is spelled as a string
-    in JSON, so the query says which names carry one. The names carry no value of
-    their own, so each is a unit entry - a dictionary rather than an array because
-    that sorts and uniques its names itself.
-
       %g = db.import_graph jsonl("/data/social.jsonl") as "social"
              embeddings {vec = 128 : ui64} : !db.column<!storage.string>
 
-    `durations` is the `WITH DURATIONS [prop, ...]` clause of `LOAD JSONL` and
-    `LOAD PARQUET`: the properties whose integers count microseconds. Neither
-    format has a duration type. Each name is a unit entry, as in `date_times`.
+    `types` maps each property the query names in a `WITH DATETIMES`, `WITH
+    DURATIONS` or `WITH POINTS` clause to the element type it is read as: a type
+    the format does not spell. A datetime is a string in JSON, a duration an
+    integer count of microseconds in JSON and Parquet, a point an object in JSON.
+
+      %g = db.import_graph jsonl("/data/cities.jsonl") as "cities"
+             types {at = !storage.point, founded = !storage.datetime} : !db.column<!storage.string>
   }];
 
   let arguments = (ins StrAttr:$path,
                        StrAttr:$graph_name,
                        GraphImportFormat:$format,
                        OptionalAttr<DictionaryAttr>:$embeddings,
-                       OptionalAttr<DictionaryAttr>:$date_times,
-                       OptionalAttr<DictionaryAttr>:$durations);
+                       OptionalAttr<DictionaryAttr>:$types);
   let results   = (outs ColumnStrings:$graph);
 
   let assemblyFormat = [{
     $format `(` $path `)` `as` $graph_name (`embeddings` $embeddings^)?
-    (`datetimes` $date_times^)? (`durations` $durations^)? attr-dict `:` qualified(type($graph))
+    (`types` $types^)? attr-dict `:` qualified(type($graph))
   }];
 }
 

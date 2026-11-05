@@ -13,9 +13,8 @@
 #include "dump/LoadGraphResult.h"
 #include "mergers/DataPartMergeResult.h"
 
-#include "DateTimeSpec.h"
-#include "DurationSpec.h"
 #include "EmbeddingsSpec.h"
+#include "TypedPropertySpec.h"
 
 #include "GraphFileType.h"
 #include "Path.h"
@@ -73,8 +72,7 @@ public:
     Graph* importGraph(const fs::Path& path,
                        std::string_view name,
                        const EmbeddingsSpec& embeddingSpecs = {},
-                       const DateTimeSpec& dateTimeSpecs = {},
-                       const DurationSpec& durationSpecs = {});
+                       const TypedPropertySpec& typedProperties = {});
 
     GraphFileType getGraphFileType(const fs::Path& path) const;
 

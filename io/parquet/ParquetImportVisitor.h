@@ -13,8 +13,8 @@
 
 #include "ParquetReader.h"
 
-#include "DurationSpec.h"
 #include "ID.h"
+#include "TypedPropertySpec.h"
 #include "list/ListContainer.h"
 #include "list/ListView.h"
 #include "metadata/PropertyType.h"
@@ -36,10 +36,10 @@ public:
     using NodeIDs = std::span<const int64_t>;
     using IDMap = std::unordered_map<int64_t, NodeID>;
 
-    ParquetImportVisitor(CommitBuilder* builder, IDMap& nodeIDs, const DurationSpec& durationSpecs)
+    ParquetImportVisitor(CommitBuilder* builder, IDMap& nodeIDs, const TypedPropertySpec& typedProperties)
         : _builder(builder),
         _nodeIDs(nodeIDs),
-        _durationSpecs(durationSpecs)
+        _typedProperties(typedProperties)
     {
     }
 
@@ -79,7 +79,7 @@ protected:
     // @ref DataPartBuilder used when importing
     IDMap& _nodeIDs;
 
-    const DurationSpec& _durationSpecs;
+    const TypedPropertySpec& _typedProperties;
 
     std::unordered_map<size_t, PropertyColumn> _propertyColumns;
 

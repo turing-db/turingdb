@@ -556,8 +556,7 @@ LoadJsonlQuery* CypherGrammar::parseLoadJsonl() {
 
     if (hasOptions) {
         query->setEmbeddingSpecs(std::move(specs._embeddings));
-        query->setDateTimeSpecs(std::move(specs._dateTimes));
-        query->setDurationSpecs(std::move(specs._durations));
+        query->setTypedPropertySpec(std::move(specs._types));
     }
 
     locate(query, start);
@@ -583,27 +582,26 @@ void CypherGrammar::parseJsonlOption(JsonlImportSpecs& specs) {
         parseEmbeddingSpecs(specs._embeddings);
         expect(CypherTokenKind::CBRACK);
     } else if (accept(CypherTokenKind::DATETIMES)) {
-        expect(CypherTokenKind::OBRACK);
-        parseSpecNames(specs._dateTimes);
-        expect(CypherTokenKind::CBRACK);
+        parseTypedNames(specs._types, ValueType::DateTime);
     } else if (accept(CypherTokenKind::DURATIONS)) {
-        expect(CypherTokenKind::OBRACK);
-        parseSpecNames(specs._durations);
-        expect(CypherTokenKind::CBRACK);
+        parseTypedNames(specs._types, ValueType::Duration);
     } else {
         throwUnexpectedToken();
     }
 }
 
-template <typename Spec>
-void CypherGrammar::parseSpecNames(Spec& specs) {
+void CypherGrammar::parseTypedNames(TypedPropertySpec& specs, ValueType type) {
+    expect(CypherTokenKind::OBRACK);
+
     do {
         if (accept(CypherTokenKind::STRING_LITERAL)) {
-            specs.emplace(_previous._text);
+            specs.emplace(_previous._text, type);
         } else {
-            specs.emplace(parseName()->getName());
+            specs.emplace(parseName()->getName(), type);
         }
     } while (accept(CypherTokenKind::COMMA));
+
+    expect(CypherTokenKind::CBRACK);
 }
 
 void CypherGrammar::parseEmbeddingSpecs(EmbeddingsSpec& specs) {
@@ -927,13 +925,11 @@ LoadParquetQuery* CypherGrammar::parseLoadParquet() {
         graphName = parseName();
     }
 
-    DurationSpec durations;
+    TypedPropertySpec types;
     const bool hasDurations = accept(CypherTokenKind::WITH);
     if (hasDurations) {
         expect(CypherTokenKind::DURATIONS);
-        expect(CypherTokenKind::OBRACK);
-        parseSpecNames(durations);
-        expect(CypherTokenKind::CBRACK);
+        parseTypedNames(types, ValueType::Duration);
     }
 
     LoadParquetQuery* query = LoadParquetQuery::create(_ast, fs::Path(std::string(path)));
@@ -943,7 +939,7 @@ LoadParquetQuery* CypherGrammar::parseLoadParquet() {
     }
 
     if (hasDurations) {
-        query->setDurationSpecs(std::move(durations));
+        query->setTypedPropertySpec(std::move(types));
     }
 
     locate(query, start);

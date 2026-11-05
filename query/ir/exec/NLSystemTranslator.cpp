@@ -12,10 +12,10 @@
 #include "NLOps.h"
 #include "StorageEnums.h"
 
-#include "DateTimeSpec.h"
-#include "DurationSpec.h"
 #include "EmbeddingsSpec.h"
+#include "IRValueTypes.h"
 #include "Path.h"
+#include "TypedPropertySpec.h"
 
 #include "LocalMemory.h"
 
@@ -172,17 +172,17 @@ void fillEmbeddingsSpec(mlir::DictionaryAttr attribute, EmbeddingsSpec& specs) {
     }
 }
 
-// The properties an import named as instants or durations, one unit entry each - the name
-// is the whole of it. A null attribute - an import with no such clause - leaves the spec
-// empty.
-template <typename PropertyNameSpec>
-void fillPropertyNameSpec(mlir::DictionaryAttr attribute, PropertyNameSpec& specs) {
+// The properties an import reads as a type its format does not spell, each name mapped to
+// that type's element type. A null attribute - an import with no such clause - leaves the
+// spec empty.
+void fillTypedPropertySpec(mlir::DictionaryAttr attribute, TypedPropertySpec& specs) {
     if (!attribute) {
         return;
     }
 
     for (const mlir::NamedAttribute& entry : attribute) {
-        specs.emplace(toStringView(entry.getName().getValue()));
+        const mlir::TypeAttr type = mlir::cast<mlir::TypeAttr>(entry.getValue());
+        specs.emplace(toStringView(entry.getName().getValue()), elementTypeToValueType(type.getValue()));
     }
 }
 
@@ -221,18 +221,14 @@ bool NLSystemTranslator::translate(mlir::Operation& operation, NLStmtContainer* 
         EmbeddingsSpec embeddings;
         fillEmbeddingsSpec(importGraph.getEmbeddingsAttr(), embeddings);
 
-        DateTimeSpec dateTimes;
-        fillPropertyNameSpec(importGraph.getDateTimesAttr(), dateTimes);
-
-        DurationSpec durations;
-        fillPropertyNameSpec(importGraph.getDurationsAttr(), durations);
+        TypedPropertySpec typedProperties;
+        fillTypedPropertySpec(importGraph.getTypesAttr(), typedProperties);
 
         NLImportGraphData* data =
             _program->allocFunctionData<NLImportGraphData>(fs::Path(importGraph.getPath().str()),
                                                            toStringView(importGraph.getGraphName()),
                                                            embeddings,
-                                                           dateTimes,
-                                                           durations,
+                                                           typedProperties,
                                                            importStatement(importGraph.getFormat()),
                                                            allocResult<NLViewColumn>(importGraph.getGraph()));
         body->emplaceStmt(&NLSystemExecutor::runImportGraph, data);

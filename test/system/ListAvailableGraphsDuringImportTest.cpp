@@ -41,7 +41,7 @@ TEST_F(ListAvailableGraphsDuringImportTest, aListedGraphStaysListedWhileItFinish
     std::thread importer([&systemManager, &importing, &importedCount] {
         for (size_t graph = 0; graph < GRAPH_COUNT; graph++) {
             SystemAccessor system = systemManager.accessShared();
-            if (system.importGraph(fs::Path {"tiny.jsonl"}, "g" + std::to_string(graph), {}, {}, {})) {
+            if (system.importGraph(fs::Path {"tiny.jsonl"}, "g" + std::to_string(graph), {}, {})) {
                 importedCount++;
             }
         }

@@ -364,8 +364,7 @@ private:
     LoadJsonlQuery* parseLoadJsonl();
     void parseJsonlOptions(JsonlImportSpecs& specs);
     void parseJsonlOption(JsonlImportSpecs& specs);
-    template <typename Spec>
-    void parseSpecNames(Spec& specs);
+    void parseTypedNames(TypedPropertySpec& specs, ValueType type);
     void parseEmbeddingSpecs(EmbeddingsSpec& specs);
     std::pair<std::string_view, size_t> parseEmbeddingSpec();
     ListGraphQuery* parseListGraphQuery();

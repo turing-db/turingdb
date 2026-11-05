@@ -4,8 +4,8 @@
 
 #include "ParquetImportVisitor.h"
 
-#include "DurationSpec.h"
 #include "Path.h"
+#include "TypedPropertySpec.h"
 
 namespace db {
 
@@ -33,11 +33,11 @@ public:
     ParquetImporter(fs::Path nodeFile,
                     fs::Path edgeFile,
                     CommitBuilder* builder,
-                    const DurationSpec& durationSpecs)
+                    const TypedPropertySpec& typedProperties)
         : _nodeFile(std::move(nodeFile)),
         _edgeFile(std::move(edgeFile)),
         _builder(builder),
-        _durationSpecs(durationSpecs)
+        _typedProperties(typedProperties)
     {
     }
 
@@ -49,7 +49,7 @@ private:
 
     CommitBuilder* _builder {nullptr};
 
-    const DurationSpec& _durationSpecs;
+    const TypedPropertySpec& _typedProperties;
 
     // Source ID -> NodeID, filled while importing nodes and consumed by the edges.
     ParquetImportVisitor::IDMap _nodeIDs;

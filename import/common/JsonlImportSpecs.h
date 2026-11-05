@@ -2,9 +2,8 @@
 
 #include <utility>
 
-#include "DateTimeSpec.h"
-#include "DurationSpec.h"
 #include "EmbeddingsSpec.h"
+#include "TypedPropertySpec.h"
 
 namespace db {
 
@@ -13,8 +12,7 @@ namespace db {
 // text or an instant - so the query names the properties that are neither by default.
 struct JsonlImportSpecs {
     EmbeddingsSpec _embeddings;
-    DateTimeSpec _dateTimes;
-    DurationSpec _durations;
+    TypedPropertySpec _types;
 
     // Takes the hints another clause of the same statement gave
     void absorb(JsonlImportSpecs&& other) {
@@ -22,12 +20,8 @@ struct JsonlImportSpecs {
             _embeddings.emplace(name, dimension);
         }
 
-        for (const std::string_view name : other._dateTimes) {
-            _dateTimes.emplace(name);
-        }
-
-        for (const std::string_view name : other._durations) {
-            _durations.emplace(name);
+        for (const auto& [name, type] : other._types) {
+            _types.emplace(name, type);
         }
     }
 };

@@ -84,6 +84,23 @@ using namespace db;
 
 namespace {
 
+std::string_view importedTypeName(ValueType type) {
+    switch (type) {
+        case ValueType::DateTime:
+            return "a datetime";
+        break;
+        case ValueType::Duration:
+            return "a duration";
+        break;
+        case ValueType::Point:
+            return "a point";
+        break;
+        default:
+            return ValueTypeName::value(type);
+        break;
+    }
+}
+
 const FunctionSignature* aggregateSignatureOf(const Expr* expr) {
     if (expr->getKind() != Expr::Kind::FUNCTION_INVOCATION) {
         return nullptr;
@@ -1874,13 +1891,19 @@ void CypherAnalyzer::analyze(LoadJsonlQuery* loadJsonl) {
         throwError("All embedding properties must have dimension greater than 1.");
     }
 
-    const DateTimeSpec& dateTimeSpecs = loadJsonl->getDateTimeSpecs();
-    for (const std::string_view name : loadJsonl->getDurationSpecs()) {
-        if (dateTimeSpecs.contains(name)) {
-            throwError(fmt::format("Property '{}' is named both a datetime and a duration.", name),
-                       loadJsonl);
-        } else if (embDims.find(name) != embDims.end()) {
-            throwError(fmt::format("Property '{}' is named both an embedding and a duration.", name),
+    const TypedPropertySpec& typedProperties = loadJsonl->getTypedPropertySpec();
+
+    for (const TypedPropertySpec::Clash& clash : typedProperties.getClashes()) {
+        throwError(fmt::format("Property '{}' is named both {} and {}.",
+                               clash._name,
+                               importedTypeName(clash._first),
+                               importedTypeName(clash._second)),
+                   loadJsonl);
+    }
+
+    for (const auto& [name, type] : typedProperties) {
+        if (embDims.find(name) != embDims.end()) {
+            throwError(fmt::format("Property '{}' is named both an embedding and {}.", name, importedTypeName(type)),
                        loadJsonl);
         }
     }
