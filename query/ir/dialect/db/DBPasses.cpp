@@ -5993,11 +5993,14 @@ bool matchHopTest(ListPredicate predicate, ExplorePaths exploration, llvm::Small
     ComprehensionYield yield = cast<ComprehensionYield>(body.getTerminator());
 
     const auto readsOnlyTheHop = [&body, tag](Value operand) {
-        if (const BlockArgument argument = dyn_cast<BlockArgument>(operand)) {
-            return argument.getOwner() == &body && argument != tag;
+        const BlockArgument argument = dyn_cast<BlockArgument>(operand);
+        if (argument && argument.getOwner() == &body) {
+            return argument != tag;
+        } else if (!argument && operand.getDefiningOp()->getBlock() == &body) {
+            return true;
         }
 
-        return operand.getDefiningOp()->getBlock() == &body || ::db::yieldsConstantColumn(operand);
+        return ::db::yieldsConstantColumn(operand);
     };
 
     for (Operation& op : body.without_terminator()) {

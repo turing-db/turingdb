@@ -7,6 +7,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 
+#include "IRConstantColumn.h"
 #include "IRLiteralList.h"
 #include "IRValueTypes.h"
 #include "StorageEnums.h"
@@ -1063,7 +1064,7 @@ LogicalResult RowConstant::verify() {
 
     while (!worklist.empty()) {
         const Value value = worklist.pop_back_val();
-        if (!visited.insert(value).second) {
+        if (!visited.insert(value).second || ::db::isFunctionArgument(value)) {
             continue;
         }
 

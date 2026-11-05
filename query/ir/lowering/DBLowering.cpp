@@ -1140,9 +1140,17 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     const mlir::Location loc = _builder.getUnknownLoc();
 
     // Create nl target function
+    llvm::SmallVector<mlir::Type> argumentTypes;
+    for (const mlir::BlockArgument argument : dbFunction.getArguments()) {
+        argumentTypes.push_back(nl::ChunkType::get(context, columnType(argument)));
+    }
+
     _builder.setInsertionPointToEnd(module.getBody());
-    const auto functionType = mlir::FunctionType::get(context, {}, {});
+    const auto functionType = mlir::FunctionType::get(context, argumentTypes, {});
     auto nlFunction = _builder.create<mlir::func::FuncOp>(loc, dbFunction.getSymName(), functionType);
+    if (const mlir::ArrayAttr argumentAttributes = dbFunction.getAllArgAttrs()) {
+        nlFunction.setAllArgAttrs(argumentAttributes);
+    }
     _entryBlock = nlFunction.addEntryBlock();
 
     // Create the ReturnOp of the target function right away
@@ -1165,6 +1173,10 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     _optionalMatchLimits.clear();
     _sortTopK.clear();
     _fusedLimits.clear();
+
+    for (const auto [dbArgument, nlArgument] : llvm::zip_equal(dbFunction.getArguments(), nlFunction.getArguments())) {
+        _valueMap[dbArgument] = nlArgument;
+    }
 
     // Find ORDER BY ... LIMIT k: a db.limit capping a db.sort's result fuses into
     // a bounded top-K, so the limit gets no streaming handle and the sort carries
@@ -1382,7 +1394,10 @@ void DBLowering::lowerOnceOverConstants(mlir::Operation& operation) {
     for (const mlir::Value result : operation.getResults()) {
         const mlir::Value row = mapValue(result);
         if (yieldsConstantColumn(row, _constantColumns)) {
-            moveAheadOfLoops(row.getDefiningOp());
+            if (mlir::Operation* const definition = row.getDefiningOp()) {
+                moveAheadOfLoops(definition);
+            }
+
             continue;
         }
 
@@ -7795,7 +7810,7 @@ mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinali
 
     if (cardinality) {
         setInsertionInto(ownerBlock(cardinality));
-    } else if (definition->getBlock() == _entryBlock) {
+    } else if (!definition || definition->getBlock() == _entryBlock) {
         setInsertionBelowHoisted(definition);
     } else {
         _builder.setInsertionPointAfter(definition);
