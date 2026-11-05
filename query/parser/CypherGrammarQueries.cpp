@@ -47,6 +47,20 @@ void CypherGrammar::parseScript() {
     expect(CypherTokenKind::PROG_END);
 }
 
+Expr* CypherGrammar::parseExpression(size_t& endOffset) {
+    _stackBase = reinterpret_cast<uintptr_t>(__builtin_frame_address(0));
+
+    Expr* expr = parseExpr(ExprFollower::NONE);
+    endOffset = _previous._location._endOffset;
+
+    while (accept(CypherTokenKind::SEMI_COLON)) {
+    }
+
+    expect(CypherTokenKind::PROG_END);
+
+    return expr;
+}
+
 void CypherGrammar::parseQueries() {
     parseQuery();
 

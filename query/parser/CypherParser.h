@@ -6,6 +6,8 @@
 namespace db {
 
 class CypherAST;
+class CypherLexer;
+class Expr;
 
 class CypherParser {
 public:
@@ -31,10 +33,17 @@ public:
 
     void parse(std::string_view query);
 
+    // @param expression as one whole expression, the way a query parses one. Semicolons
+    // and comments may follow it, and @param endOffset receives the offset just past its
+    // last token; any other text after it is a syntax error
+    Expr* parseExpression(std::string_view expression, size_t& endOffset);
+
     CypherAST* getAST() const { return _ast; }
 
 private:
     CypherAST* _ast {nullptr};
+
+    void throwIfNestedTooDeep(CypherLexer& lexer) const;
 };
 
 }

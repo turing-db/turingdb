@@ -15,7 +15,6 @@
 
 #include <argparse.hpp>
 #include <linenoise.h>
-#include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/base_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -33,7 +32,10 @@
 #include "ShellCompletion.h"
 #include "ShellTable.h"
 #include "LocalMemory.h"
-#include "ParameterJson.h"
+#include "CypherAST.h"
+#include "CypherParser.h"
+#include "ParameterValueReader.h"
+#include "SystemAccessor.h"
 #include "ParameterValue.h"
 
 #include "NLOutputSink.h"
@@ -880,6 +882,61 @@ private:
     bool _quiet {false};
 };
 
+// The first cell of what RETURN (<expression>) AS value gave, and its row count, which
+// the caller requires to be one. The local run feeds it as a sink, the remote run from
+// the dataframe it receives.
+class ParameterEvaluation : public NLOutputSink {
+public:
+    explicit ParameterEvaluation(ParameterValue& value)
+        : _value(value)
+    {
+    }
+
+    size_t getRowCount() const { return _rowCount; }
+    const std::string& getError() const { return _error; }
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        take(chunks, offset, rowCount);
+    }
+
+    void take(std::span<const Column* const> columns, size_t offset, size_t rows);
+
+private:
+    ParameterValue& _value;
+    size_t _rowCount {0};
+    std::string _error;
+};
+
+void ParameterEvaluation::take(std::span<const Column* const> columns, size_t offset, size_t rows) {
+    const bool readsTheFirstRow = _rowCount == 0 && rows > 0 && !columns.empty();
+    if (readsTheFirstRow) {
+        try {
+            readParameterValue(columns.front(), offset, _value);
+        } catch (const TuringException& error) {
+            _error = error.what();
+        }
+    }
+
+    _rowCount += rows;
+}
+
+// The text must parse as one whole expression on its own, so the parentheses the shell
+// wraps around it below cannot be closed from inside it; @param endOffset is where the
+// expression ends, ahead of any semicolon or comment the line carries after it
+bool isOneExpression(const std::string& text, const ProcedureManager* procedures, std::string& error, size_t& endOffset) {
+    CypherAST ast(procedures, text);
+
+    try {
+        CypherParser parser(&ast);
+        parser.parseExpression(text, endOffset);
+    } catch (const TuringException& e) {
+        error = e.what();
+        return false;
+    }
+
+    return true;
+}
+
 }
 
 // Cleans double-escaped characters to single-escaped characters
@@ -971,14 +1028,7 @@ void TuringShell::processLine(std::string& line) {
     }
 
     if (!res.isOk()) {
-        if (res.hasErrorMessage()) {
-            std::string errorMsg = res.getError();
-            formatMessage(errorMsg);
-            spdlog::error("{}: {}", QueryStatusDescription::value(res.getStatus()),
-                          errorMsg);
-        } else {
-            spdlog::error("{}", QueryStatusDescription::value(res.getStatus()));
-        }
+        reportQueryStatus(res);
         return;
     }
 
@@ -1019,7 +1069,7 @@ bool TuringShell::processParameterCommand(const std::string& line) {
 
 void TuringShell::setParameter(std::string_view arguments) {
     constexpr std::string_view ARROW = "=>";
-    constexpr std::string_view USAGE = "Usage: :param <name> => <json value>, or :param clear";
+    constexpr std::string_view USAGE = "Usage: :param <name> => <cypher expression>, or :param clear";
 
     std::string trimmed(arguments);
     trim(trimmed);
@@ -1043,19 +1093,81 @@ void TuringShell::setParameter(std::string_view arguments) {
         return;
     }
 
-    ParameterValue value;
-    try {
-        const nlohmann::json json = nlohmann::json::parse(trimmed.substr(arrowPos + ARROW.size()));
-        readJsonParameter(json, value);
-    } catch (const nlohmann::json::exception& e) {
-        spdlog::error("Invalid value for parameter {}: {}", name, e.what());
-        return;
-    } catch (const TuringException& e) {
-        spdlog::error("Invalid value for parameter {}: {}", name, e.what());
+    const std::string text = trimmed.substr(arrowPos + ARROW.size());
+    if (text.find_first_not_of(whiteChars) == std::string::npos) {
+        spdlog::error("No expression for parameter {}. {}", name, USAGE);
         return;
     }
 
-    _parameters.set(name, value);
+    std::string parseError;
+    size_t endOffset = 0;
+    {
+        SystemAccessor system = _turingDB.getSystemManager().accessShared();
+        if (!isOneExpression(text, system.getProcedures(), parseError, endOffset)) {
+            formatMessage(parseError);
+            spdlog::error("{}: {}", QueryStatusDescription::value(QueryStatus::Status::PARSE_ERROR), parseError);
+            return;
+        }
+    }
+
+    ParameterValue value;
+    if (evaluateParameter(fmt::format("RETURN (\n{}\n) AS value", text.substr(0, endOffset)), value)) {
+        _parameters.set(name, value);
+    }
+}
+
+bool TuringShell::evaluateParameter(const std::string& query, ParameterValue& value) {
+    ParameterEvaluation evaluation(value);
+    QueryStatus status;
+
+    if (_remoteConnected) {
+        const auto takeDataframe = [&evaluation](const Dataframe* dataframe) {
+            std::vector<const Column*> columns;
+            for (const NamedColumn* namedColumn : dataframe->cols()) {
+                columns.push_back(namedColumn->getColumn());
+            }
+
+            evaluation.take(columns, 0, dataframe->getLogicalRowCount());
+        };
+
+        try {
+            status = _client.sendQuery(query, takeDataframe, &_parameters);
+        } catch (const TuringException& e) {
+            spdlog::error("Remote query failed: {}", e.what());
+            disconnectRemote();
+            return false;
+        }
+    } else {
+        const QueryState state(_graphName, _mem, &_compilerContext, &_turingDB.getDefaultQueryConfig(), &evaluation, _hash, _changeID, &_parameters);
+        status = _turingDB.query(query, state);
+    }
+
+    if (_mem) {
+        _mem->clear();
+    }
+
+    if (!status.isOk()) {
+        reportQueryStatus(status);
+        return false;
+    } else if (!evaluation.getError().empty()) {
+        spdlog::error("{}", evaluation.getError());
+        return false;
+    } else if (evaluation.getRowCount() != 1) {
+        spdlog::error("A parameter takes one value, and the expression gave {} rows", evaluation.getRowCount());
+        return false;
+    }
+
+    return true;
+}
+
+void TuringShell::reportQueryStatus(const QueryStatus& status) {
+    if (status.hasErrorMessage()) {
+        std::string errorMessage = status.getError();
+        formatMessage(errorMessage);
+        spdlog::error("{}: {}", QueryStatusDescription::value(status.getStatus()), errorMessage);
+    } else {
+        spdlog::error("{}", QueryStatusDescription::value(status.getStatus()));
+    }
 }
 
 void TuringShell::printParameters() const {

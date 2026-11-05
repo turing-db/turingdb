@@ -2,4 +2,4 @@ add_turing_test(test_query_common_parameter_map ParameterMapTest.cpp)
 
 add_turing_test(test_query_common_parameter_value ParameterValueTest.cpp)
 
-add_turing_test(test_query_common_parameter_json ParameterJsonTest.cpp)
+add_turing_test(test_query_common_parameter_value_reader ParameterValueReaderTest.cpp)

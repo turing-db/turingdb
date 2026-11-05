@@ -22,6 +22,8 @@ namespace db {
 class TuringDB;
 class LocalMemory;
 class LineNoiseHandle;
+class ParameterValue;
+class QueryStatus;
 
 class TuringShell {
 public:
@@ -74,6 +76,8 @@ private:
     void processLine(std::string& line);
     bool processParameterCommand(const std::string& line);
     void setParameter(std::string_view arguments);
+    bool evaluateParameter(const std::string& query, ParameterValue& value);
+    void reportQueryStatus(const QueryStatus& status);
     void printParameters() const;
     void formatMessage(std::string& msg);
     std::string composePrompt();

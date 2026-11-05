@@ -3,9 +3,9 @@ set(common_sources
     CompilerException.cpp
     CardinalityEstimation.cpp
     ExplainRequest.cpp
-    ParameterJson.cpp
     ParameterMap.cpp
-    ParameterValue.cpp)
+    ParameterValue.cpp
+    ParameterValueReader.cpp)
 
 add_library(turing_db_query_common_s STATIC ${common_sources})
 
@@ -13,5 +13,4 @@ target_include_directories(turing_db_query_common_s PUBLIC ${CMAKE_CURRENT_SOURC
 
 target_link_libraries(turing_db_query_common_s
     PUBLIC turing_common_s
-    PUBLIC turing_db_storage_s
-    PUBLIC nlohmann_json)
+    PUBLIC turing_db_storage_s)

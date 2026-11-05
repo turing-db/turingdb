@@ -119,6 +119,10 @@ public:
 
     void parseScript();
 
+    // The text as one whole expression, with nothing but semicolons after it;
+    // @param endOffset receives the offset just past its last token
+    Expr* parseExpression(size_t& endOffset);
+
 private:
     using TokenKinds = std::bitset<CypherToken::KIND_COUNT>;
 
