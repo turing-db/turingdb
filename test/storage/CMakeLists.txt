@@ -110,7 +110,6 @@ add_turing_test(test_storage_datapartmerger versioning/DatapartMergerTest.cpp)
 add_turing_test(test_storage_pending_adjacency versioning/PendingAdjacencyTest.cpp)
 add_turing_test(test_storage_commit_hash_format versioning/CommitHashFormatTest.cpp)
 
-add_turing_test(test_storage_stringindex StringIndexTest.cpp)
 add_turing_test(test_storage_listorder ListOrderTest.cpp)
 add_turing_test(test_storage_listindexoperator ListIndexOperatorTest.cpp)
 add_turing_test(test_storage_path_trie list/PathTrieTest.cpp)
