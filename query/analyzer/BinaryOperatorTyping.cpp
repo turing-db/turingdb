@@ -2,13 +2,12 @@
 
 #include <stdint.h>
 
+#include <array>
 #include <optional>
 #include <string>
 #include <string_view>
 
 #include <spdlog/fmt/fmt.h>
-
-#include "ParameterProbe.h"
 
 using namespace db;
 
@@ -353,9 +352,21 @@ std::optional<TypingReason> valueOperatorReason(BinaryOperator op) {
     }
 }
 
+// The types a value has, so the ones a null can stand for
+constexpr std::array<EvaluatedType, 9> VALUE_TYPES {
+    EvaluatedType::Integer,
+    EvaluatedType::Double,
+    EvaluatedType::String,
+    EvaluatedType::Bool,
+    EvaluatedType::Embedding,
+    EvaluatedType::List,
+    EvaluatedType::Map,
+    EvaluatedType::DateTime,
+    EvaluatedType::Duration,
+};
+
 bool takesAValueBeside(BinaryOperator op, EvaluatedType known, bool knownIsLeft) {
-    for (uint32_t values = PARAMETER_VALUE_TYPES.getBitset(); values != 0; values &= values - 1) {
-        const EvaluatedType value = ParameterProbe::lowestType(values);
+    for (const EvaluatedType value : VALUE_TYPES) {
         const EvaluatedType left = knownIsLeft ? known : value;
         const EvaluatedType right = knownIsLeft ? value : known;
 
@@ -382,25 +393,6 @@ RuleResult ruleType(BinaryOperator op, EvaluatedType a, EvaluatedType b) {
     }
 
     return result;
-}
-
-void probeType(BinaryOperator op, const ExprType& lhs, const ExprType& rhs, BinaryTyping& out) {
-    const auto rule = [op](EvaluatedType left, EvaluatedType right) {
-        return ruleType(op, left, right)._type;
-    };
-
-    ParameterProbe probe;
-    ParameterProbe::probe(lhs, rhs, rule, probe);
-
-    out._leftAccepted = probe._leftAccepted;
-    out._rightAccepted = probe._rightAccepted;
-
-    // A boolean is three-valued, so null is one of its values rather than a type of its own
-    if (probe._results == EvaluatedTypeSet {EvaluatedType::Bool, EvaluatedType::Null}) {
-        probe._results = EvaluatedTypeSet {EvaluatedType::Bool};
-    }
-
-    probe.writeResult(lhs, rhs, out._result);
 }
 
 void writeError(TypingReason reason, EvaluatedType a, EvaluatedType b, BinaryTyping& out) {
@@ -441,19 +433,14 @@ void writeError(TypingReason reason, EvaluatedType a, EvaluatedType b, BinaryTyp
     }
 }
 
-// A parameter's list has no shape until it is bound, so a list it takes part in mixes
-// whatever the bind brings
 void writeListShape(const ExprType& lhs, const ExprType& rhs, BinaryTyping& out) {
     const EvaluatedType a = lhs._type;
     const EvaluatedType b = rhs._type;
 
-    const bool readsAParameter = a == EvaluatedType::Parameter || b == EvaluatedType::Parameter;
     const bool leftIsAList = a == EvaluatedType::List;
     const bool bothLists = leftIsAList && b == EvaluatedType::List;
 
-    if (readsAParameter) {
-        out._result._shape = ListShape(EvaluatedType::Invalid, 1);
-    } else if (bothLists) {
+    if (bothLists) {
         out._result._shape = ListShape::joined(lhs._shape, rhs._shape);
     } else {
         const ListShape& listShape = leftIsAList ? lhs._shape : rhs._shape;
@@ -468,14 +455,16 @@ void writeListShape(const ExprType& lhs, const ExprType& rhs, BinaryTyping& out)
 void BinaryOperatorTyping::type(BinaryOperator op, const ExprType& lhs, const ExprType& rhs, BinaryTyping& out) {
     const EvaluatedType a = lhs._type;
     const EvaluatedType b = rhs._type;
-    probeType(op, lhs, rhs, out);
+    const RuleResult rule = ruleType(op, a, b);
 
-    if (out._result._type == EvaluatedType::Invalid) {
-        writeError(ruleType(op, a, b)._reason, a, b, out);
+    if (rule._type == EvaluatedType::Invalid) {
+        writeError(rule._reason, a, b, out);
         return;
     }
 
-    if (out._result._type == EvaluatedType::List) {
+    out._result._type = rule._type;
+
+    if (rule._type == EvaluatedType::List) {
         writeListShape(lhs, rhs, out);
     }
 }

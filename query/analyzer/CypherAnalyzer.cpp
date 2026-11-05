@@ -1155,9 +1155,8 @@ void CypherAnalyzer::publishUnionBranchReturn(Projection* branchProjection, cons
 
         const EvaluatedType columnType = decl->getType();
 
-        ExprType column;
-        ExprAnalyzer::selectExprType(decl->getExprType(), *itemType, column);
-        const EvaluatedType selected = column._type;
+        const EvaluatedType selected = selectedType(columnType, itemType->_type);
+        ExprType column {selected};
 
         if (selected == EvaluatedType::Invalid) {
             throwError(fmt::format("Column '{}' cannot hold both '{}' and '{}' values",
