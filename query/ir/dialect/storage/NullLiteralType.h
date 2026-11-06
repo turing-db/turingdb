@@ -15,7 +15,8 @@ bool isNullLiteralType(Type elementType);
 bool holdsItsOwnNull(Type elementType);
 
 // Whether a column of @param elementType is read only as a plain chunk of rows, never as a
-// constant nor through a nullable: a node, an edge, a path, a walk's handle or a mask
+// constant nor through a nullable: a node, an edge, the label sets of a node, the types of
+// an edge, a path, a walk's handle or a mask
 bool isReadAsRows(Type elementType);
 
 // Turns away an equality over the null literal, shared by db.eq, db.neq, nl.eq and nl.neq,

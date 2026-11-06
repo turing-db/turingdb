@@ -69,6 +69,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_REMOVEREDUNDANTLABELCHECKS
 #define GEN_PASS_DEF_REUSEPROPERTYREADS
 #define GEN_PASS_DEF_REUSELABELANDTYPEREADS
+#define GEN_PASS_DEF_CARRYLABELANDTYPEREADS
 #define GEN_PASS_DEF_FUSEHASHJOIN
 #define GEN_PASS_DEF_FUSEFETCHNODES
 #define GEN_PASS_DEF_REROOTPATTERNATSEED
@@ -7736,6 +7737,23 @@ bool matchPropertyRead(Operation* op, StringAttr& property, bool& nodeProperty) 
     return false;
 }
 
+// What a read takes off each row of a node or an edge column: the op reading it, and the
+// property it names, null for the label sets of a node or the types of an edge
+struct EntityRead {
+    TypeID _op;
+    StringAttr _property;
+
+    bool operator==(const EntityRead& other) const = default;
+};
+
+EntityRead entityReadOf(Operation* read) {
+    StringAttr property;
+    bool nodeProperty = false;
+    matchPropertyRead(read, property, nodeProperty);
+
+    return EntityRead {._op = read->getName().getTypeID(), ._property = property};
+}
+
 bool matchPropertyWrite(Operation* op, StringAttr& property, bool& nodeProperty) {
     if (SetNodeProperty write = dyn_cast<SetNodeProperty>(op)) {
         property = write.getPropertyAttr();
@@ -7860,21 +7878,21 @@ Value canonicalRows(Value rows) {
     return *sibling;
 }
 
-// The property columns reuse_property_reads can hand a later read of the same rows: the
-// reads it kept, each serving the ops after it in its block, and the columns it carried down
-// to a row column, which serve every op reading those rows. Keyed by the row column, so a
-// read finds an earlier one without visiting every other user of its rows
-class KnownPropertyColumns {
+// The columns reuse_property_reads and carry_label_and_type_reads can hand a later read of
+// the same rows: the reads they kept, each serving the ops after it in its block, and the
+// columns they carried down to a row column, which serve every op reading those rows. Keyed
+// by the row column, so a read finds an earlier one without visiting every other user of its rows
+class KnownReadColumns {
 public:
-    Value find(Value rows, StringAttr property, bool nodeProperty, Operation* useSite) const {
+    Value find(Value rows, const EntityRead& entityRead, Operation* useSite) const {
         const auto rowsIt = _columns.find(canonicalRows(rows));
         if (rowsIt == _columns.end()) {
             return {};
         }
 
         Value carriedColumn;
-        for (const KnownProperty& known : rowsIt->second) {
-            if (known._property != property || known._nodeProperty != nodeProperty) {
+        for (const KnownColumn& known : rowsIt->second) {
+            if (known._entityRead != entityRead) {
                 continue;
             }
 
@@ -7893,12 +7911,12 @@ public:
         return carriedColumn;
     }
 
-    void addRead(Operation* read, StringAttr property, bool nodeProperty) {
-        _columns[canonicalRows(read->getOperand(0))].push_back(KnownProperty {property, nodeProperty, read->getResult(0), read});
+    void addRead(Operation* read) {
+        _columns[canonicalRows(read->getOperand(0))].push_back(KnownColumn {entityReadOf(read), read->getResult(0), read});
     }
 
-    void addCarried(Value rows, StringAttr property, bool nodeProperty, Value column) {
-        _columns[canonicalRows(rows)].push_back(KnownProperty {property, nodeProperty, column, nullptr});
+    void addCarried(Value rows, const EntityRead& entityRead, Value column) {
+        _columns[canonicalRows(rows)].push_back(KnownColumn {entityRead, column, nullptr});
     }
 
     // Moves what is known of @param replaced, the results of an op since rebuilt, onto
@@ -7915,13 +7933,13 @@ public:
                 continue;
             }
 
-            llvm::SmallVector<KnownProperty, 1> known = rowsIt->second;
+            llvm::SmallVector<KnownColumn, 1> known = rowsIt->second;
             _columns.erase(rowsIt);
 
-            for (KnownProperty& property : known) {
-                const auto columnIt = replacementOf.find(property._column);
+            for (KnownColumn& column : known) {
+                const auto columnIt = replacementOf.find(column._column);
                 if (columnIt != replacementOf.end()) {
-                    property._column = columnIt->second;
+                    column._column = columnIt->second;
                 }
             }
 
@@ -7930,14 +7948,13 @@ public:
     }
 
 private:
-    struct KnownProperty {
-        StringAttr _property;
-        bool _nodeProperty {false};
+    struct KnownColumn {
+        EntityRead _entityRead;
         Value _column;
         Operation* _read {nullptr};
     };
 
-    llvm::DenseMap<Value, llvm::SmallVector<KnownProperty, 1>> _columns;
+    llvm::DenseMap<Value, llvm::SmallVector<KnownColumn, 1>> _columns;
 };
 
 enum class RowsStepKind {
@@ -8420,11 +8437,11 @@ struct HandBack {
     Value _column;
 };
 
-// Hands a read the column holding its property for its rows: one read before it, or one read
+// Hands a read the column holding what it reads of its rows: one read before it, or one read
 // of rows its own come from, carried down to it through the ops between
-class PropertyColumnWalk {
+class ReadColumnWalk {
 public:
-    PropertyColumnWalk(KnownPropertyColumns& known, mlir::RewriterBase& rewriter)
+    ReadColumnWalk(KnownReadColumns& known, mlir::RewriterBase& rewriter)
         : _known(known),
           _rewriter(rewriter)
     {
@@ -8432,33 +8449,31 @@ public:
 
     // Null where there is none: this adds no read. A walk starts again once handing a column
     // back through a region has rebuilt ops a step of it stood on.
-    Value propertyColumnOf(Operation* read, StringAttr property, bool nodeProperty) {
-        _property = property;
-        _nodeProperty = nodeProperty;
+    Value columnOf(Operation* read) {
+        _entityRead = entityReadOf(read);
 
-        Value propertyColumn;
+        Value column;
         bool rebuilt = true;
         while (rebuilt) {
             llvm::SmallVector<RowsStep> steps;
-            propertyColumn = findKnownColumn(read, steps);
-            if (!propertyColumn) {
+            column = findKnownColumn(read, steps);
+            if (!column) {
                 return {};
             }
 
             rebuilt = false;
             for (size_t stepIndex = steps.size(); stepIndex > 0 && !rebuilt; stepIndex--) {
-                propertyColumn = carryBack(steps[stepIndex - 1], propertyColumn, rebuilt);
+                column = carryBack(steps[stepIndex - 1], column, rebuilt);
             }
         }
 
-        return propertyColumn;
+        return column;
     }
 
 private:
-    KnownPropertyColumns& _known;
+    KnownReadColumns& _known;
     mlir::RewriterBase& _rewriter;
-    StringAttr _property;
-    bool _nodeProperty {false};
+    EntityRead _entityRead;
 
     Value findKnownColumn(Operation* read, llvm::SmallVectorImpl<RowsStep>& steps) {
         Value rows = read->getOperand(0);
@@ -8469,7 +8484,7 @@ private:
                 layOutRunConstant(steps);
             }
 
-            const Value known = _known.find(rows, _property, _nodeProperty, useSite);
+            const Value known = _known.find(rows, _entityRead, useSite);
             if (known) {
                 collapseRunConstantRoundTrips(steps);
                 return known;
@@ -8518,7 +8533,7 @@ private:
         const Value carried = carryThroughOp(step._op, column);
         Operation* const carrying = carried.getDefiningOp();
 
-        _known.addCarried(carrying->getResult(static_cast<unsigned>(step._position)), _property, _nodeProperty, carried);
+        _known.addCarried(carrying->getResult(static_cast<unsigned>(step._position)), _entityRead, carried);
 
         return carried;
     }
@@ -8559,7 +8574,7 @@ private:
         }
 
         const BlockArgument argument = carriedArgument(*body.getParent(), carriedIndex);
-        _known.addCarried(step._rows, _property, _nodeProperty, argument);
+        _known.addCarried(step._rows, _entityRead, argument);
 
         return argument;
     }
@@ -8653,8 +8668,7 @@ private:
         Operation* const rebuilt = insertResult(op, handBack._carriedIndex, column.getType());
 
         _known.addCarried(rebuilt->getResult(static_cast<unsigned>(handBack._rowsIndex)),
-                          _property,
-                          _nodeProperty,
+                          _entityRead,
                           rebuilt->getResult(static_cast<unsigned>(handBack._carriedIndex)));
 
         return rebuilt;
@@ -8664,7 +8678,7 @@ private:
         _rewriter.setInsertionPointAfter(step._op);
         const Value constant = _rewriter.create<RowConstant>(step._op->getLoc(), column).getResult();
 
-        _known.addCarried(step._rows, _property, _nodeProperty, constant);
+        _known.addCarried(step._rows, _entityRead, constant);
 
         return constant;
     }
@@ -8673,7 +8687,7 @@ private:
         _rewriter.setInsertionPointAfterValue(step._rows);
         const Value laidOut = _rewriter.create<BroadcastConstant>(step._rows.getLoc(), constant, step._rows).getResult();
 
-        _known.addCarried(step._rows, _property, _nodeProperty, laidOut);
+        _known.addCarried(step._rows, _entityRead, laidOut);
 
         return laidOut;
     }
@@ -8793,8 +8807,8 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
         });
 
         mlir::IRRewriter rewriter(&getContext());
-        KnownPropertyColumns knownColumns;
-        PropertyColumnWalk walk(knownColumns, rewriter);
+        KnownReadColumns knownColumns;
+        ReadColumnWalk walk(knownColumns, rewriter);
         for (Operation* const read : reads) {
             StringAttr property;
             bool nodeProperty = false;
@@ -8809,9 +8823,9 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
                 continue;
             }
 
-            const Value reused = walk.propertyColumnOf(read, property, nodeProperty);
+            const Value reused = walk.columnOf(read);
             if (!reused) {
-                knownColumns.addRead(read, property, nodeProperty);
+                knownColumns.addRead(read);
                 continue;
             }
 
@@ -8820,16 +8834,20 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
     }
 };
 
+void collectLabelAndTypeReads(Operation* root, llvm::SmallVectorImpl<Operation*>& reads) {
+    root->walk([&reads](Operation* op) {
+        if (isa<GetNodeLabelSet, GetEdgeTypes>(op)) {
+            reads.push_back(op);
+        }
+    });
+}
+
 // Codegen reads the label sets of a node column, or the types of an edge column, once per
 // test over it, and a predicate no check fusion folds keeps every one of those reads.
 struct ReuseLabelAndTypeReads : public impl::ReuseLabelAndTypeReadsBase<ReuseLabelAndTypeReads> {
     void runOnOperation() override {
         llvm::SmallVector<Operation*> reads;
-        getOperation()->walk([&reads](Operation* op) {
-            if (isa<GetNodeLabelSet, GetEdgeTypes>(op)) {
-                reads.push_back(op);
-            }
-        });
+        collectLabelAndTypeReads(getOperation(), reads);
 
         mlir::IRRewriter rewriter(&getContext());
         llvm::DenseMap<std::tuple<Block*, Value, OperationName>, Operation*> firstReads;
@@ -8840,6 +8858,26 @@ struct ReuseLabelAndTypeReads : public impl::ReuseLabelAndTypeReadsBase<ReuseLab
                 Operation* const firstRead = entry->second;
                 rewriter.replaceOp(read, firstRead->getResults());
             }
+        }
+    }
+};
+
+struct CarryLabelAndTypeReads : public impl::CarryLabelAndTypeReadsBase<CarryLabelAndTypeReads> {
+    void runOnOperation() override {
+        llvm::SmallVector<Operation*> reads;
+        collectLabelAndTypeReads(getOperation(), reads);
+
+        mlir::IRRewriter rewriter(&getContext());
+        KnownReadColumns knownColumns;
+        ReadColumnWalk walk(knownColumns, rewriter);
+        for (Operation* const read : reads) {
+            const Value carried = walk.columnOf(read);
+            if (!carried) {
+                knownColumns.addRead(read);
+                continue;
+            }
+
+            rewriter.replaceOp(read, carried);
         }
     }
 };

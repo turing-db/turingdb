@@ -65,14 +65,15 @@ Column* allocOptValueColumn(LocalMemory* memory, ValueType valueType, size_t res
 // Translation resolves every chunk SSA value
 // to a concrete ColumnVector type through this kind
 //
-// The first three are the ID columns a scan or a hop binds. The rest are what a CALL
-// yields: a procedure's declared return types map onto these, so a yielded column can be
-// crossed and carried like any other. Every one of them is a plain (never-null)
-// ColumnVector of the element type its name says.
+// The first three are the ID columns a scan or a hop binds, and the fourth the label sets
+// read off a node column. The rest are what a CALL yields: a procedure's declared return
+// types map onto these, so a yielded column can be crossed and carried like any other.
+// Every one of them is a plain (never-null) ColumnVector of the element type its name says.
 enum class NLChunkKind {
     NodeID,
     EdgeID,
     EdgeTypeID,
+    LabelSetID,
     LabelID,
     PropertyTypeID,
     ValueTypeCode,
@@ -110,6 +111,10 @@ void dispatchChunkKind(NLChunkKind kind, Handler&& handler) {
 
         case NLChunkKind::EdgeTypeID:
             return handler.template operator()<EdgeTypeID>();
+        break;
+
+        case NLChunkKind::LabelSetID:
+            return handler.template operator()<LabelSetID>();
         break;
 
         case NLChunkKind::LabelID:
