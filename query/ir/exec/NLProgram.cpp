@@ -17,28 +17,12 @@ using namespace db;
 
 namespace {
 
-void compactAccumulators(NLCompactingValueStore& values,
-                         std::vector<NLGroupAggregateState::Aggregate>& aggregates,
-                         size_t groupCount) {
-    size_t liveCount = 0;
-    for (const NLGroupAggregateState::Aggregate& aggregate : aggregates) {
-        if (aggregate._reown) {
-            liveCount += groupCount;
-        }
-    }
+// The aggregates take turns folding a batch of rows, so the blocks a batch reaches stay in
+// the L1 cache from one aggregate to the next
+constexpr size_t FOLD_BATCH_ROWS = 256;
 
-    if (!values.needsCompaction(liveCount)) {
-        return;
-    }
-
-    NLValueStore& spare = values.getSpare();
-    for (NLGroupAggregateState::Aggregate& aggregate : aggregates) {
-        if (aggregate._reown) {
-            aggregate._reown(aggregate._accumulator, spare);
-        }
-    }
-
-    values.flip();
+size_t alignOffset(size_t offset, size_t alignment) {
+    return (offset + alignment - 1) / alignment * alignment;
 }
 
 }
@@ -483,34 +467,105 @@ void NLGroupTable::clear() {
     _groups.clear();
 }
 
-void NLGroupAggregateState::reset() {
-    _groupTable.clear();
-    _keyValues.clear();
-    _accumulatorValues.clear();
+void NLGroupAggregates::add(const Aggregate& aggregate) {
+    const NLGroupAggregateStateType& stateType = aggregate._stateType;
 
-    for (KeyColumn& key : _keyColumns) {
-        key._buffer->clear();
+    bioassert(_groupCount == 0, "An aggregate is placed in the blocks before any group has one");
+
+    const size_t offset = alignOffset(_statesEnd, stateType._alignment);
+
+    _statesEnd = offset + stateType._size;
+    _alignment = std::max(_alignment, stateType._alignment);
+    _stride = alignOffset(_statesEnd, _alignment);
+
+    _aggregates.push_back(aggregate);
+    _aggregates.back()._stateOffset = offset;
+}
+
+void NLGroupAggregates::grow(size_t groupCount) {
+    const size_t heldCount = _groupCount;
+    if (groupCount <= heldCount) {
+        return;
     }
 
-    // count has no accumulator column (only a tally); the others carry the reduced
-    // value per group. Clear whichever the aggregate holds.
-    for (Aggregate& aggregate : _aggregates) {
-        if (aggregate._accumulator) {
-            aggregate._accumulator->clear();
-        }
+    _blocks.resize(groupCount * _stride);
+    _groupCount = groupCount;
 
-        aggregate._counts.clear();
-        aggregate._durationTotals.clear();
+    for (const Aggregate& aggregate : _aggregates) {
+        aggregate._stateType._init(getPlaces(aggregate), heldCount, groupCount - heldCount);
+    }
+}
+
+void NLGroupAggregates::fold(const std::vector<size_t>& groups) {
+    NLValueStore& values = _values.getActive();
+    const size_t rowCount = groups.size();
+
+    for (size_t beginRow = 0; beginRow < rowCount; beginRow += FOLD_BATCH_ROWS) {
+        const size_t endRow = std::min(rowCount, beginRow + FOLD_BATCH_ROWS);
+
+        for (Aggregate& aggregate : _aggregates) {
+            aggregate._fold(getPlaces(aggregate),
+                            aggregate._input,
+                            groups,
+                            beginRow,
+                            endRow,
+                            aggregate._distinct,
+                            values);
+        }
+    }
+}
+
+void NLGroupAggregates::emit(size_t begin, size_t count, NLStepBuffers* stepBuffers) {
+    for (const Aggregate& aggregate : _aggregates) {
+        aggregate._stateType._emit(getPlaces(aggregate), begin, count, aggregate._output, stepBuffers);
+    }
+}
+
+void NLGroupAggregates::compactValues() {
+    size_t liveCount = 0;
+    for (const Aggregate& aggregate : _aggregates) {
+        if (aggregate._stateType._reown) {
+            liveCount += _groupCount;
+        }
+    }
+
+    if (!_values.needsCompaction(liveCount)) {
+        return;
+    }
+
+    NLValueStore& spare = _values.getSpare();
+    for (const Aggregate& aggregate : _aggregates) {
+        const NLGroupAggregateReownFunction reown = aggregate._stateType._reown;
+        if (reown) {
+            reown(getPlaces(aggregate), _groupCount, spare);
+        }
+    }
+
+    _values.flip();
+}
+
+void NLGroupAggregates::clear() {
+    _blocks.clear();
+    _groupCount = 0;
+    _values.clear();
+
+    for (Aggregate& aggregate : _aggregates) {
         aggregate._distinct.clear();
     }
 }
 
-void NLGroupAggregateState::compactAccumulatorValues() {
-    compactAccumulators(_accumulatorValues, _aggregates, _groupTable.getGroupCount());
+NLGroupStatePlaces NLGroupAggregates::getPlaces(const Aggregate& aggregate) {
+    return NLGroupStatePlaces(_blocks.data() + aggregate._stateOffset, _stride);
 }
 
-void NLCollectState::compactAccumulatorValues() {
-    compactAccumulators(_accumulatorValues, _aggregates, _groupTable.getGroupCount());
+void NLGroupAggregateState::reset() {
+    _groupTable.clear();
+    _keyValues.clear();
+    _aggregates.clear();
+
+    for (KeyColumn& key : _keyColumns) {
+        key._buffer->clear();
+    }
 }
 
 NLCollectState::ValueColumn& NLCollectState::unwoundColumn() {
@@ -540,17 +595,7 @@ void NLCollectState::reset() {
     _listBuffer.clear();
     _keyValues.clear();
     _collectedValues.clear();
-    _accumulatorValues.clear();
-
-    for (NLGroupAggregateState::Aggregate& aggregate : _aggregates) {
-        if (aggregate._accumulator) {
-            aggregate._accumulator->clear();
-        }
-
-        aggregate._counts.clear();
-        aggregate._durationTotals.clear();
-        aggregate._distinct.clear();
-    }
+    _aggregates.clear();
 
     // An ungrouped collect has exactly one group - the empty key tuple - and that group
     // exists whether or not a row ever arrives: collect() over no row is the empty list,
@@ -565,9 +610,7 @@ void NLCollectState::reset() {
             value._groupPositions.resize(1);
         }
 
-        for (NLGroupAggregateState::Aggregate& aggregate : _aggregates) {
-            aggregate._grow(aggregate._accumulator, aggregate._counts, aggregate._durationTotals, 1);
-        }
+        _aggregates.grow(1);
     }
 }
 

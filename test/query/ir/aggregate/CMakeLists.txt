@@ -203,3 +203,5 @@ add_turing_test(test_query_ir_duration_sum_overflow DurationSumOverflowTest.cpp)
 add_turing_test(test_query_ir_duration_sum_row_order DurationSumRowOrderTest.cpp)
 
 add_turing_test(test_query_ir_percentile_held_in_a_cell PercentileHeldInACellTest.cpp)
+
+add_turing_test(test_query_ir_group_aggregate_state GroupAggregateStateTest.cpp)
