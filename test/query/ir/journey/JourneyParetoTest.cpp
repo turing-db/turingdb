@@ -156,8 +156,7 @@ TEST_F(JourneyParetoTest, keepsTheLegsTheQueryBeforeReturned) {
 }
 
 // The customer's collect of one map per leg.
-// Disabled: collect() rejects a map argument in the analyzer (TUR-100).
-TEST_F(JourneyParetoTest, DISABLED_collectsTheLegsAsMaps) {
+TEST_F(JourneyParetoTest, collectsTheLegsAsMaps) {
     std::string query;
     findLegsFromOxford(query, "['DID', 'RDG', 'PAD']", 470, 500);
     query += "WITH ";
