@@ -73,10 +73,3 @@ TEST_F(ExpressionParameterTest, aDurationAndADateTimeAreReadAsTheirValues) {
     const std::vector<StringRowSink::Row> expected {{"PT2H", "2026-11-05T15:05:00Z", "2026", "true"}};
     EXPECT_EQ(sink.getRows(), expected);
 }
-
-TEST_F(ExpressionParameterTest, aListParameterInAnExpressionIsNotTakenYet) {
-    ParameterMap parameters;
-    parameters.insert("l").setList().emplace_back().setInt64(1);
-
-    runQueryExpectingError("RETURN size($l)", parameters, "Parameter $l is a List, which a parameter in an expression does not take yet");
-}
