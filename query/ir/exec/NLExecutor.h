@@ -796,8 +796,7 @@ public:
 
     // Row-key serialization for an ID chunk of this kind / a nullable value chunk
     // of this value type. Used by nl.distinct_filter to build each row's seen-set
-    // key. The value-type selector throws for a value type with no byte identity
-    // as a key (an embedding), which cannot be a DISTINCT key.
+    // key.
     static NLKeyAppendFunction selectKeyAppendFunction(NLChunkKind kind);
     static NLKeyAppendFunction selectOptKeyAppendFunction(ValueType valueType);
     static NLKeyAppendFunction selectOptKeyAppendFunction(NLChunkKind kind);

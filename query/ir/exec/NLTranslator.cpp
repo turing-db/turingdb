@@ -7133,8 +7133,7 @@ NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkTy
 }
 
 // The join's sibling of selectKeyAppendForChunkType: a key is hashed and compared where it
-// lives rather than serialized. An embedding is a key here, since `=` between two embedding
-// columns compares the vectors, though it has no byte identity a DISTINCT can group by.
+// lives rather than serialized.
 NLJoinKeyFunctions NLTranslator::selectJoinKeyFunctionsForChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();

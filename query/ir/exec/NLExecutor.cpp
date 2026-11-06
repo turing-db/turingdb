@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <bit>
 #include <cmath>
+#include <concepts>
 #include <functional>
 #include <limits>
 #include <numeric>
@@ -2739,27 +2740,40 @@ void distinctAppendValueBytes(std::string& key, const Primitive& value) {
     key.append(reinterpret_cast<const char*>(&value), sizeof(Primitive));
 }
 
-// A double is normalized before its bytes are appended so keys compare by Cypher
+// A float is normalized before its bytes are appended so keys compare by Cypher
 // value equality, not bit pattern: -0.0 collapses to +0.0 (0.0 == -0.0 in Cypher)
 // and every NaN payload maps to one canonical NaN, so two distinct bit patterns of
 // the same value never split into separate groups (or survive DISTINCT as two rows).
-void distinctAppendValueBytes(std::string& key, double value) {
-    double normalized = value;
+template <std::floating_point Float>
+void distinctAppendFloatBytes(std::string& key, const Float value) {
+    Float normalized = value;
 
-    if (normalized == 0.0) {
-        // -0.0 == +0.0, so assigning +0.0 canonicalizes the sign of zero.
-        normalized = 0.0;
+    if (normalized == 0) {
+        normalized = 0;
     } else if (std::isnan(normalized)) {
-        normalized = std::numeric_limits<double>::quiet_NaN();
+        normalized = std::numeric_limits<Float>::quiet_NaN();
     }
 
     key.append(reinterpret_cast<const char*>(&normalized), sizeof(normalized));
+}
+
+void distinctAppendValueBytes(std::string& key, double value) {
+    distinctAppendFloatBytes(key, value);
 }
 
 void distinctAppendValueBytes(std::string& key, std::string_view value) {
     const size_t length = value.size();
     key.append(reinterpret_cast<const char*>(&length), sizeof(length));
     key.append(value.data(), value.size());
+}
+
+void distinctAppendValueBytes(std::string& key, const types::Embedding::Primitive value) {
+    const size_t length = value.size();
+    key.append(reinterpret_cast<const char*>(&length), sizeof(length));
+
+    for (const float element : value) {
+        distinctAppendFloatBytes(key, element);
+    }
 }
 
 // Serialize one row of an ID column (node/edge/edge-type IDs) into the row key -
@@ -2971,7 +2985,9 @@ void distinctAppendElementBytes(std::string& key, const CellView element) {
         break;
 
         case CellTag::Embedding:
-            throw IRException("cannot dedup by an embedding element");
+            key.push_back(static_cast<char>(tag));
+            distinctAppendValueBytes(key, element.getAs<types::Embedding::Primitive>());
+            return;
         break;
 
         case CellTag::MapView:
@@ -12354,8 +12370,8 @@ NLCollectFoldFunction NLExecutor::selectCollectFold(ValueType valueType) {
 }
 
 // The collect(DISTINCT x) fold for a column of this value type: collect's own domain,
-// with each of a group's values buffered once. An embedding has no bytes to key on, and
-// no primitive to buffer either, so it is rejected for both reasons.
+// with each of a group's values buffered once. An embedding has no primitive to buffer,
+// so it is rejected.
 NLCollectFoldFunction NLExecutor::selectCollectDistinctFold(ValueType valueType) {
     switch (valueType) {
         case ValueType::Int64:
@@ -13481,11 +13497,6 @@ NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
     return nullptr;
 }
 
-// Selected per column from its value type. A manual switch, not ValueTypeDispatcher,
-// because an embedding has no byte identity to key on: dispatching would instantiate
-// the serializer for std::span<const float> - a view, not owned bytes - which cannot
-// be a DISTINCT key. The embedding case throws instead, so that instantiation is
-// never named, the same shape as selectOptCompareFunction.
 NLKeyAppendFunction NLExecutor::selectOptKeyAppendFunction(ValueType valueType) {
     switch (valueType) {
         case ValueType::Int64:
@@ -13509,7 +13520,7 @@ NLKeyAppendFunction NLExecutor::selectOptKeyAppendFunction(ValueType valueType) 
         break;
 
         case ValueType::Embedding:
-            throw IRException("cannot remove duplicates on an embedding column");
+            return &distinctKeyAppendOptColumn<types::Embedding::Primitive>;
         break;
 
         case ValueType::List:
@@ -13729,9 +13740,7 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountPresentPathFold() {
 }
 
 // Selected per column from its value type, so count(x) tallies only the rows in
-// which x is not null. Every value type has a present/absent flag, so - unlike
-// selectOptKeyAppendFunction - an embedding is fine: counting reads has_value(),
-// never the value's bytes.
+// which x is not null.
 NLCountFunction NLExecutor::selectOptCountFunction(ValueType valueType) {
     NLCountFunction count = nullptr;
     const auto select = [&]<SupportedType T>() {
@@ -14041,9 +14050,6 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountAllFold() {
     return &groupFoldCountAll;
 }
 
-// Selected per column from its value type. A manual switch, not ValueTypeDispatcher,
-// because a distinct tally keys on the value's bytes and an embedding has none to key
-// on - the same reason selectOptKeyAppendFunction is written out by hand.
 NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctFold(ValueType inputType) {
     switch (inputType) {
         case ValueType::Int64:
@@ -14067,7 +14073,7 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctFold(ValueType 
         break;
 
         case ValueType::Embedding:
-            throw IRException("cannot count the distinct values of an embedding column");
+            return &groupFoldCountDistinctPresent<types::Embedding::Primitive>;
         break;
 
         case ValueType::List:
@@ -14345,7 +14351,8 @@ NLKeyAppendFunction NLExecutor::selectConstMergeKeyAppendFunction(ValueType valu
         break;
 
         case ValueType::Embedding:
-            throw IRException("a MERGE pattern cannot constrain a property to an embedding");
+            throwUnlessKeyedAsItsOwnType(ValueType::Embedding, keyType);
+            return &mergeKeyAppendConstColumn<types::Embedding::Primitive>;
         break;
 
         case ValueType::List:
