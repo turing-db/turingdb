@@ -7784,7 +7784,8 @@ mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinali
     // what every fold, key serialization and reduction reads a value column as. A list or
     // a map literal is laid out as the plain container chunk an nl.collect drain emits
     // instead, since no row of a literal is absent; one a function answered may be null.
-    // A node, an edge, a path, a walk or a mask rides the plain chunk every op takes it in.
+    // A node, an edge, their label sets or types, a path, a walk or a mask rides the plain
+    // chunk every op takes it in.
     mlir::MLIRContext* const context = _builder.getContext();
     const bool isContainer = llvm::isa<storage::ListType, storage::MapType>(valueElement);
     const bool staysPlain = (isContainer && !nullable) || isReadAsRows(valueElement);

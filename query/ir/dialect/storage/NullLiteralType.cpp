@@ -18,7 +18,13 @@ bool mlir::holdsItsOwnNull(Type elementType) {
 }
 
 bool mlir::isReadAsRows(Type elementType) {
-    return isa<storage::NodeIDType, storage::EdgeIDType, storage::PathType, storage::PathRefType, storage::BoolType>(elementType);
+    return isa<storage::NodeIDType,
+               storage::EdgeIDType,
+               storage::LabelSetIDType,
+               storage::EdgeTypeIDType,
+               storage::PathType,
+               storage::PathRefType,
+               storage::BoolType>(elementType);
 }
 
 LogicalResult mlir::verifyComparesNoNullLiteral(Operation* op, Type lhsElementType, Type rhsElementType) {

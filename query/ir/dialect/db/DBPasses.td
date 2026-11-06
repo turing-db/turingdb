@@ -113,6 +113,11 @@ def ReuseLabelAndTypeReads : Pass<"reuse_label_and_type_reads"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def CarryLabelAndTypeReads : Pass<"carry_label_and_type_reads"> {
+    let summary = "Hand a label or type test the label sets or types already read of the rows its own come from, carried through the ops and into the regions between, instead of reading them again";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FuseFetchNodes : Pass<"fuse_fetch_nodes"> {
     let summary = "Replace a whole node scan bound by an equality to a column of IDs with a fetch of those IDs";
     let dependentDialects = ["mlir::db::DB"];
