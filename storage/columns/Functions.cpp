@@ -790,6 +790,64 @@ TaggedReverseFunction::ResultType TaggedReverseFunction::operator()(const std::o
     return cell.has_value() ? (*this)(*cell) : std::nullopt;
 }
 
+template <typename StringFunctor>
+ListConversionFunction<StringFunctor>::ListConversionFunction(QueryListBuffer* listBuffer, StringBuffer* stringBuffer)
+    : _listBuffer(listBuffer),
+    _convertElement(stringBuffer)
+{
+}
+
+template <typename StringFunctor>
+typename ListConversionFunction<StringFunctor>::ResultType ListConversionFunction<StringFunctor>::operator()(const ArgType list) {
+    _converted.clear();
+
+    for (const CellView element : list) {
+        const auto converted = _convertElement(element);
+
+        if (converted.has_value()) {
+            _converted.emplace_back(*converted);
+        } else {
+            _converted.emplace_back(PropertyNull {});
+        }
+    }
+
+    return _listBuffer->insert(_converted);
+}
+
+template <typename StringFunctor>
+TaggedListConversionFunction<StringFunctor>::TaggedListConversionFunction(QueryListBuffer* listBuffer, StringBuffer* stringBuffer)
+    : _convertList(listBuffer, stringBuffer)
+{
+}
+
+template <typename StringFunctor>
+typename TaggedListConversionFunction<StringFunctor>::ResultType TaggedListConversionFunction<StringFunctor>::operator()(const ArgType cell) {
+    const CellTag tag = cell.getTag();
+
+    if (tag == CellTag::ListView) {
+        return _convertList(cell.getAs<ListView>());
+    } else if (tag == CellTag::Null) {
+        return std::nullopt;
+    }
+
+    throwCellTypeError(StringFunctor::LIST_NAME, "a list", tag);
+}
+
+template <typename StringFunctor>
+typename TaggedListConversionFunction<StringFunctor>::ResultType TaggedListConversionFunction<StringFunctor>::operator()(const std::optional<ArgType>& cell) {
+    return cell.has_value() ? (*this)(*cell) : std::nullopt;
+}
+
+template class db::ListConversionFunction<ToIntegerFunction>;
+template class db::ListConversionFunction<ToFloatFunction>;
+template class db::ListConversionFunction<ToBoolFunction>;
+template class db::ListConversionFunction<ToStringFunction>;
+
+template class db::TaggedListConversionFunction<ToIntegerFunction>;
+template class db::TaggedListConversionFunction<ToFloatFunction>;
+template class db::TaggedListConversionFunction<ToBoolFunction>;
+template class db::TaggedListConversionFunction<ToStringFunction>;
+
 SubstringFunction::ResultType SubstringFunction::operator()(types::String::Primitive string,
                                                             types::Int64::Primitive start,
                                                             types::Int64::Primitive length) const {
