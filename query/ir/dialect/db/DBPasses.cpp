@@ -7837,14 +7837,34 @@ Value canonicalRows(Value rows) {
     return *sibling;
 }
 
+// The column the op making @param rows outputs beside them holding what @param entityRead
+// takes off each of their rows, null where it outputs none
+Value outputReadColumnOf(Value rows, const EntityRead& entityRead) {
+    const OpResult result = dyn_cast<OpResult>(rows);
+    EdgeTypesOutputOpInterface producer = result ? dyn_cast<EdgeTypesOutputOpInterface>(result.getOwner()) : nullptr;
+
+    const bool readsTheTypes = entityRead == EntityRead {._op = TypeID::get<GetEdgeTypes>()};
+    if (!producer || !readsTheTypes) {
+        return {};
+    }
+
+    return producer.getEdgeTypesOf(result);
+}
+
 // The columns reuse_property_reads and carry_label_and_type_reads can hand a later read of
 // the same rows: the reads they kept, each serving the ops after it in its block, and the
-// columns they carried down to a row column, which serve every op reading those rows. Keyed
-// by the row column, so a read finds an earlier one without visiting every other user of its rows
+// columns they carried down to a row column or the op making the rows outputs beside them,
+// which serve every op reading those rows. Keyed by the row column, so a read finds an
+// earlier one without visiting every other user of its rows
 class KnownReadColumns {
 public:
     Value find(Value rows, const EntityRead& entityRead, Operation* useSite) const {
-        const auto rowsIt = _columns.find(canonicalRows(rows));
+        const Value canonical = canonicalRows(rows);
+        if (const Value output = outputReadColumnOf(canonical, entityRead)) {
+            return output;
+        }
+
+        const auto rowsIt = _columns.find(canonical);
         if (rowsIt == _columns.end()) {
             return {};
         }
@@ -8811,6 +8831,11 @@ struct ReuseLabelAndTypeReads : public impl::ReuseLabelAndTypeReadsBase<ReuseLab
         mlir::IRRewriter rewriter(&getContext());
         llvm::DenseMap<std::tuple<Block*, Value, OperationName>, Operation*> firstReads;
         for (Operation* const read : reads) {
+            if (const Value output = outputReadColumnOf(read->getOperand(0), entityReadOf(read))) {
+                rewriter.replaceOp(read, output);
+                continue;
+            }
+
             const std::tuple<Block*, Value, OperationName> key {read->getBlock(), read->getOperand(0), read->getName()};
             const auto [entry, isFirst] = firstReads.try_emplace(key, read);
             if (!isFirst) {

@@ -279,5 +279,5 @@ TEST_F(SelectionRegionReadsTest, readsTheLabelSetOfTheFirstConditionOnce) {
 
 TEST_F(SelectionRegionReadsTest, readsTheEdgeTypesOfTheFirstConditionOnce) {
     expectReads<mlir::db::GetEdgeTypes>("MATCH ()-[e]->() WITH e RETURN e:KNOWS_WELL, CASE WHEN e:INTERESTED_IN THEN 1 END",
-                                        1);
+                                        0);
 }

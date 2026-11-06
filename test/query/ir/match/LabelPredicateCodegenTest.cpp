@@ -284,7 +284,7 @@ TEST_F(LabelPredicateCodegenTest, anEdgeTypePredicateReadsTheColumnAHopPublished
 // holds instead.
 TEST_F(LabelPredicateCodegenTest, anEdgeTypePredicateBelowABarrierFetchesTheType) {
     const mlir::OwningOpRef<mlir::ModuleOp> module =
-        generate("MATCH (n)-[e]->(m) WITH e, n WHERE e:KNOWS_WELL RETURN n");
+        generate("MATCH (n)-[e]->(m) WITH DISTINCT e, n WHERE e:KNOWS_WELL RETURN n");
 
     llvm::SmallVector<mlir::db::GetEdgeTypes> fetches = collect<mlir::db::GetEdgeTypes>(*module);
     ASSERT_EQ(fetches.size(), 1u);
