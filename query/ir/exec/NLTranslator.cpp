@@ -2740,6 +2740,7 @@ void NLTranslator::translateGetEdgeTypes(nl::GetEdgeTypes op, NLStmtContainer* b
 void NLTranslator::translateCheckLabelConstraint(nl::CheckLabelConstraint op, NLStmtContainer* body) {
     const mlir::TypedValue<::mlir::nl::ChunkType> lbls = op.getLabelsetIds();
     const Column* lblsCol = getColumn(lbls);
+    bioassert(lblsCol->getKind() == ColumnLabelSetIDs::staticKind(), "nl.check_label_constraint reads a chunk of label sets");
     const ColumnLabelSetIDs* input = static_cast<const ColumnLabelSetIDs*>(lblsCol);
 
     const bool nullable = isNullableChunk(op.getResult().getType());
@@ -2811,6 +2812,7 @@ void NLTranslator::collectMatchingLabelSets(std::span<const LabelSet> constraint
 void NLTranslator::translateCheckEdgeTypeConstraint(nl::CheckEdgeTypeConstraint op, NLStmtContainer* body) {
     const mlir::TypedValue<::mlir::nl::ChunkType> etypes = op.getEdgeTypeIds();
     const Column* etypesCol = getColumn(etypes);
+    bioassert(etypesCol->getKind() == ColumnEdgeTypes::staticKind(), "nl.check_edge_type_constraint reads a chunk of edge types");
     const ColumnEdgeTypes* input = static_cast<const ColumnEdgeTypes*>(etypesCol);
 
     const bool nullable = isNullableChunk(op.getResult().getType());
@@ -7696,6 +7698,8 @@ NLChunkKind NLTranslator::chunkKindFromElementType(mlir::Type elementType) {
         return NLChunkKind::EdgeID;
     } else if (mlir::isa<storage::EdgeTypeIDType>(elementType)) {
         return NLChunkKind::EdgeTypeID;
+    } else if (mlir::isa<storage::LabelSetIDType>(elementType)) {
+        return NLChunkKind::LabelSetID;
     } else if (mlir::isa<storage::LabelIDType>(elementType)) {
         return NLChunkKind::LabelID;
     } else if (mlir::isa<storage::PropertyTypeIDType>(elementType)) {

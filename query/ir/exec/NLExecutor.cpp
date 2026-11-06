@@ -13065,6 +13065,8 @@ NLUnaryFn NLExecutor::selectRowConstant(const Column* row, LocalMemory* memory, 
     selectForElement.template operator()<std::optional<types::Duration::Primitive>>();
     selectForElement.template operator()<NodeID>();
     selectForElement.template operator()<EdgeID>();
+    selectForElement.template operator()<LabelSetID>();
+    selectForElement.template operator()<EdgeTypeID>();
     selectForElement.template operator()<GraphPath>();
     selectForElement.template operator()<PathRef>();
     selectForElement.template operator()<ListView>();
@@ -13424,6 +13426,10 @@ NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
             return &distinctKeyAppendColumn<EdgeTypeID>;
         break;
 
+        case NLChunkKind::LabelSetID:
+            return &distinctKeyAppendColumn<LabelSetID>;
+        break;
+
         case NLChunkKind::LabelID:
             return &distinctKeyAppendColumn<LabelID>;
         break;
@@ -13554,6 +13560,10 @@ NLJoinKeyFunctions NLExecutor::selectJoinKeyFunctions(NLChunkKind kind) {
 
         case NLChunkKind::EdgeTypeID:
             return joinKeyFunctions<EdgeTypeID>();
+        break;
+
+        case NLChunkKind::LabelSetID:
+            return joinKeyFunctions<LabelSetID>();
         break;
 
         case NLChunkKind::LabelID:
@@ -14299,6 +14309,7 @@ NLKeyAppendFunction NLExecutor::selectPlainMergeKeyAppendFunction(NLChunkKind ki
         case NLChunkKind::NodeID:
         case NLChunkKind::EdgeID:
         case NLChunkKind::EdgeTypeID:
+        case NLChunkKind::LabelSetID:
         case NLChunkKind::LabelID:
         case NLChunkKind::PropertyTypeID:
         case NLChunkKind::ValueTypeCode:
@@ -14497,6 +14508,10 @@ NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
 
         case NLChunkKind::EdgeTypeID:
             return &compareColumn<EdgeTypeID>;
+        break;
+
+        case NLChunkKind::LabelSetID:
+            return &compareColumn<LabelSetID>;
         break;
 
         case NLChunkKind::LabelID:
