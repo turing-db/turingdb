@@ -376,9 +376,7 @@ TEST_F(PatternFromATaggedCellTest, DISABLED_setsAPropertyOfTheRelationshipTheVal
                       {{"Adam"}});
 }
 
-// Disabled: the analyzer turns away a key spelled in the query as an index, m['person'],
-// asking for m.person instead.
-TEST_F(PatternFromATaggedCellTest, DISABLED_startsAMatchFromANodeReadByALiteralIndex) {
+TEST_F(PatternFromATaggedCellTest, startsAMatchFromANodeReadByALiteralIndex) {
     expectRows("MATCH (n:Person {name: 'Remy'}) WITH {person: n} AS m WITH m['person'] AS p "
                "MATCH (p)-[:KNOWS_WELL]->(f) RETURN f.name",
                {{"Adam"}});
