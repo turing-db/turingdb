@@ -109,7 +109,7 @@ def ReusePropertyReads : Pass<"reuse_property_reads"> {
 }
 
 def ReuseLabelAndTypeReads : Pass<"reuse_label_and_type_reads"> {
-    let summary = "Reuse the label sets already read of a node column, or the types of an edge column, instead of reading them again for each test";
+    let summary = "Reuse the label sets already read of a node column, or the types of an edge column or the ones its scan or hop outputs, instead of reading them again for each test";
     let dependentDialects = ["mlir::db::DB"];
 }
 

@@ -996,7 +996,7 @@ def ComprehensionYield : TuringOp<"comprehension_yield",
 /**
 * ScanEdges
 */
-def ScanEdges : TuringOp<"scan_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+def ScanEdges : TuringOp<"scan_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface]> {
   let summary = "Produce every edge in the graph as four row-aligned columns";
 
   let description = [{
@@ -1035,7 +1035,7 @@ def ScanEdges : TuringOp<"scan_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpI
 /**
 * ScanEdgesByType
 */
-def ScanEdgesByType : TuringOp<"scan_edges_by_type", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+def ScanEdgesByType : TuringOp<"scan_edges_by_type", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface]> {
   let summary = "Produce every edge of the named types in the graph as four row-aligned columns";
 
   let description = [{
@@ -1079,7 +1079,7 @@ def ScanEdgesByType : TuringOp<"scan_edges_by_type", [Pure, DeclareOpInterfaceMe
 /**
 * ScanOutEdgesByLabelSrc
 */
-def ScanOutEdgesByLabelSrc : TuringOp<"scan_out_edges_by_label_src", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+def ScanOutEdgesByLabelSrc : TuringOp<"scan_out_edges_by_label_src", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface]> {
   let summary = "Produce every out-edge of the nodes carrying every given label as four row-aligned columns";
 
   let description = [{
@@ -1126,7 +1126,7 @@ def ScanOutEdgesByLabelSrc : TuringOp<"scan_out_edges_by_label_src", [Pure, Decl
 /**
 * ScanInEdgesByLabelTgt
 */
-def ScanInEdgesByLabelTgt : TuringOp<"scan_in_edges_by_label_tgt", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+def ScanInEdgesByLabelTgt : TuringOp<"scan_in_edges_by_label_tgt", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface]> {
   let summary = "Produce every in-edge of the nodes carrying every given label as four row-aligned columns";
 
   let description = [{
@@ -1165,7 +1165,7 @@ def ScanInEdgesByLabelTgt : TuringOp<"scan_in_edges_by_label_tgt", [Pure, Declar
 /**
 * ScanOutEdgesByLabelTgt
 */
-def ScanOutEdgesByLabelTgt : TuringOp<"scan_out_edges_by_label_tgt", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+def ScanOutEdgesByLabelTgt : TuringOp<"scan_out_edges_by_label_tgt", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface]> {
   let summary = "Produce every out-edge arriving at the nodes carrying every given label as four row-aligned columns";
 
   let description = [{
@@ -1204,7 +1204,7 @@ def ScanOutEdgesByLabelTgt : TuringOp<"scan_out_edges_by_label_tgt", [Pure, Decl
 /**
 * ScanInEdgesByLabelSrc
 */
-def ScanInEdgesByLabelSrc : TuringOp<"scan_in_edges_by_label_src", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+def ScanInEdgesByLabelSrc : TuringOp<"scan_in_edges_by_label_src", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface]> {
   let summary = "Produce every in-edge leaving the nodes carrying every given label as four row-aligned columns";
 
   let description = [{
@@ -1242,7 +1242,7 @@ def ScanInEdgesByLabelSrc : TuringOp<"scan_in_edges_by_label_src", [Pure, Declar
 /**
 * ScanOutEdgesByLabelSrcTgt
 */
-def ScanOutEdgesByLabelSrcTgt : TuringOp<"scan_out_edges_by_label_src_tgt", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+def ScanOutEdgesByLabelSrcTgt : TuringOp<"scan_out_edges_by_label_src_tgt", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface]> {
   let summary = "Produce every edge whose source and target each carry every given label of their end as four row-aligned columns";
 
   let description = [{
@@ -1279,7 +1279,7 @@ def ScanOutEdgesByLabelSrcTgt : TuringOp<"scan_out_edges_by_label_src_tgt", [Pur
 /**
 * ScanInEdgesByLabelSrcTgt
 */
-def ScanInEdgesByLabelSrcTgt : TuringOp<"scan_in_edges_by_label_src_tgt", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+def ScanInEdgesByLabelSrcTgt : TuringOp<"scan_in_edges_by_label_src_tgt", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface]> {
   let summary = "Produce every edge whose target and source each carry every given label of their end, read off the target's index";
 
   let description = [{
@@ -1316,7 +1316,7 @@ def ScanInEdgesByLabelSrcTgt : TuringOp<"scan_in_edges_by_label_src_tgt", [Pure,
 /**
 * GetOutEdges
 */
-def GetOutEdges : TuringOp<"get_out_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRowSource"]>]> {
+def GetOutEdges : TuringOp<"get_out_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRowSource"]>]> {
   let summary = "Fetch node and edge successors of input, filtering carried columns alongside";
 
   let description = [{
@@ -1350,7 +1350,7 @@ def GetOutEdges : TuringOp<"get_out_edges", [Pure, DeclareOpInterfaceMethods<OpA
 /**
 * GetInEdges
 */
-def GetInEdges : TuringOp<"get_in_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRowSource"]>]> {
+def GetInEdges : TuringOp<"get_in_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRowSource"]>]> {
   let summary = "Fetch node and edge predecessors of input, filtering carried columns alongside";
 
   let description = [{
@@ -1389,7 +1389,7 @@ def GetInEdges : TuringOp<"get_in_edges", [Pure, DeclareOpInterfaceMethods<OpAsm
 /**
 * GetEdges
 */
-def GetEdges : TuringOp<"get_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRowSource"]>]> {
+def GetEdges : TuringOp<"get_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRowSource"]>]> {
   let summary = "Fetch the neighbours of input over an edge in either direction, filtering carried columns alongside";
 
   let description = [{
@@ -1414,7 +1414,7 @@ def GetEdges : TuringOp<"get_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInt
 /**
 * GetOutEdgesByType
 */
-def GetOutEdgesByType : TuringOp<"get_out_edges_by_type", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRowSource"]>]> {
+def GetOutEdgesByType : TuringOp<"get_out_edges_by_type", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRowSource"]>]> {
   let summary = "Fetch the out-edges of the named types, filtering carried columns alongside";
 
   let description = [{
@@ -1464,7 +1464,7 @@ def GetOutEdgesByType : TuringOp<"get_out_edges_by_type", [Pure, DeclareOpInterf
 /**
 * GetInEdgesByType
 */
-def GetInEdgesByType : TuringOp<"get_in_edges_by_type", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRowSource"]>]> {
+def GetInEdgesByType : TuringOp<"get_in_edges_by_type", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRowSource"]>]> {
   let summary = "Fetch the in-edges of the named types, filtering carried columns alongside";
 
   let description = [{
@@ -1498,7 +1498,7 @@ def GetInEdgesByType : TuringOp<"get_in_edges_by_type", [Pure, DeclareOpInterfac
 /**
 * GetOutEdgesByLabel
 */
-def GetOutEdgesByLabel : TuringOp<"get_out_edges_by_label", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRowSource"]>]> {
+def GetOutEdgesByLabel : TuringOp<"get_out_edges_by_label", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRowSource"]>]> {
   let summary = "Fetch the out-edges arriving at the nodes carrying every given label, filtering carried columns alongside";
 
   let description = [{
@@ -1546,7 +1546,7 @@ def GetOutEdgesByLabel : TuringOp<"get_out_edges_by_label", [Pure, DeclareOpInte
 /**
 * GetInEdgesByLabel
 */
-def GetInEdgesByLabel : TuringOp<"get_in_edges_by_label", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRowSource"]>]> {
+def GetInEdgesByLabel : TuringOp<"get_in_edges_by_label", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRowSource"]>]> {
   let summary = "Fetch the in-edges leaving the nodes carrying every given label, filtering carried columns alongside";
 
   let description = [{
@@ -1581,7 +1581,7 @@ def GetInEdgesByLabel : TuringOp<"get_in_edges_by_label", [Pure, DeclareOpInterf
 /**
 * GetOutEdgesByTypeAndLabel
 */
-def GetOutEdgesByTypeAndLabel : TuringOp<"get_out_edges_by_type_and_label", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRowSource"]>]> {
+def GetOutEdgesByTypeAndLabel : TuringOp<"get_out_edges_by_type_and_label", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRowSource"]>]> {
   let summary = "Fetch the out-edges of the named types arriving at the nodes carrying every given label, filtering carried columns alongside";
 
   let description = [{
@@ -1615,7 +1615,7 @@ def GetOutEdgesByTypeAndLabel : TuringOp<"get_out_edges_by_type_and_label", [Pur
 /**
 * GetInEdgesByTypeAndLabel
 */
-def GetInEdgesByTypeAndLabel : TuringOp<"get_in_edges_by_type_and_label", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRowSource"]>]> {
+def GetInEdgesByTypeAndLabel : TuringOp<"get_in_edges_by_type_and_label", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRowSource"]>]> {
   let summary = "Fetch the in-edges of the named types leaving the nodes carrying every given label, filtering carried columns alongside";
 
   let description = [{

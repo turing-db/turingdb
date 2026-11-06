@@ -54,4 +54,28 @@ def ColumnCarrierOpInterface : OpInterface<"ColumnCarrierOpInterface"> {
   ];
 }
 
+def EdgeTypesOutputOpInterface : OpInterface<"EdgeTypesOutputOpInterface"> {
+  let cppNamespace = "::mlir::db";
+
+  let description = [{
+    An op outputting, beside a column of edges, the type of each of those edges: the column a
+    db.get_edge_types of the edges would read. A scan or a hop outputs its `etypes` beside its
+    `eids`.
+  }];
+
+  let methods = [
+    InterfaceMethod<
+      "The result holding the type of each edge `edges` holds, row for row; null where the op outputs none beside it",
+      "::mlir::Value", "getEdgeTypesOf",
+      (ins "::mlir::OpResult":$edges), [{}],
+      [{
+        if (edges != $_op.getEids()) {
+            return {};
+        }
+
+        return $_op.getEtypes();
+      }]>
+  ];
+}
+
 #endif

@@ -318,7 +318,7 @@ TEST_F(CarriedLabelAndTypeReadsTest, readsTheLabelSetOnceOutOfAHashJoin) {
 TEST_F(CarriedLabelAndTypeReadsTest, readsTheEdgeTypesOnceIntoACaseBranch) {
     const std::string_view query = "MATCH ()-[e]->() WITH e "
                                    "RETURN e.name, e:KNOWS_WELL, CASE WHEN e.duration > 15 THEN e:INTERESTED_IN END";
-    expectReads(query, "nl.get_edge_types(", 1);
+    expectReads(query, "nl.get_edge_types(", 0);
 
     expectRows(query, {
         {"Adam -> Bio", "false", "null"},
@@ -347,7 +347,7 @@ TEST_F(CarriedLabelAndTypeReadsTest, readsTheEdgeTypesOnceIntoACaseBranch) {
 TEST_F(CarriedLabelAndTypeReadsTest, readsTheEdgeTypesOnceAcrossAnOrderByAndALimit) {
     const std::string_view query = "MATCH ()-[e]->() WITH e WHERE e:KNOWS_WELL OR e.duration < 15 "
                                    "WITH e ORDER BY e.name LIMIT 3 RETURN e.name, e:INTERESTED_IN";
-    expectReads(query, "nl.get_edge_types(", 1);
+    expectReads(query, "nl.get_edge_types(", 0);
 
     expectRows(query, {
         {"Adam -> Remy", "false"},
@@ -362,7 +362,7 @@ TEST_F(CarriedLabelAndTypeReadsTest, readsTheEdgeTypesOnceIntoABodyRunPerRow) {
     const std::string_view query = "MATCH ()-[e]->() WITH e WHERE e:KNOWS_WELL OR e.duration < 15 "
                                    "CALL (e) { WITH e WHERE e:INTERESTED_IN RETURN e.name AS name ORDER BY name LIMIT 1 } "
                                    "RETURN name";
-    expectReads(query, "nl.get_edge_types(", 1);
+    expectReads(query, "nl.get_edge_types(", 0);
 
     expectRows(query, {{"Martina -> Cooking"}});
 }
