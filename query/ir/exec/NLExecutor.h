@@ -849,23 +849,26 @@ public:
     static NLAggregateResultFunction selectAggregateResult(AggregateKind kind, ValueType resultType);
 
     // The grouped counterparts, selected for one aggregate of a grouped
-    // aggregation. grow initializes a new group to the reduction's identity; fold
-    // reduces a chunk's rows into their groups; emit materializes a slice of groups.
+    // aggregation. The state type is what a group keeps for the aggregate, constructed
+    // when the group appears and finalized into a slice of groups at emit; fold
+    // reduces a chunk's rows into the states of their groups.
     // They throw for a value type the reduction cannot handle, exactly as the scalar
     // selectors do (sum/avg need numeric or duration, min/max orderable). count and
-    // count_distinct use only the per-group tally, so their grow/emit ignore the
+    // count_distinct keep only a tally per group, so their state ignores the
     // value type. count's fold has an all-rows form (count(*) over an ID chunk) and a
     // present-values form (count(x) over a nullable value chunk); count_distinct's
     // has a chunk form, keyed as a whole-row DISTINCT keys the row, and a present-values
     // form keyed on the value's bytes - so, unlike count, an embedding column is rejected.
-    static NLGroupAggregateGrowFunction selectGroupAggregateGrow(GroupAggregateKind kind, ValueType accumulatorType);
+    static void selectGroupAggregateState(GroupAggregateKind kind,
+                                          ValueType accumulatorType,
+                                          NLGroupAggregateStateType& stateType);
     static NLGroupAggregateFoldFunction selectGroupAggregateFold(GroupAggregateKind kind, ValueType inputType);
 
-    // The siblings reading a type-erased input column, as selectTaggedAggregateUpdate's are
+    // The siblings reading a type-erased input column, as selectTaggedAggregateUpdate's are.
+    // sum and avg keep a tagged sum per group, min, max and first a cell.
     static NLGroupAggregateFoldFunction selectTaggedGroupAggregateFold(GroupAggregateKind kind);
     static NLGroupAggregateFoldFunction selectOptTaggedGroupAggregateFold(GroupAggregateKind kind);
-    static NLGroupAggregateGrowFunction selectTaggedGroupAggregateGrow(GroupAggregateKind kind);
-    static NLGroupAggregateEmitFunction selectTaggedGroupAggregateEmit(GroupAggregateKind kind);
+    static void selectTaggedGroupAggregateState(GroupAggregateKind kind, NLGroupAggregateStateType& stateType);
     static NLGroupAggregateFoldFunction selectGroupCountAllFold();
     static NLGroupAggregateFoldFunction selectGroupCountDistinctFold(ValueType inputType);
     static NLGroupAggregateFoldFunction selectGroupCountDistinctChunkFold(NLChunkKind kind);
@@ -878,7 +881,6 @@ public:
     static NLGroupAggregateFoldFunction selectGroupCountDistinctOptCellFold();
     static NLGroupAggregateFoldFunction selectGroupCountOptListFold();
     static NLGroupAggregateFoldFunction selectGroupCountDistinctOptListFold();
-    static NLGroupAggregateEmitFunction selectGroupAggregateEmit(GroupAggregateKind kind, ValueType resultType);
 
     // The append (onto a key buffer's tail) for an ID chunk of this kind / a
     // nullable value chunk of this value type. Used by nl.group_aggregate_update to
