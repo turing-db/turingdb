@@ -162,8 +162,7 @@ TEST_F(JourneyLegsTest, findsTheSameLegsAtEveryChunkSize) {
 }
 
 // The customer's search as written, its window given as parameters.
-// Disabled: an expression parses and types a parameter, but codegen cannot read one yet (TUR-48).
-TEST_F(JourneyLegsTest, DISABLED_readsTheWindowFromParameters) {
+TEST_F(JourneyLegsTest, readsTheWindowFromParameters) {
     ParameterMap parameters;
 
     ParameterValue departFrom;
