@@ -156,13 +156,6 @@ int64_t temporalMicroseconds(const std::optional<T>& value) {
     return value->getMicroseconds();
 }
 
-template <typename T>
-nb::object temporalColumnAsNdarray(const std::vector<T>& src) {
-    return transformVectorAsNdarray<int64_t>(src, [](const T& value) {
-        return temporalMicroseconds(value);
-    });
-}
-
 nb::object embeddingToNdarray(std::span<const float> s) {
     std::vector<float> buf(s.begin(), s.end());
     return wrapVectorAsNdarray(std::move(buf));
@@ -270,169 +263,73 @@ struct ValueToPyObject {
 };
 
 template <typename T>
-concept HasNullSentinel = db::IsDateTime<T> || db::IsDuration<T>;
+nb::object toPyObject(const T& value, const ValueToPyObject& nested) {
+    if constexpr (db::IsEmbedding<T>) {
+        return embeddingToNdarray(value);
+    } else if constexpr (db::IsPath<T>) {
+        if (value.isNull()) {
+            return nb::none();
+        }
 
-template <typename T>
-concept HasArrayForm = HasNullSentinel<T>
-                    || db::IsBool<T>
-                    || (db::IDLike<T> && !db::EntityIDLike<T>)
-                    || db::Hash<T>
-                    || std::is_arithmetic_v<T>;
-
-template <HasArrayForm T>
-auto arrayValue(const T& value) {
-    if constexpr (HasNullSentinel<T>) {
-        return temporalMicroseconds(value);
-    } else if constexpr (db::IsBool<T>) {
-        return static_cast<uint8_t>(value._boolean ? 1 : 0);
-    } else if constexpr (db::IDLike<T>) {
-        return static_cast<uint64_t>(value.getValue());
-    } else if constexpr (db::Hash<T>) {
-        return value.get();
+        nb::list ids;
+        for (const uint64_t id : value.getIDs()) {
+            ids.append(nb::cast(id));
+        }
+        return ids;
+    } else if constexpr (db::IsListView<T> || db::IsMap<T>) {
+        return nested.view(value);
+    } else if constexpr (db::IsCell<T>) {
+        return nested.element(value);
+    } else if constexpr (db::IsNull<T>) {
+        return nb::none();
+    } else if constexpr (db::IsValueType<T>) {
+        return toPyString(db::ValueTypeName::value(value));
+    } else if constexpr (db::IsPoint<T>) {
+        return nested.point(value);
     } else {
-        return value;
+        return toPy(value);
     }
 }
 
-template <HasArrayForm T>
-using ArrayValue = decltype(arrayValue(std::declval<const T&>()));
-
-// A null datetime or duration is numpy's NaT, so a nullable one stays an array where any
-// other nullable column becomes a list holding None.
-struct ColumnToPyObject {
-    db::Column* _column {nullptr};
-    size_t _rowCount {0};
-    const ValueToPyObject& _values;
-    nb::object& _value;
-    std::string& _dtypeName;
-
-    ColumnToPyObject(db::Column* column,
-                     size_t rowCount,
-                     const ValueToPyObject& values,
-                     nb::object& value,
-                     std::string& dtypeName)
-        : _column(column),
-        _rowCount(rowCount),
-        _values(values),
-        _value(value),
-        _dtypeName(dtypeName)
-    {
-    }
-
-    template <typename T>
-    void operator()(const db::ColumnVector<T>* column) {
-        db::ColumnTypeGenerator {_dtypeName}(column);
-
-        if constexpr (std::is_arithmetic_v<T>) {
-            _value = wrapVectorAsNdarray(std::move(static_cast<db::ColumnVector<T>*>(_column)->getRaw()));
-        } else if constexpr (HasArrayForm<T>) {
-            _value = transformVectorAsNdarray<ArrayValue<T>>(column->getRaw(), arrayValue<T>);
-        } else {
-            nb::list rows;
-            for (const T& value : column->getRaw()) {
-                rows.append(object(value));
-            }
-            _value = rows;
+// A row's element in a numpy array, or its Python object where its type has no array form.
+// A null datetime or duration is numpy's NaT, so a nullable one keeps an array.
+template <typename Row>
+auto toPyElement(const Row& row, const ValueToPyObject& nested) {
+    if constexpr (std::is_arithmetic_v<Row>) {
+        return row;
+    } else if constexpr (db::IsDateTime<Row> || db::IsDuration<Row>) {
+        return temporalMicroseconds(row);
+    } else if constexpr (std::is_same_v<Row, db::CustomBool>) {
+        return static_cast<uint8_t>(row._boolean);
+    } else if constexpr (std::is_same_v<Row, db::ColumnMask::Bool_t>) {
+        return static_cast<uint8_t>(row._value);
+    } else if constexpr (db::IDLike<Row> && !db::EntityIDLike<Row>) {
+        return static_cast<uint64_t>(row.getValue());
+    } else if constexpr (db::Hash<Row>) {
+        return row.get();
+    } else if constexpr (db::Optional<Row>) {
+        if (!row) {
+            return nb::object(nb::none());
         }
+
+        return toPyObject(*row, nested);
+    } else {
+        return toPyObject(row, nested);
     }
+}
 
-    template <typename T>
-    void operator()(const db::ColumnVector<std::optional<T>>* column) {
-        db::ColumnTypeGenerator {_dtypeName}(column);
-
-        if constexpr (HasNullSentinel<T>) {
-            _value = temporalColumnAsNdarray(column->getRaw());
-        } else {
-            nb::list rows;
-            for (const std::optional<T>& value : column->getRaw()) {
-                if (value) {
-                    rows.append(object(*value));
-                } else {
-                    rows.append(nb::none());
-                }
-            }
-            _value = rows;
-        }
+nb::object repeatElement(const nb::object& element, size_t rowCount) {
+    nb::list rows;
+    for (size_t row = 0; row < rowCount; row++) {
+        rows.append(element);
     }
+    return rows;
+}
 
-    template <typename T>
-    void operator()(const db::ColumnConst<T>* column) {
-        db::ColumnTypeGenerator {_dtypeName}(column);
-        const T& value = column->getRaw();
-
-        if constexpr (HasArrayForm<T>) {
-            _value = repeatValueAsNdarray(arrayValue(value), _rowCount);
-        } else {
-            _value = repeatObject(object(value));
-        }
-    }
-
-    template <typename T>
-    void operator()(const db::ColumnConst<std::optional<T>>* column) {
-        db::ColumnTypeGenerator {_dtypeName}(column);
-        const std::optional<T>& value = column->getRaw();
-
-        if constexpr (HasNullSentinel<T>) {
-            _value = repeatValueAsNdarray(temporalMicroseconds(value), _rowCount);
-        } else if (value) {
-            _value = repeatObject(object(*value));
-        } else {
-            _value = repeatObject(nb::none());
-        }
-    }
-
-    void operator()(const db::ColumnMask* column) {
-        db::ColumnTypeGenerator {_dtypeName}(column);
-        _value = transformVectorAsNdarray<uint8_t>(column->getRaw(), [](const db::ColumnMask::Bool_t& value) {
-            return static_cast<uint8_t>(value._value ? 1 : 0);
-        });
-    }
-
-    template <typename T>
-    nb::object object(const T& value) const {
-        if constexpr (db::IsEmbedding<T>) {
-            return embeddingToNdarray(value);
-        } else if constexpr (db::IsPath<T>) {
-            if (value.isNull()) {
-                return nb::none();
-            }
-
-            nb::list ids;
-            for (const uint64_t id : value.getIDs()) {
-                ids.append(nb::cast(id));
-            }
-            return ids;
-        } else if constexpr (db::IsListView<T> || db::IsMap<T>) {
-            return _values.view(value);
-        } else if constexpr (db::IsCell<T>) {
-            return _values.element(value);
-        } else if constexpr (db::IsNull<T>) {
-            return nb::none();
-        } else if constexpr (db::IsValueType<T>) {
-            return toPyString(db::ValueTypeName::value(value));
-        } else if constexpr (db::IsDateTime<T>) {
-            return _values.dateTime(value);
-        } else if constexpr (db::IsDuration<T>) {
-            return _values.duration(value);
-        } else if constexpr (db::IsPoint<T>) {
-            return _values.point(value);
-        } else if constexpr (db::Hash<T>) {
-            return nb::cast(value.get());
-        } else if constexpr (std::is_arithmetic_v<T>) {
-            return nb::cast(value);
-        } else {
-            return toPy(value);
-        }
-    }
-
-    nb::object repeatObject(const nb::object& value) const {
-        nb::list rows;
-        for (size_t row = 0; row < _rowCount; row++) {
-            rows.append(value);
-        }
-        return rows;
-    }
-};
+template <typename T>
+nb::object repeatElement(const T& element, size_t rowCount) {
+    return repeatValueAsNdarray(element, rowCount);
+}
 
 }
 
@@ -453,8 +350,31 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
         nb::object value;
         std::string dtypeName;
 
-        ColumnToPyObject converter(col, rowCount, listVisitor, value, dtypeName);
-        db::ColumnSingleDispatcher<db::OutputtedTypes::Allowed, ColumnToPyObject, db::OutputtedTypes::Excluded>::dispatch(col, converter);
+        const auto convert = [col, rowCount, &listVisitor, &value, &dtypeName](const auto* column) {
+            using Column = std::decay_t<decltype(*column)>;
+            using Row = typename Column::ValueType;
+            using Element = decltype(toPyElement(std::declval<const Row&>(), listVisitor));
+
+            db::ColumnTypeGenerator {dtypeName}(column);
+
+            if constexpr (std::is_same_v<Column, db::ColumnConst<Row>>) {
+                value = repeatElement(toPyElement(column->getRaw(), listVisitor), rowCount);
+            } else if constexpr (std::is_arithmetic_v<Row>) {
+                value = wrapVectorAsNdarray(std::move(static_cast<Column*>(col)->getRaw()));
+            } else if constexpr (std::is_same_v<Element, nb::object>) {
+                nb::list rows;
+                for (const Row& row : column->getRaw()) {
+                    rows.append(toPyElement(row, listVisitor));
+                }
+                value = rows;
+            } else {
+                value = transformVectorAsNdarray<Element>(column->getRaw(), [&listVisitor](const Row& row) {
+                    return toPyElement(row, listVisitor);
+                });
+            }
+        };
+
+        db::ColumnSingleDispatcher<db::OutputtedTypes::Allowed, decltype(convert), db::OutputtedTypes::Excluded>::dispatch(col, convert);
 
         const nb::object key = toPyString(keyStr);
         data[key] = value;

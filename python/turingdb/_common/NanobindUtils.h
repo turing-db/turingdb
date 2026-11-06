@@ -128,34 +128,6 @@ nb::object transformVectorAsNdarray(const std::vector<In>& src, Conv conv) {
     return wrapVectorAsNdarray(std::move(buf));
 }
 
-// Build a Python list by converting each element via toPy(). Used for column
-// types that can't fit a typed numpy array — strings (no fixed-width
-// representation) and nullable columns (no nullable dtype survives through
-// pandas). The toPy(std::optional<T>) overload maps empty optionals to None
-// automatically, so a vector<optional<T>> works without a separate overload.
-template <typename T>
-nb::object vectorAsList(const std::vector<T>& src) {
-    nb::list out;
-    for (const auto& v : src) {
-        out.append(toPy(v));
-    }
-    return out;
-}
-
-// List counterpart to repeatValueAsNdarray: used when the broadcasted value
-// is a string, embedding, or other type that can't sit in a typed numpy
-// array. We share one Python object across every slot since the value is
-// immutable from the caller's point of view.
-template <typename T>
-nb::object repeatValueAsList(const T& v, size_t n) {
-    nb::list out;
-    PyObj py = toPy(v);
-    for (size_t i = 0; i < n; ++i) {
-        out.append(py);
-    }
-    return out;
-}
-
 // Allocates a destination column for every column in incomingDf and registers
 // them with bufferedDf. ColumnConst sources have their value copied here once,
 // since constants don't get appended to row-by-row.
