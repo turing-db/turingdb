@@ -46,3 +46,7 @@ target_include_directories(test_query_ir_load_jsonl_edge_endpoint PRIVATE ${IR_T
 add_turing_test(test_query_ir_load_csv_with_where LoadCSVWithWhereTest.cpp)
 target_sources(test_query_ir_load_csv_with_where PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
 target_include_directories(test_query_ir_load_csv_with_where PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_load_jsonl_list LoadJsonlListTest.cpp)
+target_sources(test_query_ir_load_jsonl_list PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_load_jsonl_list PRIVATE ${IR_TEST_DIR})

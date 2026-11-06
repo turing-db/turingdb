@@ -328,10 +328,7 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
 
         // Each list the last line built has been copied into the datapart, so the scratch
         // is released here rather than growing into a second copy of the whole file.
-        if (listBacking.size() > 0) {
-            listBacking.clear();
-        }
-
+        listBacking.clear();
         mapBacking.clear();
 
         // If empty line, skip
