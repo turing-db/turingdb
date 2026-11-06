@@ -321,6 +321,36 @@ export const VALUE_CASES: Case[] = [
             assert.deepEqual(edges, ids);
         },
     },
+    {
+        name: "returns a test on each row as a column of booleans with no null",
+        query: "MATCH (s:STATION) RETURN s.crs, s.sign IS NULL ORDER BY s.crs",
+        types: ["STRING", "BOOL"],
+        encodings: ["OPTIONAL_VECTOR", "VECTOR"],
+        ordered: true,
+        rows: [["DID", true], ["OXF", false], ["PAD", true], ["RDG", true], ["SWI", true]],
+    },
+    {
+        name: "returns an embedding literal as a constant",
+        query: "RETURN (0.5, 0.25)",
+        types: ["EMBEDDING"],
+        encodings: ["CONSTANT"],
+        rows: [[embedding(0.5, 0.25)]],
+    },
+    {
+        name: "returns a string, a datetime and a duration that may be null as constants",
+        query: "RETURN toString(toInteger('4')), datetime('2026-11-04T08:00:00Z'), duration(5)",
+        types: ["STRING", "DATE_TIME", "DURATION"],
+        encodings: ["OPTIONAL_CONSTANT", "OPTIONAL_CONSTANT", "OPTIONAL_CONSTANT"],
+        rows: [["4", at("2026-11-04T08:00:00Z"), 5n]],
+    },
+    {
+        name: "returns a null constant of every type a constant may be null in",
+        query: "RETURN toInteger('x'), toFloat('x'), toBoolean('x'), toString(toInteger('x')), " +
+            "datetime(toString(toInteger('x'))), duration(toInteger('x')), [[1], [2]][5], [1, 'two'][5]",
+        types: ["INT64", "DOUBLE", "BOOL", "STRING", "DATE_TIME", "DURATION", "LIST_VIEW", "CELL_VIEW"],
+        encodings: Array(8).fill("OPTIONAL_CONSTANT"),
+        rows: [[null, null, null, null, null, null, null, null]],
+    },
     // 2^21 characters, over the 1 MiB a packet holds, in a column and inside a list
     {
         name: "returns a string longer than a packet",

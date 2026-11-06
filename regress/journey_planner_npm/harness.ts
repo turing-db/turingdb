@@ -1,13 +1,16 @@
 import { isDeepStrictEqual } from "node:util";
 
-import { ColumnType, Point, TuringClient, TuringQueryError } from "turingdb";
+import { ColumnEncoding, ColumnType, Point, TuringClient, TuringQueryError } from "turingdb";
 import type { ColumnTypeName, QueryOptions, Value } from "turingdb";
 
 export type Row = Value[];
 
+export type ColumnEncodingName = keyof typeof ColumnEncoding;
+
 export interface QueryRows {
     names: string[];
     types: ColumnTypeName[];
+    encodings: ColumnEncodingName[];
     rows: Row[];
     chunkCount: number;
 }
@@ -24,6 +27,7 @@ export interface Case {
     options?: QueryOptions;
     names?: string[];
     types?: ColumnTypeName[];
+    encodings?: ColumnEncodingName[];
     rows?: Row[];
     ordered?: boolean;
     error?: ExpectedError;
@@ -42,6 +46,17 @@ function typeName(code: number): ColumnTypeName {
     const name = TYPE_NAMES.get(code);
     if (name === undefined) {
         throw new Error(`unknown column type ${code}`);
+    }
+
+    return name;
+}
+
+const ENCODING_NAMES = new Map<number, ColumnEncodingName>(Object.entries(ColumnEncoding).map(([name, code]) => [code, name as ColumnEncodingName]));
+
+function encodingName(code: number): ColumnEncodingName {
+    const name = ENCODING_NAMES.get(code);
+    if (name === undefined) {
+        throw new Error(`unknown column encoding ${code}`);
     }
 
     return name;
@@ -136,6 +151,7 @@ export class CaseRunner {
         const firstChunk = chunks[0];
         const names = firstChunk ? firstChunk.names : [];
         const types = firstChunk ? firstChunk.columns.map((column) => typeName(column.typeCode)) : [];
+        const encodings = firstChunk ? firstChunk.columns.map((column) => encodingName(column.encoding)) : [];
 
         const rows: Row[] = [];
         for (const { columns } of chunks) {
@@ -147,7 +163,7 @@ export class CaseRunner {
             }
         }
 
-        return { names, types, rows, chunkCount: chunks.length };
+        return { names, types, encodings, rows, chunkCount: chunks.length };
     }
 
     // Runs a setup statement, which must succeed for the rest of the test to mean anything
@@ -208,6 +224,10 @@ export class CaseRunner {
 
         if (testCase.types !== undefined && !isDeepStrictEqual(result.types, testCase.types)) {
             throw new Error(`query: ${testCase.query}\nexpected types: ${testCase.types.join(", ")}\ngot types:      ${result.types.join(", ")}`);
+        }
+
+        if (testCase.encodings !== undefined && !isDeepStrictEqual(result.encodings, testCase.encodings)) {
+            throw new Error(`query: ${testCase.query}\nexpected encodings: ${testCase.encodings.join(", ")}\ngot encodings:      ${result.encodings.join(", ")}`);
         }
 
         if (testCase.rows !== undefined) {
