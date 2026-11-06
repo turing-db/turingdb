@@ -3016,6 +3016,12 @@ def ToFloatOrNull : UnaryFunctionOp<"to_float_or_null", [Pure]>;
 def ToBooleanOrNull : UnaryFunctionOp<"to_boolean_or_null", [Pure]>;
 def ToStringOrNull : UnaryFunctionOp<"to_string_or_null", [Pure]>;
 
+// Each element converts as the OrNull conversion converts it, so one with no rule is null
+def ToIntegerList : ListFunctionOp<"to_integer_list">;
+def ToFloatList : ListFunctionOp<"to_float_list">;
+def ToBooleanList : ListFunctionOp<"to_boolean_list">;
+def ToStringList : ListFunctionOp<"to_string_list">;
+
 // The calendar fields of an instant, as integer columns. The sub-second pair reads the
 // fraction of the second truncated to its own precision, so .123456 of a second in is a
 // db.datetime_millisecond of 123 and a db.datetime_microsecond of 123456.

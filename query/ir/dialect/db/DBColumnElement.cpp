@@ -133,6 +133,15 @@ mlir::Type reverseElement(mlir::MLIRContext* context, mlir::Type inputElement) {
     return storage::StringType::get(context);
 }
 
+template <ElementRule convertedElement>
+mlir::Type convertedListElement(mlir::MLIRContext* context, mlir::Type inputElement) {
+    if (!readsAList(inputElement)) {
+        return mlir::Type {};
+    }
+
+    return storage::ListType::get(context, convertedElement(context, inputElement));
+}
+
 const std::unordered_map<std::string_view, ElementRule> elementRules = {
     {"db.labels",     &labelListElement},
     {"db.edge_type",  &stringElement},
@@ -190,6 +199,10 @@ const std::unordered_map<std::string_view, ElementRule> elementRules = {
     {"db.to_float_or_null",   &floatElement},
     {"db.to_boolean_or_null", &booleanElement},
     {"db.to_string_or_null",  &stringElement},
+    {"db.to_integer_list",    &convertedListElement<&integerElement>},
+    {"db.to_float_list",      &convertedListElement<&floatElement>},
+    {"db.to_boolean_list",    &convertedListElement<&booleanElement>},
+    {"db.to_string_list",     &convertedListElement<&stringElement>},
     {"db.element_id",         &integerElement},
     {"db.size",               &sizeElement},
     {"db.is_empty",           &isEmptyElement},

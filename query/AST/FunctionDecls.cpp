@@ -671,10 +671,11 @@ void FunctionDecls::initDefault() {
 
     // A conversion and its OrNull sibling convert the same argument types, and a type-erased
     // cell per row. Where no rule converts the value, the sibling answers null and the
-    // conversion raises.
+    // conversion raises. The list form converts each element of a list as the sibling does.
     struct Conversion {
         std::string_view _name;
         std::string_view _orNullName;
+        std::string_view _listName;
         EvaluatedType _result {EvaluatedType::Invalid};
         std::vector<EvaluatedType> _converted;
         std::vector<EvaluatedType> _unconvertible;
@@ -684,6 +685,7 @@ void FunctionDecls::initDefault() {
         {
             "toInteger",
             "toIntegerOrNull",
+            "toIntegerList",
             EvaluatedType::Integer,
             {EvaluatedType::String, EvaluatedType::Integer, EvaluatedType::Double, EvaluatedType::Bool},
             {EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
@@ -693,6 +695,7 @@ void FunctionDecls::initDefault() {
         {
             "toFloat",
             "toFloatOrNull",
+            "toFloatList",
             EvaluatedType::Double,
             {EvaluatedType::String, EvaluatedType::Integer, EvaluatedType::Double},
             {EvaluatedType::Bool, EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
@@ -702,6 +705,7 @@ void FunctionDecls::initDefault() {
         {
             "toBoolean",
             "toBooleanOrNull",
+            "toBooleanList",
             EvaluatedType::Bool,
             {EvaluatedType::String, EvaluatedType::Integer, EvaluatedType::Bool},
             {EvaluatedType::Double, EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
@@ -711,6 +715,7 @@ void FunctionDecls::initDefault() {
         {
             "toString",
             "toStringOrNull",
+            "toStringList",
             EvaluatedType::String,
             {EvaluatedType::String, EvaluatedType::Integer, EvaluatedType::Double, EvaluatedType::Bool,
              EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Point},
@@ -740,6 +745,13 @@ void FunctionDecls::initDefault() {
             FunctionSignature* unconverted = createFunction(conversion._orNullName);
             unconverted->setArguments({unconvertible});
             unconverted->setReturnTypes({{EvaluatedType::Null}});
+        }
+
+        for (const EvaluatedType argumentType : {EvaluatedType::List, EvaluatedType::Any}) {
+            FunctionSignature* ofAList = createFunction(conversion._listName);
+            ofAList->setArguments({argumentType});
+            ofAList->setReturnTypes({{EvaluatedType::List}});
+            ofAList->setReturnedListShape(ListShape(conversion._result, 1));
         }
     }
 
