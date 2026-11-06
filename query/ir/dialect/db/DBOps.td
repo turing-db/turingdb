@@ -386,7 +386,7 @@ def Unwind : TuringOp<"unwind", [Pure, DeclareOpInterfaceMethods<ColumnCarrierOp
 /**
 * UnwindRange
 */
-def UnwindRange : TuringOp<"unwind_range", [MayRaise, AttrSizedOperandSegments, DeclareOpInterfaceMethods<ConditionallySpeculatable>, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet"]>]> {
+def UnwindRange : TuringOp<"unwind_range", [MayRaise, AttrSizedOperandSegments, DeclareOpInterfaceMethods<ConditionallySpeculatable>, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getCarrySetMutable"]>]> {
   let summary = "Produce one row per integer a row's range bounds span, without building the list";
 
   let description = [{
@@ -1647,7 +1647,7 @@ def GetInEdgesByTypeAndLabel : TuringOp<"get_in_edges_by_type_and_label", [Pure,
 /**
 * ExplorePaths
 */
-def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRowSource"]>]> {
+def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRowSource", "getRegionCarrySet", "getCarrySetMutable", "getRegionCarrySetMutable"]>]> {
   let summary = "Enumerate the variable-length paths leaving each input node, filtering carried columns alongside";
 
   let description = [{
@@ -1688,11 +1688,11 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
     `hop_imports` are the columns the hop predicate reads from outside the hop, the way
     `MATCH (n)-[e*1..3 WHERE e.since > n.born]->(m)` reads the seed. Each is row-aligned
     with `input_nodes` and becomes one further block argument of the region, in that order,
-    holding the seed row's own value repeated over the candidates of the hop. They are
-    operands of their own rather than carried columns: a carry set is trimmed and
-    reordered, and nothing comes back for them. An exploration that imports is walked seed
-    by seed, so the distinct search, which expands many seeds at one level, is not used for
-    it.
+    holding the seed row's own value repeated over the candidates of the hop. They are the
+    carry set into the hop regions, apart from `columns_to_filter`: that one is trimmed and
+    reordered, and each of its columns comes back as a result, where an import does not. An
+    exploration that imports is walked seed by seed, so the distinct search, which expands
+    many seeds at one level, is not used for it.
 
     `end_labels` keeps only the paths ending on a node carrying every listed label, the
     way `(m:Interest)` constrains the end of `MATCH (n)-[e]->{2,4}(m:Interest)`. The
@@ -2315,7 +2315,7 @@ def Yield : TuringOp<"yield", [Pure, Terminator, ParentOneOf<["CrossProduct", "H
 /**
 * CallProcedure
 */
-def CallProcedure : TuringOp<"call_procedure", [AttrSizedOperandSegments, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet"]>]> {
+def CallProcedure : TuringOp<"call_procedure", [AttrSizedOperandSegments, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getCarrySetMutable"]>]> {
   let summary = "Call a registered procedure, yielding the return values named";
 
   let description = [{
@@ -2535,7 +2535,7 @@ def Sort : TuringOp<"sort", [Pure, DeclareOpInterfaceMethods<ColumnCarrierOpInte
 */
 // NOT Pure: it records each row it emits in a seen-set, so it must run where it sits and
 // must not be hoisted, CSE'd or eliminated (like nl.distinct_filter, which it lowers to).
-def RemoveDuplicates : TuringOp<"remove_duplicates", [AttrSizedOperandSegments, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet"]>]> {
+def RemoveDuplicates : TuringOp<"remove_duplicates", [AttrSizedOperandSegments, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getCarrySetMutable"]>]> {
   let summary = "Emit each distinct row of a column set once";
   let description = [{
     The declarative counterpart of a Cypher RETURN DISTINCT / WITH DISTINCT. Takes

@@ -40,7 +40,17 @@ def ColumnCarrierOpInterface : OpInterface<"ColumnCarrierOpInterface"> {
       "Set `resultOffset` to the result the first column `region` yields comes out as, each next one coming out as the next result with the rows the region left it; false where the op pads or merges what its regions yield",
       "bool", "getYieldedResultOffset",
       (ins "::mlir::Region&":$region, "size_t&":$resultOffset), [{}],
-      [{ return false; }]>
+      [{ return false; }]>,
+    InterfaceMethod<
+      "The operands of the carry set, as a range that keeps the operand segment holding them sized to match",
+      "::mlir::MutableOperandRange", "getCarrySetMutable",
+      (ins), [{}],
+      [{ return ::mlir::db::unsegmentedCarrySet($_op.getOperation()); }]>,
+    InterfaceMethod<
+      "The operands of the carry set into the op's regions, one run every region shares, as a range that keeps the operand segment holding them sized to match",
+      "::mlir::MutableOperandRange", "getRegionCarrySetMutable",
+      (ins), [{}],
+      [{ return ::mlir::db::unsegmentedRegionCarrySet($_op.getOperation()); }]>
   ];
 }
 

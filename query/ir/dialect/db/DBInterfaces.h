@@ -34,6 +34,14 @@ Value carrySetRowSource(Operation* op, OpResult result);
 // Appends the row source of @param value where it is a result that has one
 void collectRowSource(Value value, llvm::SmallVectorImpl<Value>& carried);
 
+// The carry set, or the carry set into its regions, of an op that does not size its
+// operand segments
+MutableOperandRange unsegmentedCarrySet(Operation* op);
+MutableOperandRange unsegmentedRegionCarrySet(Operation* op);
+
+// The index of the first operand of @param run, which may be empty
+size_t operandRunOffset(const MutableOperandRange& run);
+
 }
 
 namespace mlir::OpTrait {
