@@ -506,9 +506,6 @@ export const ERROR_CASES: Case[] = [
     },
 ];
 
-// The engine takes a parameter as a label so far (TUR-48), so the values the cases after the
-// labels read are declared up front with WITH. The parameter map is parsed whole either way,
-// so a map holding every kind of value still proves the client encodes each one.
 export const PARAMETER_CASES: Case[] = [
     {
         name: "matches the label a parameter names",
@@ -523,15 +520,15 @@ export const PARAMETER_CASES: Case[] = [
         rows: [["F1"], ["F2"]],
     },
     {
-        name: "parses a parameter map holding every kind of value",
-        query: "MATCH (s:$label) RETURN count(s)",
+        name: "returns every kind of value a parameter map holds",
+        query: "MATCH (s:$label) RETURN count(s), $values",
         options: {
             parameters: {
                 label: "STATION",
-                unused: [470, 2.5, double(2), -1n, 2n ** 62n, "Oxford 🚆", true, null, [], {}, { stop: { crs: "PAD", platforms: [1, 2] } }],
+                values: [470, 2.5, double(2), -1n, 2n ** 62n, "Oxford 🚆", true, null, [], {}, { stop: { crs: "PAD", platforms: [1, 2] } }],
             },
         },
-        rows: [[5n]],
+        rows: [[5n, [470n, 2.5, 2.0, -1n, 2n ** 62n, "Oxford 🚆", true, null, [], {}, { stop: { crs: "PAD", platforms: [1n, 2n] } }]]],
     },
     {
         name: "parses a parameter map larger than the client's first buffer",
@@ -546,29 +543,34 @@ export const PARAMETER_CASES: Case[] = [
         error: { status: "EXEC_ERROR", message: "Parameter $label is not defined" },
     },
     {
-        name: "returns a constant of every scalar type",
-        query: "WITH 470 AS integer, 2.5 AS ratio, 2.0 AS whole, 'Oxford 🚆' AS text, true AS flag, null AS nothing " +
-            "RETURN integer, ratio, whole, text, flag, nothing",
+        name: "returns a parameter of every scalar type",
+        query: "RETURN $integer, $ratio, $whole, $text, $flag, $nothing",
+        options: { parameters: { integer: 470, ratio: 2.5, whole: double(2), text: "Oxford 🚆", flag: true, nothing: null } },
+        types: ["INT64", "DOUBLE", "DOUBLE", "STRING", "BOOL", "PROPERTY_NULL"],
         rows: [[470n, 2.5, 2.0, "Oxford 🚆", true, null]],
     },
     {
-        name: "returns a list and a map constant",
-        query: "WITH [480, 'S1', [2.5], null] AS calls, {crs: 'PAD', platforms: [1, 2]} AS stop RETURN calls, stop",
+        name: "returns a list and a map parameter",
+        query: "RETURN $calls, $stop",
+        options: { parameters: { calls: [480, "S1", [2.5], null], stop: { crs: "PAD", platforms: [1, 2] } } },
         rows: [[[480n, "S1", [2.5], null], { crs: "PAD", platforms: [1n, 2n] }]],
     },
     {
-        name: "returns an integer constant past a double's precision",
-        query: "WITH 4611686018427387905 AS big RETURN big",
+        name: "returns an integer parameter past a double's precision",
+        query: "RETURN $big",
+        options: { parameters: { big: 2n ** 62n + 1n } },
         rows: [[2n ** 62n + 1n]],
     },
     {
-        name: "keeps the stations a list constant names",
-        query: "WITH ['OXF', 'PAD'] AS stops MATCH (s:STATION) WHERE s.crs IN stops RETURN s.name",
+        name: "keeps the stations a list parameter names",
+        query: "MATCH (s:STATION) WHERE s.crs IN $stops RETURN s.name",
+        options: { parameters: { stops: ["OXF", "PAD"] } },
         rows: [["Oxford"], ["London Paddington"]],
     },
     {
-        name: "reads a key of a map constant",
-        query: "WITH {from: 470, to: 500} AS window RETURN window.from, window.to - window.from",
+        name: "reads a key of a map parameter",
+        query: "RETURN $window.from, $window.to - $window.from",
+        options: { parameters: { window: { from: 470, to: 500 } } },
         rows: [[470n, 30n]],
     },
 ];
