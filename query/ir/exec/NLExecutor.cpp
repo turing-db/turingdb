@@ -12270,102 +12270,26 @@ void NLExecutor::runCollectUpdate(NLExecutionContext* context, NLFunctionData* d
     aggregates.compactValues();
 }
 
-// Only the scalar value types are collectable for now; an embedding column (a span of
-// floats per row) has no owned primitive to buffer, so it is rejected here rather than
-// silently mishandled.
 NLCollectFoldFunction NLExecutor::selectCollectFold(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return &collectFold<types::Int64::Primitive>;
-        break;
+    NLCollectFoldFunction selected = nullptr;
 
-        case ValueType::UInt64:
-            return &collectFold<types::UInt64::Primitive>;
-        break;
+    const auto select = [&]<SupportedType T>() {
+        selected = &collectFold<typename T::Primitive>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
 
-        case ValueType::Double:
-            return &collectFold<types::Double::Primitive>;
-        break;
-
-        case ValueType::Bool:
-            return &collectFold<types::Bool::Primitive>;
-        break;
-
-        case ValueType::String:
-            return &collectFold<types::String::Primitive>;
-        break;
-
-        case ValueType::List:
-            return &collectFold<ListView>;
-        break;
-
-        case ValueType::DateTime:
-            return &collectFold<types::DateTime::Primitive>;
-        break;
-
-        case ValueType::Duration:
-            return &collectFold<types::Duration::Primitive>;
-        break;
-
-        case ValueType::Point:
-            return &collectFold<types::Point::Primitive>;
-        break;
-
-        default:
-            throw IRException("collect does not support this value type");
-        break;
-    }
-
-    return nullptr;
+    return selected;
 }
 
-// The collect(DISTINCT x) fold for a column of this value type: collect's own domain,
-// with each of a group's values buffered once. An embedding has no primitive to buffer,
-// so it is rejected.
 NLCollectFoldFunction NLExecutor::selectCollectDistinctFold(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return &collectFoldDistinct<types::Int64::Primitive>;
-        break;
+    NLCollectFoldFunction selected = nullptr;
 
-        case ValueType::UInt64:
-            return &collectFoldDistinct<types::UInt64::Primitive>;
-        break;
+    const auto select = [&]<SupportedType T>() {
+        selected = &collectFoldDistinct<typename T::Primitive>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
 
-        case ValueType::Double:
-            return &collectFoldDistinct<types::Double::Primitive>;
-        break;
-
-        case ValueType::Bool:
-            return &collectFoldDistinct<types::Bool::Primitive>;
-        break;
-
-        case ValueType::String:
-            return &collectFoldDistinct<types::String::Primitive>;
-        break;
-
-        case ValueType::List:
-            return &collectFoldDistinct<ListView>;
-        break;
-
-        case ValueType::DateTime:
-            return &collectFoldDistinct<types::DateTime::Primitive>;
-        break;
-
-        case ValueType::Duration:
-            return &collectFoldDistinct<types::Duration::Primitive>;
-        break;
-
-        case ValueType::Point:
-            return &collectFoldDistinct<types::Point::Primitive>;
-        break;
-
-        default:
-            throw IRException("collect does not support this value type");
-        break;
-    }
-
-    return nullptr;
+    return selected;
 }
 
 NLUnwindElementCountFunction NLExecutor::selectListUnwindElementCount(bool sourceIsNullable) {
@@ -12437,95 +12361,25 @@ NLUnwindElementEmitFunction NLExecutor::selectOptTaggedUnwindElementEmit() {
 }
 
 NLUnwindCollectValueEmitFunction NLExecutor::selectUnwindCollectValueEmit(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return &unwindCollectValueEmit<types::Int64::Primitive>;
-        break;
+    NLUnwindCollectValueEmitFunction selected = nullptr;
 
-        case ValueType::UInt64:
-            return &unwindCollectValueEmit<types::UInt64::Primitive>;
-        break;
+    const auto select = [&]<SupportedType T>() {
+        selected = &unwindCollectValueEmit<typename T::Primitive>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
 
-        case ValueType::Double:
-            return &unwindCollectValueEmit<types::Double::Primitive>;
-        break;
-
-        case ValueType::Bool:
-            return &unwindCollectValueEmit<types::Bool::Primitive>;
-        break;
-
-        case ValueType::String:
-            return &unwindCollectValueEmit<types::String::Primitive>;
-        break;
-
-        case ValueType::List:
-            return &unwindCollectValueEmit<ListView>;
-        break;
-
-        case ValueType::DateTime:
-            return &unwindCollectValueEmit<types::DateTime::Primitive>;
-        break;
-
-        case ValueType::Duration:
-            return &unwindCollectValueEmit<types::Duration::Primitive>;
-        break;
-
-        case ValueType::Point:
-            return &unwindCollectValueEmit<types::Point::Primitive>;
-        break;
-
-        default:
-            throw IRException("unwind does not support this value type");
-        break;
-    }
-
-    return nullptr;
+    return selected;
 }
 
 NLCollectListEmitFunction NLExecutor::selectCollectListEmit(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return &collectListEmit<types::Int64::Primitive>;
-        break;
+    NLCollectListEmitFunction selected = nullptr;
 
-        case ValueType::UInt64:
-            return &collectListEmit<types::UInt64::Primitive>;
-        break;
+    const auto select = [&]<SupportedType T>() {
+        selected = &collectListEmit<typename T::Primitive>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
 
-        case ValueType::Double:
-            return &collectListEmit<types::Double::Primitive>;
-        break;
-
-        case ValueType::Bool:
-            return &collectListEmit<types::Bool::Primitive>;
-        break;
-
-        case ValueType::String:
-            return &collectListEmit<types::String::Primitive>;
-        break;
-
-        case ValueType::List:
-            return &collectListEmit<ListView>;
-        break;
-
-        case ValueType::DateTime:
-            return &collectListEmit<types::DateTime::Primitive>;
-        break;
-
-        case ValueType::Duration:
-            return &collectListEmit<types::Duration::Primitive>;
-        break;
-
-        case ValueType::Point:
-            return &collectListEmit<types::Point::Primitive>;
-        break;
-
-        default:
-            throw IRException("collect does not support this value type");
-        break;
-    }
-
-    return nullptr;
+    return selected;
 }
 
 void NLExecutor::selectCollectEntityHandlers(NLChunkKind kind,
