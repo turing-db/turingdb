@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <optional>
+#include <unordered_map>
+#include <vector>
 
 #include "BinaryOperatorTyping.h"
 
@@ -93,6 +95,43 @@ ListShape sharedListShape(std::span<Expr* const> elements) {
     }
 
     return shared;
+}
+
+using NestedListShapes = std::unordered_map<const ParameterValue::List*, ListShape>;
+
+// The shape of the list these parameter elements make, as sharedListShape reads it off a
+// literal's: @param nested holds the shape of every list under them
+ListShape sharedListShape(const ParameterValue::List& elements, const NestedListShapes& nested) {
+    ListShape shared(EvaluatedType::Null, 1);
+
+    for (const ParameterValue& element : elements) {
+        const EvaluatedType type = ParameterDecl::evaluatedTypeOf(element);
+        const ListShape shape = type == EvaluatedType::List ? nested.at(&element.getList()) : ListShape();
+        shared = ListShape::joined(shared, ListShape::singleton(type, shape));
+    }
+
+    return shared;
+}
+
+// A literal's nested lists are shaped by the walk that analyzes them before sharedListShape
+// reads them. A value's are shaped here first, deepest first over a flat list of them rather
+// than a recursion, since a parameter nests as deep as its sender chose
+ListShape parameterListShape(const ParameterValue::List& elements) {
+    std::vector<const ParameterValue::List*> lists {&elements};
+    for (size_t next = 0; next < lists.size(); next++) {
+        for (const ParameterValue& element : *lists[next]) {
+            if (ParameterDecl::evaluatedTypeOf(element) == EvaluatedType::List) {
+                lists.push_back(&element.getList());
+            }
+        }
+    }
+
+    NestedListShapes nested;
+    for (auto list = lists.rbegin(); list != lists.rend(); ++list) {
+        nested[*list] = sharedListShape(**list, nested);
+    }
+
+    return nested.at(&elements);
 }
 
 // The shape of the list a COLLECT gathers its one column into, which every branch of a
@@ -429,7 +468,11 @@ void ExprAnalyzer::analyzeParameterExpr(ParameterExpr* expr) {
     const std::string_view name = expr->getParameter()->getName();
     ParameterDecl* decl = _ast->findParameterDecl(name);
     if (!decl) {
-        decl = ParameterDecl::create(_ast, name, boundParameterValue(name, expr));
+        const ParameterValue& value = boundParameterValue(name, expr);
+        const bool holdsAList = ParameterDecl::evaluatedTypeOf(value) == EvaluatedType::List;
+        const ListShape listShape = holdsAList ? parameterListShape(value.getList()) : ListShape();
+
+        decl = ParameterDecl::create(_ast, name, value, listShape);
     }
 
     expr->setDecl(decl);
@@ -438,7 +481,7 @@ void ExprAnalyzer::analyzeParameterExpr(ParameterExpr* expr) {
     expr->setType(type);
 
     if (type == EvaluatedType::List) {
-        expr->setListShape(ListShape(EvaluatedType::Invalid, 1));
+        expr->setListShape(decl->getListShape());
     }
 
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));

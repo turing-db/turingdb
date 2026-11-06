@@ -5,18 +5,19 @@
 
 using namespace db;
 
-ParameterDecl::ParameterDecl(std::string_view name, const ParameterValue& value)
+ParameterDecl::ParameterDecl(std::string_view name, const ParameterValue& value, const ListShape& listShape)
     : _name(name),
     _value(&value),
-    _type(evaluatedTypeOf(value))
+    _type(evaluatedTypeOf(value)),
+    _listShape(listShape)
 {
 }
 
 ParameterDecl::~ParameterDecl() {
 }
 
-ParameterDecl* ParameterDecl::create(CypherAST* ast, std::string_view name, const ParameterValue& value) {
-    ParameterDecl* decl = new ParameterDecl(name, value);
+ParameterDecl* ParameterDecl::create(CypherAST* ast, std::string_view name, const ParameterValue& value, const ListShape& listShape) {
+    ParameterDecl* decl = new ParameterDecl(name, value, listShape);
     ast->addParameterDecl(decl);
 
     return decl;
