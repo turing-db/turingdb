@@ -891,8 +891,7 @@ public:
     static NLGroupKeyGatherFunction selectOptGroupKeyGather(NLChunkKind kind);
 
     // The collect fold for a column of this value type: appends each present value to
-    // its group's list in the flat value buffer. Only the scalar value types are
-    // supported (collect of embeddings is unsupported for now).
+    // its group's list in the flat value buffer.
     static NLCollectFoldFunction selectCollectFold(ValueType valueType);
     static NLCollectFoldFunction selectCollectDistinctFold(ValueType valueType);
 

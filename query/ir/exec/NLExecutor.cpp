@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <bit>
 #include <cmath>
+#include <concepts>
 #include <functional>
 #include <limits>
 #include <numeric>
@@ -2739,27 +2740,40 @@ void distinctAppendValueBytes(std::string& key, const Primitive& value) {
     key.append(reinterpret_cast<const char*>(&value), sizeof(Primitive));
 }
 
-// A double is normalized before its bytes are appended so keys compare by Cypher
+// A float is normalized before its bytes are appended so keys compare by Cypher
 // value equality, not bit pattern: -0.0 collapses to +0.0 (0.0 == -0.0 in Cypher)
 // and every NaN payload maps to one canonical NaN, so two distinct bit patterns of
 // the same value never split into separate groups (or survive DISTINCT as two rows).
-void distinctAppendValueBytes(std::string& key, double value) {
-    double normalized = value;
+template <std::floating_point Float>
+void distinctAppendFloatBytes(std::string& key, const Float value) {
+    Float normalized = value;
 
-    if (normalized == 0.0) {
-        // -0.0 == +0.0, so assigning +0.0 canonicalizes the sign of zero.
-        normalized = 0.0;
+    if (normalized == 0) {
+        normalized = 0;
     } else if (std::isnan(normalized)) {
-        normalized = std::numeric_limits<double>::quiet_NaN();
+        normalized = std::numeric_limits<Float>::quiet_NaN();
     }
 
     key.append(reinterpret_cast<const char*>(&normalized), sizeof(normalized));
+}
+
+void distinctAppendValueBytes(std::string& key, double value) {
+    distinctAppendFloatBytes(key, value);
 }
 
 void distinctAppendValueBytes(std::string& key, std::string_view value) {
     const size_t length = value.size();
     key.append(reinterpret_cast<const char*>(&length), sizeof(length));
     key.append(value.data(), value.size());
+}
+
+void distinctAppendValueBytes(std::string& key, const types::Embedding::Primitive value) {
+    const size_t length = value.size();
+    key.append(reinterpret_cast<const char*>(&length), sizeof(length));
+
+    for (const float element : value) {
+        distinctAppendFloatBytes(key, element);
+    }
 }
 
 // Serialize one row of an ID column (node/edge/edge-type IDs) into the row key -
@@ -2971,7 +2985,9 @@ void distinctAppendElementBytes(std::string& key, const CellView element) {
         break;
 
         case CellTag::Embedding:
-            throw IRException("cannot dedup by an embedding element");
+            key.push_back(static_cast<char>(tag));
+            distinctAppendValueBytes(key, element.getAs<types::Embedding::Primitive>());
+            return;
         break;
 
         case CellTag::MapView:
@@ -12308,94 +12324,26 @@ void NLExecutor::runCollectUpdate(NLExecutionContext* context, NLFunctionData* d
     state->compactAccumulatorValues();
 }
 
-// Only the scalar value types are collectable for now; an embedding column (a span of
-// floats per row) has no owned primitive to buffer, so it is rejected here rather than
-// silently mishandled.
 NLCollectFoldFunction NLExecutor::selectCollectFold(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return &collectFold<types::Int64::Primitive>;
-        break;
+    NLCollectFoldFunction selected = nullptr;
 
-        case ValueType::UInt64:
-            return &collectFold<types::UInt64::Primitive>;
-        break;
+    const auto select = [&]<SupportedType T>() {
+        selected = &collectFold<typename T::Primitive>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
 
-        case ValueType::Double:
-            return &collectFold<types::Double::Primitive>;
-        break;
-
-        case ValueType::Bool:
-            return &collectFold<types::Bool::Primitive>;
-        break;
-
-        case ValueType::String:
-            return &collectFold<types::String::Primitive>;
-        break;
-
-        case ValueType::List:
-            return &collectFold<ListView>;
-        break;
-
-        case ValueType::DateTime:
-            return &collectFold<types::DateTime::Primitive>;
-        break;
-
-        case ValueType::Duration:
-            return &collectFold<types::Duration::Primitive>;
-        break;
-
-        default:
-            throw IRException("collect does not support this value type");
-        break;
-    }
-
-    return nullptr;
+    return selected;
 }
 
-// The collect(DISTINCT x) fold for a column of this value type: collect's own domain,
-// with each of a group's values buffered once. An embedding has no bytes to key on, and
-// no primitive to buffer either, so it is rejected for both reasons.
 NLCollectFoldFunction NLExecutor::selectCollectDistinctFold(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return &collectFoldDistinct<types::Int64::Primitive>;
-        break;
+    NLCollectFoldFunction selected = nullptr;
 
-        case ValueType::UInt64:
-            return &collectFoldDistinct<types::UInt64::Primitive>;
-        break;
+    const auto select = [&]<SupportedType T>() {
+        selected = &collectFoldDistinct<typename T::Primitive>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
 
-        case ValueType::Double:
-            return &collectFoldDistinct<types::Double::Primitive>;
-        break;
-
-        case ValueType::Bool:
-            return &collectFoldDistinct<types::Bool::Primitive>;
-        break;
-
-        case ValueType::String:
-            return &collectFoldDistinct<types::String::Primitive>;
-        break;
-
-        case ValueType::List:
-            return &collectFoldDistinct<ListView>;
-        break;
-
-        case ValueType::DateTime:
-            return &collectFoldDistinct<types::DateTime::Primitive>;
-        break;
-
-        case ValueType::Duration:
-            return &collectFoldDistinct<types::Duration::Primitive>;
-        break;
-
-        default:
-            throw IRException("collect does not support this value type");
-        break;
-    }
-
-    return nullptr;
+    return selected;
 }
 
 NLUnwindElementCountFunction NLExecutor::selectListUnwindElementCount(bool sourceIsNullable) {
@@ -12467,87 +12415,25 @@ NLUnwindElementEmitFunction NLExecutor::selectOptTaggedUnwindElementEmit() {
 }
 
 NLUnwindCollectValueEmitFunction NLExecutor::selectUnwindCollectValueEmit(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return &unwindCollectValueEmit<types::Int64::Primitive>;
-        break;
+    NLUnwindCollectValueEmitFunction selected = nullptr;
 
-        case ValueType::UInt64:
-            return &unwindCollectValueEmit<types::UInt64::Primitive>;
-        break;
+    const auto select = [&]<SupportedType T>() {
+        selected = &unwindCollectValueEmit<typename T::Primitive>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
 
-        case ValueType::Double:
-            return &unwindCollectValueEmit<types::Double::Primitive>;
-        break;
-
-        case ValueType::Bool:
-            return &unwindCollectValueEmit<types::Bool::Primitive>;
-        break;
-
-        case ValueType::String:
-            return &unwindCollectValueEmit<types::String::Primitive>;
-        break;
-
-        case ValueType::List:
-            return &unwindCollectValueEmit<ListView>;
-        break;
-
-        case ValueType::DateTime:
-            return &unwindCollectValueEmit<types::DateTime::Primitive>;
-        break;
-
-        case ValueType::Duration:
-            return &unwindCollectValueEmit<types::Duration::Primitive>;
-        break;
-
-        default:
-            throw IRException("unwind does not support this value type");
-        break;
-    }
-
-    return nullptr;
+    return selected;
 }
 
 NLCollectListEmitFunction NLExecutor::selectCollectListEmit(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return &collectListEmit<types::Int64::Primitive>;
-        break;
+    NLCollectListEmitFunction selected = nullptr;
 
-        case ValueType::UInt64:
-            return &collectListEmit<types::UInt64::Primitive>;
-        break;
+    const auto select = [&]<SupportedType T>() {
+        selected = &collectListEmit<typename T::Primitive>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
 
-        case ValueType::Double:
-            return &collectListEmit<types::Double::Primitive>;
-        break;
-
-        case ValueType::Bool:
-            return &collectListEmit<types::Bool::Primitive>;
-        break;
-
-        case ValueType::String:
-            return &collectListEmit<types::String::Primitive>;
-        break;
-
-        case ValueType::List:
-            return &collectListEmit<ListView>;
-        break;
-
-        case ValueType::DateTime:
-            return &collectListEmit<types::DateTime::Primitive>;
-        break;
-
-        case ValueType::Duration:
-            return &collectListEmit<types::Duration::Primitive>;
-        break;
-
-        default:
-            throw IRException("collect does not support this value type");
-        break;
-    }
-
-    return nullptr;
+    return selected;
 }
 
 void NLExecutor::selectCollectEntityHandlers(NLChunkKind kind,
