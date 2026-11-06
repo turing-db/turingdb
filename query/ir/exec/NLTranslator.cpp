@@ -6547,45 +6547,14 @@ void NLTranslator::translateCollectLoop(const IteratorConfig& config,
 // drops nulls, so only present values land here. It grows as values are appended
 // across steps, so no initial reserve is needed.
 Column* NLTranslator::allocValueColumnForValueType(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return _memory->alloc<ColumnVector<types::Int64::Primitive>>();
-        break;
+    Column* column = nullptr;
 
-        case ValueType::UInt64:
-            return _memory->alloc<ColumnVector<types::UInt64::Primitive>>();
-        break;
+    const auto alloc = [&]<SupportedType T>() {
+        column = _memory->alloc<ColumnVector<typename T::Primitive>>();
+    };
+    ValueTypeDispatcher(valueType).execute(alloc);
 
-        case ValueType::Double:
-            return _memory->alloc<ColumnVector<types::Double::Primitive>>();
-        break;
-
-        case ValueType::Bool:
-            return _memory->alloc<ColumnVector<types::Bool::Primitive>>();
-        break;
-
-        case ValueType::String:
-            return _memory->alloc<ColumnVector<types::String::Primitive>>();
-        break;
-
-        case ValueType::List:
-            return allocListColumn();
-        break;
-
-        case ValueType::DateTime:
-            return _memory->alloc<ColumnVector<types::DateTime::Primitive>>();
-        break;
-
-        case ValueType::Duration:
-            return _memory->alloc<ColumnVector<types::Duration::Primitive>>();
-        break;
-
-        default:
-            throw IRException("collect does not support this value type");
-        break;
-    }
-
-    return nullptr;
+    return column;
 }
 
 void NLTranslator::translateProcedure(nl::Procedure procedureOp, NLStmtContainer* body) {

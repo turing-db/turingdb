@@ -200,6 +200,12 @@ void FunctionDecls::initDefault() {
     collectDurations->setIsAggregate(true);
     collectDurations->setCollectsItsArgument(true);
 
+    FunctionSignature* collectEmbeddings = createFunction("collect");
+    collectEmbeddings->setArguments({EvaluatedType::Embedding});
+    collectEmbeddings->setReturnTypes({{EvaluatedType::List}});
+    collectEmbeddings->setIsAggregate(true);
+    collectEmbeddings->setCollectsItsArgument(true);
+
     FunctionSignature* collectNodes = createFunction("collect");
     collectNodes->setArguments({EvaluatedType::NodePattern});
     collectNodes->setReturnTypes({{EvaluatedType::List}});
