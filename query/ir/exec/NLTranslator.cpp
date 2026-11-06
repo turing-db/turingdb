@@ -4103,14 +4103,15 @@ void NLTranslator::translateStaticMapKey(nl::StaticMapKey mapKey, NLStmtContaine
     _valueSlots[resultValue] = result;
 
     const std::string_view key = ownedCharacters(mapKey.getKey());
+    const NLStaticMapKeyData::ComponentParts parts {componentNamed<DateTimePart, DateTime>(key),
+                                                    componentNamed<DurationPart, Duration>(key),
+                                                    componentNamed<PointPart, Point>(key)};
 
     NLStaticMapKeyData* data = _program->allocFunctionData<NLStaticMapKeyData>(input,
                                                                    result,
                                                                    NLExecutor::selectKeyedRead(input),
                                                                    key,
-                                                                   componentNamed<DateTimePart, DateTime>(key),
-                                                                   componentNamed<DurationPart, Duration>(key),
-                                                                   componentNamed<PointPart, Point>(key),
+                                                                   parts,
                                                                    _program->allocStepBuffers());
 
     body->emplaceStmt(&NLExecutor::runStaticMapKey, data);

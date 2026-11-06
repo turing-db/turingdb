@@ -1,8 +1,11 @@
 #pragma once
 
+#include <optional>
+
 #include "Expr.h"
 
 #include "metadata/PropertyType.h"
+#include "metadata/ValueComponent.h"
 
 namespace db {
 
@@ -35,19 +38,9 @@ public:
         _stringTableHeaderAccess = csvHeaderAccess;
     }
 
-    // A calendar field read off a variable bound to an instant, d.year. The part is
-    // meaningless unless this says so.
-    bool readsADateTimeComponent() const { return _readsADateTimeComponent; }
-    DateTimePart getDateTimePart() const { return _dateTimePart; }
-    void setDateTimePart(DateTimePart part);
-
-    bool readsADurationComponent() const { return _readsADurationComponent; }
-    DurationPart getDurationPart() const { return _durationPart; }
-    void setDurationPart(DurationPart part);
-
-    bool readsAPointComponent() const { return _readsAPointComponent; }
-    PointPart getPointPart() const { return _pointPart; }
-    void setPointPart(PointPart part);
+    // The component read off a variable bound to an instant, a duration or a point: d.year
+    const std::optional<ValueComponent>& getComponent() const { return _component; }
+    void setComponent(ValueComponent component) { _component = component; }
 
     // The key a map variable is read under, m.key. The key is meaningless unless this says so.
     bool readsAMapKey() const { return _readsAMapKey; }
@@ -68,13 +61,8 @@ private:
     std::string_view _propName;
     std::string_view _mapKey;
     ValueType _valueType {ValueType::Invalid};
-    DateTimePart _dateTimePart {DateTimePart::Year};
-    DurationPart _durationPart {DurationPart::Years};
-    PointPart _pointPart {PointPart::X};
+    std::optional<ValueComponent> _component;
     bool _stringTableHeaderAccess {false};
-    bool _readsADateTimeComponent {false};
-    bool _readsADurationComponent {false};
-    bool _readsAPointComponent {false};
     bool _readsAMapKey {false};
 
     PropertyExpr(QualifiedName* name)

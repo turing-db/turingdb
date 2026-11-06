@@ -348,6 +348,16 @@ double Point::coordinate(Point value, PointPart part) {
     return 0.0;
 }
 
+Point::Component Point::component(Point value, PointPart part) {
+    if (part == PointPart::CRS) {
+        return getCRSName(value.getCRS());
+    } else if (part == PointPart::SRID) {
+        return getSRID(value.getCRS());
+    }
+
+    return coordinate(value, part);
+}
+
 bool Point::fromMap(const MapView& map, Point& value) {
     PointKeys keys;
     if (!readKeys(map, keys)) {

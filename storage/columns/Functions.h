@@ -557,13 +557,7 @@ using PointComponent = std::conditional_t<part == PointPart::CRS,
 
 template <PointPart part>
 PointComponent<part> readPointComponent(const types::Point::Primitive value) {
-    if constexpr (part == PointPart::CRS) {
-        return Point::getCRSName(value.getCRS());
-    } else if constexpr (part == PointPart::SRID) {
-        return Point::getSRID(value.getCRS());
-    } else {
-        return Point::coordinate(value, part);
-    }
+    return std::get<PointComponent<part>>(Point::component(value, part));
 }
 
 template <PointPart part>

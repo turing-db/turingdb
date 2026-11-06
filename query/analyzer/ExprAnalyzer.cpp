@@ -43,6 +43,7 @@
 #include "metadata/DateTime.h"
 #include "metadata/Duration.h"
 #include "metadata/Point.h"
+#include "metadata/ValueComponent.h"
 #include "StringBucket.h"
 
 #include "expr/All.h"
@@ -69,14 +70,50 @@ constexpr std::string_view POINT_COMPONENT_NOT_A_PROPERTY =
     "A point component is computed from a property, not stored as one. "
     "Only a property can be set, removed or indexed.";
 
-EvaluatedType pointComponentType(PointPart part) {
-    if (part == PointPart::CRS) {
-        return EvaluatedType::String;
-    } else if (part == PointPart::SRID) {
+bool hasComponents(EvaluatedType type) {
+    return type == EvaluatedType::DateTime || type == EvaluatedType::Duration || type == EvaluatedType::Point;
+}
+
+template <typename Owner, typename Part>
+std::optional<ValueComponent> componentOf(std::string_view name) {
+    Part part {};
+    if (!Owner::partNamed(name, part)) {
+        return std::nullopt;
+    }
+
+    return ValueComponent {part};
+}
+
+std::optional<ValueComponent> componentOfAnyType(std::string_view name) {
+    if (const std::optional<ValueComponent> dateTimeComponent = componentOf<DateTime, DateTimePart>(name)) {
+        return dateTimeComponent;
+    } else if (const std::optional<ValueComponent> durationComponent = componentOf<Duration, DurationPart>(name)) {
+        return durationComponent;
+    }
+
+    return componentOf<Point, PointPart>(name);
+}
+
+EvaluatedType componentType(const ValueComponent& component) {
+    const PointPart* pointPart = std::get_if<PointPart>(&component);
+
+    if (!pointPart || *pointPart == PointPart::SRID) {
         return EvaluatedType::Integer;
+    } else if (*pointPart == PointPart::CRS) {
+        return EvaluatedType::String;
     }
 
     return EvaluatedType::Double;
+}
+
+std::string_view componentNotAProperty(const ValueComponent& component) {
+    if (std::holds_alternative<DateTimePart>(component)) {
+        return datetimeComponentNotAProperty;
+    } else if (std::holds_alternative<DurationPart>(component)) {
+        return "A duration component cannot name a property.";
+    }
+
+    return POINT_COMPONENT_NOT_A_PROPERTY;
 }
 
 // The type a reduce's accumulator takes once it has held @param accumulator and then
@@ -596,45 +633,20 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
 
     // d.year, d.hours or p.x, where d or p was bound to an instant, a duration or a point
     // rather than to an entity
-    const bool bindsAValueWithComponents = varType == EvaluatedType::DateTime
-                                        || varType == EvaluatedType::Duration
-                                        || varType == EvaluatedType::Point;
+    if (hasComponents(varType)) {
+        ValueComponent component;
+        resolveComponent(expr, varType, propName->getName(), component);
 
-    if (bindsAValueWithComponents) {
-        const std::string_view name = propName->getName();
-        EvaluatedType componentType = EvaluatedType::Integer;
+        const EvaluatedType readType = componentType(component);
 
-        if (varType == EvaluatedType::DateTime) {
-            DateTimePart part {DateTimePart::Year};
-            if (!DateTime::partNamed(name, part)) {
-                throwError(fmt::format("'{}' is not a component of a datetime", name), expr);
-            }
-
-            expr->setDateTimePart(part);
-        } else if (varType == EvaluatedType::Duration) {
-            DurationPart part {DurationPart::Years};
-            if (!Duration::partNamed(name, part)) {
-                throwError(fmt::format("'{}' is not a component of a duration", name), expr);
-            }
-
-            expr->setDurationPart(part);
-        } else {
-            PointPart part {PointPart::X};
-            if (!Point::partNamed(name, part)) {
-                throwError(fmt::format("'{}' is not a component of a point", name), expr);
-            }
-
-            expr->setPointPart(part);
-            componentType = pointComponentType(part);
-        }
-
+        expr->setComponent(component);
         expr->setEntityVarDecl(varDecl);
-        expr->setType(componentType);
+        expr->setType(readType);
         expr->setDynamic();
 
-        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, componentType));
+        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, readType));
 
-        return *toValueType(componentType);
+        return *toValueType(readType);
     }
 
     if (varType == EvaluatedType::StringTable) {
@@ -776,12 +788,7 @@ void ExprAnalyzer::throwTargetInsideAProperty(const PropertyExpr* expr, const Va
     const std::string_view propName = qualifiedName->get(1)->getName();
     const std::string_view componentName = qualifiedName->get(2)->getName();
 
-    DateTimePart part {DateTimePart::Year};
-    DurationPart durationPart {DurationPart::Years};
-    PointPart pointPart {PointPart::X};
-    const bool namesADateTimePart = DateTime::partNamed(componentName, part);
-    const bool namesADurationPart = Duration::partNamed(componentName, durationPart);
-    const bool namesAPointPart = Point::partNamed(componentName, pointPart);
+    const std::optional<ValueComponent> namedComponent = componentOfAnyType(componentName);
 
     const EvaluatedType varType = varDecl->getType();
     const bool readsAMapVariable = varType == EvaluatedType::Map || varType == EvaluatedType::Any;
@@ -789,12 +796,8 @@ void ExprAnalyzer::throwTargetInsideAProperty(const PropertyExpr* expr, const Va
 
     if (readsAMapVariable || storesAMap) {
         throwError(mapKeyNotAProperty, expr);
-    } else if (namesADateTimePart) {
-        throwError(datetimeComponentNotAProperty, expr);
-    } else if (namesADurationPart) {
-        throwError("A duration component cannot name a property.", expr);
-    } else if (namesAPointPart) {
-        throwError(POINT_COMPONENT_NOT_A_PROPERTY, expr);
+    } else if (namedComponent) {
+        throwError(componentNotAProperty(*namedComponent), expr);
     } else {
         throwError(fmt::format("'{}' is not a component of a datetime, a duration or a point", componentName), expr);
     }
@@ -803,15 +806,38 @@ void ExprAnalyzer::throwTargetInsideAProperty(const PropertyExpr* expr, const Va
 // A datetime or duration component and a map key are all read out of a property rather than
 // being one, so none of them can be the property a write or an index targets.
 void ExprAnalyzer::throwIfReadsPartOfAProperty(const PropertyExpr* expr) {
-    if (expr->readsADateTimeComponent()) {
-        throwError(datetimeComponentNotAProperty, expr);
-    } else if (expr->readsADurationComponent()) {
-        throwError("A duration component cannot name a property.", expr);
-    } else if (expr->readsAPointComponent()) {
-        throwError(POINT_COMPONENT_NOT_A_PROPERTY, expr);
+    const std::optional<ValueComponent>& component = expr->getComponent();
+
+    if (component) {
+        throwError(componentNotAProperty(*component), expr);
     } else if (expr->readsAMapKey()) {
         throwError(mapKeyNotAProperty, expr);
     }
+}
+
+void ExprAnalyzer::resolveComponent(const Expr* expr,
+                                    EvaluatedType ownerType,
+                                    std::string_view name,
+                                    ValueComponent& component) const {
+    std::optional<ValueComponent> namedComponent;
+    std::string_view ownerName;
+
+    if (ownerType == EvaluatedType::DateTime) {
+        namedComponent = componentOf<DateTime, DateTimePart>(name);
+        ownerName = "datetime";
+    } else if (ownerType == EvaluatedType::Duration) {
+        namedComponent = componentOf<Duration, DurationPart>(name);
+        ownerName = "duration";
+    } else {
+        namedComponent = componentOf<Point, PointPart>(name);
+        ownerName = "point";
+    }
+
+    if (!namedComponent) {
+        throwError(fmt::format("'{}' is not a component of a {}", name, ownerName), expr);
+    }
+
+    component = *namedComponent;
 }
 
 void ExprAnalyzer::analyzePropertyLookupExpr(PropertyLookupExpr* expr) {
@@ -830,30 +856,12 @@ void ExprAnalyzer::analyzePropertyLookupExpr(PropertyLookupExpr* expr) {
 
     EvaluatedType type = EvaluatedType::Null;
 
-    if (baseType == EvaluatedType::DateTime) {
-        DateTimePart part {DateTimePart::Year};
-        if (!DateTime::partNamed(propName, part)) {
-            throwError(fmt::format("'{}' is not a component of a datetime", propName), expr);
-        }
+    if (hasComponents(baseType)) {
+        ValueComponent component;
+        resolveComponent(expr, baseType, propName, component);
 
-        expr->setDateTimePart(part);
-        type = EvaluatedType::Integer;
-    } else if (baseType == EvaluatedType::Duration) {
-        DurationPart part {DurationPart::Years};
-        if (!Duration::partNamed(propName, part)) {
-            throwError(fmt::format("'{}' is not a component of a duration", propName), expr);
-        }
-
-        expr->setDurationPart(part);
-        type = EvaluatedType::Integer;
-    } else if (baseType == EvaluatedType::Point) {
-        PointPart part {PointPart::X};
-        if (!Point::partNamed(propName, part)) {
-            throwError(fmt::format("'{}' is not a component of a point", propName), expr);
-        }
-
-        expr->setPointPart(part);
-        type = pointComponentType(part);
+        expr->setComponent(component);
+        type = componentType(component);
     } else if (readsAnEntity) {
         const ValueType valueType = resolvePropertyType(propName);
 

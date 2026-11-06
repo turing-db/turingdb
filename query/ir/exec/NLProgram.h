@@ -9,6 +9,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <variant>
@@ -4472,21 +4473,20 @@ using NLStringReadFunction = std::optional<types::String::Primitive> (*)(const C
 // duration and a point the key names are resolved during translation.
 class NLStaticMapKeyData : public NLFunctionData {
 public:
+    // The part the key names of each type with components, as the row's value picks the type
+    using ComponentParts = std::tuple<std::optional<DateTimePart>, std::optional<DurationPart>, std::optional<PointPart>>;
+
     NLStaticMapKeyData(const Column* input,
                  Column* result,
                  NLKeyedReadFunction keyedRead,
                  std::string_view key,
-                 std::optional<DateTimePart> dateTimePart,
-                 std::optional<DurationPart> durationPart,
-                 std::optional<PointPart> pointPart,
+                 const ComponentParts& parts,
                  NLStepBuffers* stepBuffers)
         : _input(input),
         _result(result),
         _keyedRead(keyedRead),
         _key(key),
-        _dateTimePart(dateTimePart),
-        _durationPart(durationPart),
-        _pointPart(pointPart),
+        _parts(parts),
         _stepBuffers(stepBuffers)
     {
     }
@@ -4495,19 +4495,17 @@ public:
     Column* getResult() const { return _result; }
     NLKeyedReadFunction getKeyedRead() const { return _keyedRead; }
     std::string_view getKey() const { return _key; }
-    std::optional<DateTimePart> getDateTimePart() const { return _dateTimePart; }
-    std::optional<DurationPart> getDurationPart() const { return _durationPart; }
-    std::optional<PointPart> getPointPart() const { return _pointPart; }
     NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
+
+    template <typename Part>
+    std::optional<Part> getPart() const { return std::get<std::optional<Part>>(_parts); }
 
 private:
     const Column* _input {nullptr};
     Column* _result {nullptr};
     NLKeyedReadFunction _keyedRead {nullptr};
     std::string_view _key {};
-    std::optional<DateTimePart> _dateTimePart;
-    std::optional<DurationPart> _durationPart;
-    std::optional<PointPart> _pointPart;
+    ComponentParts _parts;
     NLStepBuffers* _stepBuffers {nullptr};
 };
 

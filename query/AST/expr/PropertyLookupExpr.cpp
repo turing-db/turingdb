@@ -20,21 +20,6 @@ PropertyLookupExpr* PropertyLookupExpr::create(CypherAST* ast, Expr* base, std::
     return expr;
 }
 
-void PropertyLookupExpr::setDateTimePart(DateTimePart part) {
-    _dateTimePart = part;
-    _readsADateTimeComponent = true;
-}
-
-void PropertyLookupExpr::setDurationPart(DurationPart part) {
-    _durationPart = part;
-    _readsADurationComponent = true;
-}
-
-void PropertyLookupExpr::setPointPart(PointPart part) {
-    _pointPart = part;
-    _readsAPointComponent = true;
-}
-
 void PropertyLookupExpr::setReadsAMapKey() {
     _readsAMapKey = true;
 }

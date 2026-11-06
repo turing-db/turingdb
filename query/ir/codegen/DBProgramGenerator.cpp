@@ -9851,15 +9851,12 @@ mlir::Type DBProgramGenerator::propertyValueType(ValueType valueType) {
 
 mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propExpr) {
     const mlir::Value value = translatePropertyRead(propExpr);
+    const std::optional<ValueComponent>& component = propExpr->getComponent();
 
     if (propExpr->readsAMapKey()) {
         return emitStaticMapKey(value, propExpr->getMapKey());
-    } else if (propExpr->readsADateTimeComponent()) {
-        return emitDateTimeComponent(propExpr->getDateTimePart(), value);
-    } else if (propExpr->readsADurationComponent()) {
-        return emitDurationComponent(propExpr->getDurationPart(), value);
-    } else if (propExpr->readsAPointComponent()) {
-        return emitPointComponent(propExpr->getPointPart(), value);
+    } else if (component) {
+        return emitComponent(*component, value);
     }
 
     return value;
@@ -9877,17 +9874,14 @@ mlir::Value DBProgramGenerator::translatePropertyLookupExpr(const PropertyLookup
     bioassert(_part._exprMap.contains(base), "Property lookup with unknown base.");
 
     const mlir::Value baseColumn = _part._exprMap.at(base);
+    const std::optional<ValueComponent>& component = lookupExpr->getComponent();
 
     if (lookupExpr->readsAMapKey()) {
         return emitStaticMapKey(baseColumn, lookupExpr->getPropName());
     }
 
-    if (lookupExpr->readsADateTimeComponent()) {
-        return emitDateTimeComponent(lookupExpr->getDateTimePart(), baseColumn);
-    } else if (lookupExpr->readsADurationComponent()) {
-        return emitDurationComponent(lookupExpr->getDurationPart(), baseColumn);
-    } else if (lookupExpr->readsAPointComponent()) {
-        return emitPointComponent(lookupExpr->getPointPart(), baseColumn);
+    if (component) {
+        return emitComponent(*component, baseColumn);
     } else if (readType == EvaluatedType::Any) {
         return emitStaticMapKey(baseColumn, lookupExpr->getPropName());
     }
@@ -9930,7 +9924,11 @@ mlir::Value DBProgramGenerator::emitDynamicMapKey(mlir::Value map, mlir::Value k
     return _opBuilder.create<mlir::db::DynamicMapKey>(loc, cellType, map, key).getResult();
 }
 
-mlir::Value DBProgramGenerator::emitDateTimeComponent(DateTimePart part, mlir::Value instant) {
+mlir::Value DBProgramGenerator::emitComponent(const ValueComponent& component, mlir::Value value) {
+    return std::visit([this, value](auto part) { return emitComponent(part, value); }, component);
+}
+
+mlir::Value DBProgramGenerator::emitComponent(DateTimePart part, mlir::Value instant) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
@@ -9971,7 +9969,7 @@ mlir::Value DBProgramGenerator::emitDateTimeComponent(DateTimePart part, mlir::V
     return mlir::Value();
 }
 
-mlir::Value DBProgramGenerator::emitPointComponent(PointPart part, mlir::Value point) {
+mlir::Value DBProgramGenerator::emitComponent(PointPart part, mlir::Value point) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
@@ -10012,7 +10010,7 @@ mlir::Value DBProgramGenerator::emitPointComponent(PointPart part, mlir::Value p
     return mlir::Value();
 }
 
-mlir::Value DBProgramGenerator::emitDurationComponent(DurationPart part, mlir::Value duration) {
+mlir::Value DBProgramGenerator::emitComponent(DurationPart part, mlir::Value duration) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 

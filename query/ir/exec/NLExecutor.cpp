@@ -5705,6 +5705,14 @@ bool findKeyedEntry(const NLKeyedValue& keyed,
     return true;
 }
 
+MapBuffer<>::MapItemVariant mapItemOf(int64_t component) {
+    return component;
+}
+
+MapBuffer<>::MapItemVariant mapItemOf(const Point::Component& component) {
+    return std::visit([](auto value) -> MapBuffer<>::MapItemVariant { return value; }, component);
+}
+
 // The component @param part names of @param value, written into @param mapBuffer as the
 // value of a map of one entry, as an entity's property is
 template <typename Owner, typename Part>
@@ -5719,33 +5727,8 @@ CellView componentCell(Owner value,
 
     const MapBuffer<>::MapKeyValuePair component {
         .key = key,
-        .value = Owner::component(value, *part),
+        .value = mapItemOf(Owner::component(value, *part)),
     };
-
-    const MapView map = mapBuffer.insert(std::span<const MapBuffer<>::MapKeyValuePair> {&component, 1});
-
-    return map.front().getValue();
-}
-
-// componentCell's sibling for a point, whose components differ in type: a coordinate is a
-// double, the CRS a name, the SRID an integer
-CellView pointComponentCell(const Point value,
-                            std::optional<PointPart> part,
-                            std::string_view key,
-                            MapBuffer<>& mapBuffer) {
-    if (!part) {
-        throw IRException(fmt::format("'{}' is not a component of a point", key));
-    }
-
-    MapBuffer<>::MapKeyValuePair component {.key = key, .value = PropertyNull {}};
-
-    if (*part == PointPart::CRS) {
-        component.value = Point::getCRSName(value.getCRS());
-    } else if (*part == PointPart::SRID) {
-        component.value = Point::getSRID(value.getCRS());
-    } else {
-        component.value = Point::coordinate(value, *part);
-    }
 
     const MapView map = mapBuffer.insert(std::span<const MapBuffer<>::MapKeyValuePair> {&component, 1});
 
@@ -5762,11 +5745,11 @@ CellView readStaticKey(const NLKeyedValue& keyed,
     const std::string_view key = mapKey->getKey();
 
     if (const DateTime* instant = std::get_if<DateTime>(&keyed)) {
-        return componentCell(*instant, mapKey->getDateTimePart(), key, "datetime", mapBuffer);
+        return componentCell(*instant, mapKey->getPart<DateTimePart>(), key, "datetime", mapBuffer);
     } else if (const Duration* duration = std::get_if<Duration>(&keyed)) {
-        return componentCell(*duration, mapKey->getDurationPart(), key, "duration", mapBuffer);
+        return componentCell(*duration, mapKey->getPart<DurationPart>(), key, "duration", mapBuffer);
     } else if (const Point* point = std::get_if<Point>(&keyed)) {
-        return pointComponentCell(*point, mapKey->getPointPart(), key, mapBuffer);
+        return componentCell(*point, mapKey->getPart<PointPart>(), key, "point", mapBuffer);
     } else if (const NLKeylessValue* keyless = std::get_if<NLKeylessValue>(&keyed)) {
         throw IRException(fmt::format("Type mismatch: a value of type '{}' has no property '{}'",
                                       queryTypeName(keyless->_tag),

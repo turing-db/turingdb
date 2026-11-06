@@ -118,36 +118,7 @@ bool StructuralExpressionComparator::equal(const Expr* lhs, const Expr* rhs) {
 
             // Two components of one value are two values, so the component is part of
             // what the access reads: d.year and d.day read the same variable
-            const bool lhsReadsADateTime = lhsProperty->readsADateTimeComponent();
-            const bool rhsReadsADateTime = rhsProperty->readsADateTimeComponent();
-            const bool lhsReadsADuration = lhsProperty->readsADurationComponent();
-            const bool rhsReadsADuration = rhsProperty->readsADurationComponent();
-            const bool lhsReadsAPoint = lhsProperty->readsAPointComponent();
-            const bool rhsReadsAPoint = rhsProperty->readsAPointComponent();
-
-            const bool neitherReadsAComponent = !lhsReadsADateTime
-                                             && !rhsReadsADateTime
-                                             && !lhsReadsADuration
-                                             && !rhsReadsADuration
-                                             && !lhsReadsAPoint
-                                             && !rhsReadsAPoint;
-
-            const bool sameDateTimeComponent = lhsReadsADateTime
-                                            && rhsReadsADateTime
-                                            && lhsProperty->getDateTimePart() == rhsProperty->getDateTimePart();
-
-            const bool sameDurationComponent = lhsReadsADuration
-                                            && rhsReadsADuration
-                                            && lhsProperty->getDurationPart() == rhsProperty->getDurationPart();
-
-            const bool samePointComponent = lhsReadsAPoint
-                                         && rhsReadsAPoint
-                                         && lhsProperty->getPointPart() == rhsProperty->getPointPart();
-
-            const bool sameComponent = neitherReadsAComponent
-                                    || sameDateTimeComponent
-                                    || sameDurationComponent
-                                    || samePointComponent;
+            const bool sameComponent = lhsProperty->getComponent() == rhsProperty->getComponent();
 
             // And two keys of one map are two values for the same reason. The key is empty
             // on every read that is not one, so the comparison stands for all of them.

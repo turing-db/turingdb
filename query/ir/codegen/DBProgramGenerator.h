@@ -24,6 +24,7 @@
 #include "stmt/SetItem.h"
 #include "metadata/DateTime.h"
 #include "metadata/Point.h"
+#include "metadata/ValueComponent.h"
 
 #include "ExplainRequest.h"
 #include "InsertionOrderedMap.h"
@@ -1414,9 +1415,10 @@ private:
     mlir::Value translatePropertyLookupExpr(const PropertyLookupExpr* lookupExpr);
     mlir::Value emitStaticMapKey(mlir::Value map, std::string_view key);
     mlir::Value emitDynamicMapKey(mlir::Value map, mlir::Value key);
-    mlir::Value emitDateTimeComponent(DateTimePart part, mlir::Value instant);
-    mlir::Value emitDurationComponent(DurationPart part, mlir::Value duration);
-    mlir::Value emitPointComponent(PointPart part, mlir::Value point);
+    mlir::Value emitComponent(const ValueComponent& component, mlir::Value value);
+    mlir::Value emitComponent(DateTimePart part, mlir::Value instant);
+    mlir::Value emitComponent(DurationPart part, mlir::Value duration);
+    mlir::Value emitComponent(PointPart part, mlir::Value point);
     mlir::Value translateEntityTypeExpr(const EntityTypeExpr* typeExpr);
 
     // labels() / type() of an entity the CREATE wrote, as the constant string it reads:

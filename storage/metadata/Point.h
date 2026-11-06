@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 
 namespace db {
 
@@ -36,6 +37,9 @@ enum class PointPart : uint8_t {
 // of 0, and no coordinate is -0.0, so two equal points are equal in every byte.
 class Point {
 public:
+    // The value of a component: a coordinate, the name of the CRS or its SRID
+    using Component = std::variant<double, int64_t, std::string_view>;
+
     Point() = default;
 
     // Raises on a non-finite coordinate and on a latitude outside [-90, 90]. A longitude
@@ -72,6 +76,8 @@ public:
     // A coordinate the point has. Raises for z of a 2D point, and for longitude, latitude
     // and height of a cartesian one.
     static double coordinate(Point value, PointPart part);
+
+    static Component component(Point value, PointPart part);
 
     // point() of a map. False where the map holds a null.
     static bool fromMap(const MapView& map, Point& value);

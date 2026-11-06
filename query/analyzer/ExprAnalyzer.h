@@ -10,6 +10,7 @@
 #include "decl/ExprType.h"
 #include "expr/CaseExpr.h"
 #include "metadata/PropertyType.h"
+#include "metadata/ValueComponent.h"
 #include "views/GraphView.h"
 
 namespace db {
@@ -203,6 +204,13 @@ private:
     Expr* createDottedForm(const IndexExpr* expr);
 
     [[noreturn]] void throwTargetInsideAProperty(const PropertyExpr* expr, const VarDecl* varDecl);
+
+    // The component @param name names of a value of @param ownerType, an instant, a duration
+    // or a point. Raises where it names none.
+    void resolveComponent(const Expr* expr,
+                          EvaluatedType ownerType,
+                          std::string_view name,
+                          ValueComponent& component) const;
 
     LoadCSVStmt* findCSVSource(const VarDecl* alias) const;
 
