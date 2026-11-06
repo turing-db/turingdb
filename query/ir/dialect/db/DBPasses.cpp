@@ -6829,15 +6829,23 @@ void renumberEndColumn(ExplorePaths exploration, llvm::ArrayRef<size_t> kept, Op
     state.attributes.set(exploration.getEndColumnAttrName(), unsignedAttribute(static_cast<uint64_t>(keptIt - kept.begin()), builder));
 }
 
-// The carry set is an exploration's second operand segment, so a trim of it rewrites the
-// segment sizes as a trimmed procedure call's are rewritten
-void trimExploreSegments(ExplorePaths exploration, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
-    const int32_t keptCount = static_cast<int32_t>(kept.size());
-    const int32_t endNodeCount = exploration.getEndNodes() ? 1 : 0;
-    const int32_t importCount = static_cast<int32_t>(exploration.getHopImports().size());
+// On an op sizing its operand segments the carry set is a segment of its own, so a carry set
+// of a new length rewrites the segment sizes
+void sizeCarrySetSegment(Operation* op, size_t count, OperationState& state, mlir::OpBuilder& builder) {
+    const int32_t carriedCount = static_cast<int32_t>(count);
 
-    state.attributes.set(exploration.getOperandSegmentSizesAttrName(),
-                         builder.getDenseI32ArrayAttr({1, keptCount, endNodeCount, importCount}));
+    if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op)) {
+        const int32_t endNodeCount = exploration.getEndNodes() ? 1 : 0;
+        const int32_t importCount = static_cast<int32_t>(exploration.getHopImports().size());
+        state.attributes.set(exploration.getOperandSegmentSizesAttrName(), builder.getDenseI32ArrayAttr({1, carriedCount, endNodeCount, importCount}));
+    } else if (CallProcedure call = dyn_cast<CallProcedure>(op)) {
+        const int32_t inputCount = static_cast<int32_t>(call.getInputs().size());
+        state.attributes.set(call.getOperandSegmentSizesAttrName(), builder.getDenseI32ArrayAttr({inputCount, carriedCount}));
+    } else if (UnwindRange unwind = dyn_cast<UnwindRange>(op)) {
+        const int32_t fromCount = unwind.getFrom() ? 1 : 0;
+        const int32_t toCount = unwind.getTo() ? 1 : 0;
+        state.attributes.set(unwind.getOperandSegmentSizesAttrName(), builder.getDenseI32ArrayAttr({1, 1, 1, fromCount, toCount, carriedCount}));
+    }
 }
 
 void trimAttributes(Operation* op, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
@@ -6845,21 +6853,29 @@ void trimAttributes(Operation* op, llvm::ArrayRef<size_t> kept, OperationState& 
         renumberSortKeys(sort, kept, state, builder);
     } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op)) {
         renumberEndColumn(exploration, kept, state, builder);
-        trimExploreSegments(exploration, kept, state, builder);
     } else if (GroupAggregate groupAggregate = dyn_cast<GroupAggregate>(op)) {
         trimGroupAggregateKinds(groupAggregate, kept, state, builder);
     } else if (Collect collect = dyn_cast<Collect>(op)) {
         trimCollectAttributes(collect, kept, state, builder);
-    } else if (CallProcedure call = dyn_cast<CallProcedure>(op)) {
-        const int32_t inputCount = static_cast<int32_t>(call.getInputs().size());
-        const int32_t keptCount = static_cast<int32_t>(kept.size());
-        state.attributes.set(call.getOperandSegmentSizesAttrName(), builder.getDenseI32ArrayAttr({inputCount, keptCount}));
-    } else if (UnwindRange unwind = dyn_cast<UnwindRange>(op)) {
-        const int32_t fromCount = unwind.getFrom() ? 1 : 0;
-        const int32_t toCount = unwind.getTo() ? 1 : 0;
-        const int32_t keptCount = static_cast<int32_t>(kept.size());
-        state.attributes.set(unwind.getOperandSegmentSizesAttrName(), builder.getDenseI32ArrayAttr({1, 1, 1, fromCount, toCount, keptCount}));
     }
+
+    sizeCarrySetSegment(op, kept.size(), state, builder);
+}
+
+Operation* rebuildOp(Operation* op, OperationState& state, mlir::OpBuilder& builder) {
+    const unsigned regionCount = op->getNumRegions();
+    for (unsigned regionIndex = 0; regionIndex < regionCount; regionIndex++) {
+        state.addRegion();
+    }
+
+    builder.setInsertionPoint(op);
+    Operation* const rebuilt = builder.create(state);
+
+    for (unsigned regionIndex = 0; regionIndex < regionCount; regionIndex++) {
+        rebuilt->getRegion(regionIndex).takeBody(op->getRegion(regionIndex));
+    }
+
+    return rebuilt;
 }
 
 void trimCarrySet(Operation* op, const CarrySet& carrySet, llvm::ArrayRef<size_t> kept, mlir::OpBuilder& builder) {
@@ -6885,17 +6901,7 @@ void trimCarrySet(Operation* op, const CarrySet& carrySet, llvm::ArrayRef<size_t
     state.addAttributes(op->getAttrs());
     trimAttributes(op, kept, state, builder);
 
-    const unsigned regionCount = op->getNumRegions();
-    for (unsigned regionIndex = 0; regionIndex < regionCount; regionIndex++) {
-        state.addRegion();
-    }
-
-    builder.setInsertionPoint(op);
-    Operation* const trimmed = builder.create(state);
-
-    for (unsigned regionIndex = 0; regionIndex < regionCount; regionIndex++) {
-        trimmed->getRegion(regionIndex).takeBody(op->getRegion(regionIndex));
-    }
+    Operation* const trimmed = rebuildOp(op, state, builder);
 
     for (size_t resultIndex = 0; resultIndex < carrySet._resultOffset; resultIndex++) {
         results[resultIndex].replaceAllUsesWith(trimmed->getResult(resultIndex));
@@ -7708,7 +7714,7 @@ struct FuseScanByPropertyValue : public impl::FuseScanByPropertyValueBase<FuseSc
 // among them - a group's rows are not its input's - and neither is remove_duplicates,
 // whose dedup key is every column it carries, so a wider carry set drops different rows.
 bool mapsRowsThrough(Operation* op) {
-    return isEdgeHop(op) || isa<FilterOp, Unwind, Limit, Skip, Sort>(op);
+    return isEdgeHop(op) || isa<FilterOp, ExplorePaths, Unwind, Limit, Skip, Sort>(op);
 }
 
 bool matchPropertyRead(Operation* op, StringAttr& property, bool& nodeProperty) {
@@ -7751,29 +7757,44 @@ bool matchPropertiesWrite(Operation* op, bool& nodeProperty) {
     return false;
 }
 
-// Widens an op's carry set by one column and hands back the result it comes out as. A carry
-// set is the trailing operands and the trailing results of the op holding it, so the column
-// appends to both; an op's arity is fixed once built, hence the rebuild.
+// Widens an op's carry set by one column and hands back the result it comes out as. The
+// column ends the run of operands and the run of results the carry set spans; an op's arity
+// is fixed once built, hence the rebuild.
 Value appendCarriedColumn(Operation* op, Value column, mlir::RewriterBase& rewriter) {
+    CarrySet carrySet;
+    const bool carries = matchCarrySet(op, carrySet);
+    bioassert(carries, "A column is carried through an op with a carry set");
+
+    const size_t operandIndex = carrySet._operandOffset + carrySet._count;
+    const size_t resultIndex = carrySet._resultOffset + carrySet._count;
+
     llvm::SmallVector<Value> operands;
     llvm::append_range(operands, op->getOperands());
-    operands.push_back(column);
+    operands.insert(operands.begin() + operandIndex, column);
 
     llvm::SmallVector<Type> types;
     llvm::append_range(types, op->getResultTypes());
-    types.push_back(column.getType());
+    types.insert(types.begin() + resultIndex, column.getType());
 
     OperationState state(op->getLoc(), op->getName());
     state.addOperands(operands);
     state.addTypes(types);
     state.addAttributes(op->getAttrs());
+    sizeCarrySetSegment(op, carrySet._count + 1, state, rewriter);
 
-    rewriter.setInsertionPoint(op);
-    Operation* const widened = rewriter.create(state);
+    Operation* const widened = rebuildOp(op, state, rewriter);
 
-    rewriter.replaceOp(op, widened->getResults().drop_back());
+    const size_t resultCount = op->getNumResults();
 
-    return widened->getResults().back();
+    llvm::SmallVector<Value> replacements;
+    for (size_t index = 0; index < resultCount; index++) {
+        const size_t widenedIndex = index < resultIndex ? index : index + 1;
+        replacements.push_back(widened->getResult(static_cast<unsigned>(widenedIndex)));
+    }
+
+    rewriter.replaceOp(op, replacements);
+
+    return widened->getResult(static_cast<unsigned>(resultIndex));
 }
 
 Value carryThrough(Operation* op, Value column, mlir::RewriterBase& rewriter) {
@@ -8504,8 +8525,14 @@ private:
 
         Operation* const carrying = carried.getDefiningOp();
         if (carrying != carrier) {
-            const ResultRange replacements = carrying->getResults();
-            _known.rebind(carrierResults, llvm::SmallVector<Value>(replacements.take_front(carrierResults.size())));
+            llvm::SmallVector<Value> replacements;
+            for (const Value result : carrying->getResults()) {
+                if (result != carried) {
+                    replacements.push_back(result);
+                }
+            }
+
+            _known.rebind(carrierResults, replacements);
         }
 
         return carried;
@@ -8709,21 +8736,12 @@ private:
         llvm::SmallVector<Type> types(op->getResultTypes());
         types.insert(types.begin() + resultIndex, type);
 
-        const unsigned regionCount = op->getNumRegions();
-
         OperationState state(op->getLoc(), op->getName());
         state.addOperands(op->getOperands());
         state.addTypes(types);
         state.addAttributes(op->getAttrs());
-        for (unsigned regionIndex = 0; regionIndex < regionCount; regionIndex++) {
-            state.addRegion();
-        }
 
-        _rewriter.setInsertionPoint(op);
-        Operation* const rebuilt = _rewriter.create(state);
-        for (unsigned regionIndex = 0; regionIndex < regionCount; regionIndex++) {
-            rebuilt->getRegion(regionIndex).takeBody(op->getRegion(regionIndex));
-        }
+        Operation* const rebuilt = rebuildOp(op, state, _rewriter);
 
         const llvm::SmallVector<Value> replaced(op->getResults());
         llvm::SmallVector<Value> replacements;
