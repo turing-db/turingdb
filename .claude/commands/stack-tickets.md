@@ -118,7 +118,7 @@ Commit once. Stage by explicit path, never `git add -A`, `git add .` or `git add
 
 ```
 Do not commit yourself. Run `git add -N <each new file>` so your new files count as
-   part of the working-tree change, then invoke Skill(skill: "converge", args: "high"). It
+   part of the working-tree change, then invoke Skill(skill: "converge", args: "xhigh"). It
    reviews your uncommitted change, fixes what it finds, and makes the one commit, with a
    subject in the repo's style. When it finishes, move REVIEW.md to
    <scratch>/<TICKET>/REVIEW.md.

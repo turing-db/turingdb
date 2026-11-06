@@ -12,7 +12,7 @@ at the end carrying the fixes and the tests. `REVIEW.md` records the whole run a
 committed.
 
 `$ARGUMENTS` may carry an effort level (`low`, `medium`, `high`, `xhigh`, `max`) and a
-review target (a PR number, a branch, a path, or a jj change id). Default: `high`, and the
+review target (a PR number, a branch, a path, or a jj change id). Default: `xhigh`, and the
 target phase 0 works out.
 
 Run in **jj mode** when `$ARGUMENTS` contains `jj`, or when `jj root` succeeds in the working
@@ -241,7 +241,7 @@ later section can write `C2 reopened`.
 ```markdown
 # Converge — <target> — <date>
 
-## Iteration 1 — code-review high
+## Iteration 1 — code-review xhigh
 
 ### Correctness
 C1 `query/ir/DBLowering.cpp:412` — the limit attribute is signed, so a negative literal
