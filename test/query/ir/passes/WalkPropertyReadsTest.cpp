@@ -144,13 +144,12 @@ TEST_F(WalkPropertyReadsTest, readsTheSeedPropertyOnceAcrossAWalkWithAHopPredica
                             1);
 }
 
-// The walk imports the seed into its hop predicate, an operand standing after the carry set,
-// and the predicate reads the age of the import inside the hop region
+// The walk imports the seed into its hop predicate, an operand standing after the carry set
 TEST_F(WalkPropertyReadsTest, readsTheSeedPropertyOnceAcrossAWalkImportingIt) {
     expectNodePropertyReads("MATCH (n:Person) WHERE n.age > 0 "
                             "MATCH (n)(()-[e]->() WHERE e.duration < n.age){1,2}(m) RETURN n.age, m",
                             "age",
-                            2);
+                            1);
 }
 
 TEST_F(WalkPropertyReadsTest, readsTheSeedPropertyOnceAcrossAWalkEndingOnANamedNode) {

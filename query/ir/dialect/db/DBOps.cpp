@@ -2815,8 +2815,13 @@ bool Sort::getCarrySet(CarrySet& carrySet) {
 }
 
 bool RemoveDuplicates::getCarrySet(CarrySet& carrySet) {
-    carrySet = CarrySet {._count = getColumns().size()};
+    const MutableOperandRange carried = getCarrySetMutable();
+    carrySet = CarrySet {._operandOffset = operandRunOffset(carried), ._count = carried.size()};
     return true;
+}
+
+MutableOperandRange RemoveDuplicates::getCarrySetMutable() {
+    return getColumnsMutable();
 }
 
 bool GroupAggregate::getCarrySet(CarrySet& carrySet) {
@@ -2840,9 +2845,13 @@ bool Unwind::getCarrySet(CarrySet& carrySet) {
 }
 
 bool UnwindRange::getCarrySet(CarrySet& carrySet) {
-    const size_t count = getColumnsToFilter().size();
-    carrySet = CarrySet {._operandOffset = getNumOperands() - count, ._resultOffset = 1, ._count = count};
+    const MutableOperandRange carried = getCarrySetMutable();
+    carrySet = CarrySet {._operandOffset = operandRunOffset(carried), ._resultOffset = 1, ._count = carried.size()};
     return true;
+}
+
+MutableOperandRange UnwindRange::getCarrySetMutable() {
+    return getColumnsToFilterMutable();
 }
 
 bool UnwindComputed::getCarrySet(CarrySet& carrySet) {
@@ -2856,10 +2865,15 @@ void UnwindComputed::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Va
 }
 
 bool CallProcedure::getCarrySet(CarrySet& carrySet) {
-    carrySet = CarrySet {._operandOffset = getInputs().size(),
+    const MutableOperandRange carried = getCarrySetMutable();
+    carrySet = CarrySet {._operandOffset = operandRunOffset(carried),
                          ._resultOffset = getYields().size(),
-                         ._count = getCarriedColumns().size()};
+                         ._count = carried.size()};
     return true;
+}
+
+MutableOperandRange CallProcedure::getCarrySetMutable() {
+    return getCarriedColumnsMutable();
 }
 
 bool GetOutEdges::getCarrySet(CarrySet& carrySet) {
@@ -2935,8 +2949,25 @@ Value GetInEdgesByTypeAndLabel::getRowSource(OpResult result) {
 }
 
 bool ExplorePaths::getCarrySet(CarrySet& carrySet) {
-    carrySet = CarrySet {._operandOffset = 1, ._resultOffset = PATH_FIXED_RESULT_COUNT, ._count = getColumnsToFilter().size()};
+    const MutableOperandRange carried = getCarrySetMutable();
+    carrySet = CarrySet {._operandOffset = operandRunOffset(carried), ._resultOffset = PATH_FIXED_RESULT_COUNT, ._count = carried.size()};
     return true;
+}
+
+MutableOperandRange ExplorePaths::getCarrySetMutable() {
+    return getColumnsToFilterMutable();
+}
+
+bool ExplorePaths::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
+    const MutableOperandRange carried = getRegionCarrySetMutable();
+    carrySet = RegionCarrySet {._operandOffset = operandRunOffset(carried),
+                               ._argumentOffset = hopWalkArgumentCount(region.getRegionNumber()),
+                               ._count = carried.size()};
+    return true;
+}
+
+MutableOperandRange ExplorePaths::getRegionCarrySetMutable() {
+    return getHopImportsMutable();
 }
 
 // The seed comes back as srcids, and as tgtids too when the walk ends on it
