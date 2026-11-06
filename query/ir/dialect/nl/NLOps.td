@@ -3130,6 +3130,11 @@ def ToFloatOrNull : NLUnaryFunctionOp<"to_float_or_null", [ConstantThroughOperan
 def ToBooleanOrNull : NLUnaryFunctionOp<"to_boolean_or_null", [ConstantThroughOperands]>;
 def ToStringOrNull : NLUnaryFunctionOp<"to_string_or_null", [ConstantThroughOperands]>;
 
+def ToIntegerList : NLUnaryFunctionOp<"to_integer_list", [ConstantThroughOperands]>;
+def ToFloatList : NLUnaryFunctionOp<"to_float_list", [ConstantThroughOperands]>;
+def ToBooleanList : NLUnaryFunctionOp<"to_boolean_list", [ConstantThroughOperands]>;
+def ToStringList : NLUnaryFunctionOp<"to_string_list", [ConstantThroughOperands]>;
+
 // The db.datetime_* family lowers to these. Each reads one instant and answers one
 // integer, so a constant instant - what datetime() and datetime('...') are - keeps its
 // constancy through the field read.

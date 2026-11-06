@@ -225,6 +225,7 @@ public:
     using TaggedCounterpart = TaggedConversionFunction<ToFloatFunction, UnconvertibleCell::Raise>;
 
     static constexpr std::string_view NAME = "toFloat";
+    static constexpr std::string_view LIST_NAME = "toFloatList";
 
     ResultType operator()(std::string_view sv) {
         // @ref std::strtod requires a null-terminated std::string: convert the string_view
@@ -259,6 +260,7 @@ public:
     using TaggedCounterpart = TaggedConversionFunction<ToIntegerFunction, UnconvertibleCell::Raise>;
 
     static constexpr std::string_view NAME = "toInteger";
+    static constexpr std::string_view LIST_NAME = "toIntegerList";
 
     ResultType operator()(std::string_view text);
 
@@ -273,6 +275,7 @@ public:
     using TaggedCounterpart = TaggedConversionFunction<ToBoolFunction, UnconvertibleCell::Raise>;
 
     static constexpr std::string_view NAME = "toBoolean";
+    static constexpr std::string_view LIST_NAME = "toBooleanList";
 
     ResultType operator()(std::string_view sv) {
         strToLower(_buf, sv);
@@ -310,6 +313,7 @@ public:
     using TaggedCounterpart = TaggedConversionFunction<ToStringFunction, UnconvertibleCell::Raise>;
 
     static constexpr std::string_view NAME = "toString";
+    static constexpr std::string_view LIST_NAME = "toStringList";
 
     explicit ToStringFunction(StringBuffer* stringBuffer);
 
@@ -835,6 +839,46 @@ using TaggedToIntegerOrNullFunction = TaggedConversionFunction<ToIntegerFunction
 using TaggedToFloatOrNullFunction = TaggedConversionFunction<ToFloatFunction, UnconvertibleCell::Null>;
 using TaggedToBooleanOrNullFunction = TaggedConversionFunction<ToBoolFunction, UnconvertibleCell::Null>;
 using TaggedToStringOrNullFunction = TaggedConversionFunction<ToStringFunction, UnconvertibleCell::Null>;
+
+template <typename StringFunctor>
+class TaggedListConversionFunction;
+
+template <typename StringFunctor>
+class ListConversionFunction {
+public:
+    using ArgType = types::List::Primitive;
+    using ResultType = types::List::Primitive;
+    using TaggedCounterpart = TaggedListConversionFunction<StringFunctor>;
+
+    ListConversionFunction(QueryListBuffer* listBuffer, StringBuffer* stringBuffer);
+
+    ResultType operator()(const ArgType list);
+
+private:
+    QueryListBuffer* _listBuffer {nullptr};
+    TaggedConversionFunction<StringFunctor, UnconvertibleCell::Null> _convertElement;
+    std::vector<QueryListBuffer::ListItemVariant> _converted;
+};
+
+template <typename StringFunctor>
+class TaggedListConversionFunction {
+public:
+    using ArgType = CellView;
+    using ResultType = std::optional<types::List::Primitive>;
+
+    TaggedListConversionFunction(QueryListBuffer* listBuffer, StringBuffer* stringBuffer);
+
+    ResultType operator()(const ArgType cell);
+    ResultType operator()(const std::optional<ArgType>& cell);
+
+private:
+    ListConversionFunction<StringFunctor> _convertList;
+};
+
+using ToIntegerListFunction = ListConversionFunction<ToIntegerFunction>;
+using ToFloatListFunction = ListConversionFunction<ToFloatFunction>;
+using ToBooleanListFunction = ListConversionFunction<ToBoolFunction>;
+using ToStringListFunction = ListConversionFunction<ToStringFunction>;
 
 // abs keeps the type each cell holds, so its answer is a cell of its own
 class TaggedAbsFunction {
