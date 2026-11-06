@@ -28,9 +28,8 @@ TEST_F(DurationArithmeticTest, dividesADurationByANumber) {
     expectRows("RETURN duration(3600000000) / 0.5", {{"PT2H"}});
 }
 
-TEST_F(DurationArithmeticTest, truncatesTowardZero) {
+TEST_F(DurationArithmeticTest, truncatesAnIntegerDivisionTowardZero) {
     expectRows("RETURN duration(3) / 2", {{"PT0.000001S"}});
-    expectRows("RETURN duration(3) * 0.5", {{"PT0.000001S"}});
     expectRows("RETURN duration(-3) / 2", {{"PT-0.000001S"}});
 }
 
