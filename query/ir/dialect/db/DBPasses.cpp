@@ -1,5 +1,6 @@
 #include "DBPasses.h"
 
+#include <math.h>
 #include <stdint.h>
 #include <algorithm>
 #include <map>
@@ -2127,16 +2128,17 @@ CrossProduct stackedProduct(FilterOp filter) {
     return product;
 }
 
-// The rows of a cross product and of the filters stacked over it, climbed one filter at a
-// time. It answers matchFilterChain's question for each filter of the stack, while following
-// the readers of each level once rather than once per filter above it.
+// The rows of a cross product, or of another op making rows, and of the filters stacked
+// over it, climbed one filter at a time. It answers matchFilterChain's question for each
+// filter of the stack, while following the readers of each level once rather than once per
+// filter above it.
 class FilterStack {
 public:
-    explicit FilterStack(CrossProduct product)
-        : _block(product->getBlock()),
-        _top(product)
+    explicit FilterStack(Operation* rows)
+        : _block(rows->getBlock()),
+        _top(rows)
     {
-        followReaders(product);
+        followReaders(rows);
     }
 
     FilterOp getReader() const {
@@ -9075,6 +9077,41 @@ constexpr double EQUALITY_SELECTIVITY = 0.1;
 constexpr double RANGE_SELECTIVITY = 1.0 / 3.0;
 constexpr double MEMBERSHIP_SELECTIVITY_CEILING = 0.5;
 
+// PostgreSQL's count of distinct values in a column it holds no statistics of
+// (DEFAULT_NUM_DISTINCT): as many as the rows, up to this many
+constexpr double DEFAULT_DISTINCT_VALUES = 200;
+
+std::optional<int64_t> literalInteger(Value value) {
+    ConstantOp constant = value.getDefiningOp<ConstantOp>();
+    const IntegerAttr integer = constant ? dyn_cast<IntegerAttr>(constant.getValue()) : IntegerAttr();
+    if (!integer) {
+        return std::nullopt;
+    }
+
+    return integer.getInt();
+}
+
+double estimateUnwoundRows(Unwind unwind) {
+    Range range = unwind.getSource().getDefiningOp<Range>();
+    if (!range) {
+        return static_cast<double>(uncountableRows);
+    }
+
+    const Value stepColumn = range.getStep();
+    const std::optional<int64_t> start = literalInteger(range.getStart());
+    const std::optional<int64_t> end = literalInteger(range.getEnd());
+    const std::optional<int64_t> step = stepColumn ? literalInteger(stepColumn) : std::optional<int64_t>(1);
+
+    const bool countsLiterals = start && end && step && *step != 0;
+    if (!countsLiterals) {
+        return static_cast<double>(uncountableRows);
+    }
+
+    const double steps = (static_cast<double>(*end) - static_cast<double>(*start)) / static_cast<double>(*step);
+
+    return steps < 0 ? 0 : floor(steps) + 1;
+}
+
 using KnownLabels = llvm::DenseMap<Value, ::db::LabelSet>;
 
 // The edges a hop walks as far as the estimate tells them apart: the labels known on the
@@ -9712,11 +9749,11 @@ std::optional<double> estimateSourceRows(Operation* op, const RowEstimator& esti
 // than a count because a graph with fewer edges than nodes has a hop shrink its input
 // rather than grow it. An unwind makes a row per element of each row's list, whose length
 // is a property of the rows themselves: no statistic of the graph measures it, so it reads
-// at the figure an uncountable source does - where a literal list, whose elements are in
-// the IR, is counted exactly instead.
+// at the figure an uncountable source does - where a literal list or a range between
+// literal bounds, whose elements are in the IR, is counted exactly instead.
 std::optional<double> estimateRowMultiplier(Operation* op, const RowEstimator& estimator, WalkKnowledge& knowledge) {
-    if (isa<Unwind>(op)) {
-        return static_cast<double>(uncountableRows);
+    if (Unwind unwind = dyn_cast<Unwind>(op)) {
+        return estimateUnwoundRows(unwind);
     } else if (!isEdgeHop(op)) {
         return std::nullopt;
     }
@@ -10397,17 +10434,88 @@ struct SeedPattern {
     llvm::SmallVector<FilterOp> _filters;
 };
 
-// Where a pattern's rows meet the rows of the column its node is equated to: a cross
-// product with the pattern in one factor, or an unwind carrying the pattern's columns
-struct SeedJunction {
+// Where a pattern's rows meet rows that are not its own: a cross product with the pattern
+// in one factor, or an unwind carrying the pattern's columns
+struct PatternJunction {
     Operation* _op {nullptr};
-    Region* _seedFactor {nullptr};
+    Region* _otherFactor {nullptr};
     llvm::SmallVector<Value> _patternOutputs;
     llvm::SmallVector<Value> _patternResults;
-    llvm::SmallVector<Value> _seedResults;
+    llvm::SmallVector<Value> _otherResults;
 };
 
-bool standsFromTheJunction(Operation* op, const SeedJunction& junction) {
+void readProductJunction(CrossProduct product, bool patternOnTheLeft, PatternJunction& junction) {
+    Operation* const op = product.getOperation();
+    const size_t leftCount = factorYield(op, 0).getNumOperands();
+
+    Region& patternFactor = patternOnTheLeft ? product.getLeftFactor() : product.getRightFactor();
+
+    junction._op = op;
+    junction._otherFactor = patternOnTheLeft ? &product.getRightFactor() : &product.getLeftFactor();
+
+    const Operation::operand_range patternYield = factorYieldColumns(patternFactor);
+    junction._patternOutputs.assign(patternYield.begin(), patternYield.end());
+
+    for (size_t index = 0; index < op->getNumResults(); index++) {
+        const bool fromThePattern = (index < leftCount) == patternOnTheLeft;
+        (fromThePattern ? junction._patternResults : junction._otherResults).push_back(op->getResult(index));
+    }
+}
+
+void readUnwindJunction(Unwind unwind, PatternJunction& junction) {
+    const Operation::operand_range patternOutputs = unwind.getColumnsToFilter();
+    const ResultRange patternResults = unwind.getCarried();
+
+    junction._op = unwind.getOperation();
+    junction._otherResults.push_back(unwind.getElement());
+    junction._patternOutputs.assign(patternOutputs.begin(), patternOutputs.end());
+    junction._patternResults.assign(patternResults.begin(), patternResults.end());
+}
+
+// The value a result of the junction hands on: the pattern column it took, or for the other
+// side the result itself. Null for a value the junction did not make.
+Value junctionSource(const PatternJunction& junction, Value result) {
+    const auto patternResult = llvm::find(junction._patternResults, result);
+    if (patternResult != junction._patternResults.end()) {
+        return junction._patternOutputs[patternResult - junction._patternResults.begin()];
+    } else if (llvm::is_contained(junction._otherResults, result)) {
+        return result;
+    }
+
+    return {};
+}
+
+// The unwound list is none of the pattern's, the unwind carries the pattern's columns alone, and
+// nothing but the pattern and the unwind reads what the pattern binds
+bool unwindsOverThePatternAlone(const PatternJunction& junction,
+                                const SeedPattern& pattern,
+                                llvm::ArrayRef<Operation*> orderedOps) {
+    Unwind unwind = cast<Unwind>(junction._op);
+
+    Operation* const sourceDef = unwind.getSource().getDefiningOp();
+    if (sourceDef && pattern._ops.contains(sourceDef)) {
+        return false;
+    }
+
+    for (const Value output : junction._patternOutputs) {
+        Operation* const def = output.getDefiningOp();
+        if (!def || !pattern._ops.contains(def)) {
+            return false;
+        }
+    }
+
+    for (Operation* const patternOp : orderedOps) {
+        for (Operation* const user : patternOp->getUsers()) {
+            if (user != junction._op && !pattern._ops.contains(user)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+bool standsFromTheJunction(Operation* op, const PatternJunction& junction) {
     if (!op || op->getBlock() != junction._op->getBlock()) {
         return false;
     }
@@ -10415,21 +10523,37 @@ bool standsFromTheJunction(Operation* op, const SeedJunction& junction) {
     return !op->isBeforeInBlock(junction._op);
 }
 
+// A conjunct of a filter over a junction that reads both its sides, which the pattern's
+// walk can apply as soon as it has bound the pattern nodes and edges the conjunct reads.
+// _equatesKeys says it is an equality of a key of each side, and _hashes that
+// fuse_hash_join can then run a product crossed in right before it as a hash join.
+struct JoinConjunct {
+    Value _conjunct;
+    FilterOp _filter {nullptr};
+    MaskCone _cone;
+    llvm::SmallPtrSet<void*, 4> _patternInputs;
+    bool _equatesKeys {false};
+    bool _hashes {false};
+};
+
 struct WalkEvent {
     enum class Kind {
         RootLabels,
         Filter,
         Forward,
         Backward,
+        Cross,
+        Join,
     };
 
     Kind _kind {Kind::Filter};
     FilterOp _filter {nullptr};
     const PatternStep* _step {nullptr};
+    const JoinConjunct* _join {nullptr};
 };
 
 struct PatternSeed {
-    SeedJunction _junction;
+    PatternJunction _junction;
     SeedPattern _pattern;
     FilterOp _filter {nullptr};
     EqOp _equality {nullptr};
@@ -10532,6 +10656,14 @@ void collectPatternOps(Operation* root, Operation* end, SeedPattern& pattern) {
     }
 }
 
+bool walksFreely(ExplorePaths exploration) {
+    return !exploration.getEndNodes()
+        && !exploration.getEndColumn()
+        && !exploration.getEndsOnSeed()
+        && !exploration.getDistinct()
+        && exploration.getHopImports().empty();
+}
+
 // Checks every op of the pattern is one a re-rooted pattern can be rebuilt from, and
 // records its steps and filters
 bool analyzePattern(SeedPattern& pattern, llvm::ArrayRef<Operation*> orderedOps) {
@@ -10548,12 +10680,7 @@ bool analyzePattern(SeedPattern& pattern, llvm::ArrayRef<Operation*> orderedOps)
             const Value from = patternOrigin(op->getOperand(0), pattern);
             pattern._steps.push_back(PatternStep {._op = op, ._from = from, ._to = op->getResult(hopReachedResult(op))});
         } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op)) {
-            const bool walksFreely = !exploration.getEndNodes()
-                                  && !exploration.getEndColumn()
-                                  && !exploration.getEndsOnSeed()
-                                  && !exploration.getDistinct()
-                                  && exploration.getHopImports().empty();
-            if (!walksFreely) {
+            if (!walksFreely(exploration)) {
                 return false;
             }
 
@@ -10646,6 +10773,20 @@ bool raisesOnSomeRow(Value mask, const SeedPattern& pattern) {
     return false;
 }
 
+void bindStep(const PatternStep& step, llvm::DenseSet<Value>& bound) {
+    Operation* const stepOp = step._op;
+
+    bound.insert(step._from);
+    bound.insert(step._to);
+
+    if (ExplorePaths exploration = dyn_cast<ExplorePaths>(stepOp)) {
+        bound.insert(exploration.getPaths());
+    } else {
+        bound.insert(stepOp->getResult(1));
+        bound.insert(stepOp->getResult(2));
+    }
+}
+
 // The order a pattern is rebuilt in from its seeded node: each filter as soon as what it
 // reads is bound, then the first step written that leaves a bound node. The rows already
 // pass the filters of @param applied, and the root's labels when @param rootChecked. False
@@ -10734,15 +10875,7 @@ bool planWalk(const SeedPattern& pattern,
 
             events.push_back(WalkEvent {._kind = forward ? WalkEvent::Kind::Forward : WalkEvent::Kind::Backward, ._step = &step});
 
-            bound.insert(step._from);
-            bound.insert(step._to);
-            if (ExplorePaths exploration = dyn_cast<ExplorePaths>(stepOp)) {
-                bound.insert(exploration.getPaths());
-            } else {
-                bound.insert(stepOp->getResult(1));
-                bound.insert(stepOp->getResult(2));
-            }
-
+            bindStep(step, bound);
             walked.insert(stepOp);
             progressed = true;
             break;
@@ -10806,24 +10939,15 @@ private:
     llvm::DenseMap<Value, Value> _junctions;
 };
 
-bool matchSeedJunction(OpResult seededResult, SeedJunction& junction, SeedPattern& pattern) {
+bool matchSeedJunction(OpResult seededResult, PatternJunction& junction, SeedPattern& pattern) {
     Operation* const op = seededResult.getOwner();
-    junction._op = op;
 
     if (CrossProduct product = dyn_cast<CrossProduct>(op)) {
         const size_t leftCount = factorYield(op, 0).getNumOperands();
         const bool patternOnTheLeft = seededResult.getResultNumber() < leftCount;
+        readProductJunction(product, patternOnTheLeft, junction);
 
         Region& patternFactor = patternOnTheLeft ? product.getLeftFactor() : product.getRightFactor();
-        junction._seedFactor = patternOnTheLeft ? &product.getRightFactor() : &product.getLeftFactor();
-
-        const Operation::operand_range patternYield = factorYieldColumns(patternFactor);
-        junction._patternOutputs.assign(patternYield.begin(), patternYield.end());
-
-        for (size_t index = 0; index < op->getNumResults(); index++) {
-            const bool fromThePattern = (index < leftCount) == patternOnTheLeft;
-            (fromThePattern ? junction._patternResults : junction._seedResults).push_back(op->getResult(index));
-        }
 
         const size_t outputIndex = llvm::find(junction._patternResults, Value(seededResult)) - junction._patternResults.begin();
         Operation* const root = findPatternRoot(junction._patternOutputs[outputIndex]);
@@ -10847,14 +10971,9 @@ bool matchSeedJunction(OpResult seededResult, SeedJunction& junction, SeedPatter
         return false;
     }
 
-    const Operation::operand_range patternOutputs = unwind.getColumnsToFilter();
-    const ResultRange patternResults = unwind.getCarried();
+    readUnwindJunction(unwind, junction);
 
-    junction._seedResults.push_back(unwind.getElement());
-    junction._patternOutputs.assign(patternOutputs.begin(), patternOutputs.end());
-    junction._patternResults.assign(patternResults.begin(), patternResults.end());
-
-    Operation* const root = findPatternRoot(patternOutputs[seededResult.getResultNumber() - 1]);
+    Operation* const root = findPatternRoot(junction._patternOutputs[seededResult.getResultNumber() - 1]);
     if (!root || root->getBlock() != op->getBlock()) {
         return false;
     }
@@ -10868,26 +10987,8 @@ bool matchSeedJunction(OpResult seededResult, SeedJunction& junction, SeedPatter
         }
     }
 
-    // The unwound list is the seed's own, and the unwind carries the pattern alone
-    Operation* const sourceDef = unwind.getSource().getDefiningOp();
-    if (sourceDef && pattern._ops.contains(sourceDef)) {
+    if (!unwindsOverThePatternAlone(junction, pattern, orderedOps)) {
         return false;
-    }
-
-    for (const Value output : junction._patternOutputs) {
-        Operation* const def = output.getDefiningOp();
-        if (!def || !pattern._ops.contains(def)) {
-            return false;
-        }
-    }
-
-    // Nothing but the pattern and the unwind may read what the pattern binds
-    for (Operation* const patternOp : orderedOps) {
-        for (Operation* const user : patternOp->getUsers()) {
-            if (user != op && !pattern._ops.contains(user)) {
-                return false;
-            }
-        }
     }
 
     return analyzePattern(pattern, orderedOps);
@@ -10895,7 +10996,7 @@ bool matchSeedJunction(OpResult seededResult, SeedJunction& junction, SeedPatter
 
 // @param visited holds the values an earlier call reached without finding the seed, so a
 // caller asking of every filter along a chain walks the chain once
-bool readsTheSeed(Value value, const SeedJunction& junction, llvm::DenseSet<Value>& visited) {
+bool readsTheSeed(Value value, const PatternJunction& junction, llvm::DenseSet<Value>& visited) {
     llvm::SmallVector<Value> worklist {value};
 
     while (!worklist.empty()) {
@@ -10904,7 +11005,7 @@ bool readsTheSeed(Value value, const SeedJunction& junction, llvm::DenseSet<Valu
             continue;
         }
 
-        if (llvm::is_contained(junction._seedResults, current)) {
+        if (llvm::is_contained(junction._otherResults, current)) {
             return true;
         }
 
@@ -10924,14 +11025,14 @@ bool readsTheSeed(Value value, const SeedJunction& junction, llvm::DenseSet<Valu
     return false;
 }
 
-bool isComputedFromTheSeed(Value ids, const SeedJunction& junction, Operation* filter) {
+bool isComputedFromTheSeed(Value ids, const PatternJunction& junction, Operation* filter) {
     llvm::SmallVector<Value> worklist {ids};
     llvm::DenseSet<Value> visited;
     llvm::DenseSet<Value> masksVisited;
 
     while (!worklist.empty()) {
         const Value current = worklist.pop_back_val();
-        if (!visited.insert(current).second || llvm::is_contained(junction._seedResults, current)) {
+        if (!visited.insert(current).second || llvm::is_contained(junction._otherResults, current)) {
             continue;
         }
 
@@ -10963,7 +11064,7 @@ bool isComputedFromTheSeed(Value ids, const SeedJunction& junction, Operation* f
 
 // The junction's rows reach the equality's filter through filters and row-wise ops alone,
 // which keep their meaning over the rows the equality would have kept
-bool readsTheJunctionRowWise(const SeedJunction& junction, FilterOp filter) {
+bool readsTheJunctionRowWise(const PatternJunction& junction, FilterOp filter) {
     llvm::SmallPtrSet<Operation*, 16> readers;
     Operation* const junctionOp = junction._op;
 
@@ -11007,12 +11108,16 @@ bool matchPatternSeedSide(FilterOp filter, EqOp equality, Value seeded, Value id
         return false;
     }
 
-    seed = PatternSeed {};
+    // GCC 13 reads moving an empty event list into the seed as a memmove past its end
+    // (-Warray-bounds), so the seed is rebuilt in place rather than assigned a fresh one
+    std::destroy_at(&seed);
+    std::construct_at(&seed);
+
     if (!matchSeedJunction(seededResult, seed._junction, seed._pattern)) {
         return false;
     }
 
-    const SeedJunction& junction = seed._junction;
+    const PatternJunction& junction = seed._junction;
     const size_t outputIndex = llvm::find(junction._patternResults, Value(seededResult)) - junction._patternResults.begin();
     seed._seeded = patternOrigin(junction._patternOutputs[outputIndex], seed._pattern);
 
@@ -11089,6 +11194,13 @@ public:
 
     Value currentOf(Value origin) const { return _current.lookup(origin); }
 
+    void setJunction(const PatternJunction* junction) { _junction = junction; }
+
+    // The value a result of the junction holds over the rebuilt rows
+    Value materializeJunctionResult(Value result) {
+        return materialize(junctionSource(*_junction, result));
+    }
+
     // The value a pattern column holds over the rebuilt rows
     Value materialize(Value value) {
         mlir::IRMapping materialized;
@@ -11103,18 +11215,25 @@ public:
 
             const Value origin = patternOrigin(pending, _pattern);
             Operation* const def = pending.getDefiningOp();
-            Operation* const originDef = origin.getDefiningOp();
 
+            Operation* computing = nullptr;
             if (_current.count(origin)) {
                 materialized.map(pending, _current.lookup(origin));
-            } else if (!def || !_pattern._ops.contains(def)) {
+            } else if (def && _pattern._ops.contains(def)) {
+                computing = origin.getDefiningOp();
+
+                const bool computedPerRow = computing && _pattern._ops.contains(computing) && computesPerRow(computing);
+                bioassert(computedPerRow, "A pattern column read before the step binding it");
+            } else if (!def || isVisibleHere(pending)) {
                 materialized.map(pending, pending);
             } else {
-                const bool computedPerRow = originDef && _pattern._ops.contains(originDef) && computesPerRow(originDef);
-                bioassert(computedPerRow, "A pattern column read before the step binding it");
+                computing = def;
+                bioassert(computesFromTheRow(def), "A walk rebuilt out of its factor reads a row the factor made");
+            }
 
+            if (computing) {
                 bool operandsPending = false;
-                for (const Value operand : llvm::reverse(originDef->getOperands())) {
+                for (const Value operand : llvm::reverse(computing->getOperands())) {
                     if (!materialized.contains(operand)) {
                         worklist.push_back(operand);
                         operandsPending = true;
@@ -11125,7 +11244,7 @@ public:
                     continue;
                 }
 
-                Operation* const cloned = _builder.clone(*originDef, materialized);
+                Operation* const cloned = _builder.clone(*computing, materialized);
                 materialized.map(pending, cloned->getResult(cast<OpResult>(origin).getResultNumber()));
             }
 
@@ -11152,6 +11271,12 @@ public:
                 case WalkEvent::Kind::Backward:
                     walkBackward(*event._step);
                 break;
+                case WalkEvent::Kind::Cross:
+                    crossJunction();
+                break;
+                case WalkEvent::Kind::Join:
+                    keepRows(materializeJoin(*event._join));
+                break;
             }
         }
     }
@@ -11162,6 +11287,100 @@ private:
     Location _loc;
     llvm::DenseMap<Value, Value> _current;
     llvm::SmallVector<Value> _inFlight;
+    const PatternJunction* _junction {nullptr};
+
+    // A walk crossing a product in leaves the factor it was written in, whose values the rows
+    // rebuilt after the cross no longer see
+    bool isVisibleHere(Value value) const {
+        Region* const here = _builder.getInsertionBlock()->getParent();
+        return value.getParentRegion()->isAncestor(here);
+    }
+
+    // The rows rebuilt so far take the junction's place: crossed with the other factor of its
+    // product, or repeated once per element of its unwind
+    void crossJunction() {
+        const PatternJunction& junction = *_junction;
+        Operation* const junctionOp = junction._op;
+
+        llvm::SmallVector<Value> rebuilt;
+        carried(rebuilt, Value());
+
+        _builder.setInsertionPoint(junctionOp);
+
+        Operation* crossed = nullptr;
+        llvm::SmallVector<Value> otherColumns;
+        llvm::SmallVector<Value> rebuiltColumns;
+
+        if (CrossProduct product = dyn_cast<CrossProduct>(junctionOp)) {
+            Region& leftFactor = product.getLeftFactor();
+            Region& rightFactor = product.getRightFactor();
+            const bool patternOnTheLeft = junction._otherFactor == &rightFactor;
+
+            Region& patternFactor = patternOnTheLeft ? leftFactor : rightFactor;
+            Yield yield = cast<Yield>(patternFactor.front().getTerminator());
+            yield->setOperands(rebuilt);
+
+            llvm::SmallVector<Type> types;
+            collectFactorTypes(leftFactor, rightFactor, types);
+
+            CrossProduct crossedProduct = _builder.create<CrossProduct>(_loc, types);
+            crossedProduct.getLeftFactor().takeBody(leftFactor);
+            crossedProduct.getRightFactor().takeBody(rightFactor);
+
+            const size_t leftWidth = leftFactorWidth(crossedProduct);
+            for (const OpResult result : crossedProduct->getResults()) {
+                const bool fromThePattern = (result.getResultNumber() < leftWidth) == patternOnTheLeft;
+                (fromThePattern ? rebuiltColumns : otherColumns).push_back(result);
+            }
+
+            crossed = crossedProduct.getOperation();
+        } else {
+            Unwind unwind = cast<Unwind>(junctionOp);
+
+            llvm::SmallVector<Type> types {unwind.getElement().getType()};
+            for (const Value column : rebuilt) {
+                types.push_back(column.getType());
+            }
+
+            Unwind crossedUnwind = _builder.create<Unwind>(_loc, types, unwind.getSource(), rebuilt);
+            const ResultRange crossedRows = crossedUnwind.getCarried();
+
+            otherColumns.push_back(crossedUnwind.getElement());
+            rebuiltColumns.assign(crossedRows.begin(), crossedRows.end());
+
+            crossed = crossedUnwind.getOperation();
+        }
+
+        _builder.setInsertionPointAfter(crossed);
+
+        const llvm::SmallVector<Value> rebuiltOrigins(_inFlight.begin(), _inFlight.end());
+        _inFlight.clear();
+        _current.clear();
+
+        for (size_t index = 0; index < otherColumns.size(); index++) {
+            bind(junction._otherResults[index], otherColumns[index]);
+        }
+
+        for (size_t index = 0; index < rebuiltColumns.size(); index++) {
+            bind(rebuiltOrigins[index], rebuiltColumns[index]);
+        }
+    }
+
+    Value materializeJoin(const JoinConjunct& join) {
+        mlir::IRMapping mapping;
+        for (const Value input : join._cone._inputs) {
+            const Value source = junctionSource(*_junction, climbFilters(input));
+            if (source) {
+                mapping.map(input, materialize(source));
+            }
+        }
+
+        for (Operation* const coneOp : join._cone._ops) {
+            _builder.clone(*coneOp, mapping);
+        }
+
+        return mapping.lookup(join._conjunct);
+    }
 
     // A hop hands back the node it walks from as its own result, so it does not carry it
     void carried(llvm::SmallVectorImpl<Value>& columns, Value walkedFrom) const {
@@ -11278,7 +11497,7 @@ private:
     }
 };
 
-Value cloneSeedIDs(Value ids, const SeedJunction& junction, mlir::IRMapping& seedColumns, mlir::OpBuilder& builder) {
+Value cloneSeedIDs(Value ids, const PatternJunction& junction, mlir::IRMapping& seedColumns, mlir::OpBuilder& builder) {
     llvm::SmallVector<Value> worklist {ids};
 
     while (!worklist.empty()) {
@@ -11364,7 +11583,7 @@ bool namesGraphNodes(Value column) {
 }
 
 void reroot(PatternSeed& seed, mlir::RewriterBase& rewriter) {
-    SeedJunction& junction = seed._junction;
+    PatternJunction& junction = seed._junction;
     Operation* const junctionOp = junction._op;
     const Location loc = junctionOp->getLoc();
 
@@ -11373,11 +11592,11 @@ void reroot(PatternSeed& seed, mlir::RewriterBase& rewriter) {
     // The seed's rows on their own: the other factor's body, or the list unwound again
     // without the pattern's columns
     llvm::SmallVector<Value> seedColumns;
-    if (junction._seedFactor) {
-        const Operation::operand_range yielded = factorYieldColumns(*junction._seedFactor);
+    if (junction._otherFactor) {
+        const Operation::operand_range yielded = factorYieldColumns(*junction._otherFactor);
         seedColumns.assign(yielded.begin(), yielded.end());
 
-        Block& seedBlock = junction._seedFactor->front();
+        Block& seedBlock = junction._otherFactor->front();
         junctionOp->getBlock()->getOperations().splice(Block::iterator(junctionOp),
                                                        seedBlock.getOperations(),
                                                        seedBlock.begin(),
@@ -11391,7 +11610,7 @@ void reroot(PatternSeed& seed, mlir::RewriterBase& rewriter) {
 
     mlir::IRMapping seedMapping;
     for (size_t index = 0; index < seedColumns.size(); index++) {
-        seedMapping.map(junction._seedResults[index], seedColumns[index]);
+        seedMapping.map(junction._otherResults[index], seedColumns[index]);
     }
 
     const Value ids = cloneSeedIDs(seed._ids, junction, seedMapping, rewriter);
@@ -11411,7 +11630,7 @@ void reroot(PatternSeed& seed, mlir::RewriterBase& rewriter) {
 
     PatternReplay replay(seed._pattern, rewriter, loc);
     for (size_t index = 0; index < seedColumns.size(); index++) {
-        replay.bind(junction._seedResults[index], seededColumns[index + 1]);
+        replay.bind(junction._otherResults[index], seededColumns[index + 1]);
     }
 
     replay.bind(seed._seeded, seededColumns.front());
@@ -11421,13 +11640,13 @@ void reroot(PatternSeed& seed, mlir::RewriterBase& rewriter) {
         junction._patternResults[index].replaceAllUsesWith(replay.materialize(junction._patternOutputs[index]));
     }
 
-    for (Value seedResult : junction._seedResults) {
+    for (Value seedResult : junction._otherResults) {
         seedResult.replaceAllUsesWith(replay.currentOf(seedResult));
     }
 
     dropConjunct(seed._filter, seed._equality.getResult(), rewriter);
 
-    if (junction._seedFactor) {
+    if (junction._otherFactor) {
         rewriter.eraseOp(junctionOp);
         return;
     }
@@ -11468,8 +11687,17 @@ struct RerootPatternAtSeed : public impl::RerootPatternAtSeedBase<RerootPatternA
 // the query wrote only when another start costs this much less
 constexpr double REROOT_GAIN_FACTOR = 1.3;
 
+// The junction a pattern ends at, the conjuncts of the filters over it that relate the
+// pattern to the junction's other side, and the rows that side multiplies the walk's by
+struct JunctionJoins {
+    PatternJunction _junction;
+    llvm::SmallVector<JoinConjunct, 2> _joins;
+    double _crossedRows {0};
+};
+
 // A pattern rooted at a scan up to the first op reading it that is not rebuilt with it, and
-// the walk out of the node making the fewest rows, scanned by the labels its filters ask for
+// the walk out of the node making the fewest rows, scanned by the labels its filters ask for.
+// A walk crossing the other side of its junction in partway rebuilds the junction there.
 struct CheapestRoot {
     SeedPattern _pattern;
     llvm::SmallVector<Operation*> _orderedOps;
@@ -11477,6 +11705,8 @@ struct CheapestRoot {
     Value _start;
     ArrayAttr _labels;
     llvm::SmallVector<WalkEvent> _events;
+    JunctionJoins _joins;
+    bool _crossesJunction {false};
 };
 
 // False when a graph write stands before the end, which the rebuilt pattern would read past
@@ -11505,14 +11735,17 @@ bool collectRootedPattern(Operation* scan, CheapestRoot& match) {
             continue;
         }
 
-        const bool buildsThePattern = isa<FilterOp>(op) || isHop(&op) || computesPerRow(&op);
+        ExplorePaths exploration = dyn_cast<ExplorePaths>(op);
+        const bool explores = exploration && walksFreely(exploration);
+
+        const bool buildsThePattern = isa<FilterOp>(op) || isHop(&op) || explores || computesPerRow(&op);
         if (!buildsThePattern) {
             match._end = &op;
             return true;
         }
 
         FilterOp filter = dyn_cast<FilterOp>(op);
-        const bool carriesRows = filter || isHop(&op);
+        const bool carriesRows = filter || isHop(&op) || explores;
         const OperandRange carried = filter ? filter.getColumnsToFilter() : op.getOperands();
         if (carriesRows && !llvm::all_of(carried, definedByThePattern)) {
             return false;
@@ -11532,10 +11765,204 @@ void collectWrittenWalk(const CheapestRoot& match, llvm::SmallVectorImpl<WalkEve
     for (Operation* const op : match._orderedOps) {
         if (FilterOp filter = dyn_cast<FilterOp>(op)) {
             events.push_back(WalkEvent {._kind = WalkEvent::Kind::Filter, ._filter = filter});
-        } else if (isHop(op)) {
+        } else if (isHop(op) || isa<ExplorePaths>(op)) {
             events.push_back(WalkEvent {._kind = WalkEvent::Kind::Forward, ._step = &steps[stepIndex++]});
         }
     }
+}
+
+bool isComputedAhead(Value value, Operation* op) {
+    Operation* const ancestor = value.getParentBlock()->findAncestorOpInBlock(*op);
+    if (!ancestor) {
+        return false;
+    }
+
+    Operation* const def = value.getDefiningOp();
+
+    return !def || def->isBeforeInBlock(ancestor);
+}
+
+// The keys fuse_hash_join joins on: each side of the equality computed from one column of a
+// side of the junction of its own
+void readJoinKeys(Value conjunct, const PatternJunction& junction, bool usesHashJoin, JoinConjunct& join) {
+    EqOp equality = conjunct.getDefiningOp<EqOp>();
+    if (!equality) {
+        return;
+    }
+
+    bool keysThePattern = false;
+    bool keysTheOtherSide = false;
+    bool hashesKeys = true;
+    for (const Value key : {equality.getLhs(), equality.getRhs()}) {
+        JoinKeySide side;
+        side._key = key;
+        collectRowCone({key}, equality->getBlock(), side._cone);
+
+        if (side._cone._inputs.size() != 1) {
+            return;
+        }
+
+        const Value column = climbFilters(side._cone._inputs.front());
+        keysThePattern = keysThePattern || llvm::is_contained(junction._patternResults, column);
+        keysTheOtherSide = keysTheOtherSide || llvm::is_contained(junction._otherResults, column);
+        hashesKeys = hashesKeys && isHashableKey(side);
+    }
+
+    join._equatesKeys = keysThePattern && keysTheOtherSide;
+    join._hashes = join._equatesKeys && hashesKeys && usesHashJoin && isa<CrossProduct>(junction._op);
+}
+
+// A conjunct reading both sides of the junction. Its cone is cloned where the junction
+// stands, so it reads nothing computed after the junction.
+bool matchJoinConjunct(Value conjunct,
+                       FilterOp filter,
+                       const PatternJunction& junction,
+                       const SeedPattern& pattern,
+                       bool usesHashJoin,
+                       JoinConjunct& join) {
+    join._conjunct = conjunct;
+    join._filter = filter;
+    collectRowCone({conjunct}, filter->getBlock(), join._cone);
+
+    bool readsTheOtherSide = false;
+    for (const Value input : join._cone._inputs) {
+        const Value climbed = climbFilters(input);
+
+        if (llvm::is_contained(junction._otherResults, climbed)) {
+            readsTheOtherSide = true;
+        } else if (const Value patternColumn = junctionSource(junction, climbed)) {
+            collectPatternInputs(patternColumn, pattern, join._patternInputs);
+        } else if (!isComputedAhead(input, junction._op)) {
+            return false;
+        }
+    }
+
+    readJoinKeys(conjunct, junction, usesHashJoin, join);
+
+    return readsTheOtherSide && !join._patternInputs.empty();
+}
+
+bool matchJunctionJoins(const CheapestRoot& match,
+                        const RowEstimator& estimator,
+                        const DBPassContext& context,
+                        JunctionJoins& joins) {
+    const SeedPattern& pattern = match._pattern;
+    PatternJunction& junction = joins._junction;
+
+    Yield yield = dyn_cast<Yield>(match._end);
+    CrossProduct product = yield ? dyn_cast<CrossProduct>(yield->getParentOp()) : CrossProduct();
+    Unwind unwind = dyn_cast<Unwind>(match._end);
+
+    if (product) {
+        const bool holdsThePatternAlone = llvm::all_of(yield->getBlock()->without_terminator(), [&pattern](Operation& op) {
+            return pattern._ops.contains(&op) || computesFromTheRow(&op);
+        });
+
+        if (!holdsThePatternAlone) {
+            return false;
+        }
+
+        readProductJunction(product, yield->getParentRegion() == &product.getLeftFactor(), junction);
+        joins._crossedRows = estimateFactorRows(*junction._otherFactor, estimator);
+    } else if (unwind && !unwind.getColumnsToFilter().empty()) {
+        readUnwindJunction(unwind, junction);
+        if (!unwindsOverThePatternAlone(junction, pattern, match._orderedOps)) {
+            return false;
+        }
+
+        joins._crossedRows = estimateUnwoundRows(unwind);
+    } else {
+        return false;
+    }
+
+    for (const Value output : junction._patternOutputs) {
+        Operation* const def = output.getDefiningOp();
+        if (!def || !pattern._ops.contains(def)) {
+            return false;
+        }
+    }
+
+    llvm::SmallVector<std::pair<Value, FilterOp>, 4> conjuncts;
+    FilterStack stack(junction._op);
+    for (FilterOp filter = stack.getReader(); filter && stack.isExclusiveTo(filter); filter = stack.getReader()) {
+        stack.climbTo(filter);
+
+        llvm::SmallVector<Value, 4> filterConjuncts;
+        collectConjuncts(filter.getMask(), filterConjuncts);
+        for (const Value conjunct : filterConjuncts) {
+            conjuncts.emplace_back(conjunct, filter);
+        }
+    }
+
+    // Equalities go first, so the filter right over a rebuilt junction is one fuse_hash_join
+    // can fuse with it into a hash join
+    std::stable_partition(conjuncts.begin(), conjuncts.end(), [](const std::pair<Value, FilterOp>& conjunct) {
+        return static_cast<bool>(conjunct.first.getDefiningOp<EqOp>());
+    });
+
+    for (const auto& [conjunct, filter] : conjuncts) {
+        JoinConjunct& join = joins._joins.emplace_back();
+        if (!matchJoinConjunct(conjunct, filter, junction, pattern, context._usesHashJoin, join)) {
+            joins._joins.pop_back();
+        }
+    }
+
+    return !joins._joins.empty();
+}
+
+bool isStepEvent(const WalkEvent& event) {
+    return event._kind == WalkEvent::Kind::Forward || event._kind == WalkEvent::Kind::Backward;
+}
+
+// The walk crossing the junction's other side in ahead of its event @param position, after
+// which each join conjunct runs before the next step once the steps have bound what it reads
+void crossWalkAt(const JunctionJoins& joins,
+                 Value start,
+                 llvm::ArrayRef<WalkEvent> walk,
+                 size_t position,
+                 llvm::SmallVectorImpl<WalkEvent>& events) {
+    llvm::DenseSet<Value> bound {start};
+    llvm::SmallBitVector joined(joins._joins.size());
+
+    const auto joinBound = [&joins, &bound, &joined, &events]() {
+        for (size_t index = 0; index < joins._joins.size(); index++) {
+            const JoinConjunct& join = joins._joins[index];
+            const bool readsBound = llvm::all_of(join._patternInputs, [&bound](void* input) {
+                return bound.contains(Value::getFromOpaquePointer(input));
+            });
+
+            if (!joined.test(index) && readsBound) {
+                events.push_back(WalkEvent {._kind = WalkEvent::Kind::Join, ._join = &join});
+                joined.set(index);
+            }
+        }
+    };
+
+    bool crossed = false;
+    for (size_t index = 0; index < walk.size(); index++) {
+        const WalkEvent& event = walk[index];
+        const bool isStep = isStepEvent(event);
+
+        if (index == position) {
+            events.push_back(WalkEvent {._kind = WalkEvent::Kind::Cross});
+            crossed = true;
+            joinBound();
+        } else if (crossed && isStep) {
+            joinBound();
+        }
+
+        events.push_back(event);
+
+        if (isStep) {
+            bindStep(*event._step, bound);
+        }
+    }
+
+    if (!crossed) {
+        events.push_back(WalkEvent {._kind = WalkEvent::Kind::Cross});
+    }
+
+    joinBound();
 }
 
 void collectScanLabelFilters(const SeedPattern& pattern,
@@ -11604,14 +12031,20 @@ void collectHopTypeChecks(const SeedPattern& pattern, llvm::DenseMap<Operation*,
 // each filter and each hop, and the edges each hop reads. A property equality in the first
 // filter makes that scan and filter one scan by property value, which emits only the rows
 // the filter keeps, and a hop emits only the edges of the types its own filter keeps, as
-// the by-type hop it becomes, though it reads every edge of the nodes it leaves.
+// the by-type hop it becomes, though it reads every edge of the nodes it leaves. Crossing a
+// junction's other side in makes a row per pair, unless it is the hash join fuse_hash_join
+// makes of the product and the equality right after it, which reads each side once. An
+// equality of a key of each side keeps one pair in as many as the distinct keys of the side
+// holding more, as PostgreSQL estimates a join of columns it holds no statistics of.
 double estimateWalkCost(const SeedPattern& pattern,
                         Value start,
                         ArrayAttr startLabels,
                         llvm::ArrayRef<WalkEvent> events,
+                        const JunctionJoins* joins,
                         const RowEstimator& estimator) {
-    const auto nodeOf = [&pattern](Value column) {
-        return patternOrigin(column, pattern);
+    const auto nodeOf = [&pattern, joins](Value column) {
+        const Value patternColumn = joins ? junctionSource(joins->_junction, climbFilters(column)) : Value();
+        return patternOrigin(patternColumn ? patternColumn : column, pattern);
     };
 
     llvm::DenseMap<Operation*, ArrayAttr> hopTypes;
@@ -11627,7 +12060,11 @@ double estimateWalkCost(const SeedPattern& pattern,
     const bool scansByPropertyValue = startsWithFilter && fusesIntoScanByPropertyValue(events.front()._filter, start, pattern);
 
     double cost = scansByPropertyValue ? 0 : rows;
-    for (const WalkEvent& event : events) {
+    double crossedPatternRows = 0;
+    for (size_t index = 0; index < events.size(); index++) {
+        const WalkEvent& event = events[index];
+        bool buildsRows = true;
+
         switch (event._kind) {
             case WalkEvent::Kind::RootLabels: {
                 const ArrayAttr rootLabels = cast<ScanNodesByLabel>(pattern._root).getLabels();
@@ -11653,19 +12090,65 @@ double estimateWalkCost(const SeedPattern& pattern,
                 rows *= hop._rows;
             }
             break;
+            case WalkEvent::Kind::Cross: {
+                const bool joinsNext = index + 1 < events.size() && events[index + 1]._kind == WalkEvent::Kind::Join;
+                const bool hashes = joinsNext && events[index + 1]._join->_hashes;
+                if (hashes) {
+                    cost += rows + joins->_crossedRows;
+                    buildsRows = false;
+                }
+
+                crossedPatternRows = rows;
+                rows *= joins->_crossedRows;
+            }
+            break;
+            case WalkEvent::Kind::Join: {
+                const JoinConjunct& join = *event._join;
+                if (join._equatesKeys) {
+                    const double patternKeys = std::min(DEFAULT_DISTINCT_VALUES, crossedPatternRows);
+                    const double otherKeys = std::min(DEFAULT_DISTINCT_VALUES, joins->_crossedRows);
+                    rows /= std::max({patternKeys, otherKeys, 1.0});
+                } else {
+                    rows *= estimator.getSelectivity(join._conjunct, nodeOf, knowledge);
+                }
+            }
+            break;
         }
 
-        cost += rows;
+        if (buildsRows) {
+            cost += rows;
+        }
     }
 
     return cost;
 }
 
-bool matchCheapestRoot(Operation* scan, const RowEstimator& estimator, CheapestRoot& match) {
+// A walk crossing the other side in once nothing but join conjuncts is left leaves the
+// junction and the filters over it as they stand
+void settleCross(CheapestRoot& match) {
+    llvm::SmallVector<WalkEvent>& events = match._events;
+    const auto cross = llvm::find_if(events, [](const WalkEvent& event) {
+        return event._kind == WalkEvent::Kind::Cross;
+    });
+
+    const bool joinsAlone = std::all_of(std::next(cross), events.end(), [](const WalkEvent& event) {
+        return event._kind == WalkEvent::Kind::Join;
+    });
+
+    if (joinsAlone) {
+        events.erase(cross, events.end());
+    } else {
+        match._crossesJunction = true;
+    }
+}
+
+bool matchCheapestRoot(Operation* scan, const RowEstimator& estimator, const DBPassContext& context, CheapestRoot& match) {
     SeedPattern& pattern = match._pattern;
     if (!collectRootedPattern(scan, match) || !analyzePattern(pattern, match._orderedOps) || pattern._steps.empty()) {
         return false;
     }
+
+    const JunctionJoins* const joins = matchJunctionJoins(match, estimator, context, match._joins) ? &match._joins : nullptr;
 
     const Value root = scan->getResult(0);
     ScanNodesByLabel rootScan = dyn_cast<ScanNodesByLabel>(scan);
@@ -11674,8 +12157,27 @@ bool matchCheapestRoot(Operation* scan, const RowEstimator& estimator, CheapestR
     llvm::SmallVector<WalkEvent> written;
     collectWrittenWalk(match, written);
 
-    double cheapest = estimateWalkCost(pattern, root, rootLabels, written, estimator) / REROOT_GAIN_FACTOR;
+    llvm::SmallVector<WalkEvent> crossedWritten;
+    if (joins) {
+        crossWalkAt(*joins, root, written, written.size(), crossedWritten);
+    }
+
+    const llvm::ArrayRef<WalkEvent> writtenWalk = joins ? crossedWritten : written;
+
+    double cheapest = estimateWalkCost(pattern, root, rootLabels, writtenWalk, joins, estimator) / REROOT_GAIN_FACTOR;
     bool foundCheaper = false;
+
+    const auto considerWalk = [&](Value candidate, ArrayAttr startLabels, llvm::ArrayRef<WalkEvent> events) {
+        const double cost = estimateWalkCost(pattern, candidate, startLabels, events, joins, estimator);
+        if (cost < cheapest) {
+            cheapest = cost;
+            foundCheaper = true;
+
+            match._start = candidate;
+            match._labels = startLabels;
+            match._events.assign(events.begin(), events.end());
+        }
+    };
 
     llvm::SmallVector<Value> candidates {root};
     for (const PatternStep& step : pattern._steps) {
@@ -11703,15 +12205,26 @@ bool matchCheapestRoot(Operation* scan, const RowEstimator& estimator, CheapestR
             continue;
         }
 
-        const double cost = estimateWalkCost(pattern, candidate, startLabels, events, estimator);
-        if (cost < cheapest) {
-            cheapest = cost;
-            foundCheaper = true;
+        if (joins) {
+            // Crossed in only ahead of a step or at the end, the filters a scan or a hop is
+            // followed by stay beside it, where the passes fusing them into it look for them
+            for (size_t position = 0; position <= events.size(); position++) {
+                const bool beforeAStepOrTheEnd = position == events.size() || isStepEvent(events[position]);
+                if (!beforeAStepOrTheEnd) {
+                    continue;
+                }
 
-            match._start = candidate;
-            match._labels = startLabels;
-            match._events.assign(events.begin(), events.end());
+                llvm::SmallVector<WalkEvent> crossedEvents;
+                crossWalkAt(*joins, candidate, events, position, crossedEvents);
+                considerWalk(candidate, startLabels, crossedEvents);
+            }
+        } else {
+            considerWalk(candidate, startLabels, events);
         }
+    }
+
+    if (foundCheaper && joins) {
+        settleCross(match);
     }
 
     return foundCheaper;
@@ -11733,17 +12246,36 @@ void rerootAtCheapestNode(CheapestRoot& match, mlir::RewriterBase& rewriter) {
     }
 
     PatternReplay replay(pattern, rewriter, loc);
+    if (match._crossesJunction) {
+        replay.setJunction(&match._joins._junction);
+    }
+
     replay.bind(match._start, scanned);
     replay.walk(match._events);
 
-    const auto readOutsideThePattern = [&pattern](OpOperand& use) {
-        return !pattern._ops.contains(use.getOwner());
-    };
+    if (match._crossesJunction) {
+        const JunctionJoins& joins = match._joins;
+        Operation* const junctionOp = joins._junction._op;
 
-    for (Operation* const op : match._orderedOps) {
-        for (Value result : op->getResults()) {
-            if (llvm::any_of(result.getUses(), readOutsideThePattern)) {
-                result.replaceUsesWithIf(replay.materialize(result), readOutsideThePattern);
+        for (const Value result : junctionOp->getResults()) {
+            rewriter.replaceAllUsesWith(result, replay.materializeJunctionResult(result));
+        }
+
+        for (const JoinConjunct& join : joins._joins) {
+            dropConjunct(join._filter, join._conjunct, rewriter);
+        }
+
+        rewriter.eraseOp(junctionOp);
+    } else {
+        const auto readOutsideThePattern = [&pattern](OpOperand& use) {
+            return !pattern._ops.contains(use.getOwner());
+        };
+
+        for (Operation* const op : match._orderedOps) {
+            for (Value result : op->getResults()) {
+                if (llvm::any_of(result.getUses(), readOutsideThePattern)) {
+                    result.replaceUsesWithIf(replay.materialize(result), readOutsideThePattern);
+                }
             }
         }
     }
@@ -11769,9 +12301,10 @@ struct RerootPatternAtCheapestNode : public impl::RerootPatternAtCheapestNodeBas
 
         const RowEstimator estimator(*_context->_view);
 
-        runWorklist<ScanNodes, ScanNodesByLabel>(getOperation(), [&estimator](Operation* op, mlir::RewriterBase& rewriter) {
+        const DBPassContext& context = *_context;
+        runWorklist<ScanNodes, ScanNodesByLabel>(getOperation(), [&estimator, &context](Operation* op, mlir::RewriterBase& rewriter) {
             CheapestRoot match;
-            if (!matchCheapestRoot(op, estimator, match)) {
+            if (!matchCheapestRoot(op, estimator, context, match)) {
                 return false;
             }
 

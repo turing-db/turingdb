@@ -124,7 +124,7 @@ def RerootPatternAtSeed : Pass<"reroot_pattern_at_seed"> {
 }
 
 def RerootPatternAtCheapestNode : Pass<"reroot_pattern_at_cheapest_node"> {
-    let summary = "Walk a pattern out from the node the graph's counts say makes the fewest rows, rather than from the node the query writes first";
+    let summary = "Walk a pattern out from the node the graph's counts say makes the fewest rows, rather than from the node the query writes first, and cross in the rows a filter joins it to where that filter can run, rather than after the whole pattern";
     let dependentDialects = ["mlir::db::DB"];
 }
 
