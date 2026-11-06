@@ -3634,11 +3634,17 @@ double taggedNumericValue(const CellView element) {
     }
 }
 
-// A standard deviation holds two doubles per group, side by side in its accumulator: the
-// mean of the values folded so far, then the sum of their squared deviations from it.
-// Welford's update keeps both accurate for values far from 0, where a sum of squares
-// minus a squared sum cancels to noise.
+// A standard deviation keeps the mean of the values folded so far and the sum of their
+// squared deviations from it. Welford's update keeps both accurate for values far from 0,
+// where a sum of squares minus a squared sum cancels to noise. An ungrouped accumulator
+// holds the two side by side.
 constexpr size_t DEVIATION_SLOT_COUNT = 2;
+
+struct NLDeviationState {
+    uint64_t _count {0};
+    double _mean {0.0};
+    double _squaredDeviations {0.0};
+};
 
 template <typename Primitive>
 double numberOf(const Primitive& value) {
@@ -3710,28 +3716,18 @@ void aggregateResultDeviation(const NLAggregateState* state, Column* output, NLS
     outputRaw.assign(1, deviation<Population>(slots[1].value(), state->getCount()));
 }
 
-void groupGrowDeviation(Column* accumulator,
-                        std::vector<uint64_t>& counts,
-                        std::vector<__int128>& durationTotals,
-                        size_t groupCount) {
-    auto& raw = static_cast<ColumnOptVector<double>*>(accumulator)->getRaw();
-    raw.resize(groupCount * DEVIATION_SLOT_COUNT, std::optional<double>(0.0));
-    counts.resize(groupCount, 0);
-}
-
-// stDev(DISTINCT x) moves a group's slots once per distinct value it sees
+// stDev(DISTINCT x) moves a group's state once per distinct value it sees
 template <typename Cell, bool Distinct>
-void groupFoldDeviation(Column* accumulator,
-                        std::vector<uint64_t>& counts,
-                        std::vector<__int128>& durationTotals,
+void groupFoldDeviation(NLGroupStatePlaces places,
                         const Column* input,
                         const std::vector<size_t>& groups,
+                        size_t beginRow,
+                        size_t endRow,
                         NLGroupDistinctTally& distinct,
                         NLValueStore& values) {
-    auto& raw = static_cast<ColumnOptVector<double>*>(accumulator)->getRaw();
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
-    for (size_t row = 0; row < inputRaw.size(); row++) {
+    for (size_t row = beginRow; row < endRow; row++) {
         const auto value = presentCell(inputRaw[row]);
         if (!value.has_value()) {
             continue;
@@ -3753,35 +3749,8 @@ void groupFoldDeviation(Column* accumulator,
             }
         }
 
-        std::optional<double>& mean = raw[group * DEVIATION_SLOT_COUNT];
-        std::optional<double>& squaredDeviations = raw[group * DEVIATION_SLOT_COUNT + 1];
-
-        double groupMean = mean.value();
-        double groupSquaredDeviations = squaredDeviations.value();
-        foldDeviation(numberOf(*value), groupMean, groupSquaredDeviations, counts[group]);
-
-        mean = groupMean;
-        squaredDeviations = groupSquaredDeviations;
-    }
-}
-
-template <bool Population>
-void groupEmitDeviation(const Column* accumulator,
-                        const std::vector<uint64_t>& counts,
-                        const std::vector<__int128>& durationTotals,
-                        size_t begin,
-                        size_t count,
-                        Column* output,
-                        NLStepBuffers* stepBuffers) {
-    const auto& raw = static_cast<const ColumnOptVector<double>*>(accumulator)->getRaw();
-    auto& outputRaw = static_cast<ColumnOptVector<double>*>(output)->getRaw();
-    outputRaw.resize(count);
-
-    for (size_t index = 0; index < count; index++) {
-        const size_t group = begin + index;
-        const double squaredDeviations = raw[group * DEVIATION_SLOT_COUNT + 1].value();
-
-        outputRaw[index] = deviation<Population>(squaredDeviations, counts[group]);
+        NLDeviationState& state = places.getState<NLDeviationState>(group);
+        foldDeviation(numberOf(*value), state._mean, state._squaredDeviations, state._count);
     }
 }
 
@@ -3847,6 +3816,8 @@ constexpr std::byte DURATION_ZERO_CELL[sizeof(CellTag) + sizeof(types::Duration:
 // of a duration sum is PT0S, so its tag still names what the sum holds.
 class NLTaggedSum {
 public:
+    NLTaggedSum() = default;
+
     NLTaggedSum(const std::optional<CellView>& sum, __int128 durationTotal)
         : _durationTotal(durationTotal)
     {
@@ -4272,90 +4243,84 @@ void reownColumnRows(Column* column, const std::vector<size_t>& rows, NLValueSto
     }
 }
 
-// Grow a sum accumulator to groupCount groups, initializing each new group to a
-// present zero (the additive identity). Existing groups keep their running sum. sum
-// keeps no per-group tally, so the counts vector is left untouched.
-template <typename Primitive>
-void groupGrowZero(Column* accumulator,
-                   std::vector<uint64_t>& counts,
-                   std::vector<__int128>& durationTotals,
-                   size_t groupCount) {
-    auto& raw = static_cast<ColumnOptVector<Primitive>*>(accumulator)->getRaw();
-    raw.resize(groupCount, std::optional<Primitive>(Primitive {}));
+// Construct the identity of a state - a zero tally, sum or spread, no value kept yet - in the
+// blocks of new groups
+template <typename State>
+void groupInitStates(NLGroupStatePlaces places, size_t begin, size_t count) {
+    for (size_t group = begin; group < begin + count; group++) {
+        new (places.getPlace(group)) State {};
+    }
 }
 
-// Grow a min/max accumulator to groupCount groups, initializing each new group to
-// null (no extreme seen yet). Existing groups keep their running extreme. min/max
-// keeps no per-group tally, so the counts vector is left untouched.
-template <typename Primitive>
-void groupGrowNull(Column* accumulator,
-                   std::vector<uint64_t>& counts,
-                   std::vector<__int128>& durationTotals,
-                   size_t groupCount) {
-    auto& raw = static_cast<ColumnOptVector<Primitive>*>(accumulator)->getRaw();
-    raw.resize(groupCount);
+template <typename State>
+void groupReownStates(NLGroupStatePlaces places, size_t groupCount, NLValueStore& values) {
+    for (size_t group = 0; group < groupCount; group++) {
+        State& state = places.getState<State>(group);
+        state = values.ownElement(state);
+    }
 }
 
-// Grow an avg accumulator to groupCount groups: a running total initialized to a
-// present zero plus the per-group non-null tally zeroed for new groups. avg is the
-// only value reduction carried as (sum, count), so it is the only one that grows the
-// counts vector besides count itself.
+// The state type of an aggregate each group keeps a State for, finalized by emit
+template <typename State>
+void describeGroupState(NLGroupAggregateEmitFunction emit, NLGroupAggregateStateType& stateType) {
+    static_assert(std::is_trivially_copyable_v<State>, "The blocks move a state as bytes and never destroy it");
+    static_assert(alignof(State) <= __STDCPP_DEFAULT_NEW_ALIGNMENT__, "The blocks are as aligned as operator new makes them");
+
+    stateType._size = sizeof(State);
+    stateType._alignment = alignof(State);
+    stateType._init = &groupInitStates<State>;
+    stateType._emit = emit;
+
+    if constexpr (NLOptionalViewElement<State>) {
+        stateType._reown = &groupReownStates<State>;
+    } else {
+        stateType._reown = nullptr;
+    }
+}
+
+// The state of an average: the total of the values folded and how many there were. A group
+// that folded none averages to null.
 template <typename Total>
-void groupGrowAvg(Column* accumulator,
-                  std::vector<uint64_t>& counts,
-                  std::vector<__int128>& durationTotals,
-                  size_t groupCount) {
-    auto& raw = static_cast<ColumnOptVector<Total>*>(accumulator)->getRaw();
-    raw.resize(groupCount, std::optional<Total>(Total {}));
-    counts.resize(groupCount, 0);
-}
+struct NLAverageState {
+    Total _total {};
+    uint64_t _count {0};
+};
 
-// Grow a count accumulator: only the per-group tally, zeroed for new groups. count
-// keeps no reduced value, so there is no accumulator column to grow.
-void groupGrowCount(Column* accumulator,
-                    std::vector<uint64_t>& counts,
-                    std::vector<__int128>& durationTotals,
-                    size_t groupCount) {
-    counts.resize(groupCount, 0);
-}
-
-// Fold a chunk's present values into per-group sum accumulators. Each new group was
-// grown to a present zero, so read-modify-write its running sum.
+// Fold a chunk's present values into per-group sums. Each new group starts at zero, so the
+// value is added into its running sum.
 template <typename Primitive>
-void groupFoldSum(Column* accumulator,
-                  std::vector<uint64_t>& counts,
-                  std::vector<__int128>& durationTotals,
+void groupFoldSum(NLGroupStatePlaces places,
                   const Column* input,
                   const std::vector<size_t>& groups,
+                  size_t beginRow,
+                  size_t endRow,
                   NLGroupDistinctTally& distinct,
                   NLValueStore& values) {
-    auto& raw = static_cast<ColumnOptVector<Primitive>*>(accumulator)->getRaw();
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
-    for (size_t row = 0; row < inputRaw.size(); row++) {
+    for (size_t row = beginRow; row < endRow; row++) {
         const std::optional<Primitive>& value = inputRaw[row];
         if (value.has_value()) {
-            std::optional<Primitive>& running = raw[groups[row]];
-            running = numericAdd(running.value(), *value);
+            Primitive& running = places.getState<Primitive>(groups[row]);
+            running = numericAdd(running, *value);
         }
     }
 }
 
-// Fold a chunk's distinct present values into per-group sum accumulators
-// (sum(DISTINCT x)): a value its group has already been charged is skipped, so each
-// distinct value is added once however many rows carry it.
+// Fold a chunk's distinct present values into per-group sums (sum(DISTINCT x)): a value its
+// group has already been charged is skipped, so each distinct value is added once however
+// many rows carry it.
 template <typename Primitive>
-void groupFoldSumDistinct(Column* accumulator,
-                          std::vector<uint64_t>& counts,
-                          std::vector<__int128>& durationTotals,
+void groupFoldSumDistinct(NLGroupStatePlaces places,
                           const Column* input,
                           const std::vector<size_t>& groups,
+                          size_t beginRow,
+                          size_t endRow,
                           NLGroupDistinctTally& distinct,
                           NLValueStore& values) {
-    auto& raw = static_cast<ColumnOptVector<Primitive>*>(accumulator)->getRaw();
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
-    for (size_t row = 0; row < inputRaw.size(); row++) {
+    for (size_t row = beginRow; row < endRow; row++) {
         const std::optional<Primitive>& value = inputRaw[row];
         if (!value.has_value()) {
             continue;
@@ -4370,54 +4335,24 @@ void groupFoldSumDistinct(Column* accumulator,
             continue;
         }
 
-        std::optional<Primitive>& running = raw[group];
-        running = numericAdd(running.value(), *value);
-    }
-}
-
-// Grow a sum or an average of tagged cells: a null cell, a zero duration total and, for an
-// average, a zero tally per new group
-template <bool Averages>
-void groupGrowTaggedSum(Column* accumulator,
-                        std::vector<uint64_t>& counts,
-                        std::vector<__int128>& durationTotals,
-                        size_t groupCount) {
-    auto& raw = static_cast<ColumnOptVector<CellView>*>(accumulator)->getRaw();
-    raw.resize(groupCount);
-    durationTotals.resize(groupCount, 0);
-
-    if constexpr (Averages) {
-        counts.resize(groupCount, 0);
-    }
-}
-
-// Grow a sum or an average of durations: their totals live in durationTotals, so the
-// accumulator holds no slot
-template <bool Averages>
-void groupGrowDurationTotal(Column* accumulator,
-                            std::vector<uint64_t>& counts,
-                            std::vector<__int128>& durationTotals,
-                            size_t groupCount) {
-    durationTotals.resize(groupCount, 0);
-
-    if constexpr (Averages) {
-        counts.resize(groupCount, 0);
+        Primitive& running = places.getState<Primitive>(group);
+        running = numericAdd(running, *value);
     }
 }
 
 // Fold a chunk's present durations into per-group 128-bit totals, once per distinct value
 // of a group for sum(DISTINCT x) and avg(DISTINCT x), tallying the ones an average folds
 template <bool Distinct, bool Averages>
-void groupFoldDurationTotal(Column* accumulator,
-                            std::vector<uint64_t>& counts,
-                            std::vector<__int128>& durationTotals,
+void groupFoldDurationTotal(NLGroupStatePlaces places,
                             const Column* input,
                             const std::vector<size_t>& groups,
+                            size_t beginRow,
+                            size_t endRow,
                             NLGroupDistinctTally& distinct,
                             NLValueStore& values) {
     const auto& inputRaw = static_cast<const ColumnOptVector<types::Duration::Primitive>*>(input)->getRaw();
 
-    for (size_t row = 0; row < inputRaw.size(); row++) {
+    for (size_t row = beginRow; row < endRow; row++) {
         const std::optional<types::Duration::Primitive>& value = inputRaw[row];
         if (!value.has_value()) {
             continue;
@@ -4434,29 +4369,31 @@ void groupFoldDurationTotal(Column* accumulator,
             }
         }
 
-        durationTotals[group] += value->getMicroseconds();
+        const __int128 microseconds = value->getMicroseconds();
 
         if constexpr (Averages) {
-            counts[group]++;
+            NLAverageState<__int128>& average = places.getState<NLAverageState<__int128>>(group);
+            average._total += microseconds;
+            average._count++;
+        } else {
+            places.getState<__int128>(group) += microseconds;
         }
     }
 }
 
-// Fold a group's tagged cells into its running sum, tallying the ones an average folds.
-// The type-erased sibling of groupFoldSum and groupFoldAvg: a group's sum is a cell copied
-// into @param values at each cell it folds, compacted as the min/max extremes are.
+// Fold a group's tagged cells into its running sum in place, tallying the ones an average
+// folds. The type-erased sibling of groupFoldSum and groupFoldAvg.
 template <typename Cell, bool Distinct, bool Averages>
-void groupFoldTaggedSum(Column* accumulator,
-                        std::vector<uint64_t>& counts,
-                        std::vector<__int128>& durationTotals,
+void groupFoldTaggedSum(NLGroupStatePlaces places,
                         const Column* input,
                         const std::vector<size_t>& groups,
+                        size_t beginRow,
+                        size_t endRow,
                         NLGroupDistinctTally& distinct,
                         NLValueStore& values) {
-    auto& raw = static_cast<ColumnOptVector<CellView>*>(accumulator)->getRaw();
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
-    for (size_t row = 0; row < inputRaw.size(); row++) {
+    for (size_t row = beginRow; row < endRow; row++) {
         const std::optional<CellView> value = presentCell(inputRaw[row]);
         if (!value) {
             continue;
@@ -4473,64 +4410,56 @@ void groupFoldTaggedSum(Column* accumulator,
             }
         }
 
-        std::optional<CellView>& running = raw[group];
-        __int128& durationTotal = durationTotals[group];
-        NLTaggedSum sum(running, durationTotal);
-
         if constexpr (Averages) {
-            sum.addToAverage(*value);
-            counts[group]++;
+            NLAverageState<NLTaggedSum>& average = places.getState<NLAverageState<NLTaggedSum>>(group);
+            average._total.addToAverage(*value);
+            average._count++;
         } else {
-            sum.add(*value);
+            places.getState<NLTaggedSum>(group).add(*value);
         }
-
-        running = sum.own(values);
-        durationTotal = sum.getDurationTotal();
     }
 }
 
 // Fold a chunk's present values into per-group min (IsMax false) or max (IsMax
-// true) accumulators. The first present value of a group seeds it; a later value
+// true) states. The first present value of a group seeds it; a later value
 // replaces it when more extreme. A group with no present value stays null.
 template <typename Primitive, bool IsMax, typename Cell = std::optional<Primitive>>
-void groupFoldMinMax(Column* accumulator,
-                     std::vector<uint64_t>& counts,
-                     std::vector<__int128>& durationTotals,
+void groupFoldMinMax(NLGroupStatePlaces places,
                      const Column* input,
                      const std::vector<size_t>& groups,
+                     size_t beginRow,
+                     size_t endRow,
                      NLGroupDistinctTally& distinct,
                      NLValueStore& values) {
-    auto& raw = static_cast<ColumnOptVector<Primitive>*>(accumulator)->getRaw();
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
-    for (size_t row = 0; row < inputRaw.size(); row++) {
+    for (size_t row = beginRow; row < endRow; row++) {
         const std::optional<Primitive> value = presentCell(inputRaw[row]);
         if (!value.has_value()) {
             continue;
         }
 
-        std::optional<Primitive>& current = raw[groups[row]];
+        std::optional<Primitive>& current = places.getState<std::optional<Primitive>>(groups[row]);
         if (!current.has_value() || replacesExtremum<Primitive, IsMax>(*current, *value)) {
             current = values.ownElement(*value);
         }
     }
 }
 
-// Fold a chunk's present values into per-group first accumulators: the first present
-// value of a group is kept and every later one passed over.
+// Fold a chunk's present values into per-group first states: the first present value of a
+// group is kept and every later one passed over.
 template <typename Primitive, typename Cell = std::optional<Primitive>>
-void groupFoldFirst(Column* accumulator,
-                    std::vector<uint64_t>& counts,
-                    std::vector<__int128>& durationTotals,
+void groupFoldFirst(NLGroupStatePlaces places,
                     const Column* input,
                     const std::vector<size_t>& groups,
+                    size_t beginRow,
+                    size_t endRow,
                     NLGroupDistinctTally& distinct,
                     NLValueStore& values) {
-    auto& raw = static_cast<ColumnOptVector<Primitive>*>(accumulator)->getRaw();
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
-    for (size_t row = 0; row < inputRaw.size(); row++) {
-        std::optional<Primitive>& current = raw[groups[row]];
+    for (size_t row = beginRow; row < endRow; row++) {
+        std::optional<Primitive>& current = places.getState<std::optional<Primitive>>(groups[row]);
         if (current.has_value()) {
             continue;
         }
@@ -4594,50 +4523,46 @@ NLGroupAggregateFoldFunction taggedGroupAggregateFoldFor(GroupAggregateKind kind
     return nullptr;
 }
 
-// Fold a chunk's present values into per-group avg accumulators: a running total
-// (the accumulator, a number widened to f64) plus the per-group non-null count. avg
-// divides the two at the emit step.
+// Fold a chunk's present values into per-group averages: a running total (a number widened
+// to f64) plus the count of the values folded. avg divides the two at the emit step.
 template <typename Primitive>
-void groupFoldAvg(Column* accumulator,
-                  std::vector<uint64_t>& counts,
-                  std::vector<__int128>& durationTotals,
+void groupFoldAvg(NLGroupStatePlaces places,
                   const Column* input,
                   const std::vector<size_t>& groups,
+                  size_t beginRow,
+                  size_t endRow,
                   NLGroupDistinctTally& distinct,
                   NLValueStore& values) {
-    using Total = AverageTotal<Primitive>;
+    using State = NLAverageState<types::Double::Primitive>;
 
-    auto& raw = static_cast<ColumnOptVector<Total>*>(accumulator)->getRaw();
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
-    for (size_t row = 0; row < inputRaw.size(); row++) {
+    for (size_t row = beginRow; row < endRow; row++) {
         const std::optional<Primitive>& value = inputRaw[row];
         if (value.has_value()) {
-            const size_t group = groups[row];
-            std::optional<Total>& running = raw[group];
-            running = addToAverageTotal(running.value(), *value);
-            counts[group]++;
+            State& average = places.getState<State>(groups[row]);
+            average._total = addToAverageTotal(average._total, *value);
+            average._count++;
         }
     }
 }
 
-// Fold a chunk's distinct present values into per-group avg accumulators
-// (avg(DISTINCT x)): a value its group has already been charged moves neither the
-// running sum nor the count, so the mean is taken over the distinct values.
+// Fold a chunk's distinct present values into per-group averages (avg(DISTINCT x)): a value
+// its group has already been charged moves neither the total nor the count, so the mean is
+// taken over the distinct values.
 template <typename Primitive>
-void groupFoldAvgDistinct(Column* accumulator,
-                          std::vector<uint64_t>& counts,
-                          std::vector<__int128>& durationTotals,
+void groupFoldAvgDistinct(NLGroupStatePlaces places,
                           const Column* input,
                           const std::vector<size_t>& groups,
+                          size_t beginRow,
+                          size_t endRow,
                           NLGroupDistinctTally& distinct,
                           NLValueStore& values) {
-    using Total = AverageTotal<Primitive>;
+    using State = NLAverageState<types::Double::Primitive>;
 
-    auto& raw = static_cast<ColumnOptVector<Total>*>(accumulator)->getRaw();
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
-    for (size_t row = 0; row < inputRaw.size(); row++) {
+    for (size_t row = beginRow; row < endRow; row++) {
         const std::optional<Primitive>& value = inputRaw[row];
         if (!value.has_value()) {
             continue;
@@ -4652,41 +4577,41 @@ void groupFoldAvgDistinct(Column* accumulator,
             continue;
         }
 
-        std::optional<Total>& running = raw[group];
-        running = addToAverageTotal(running.value(), *value);
-        counts[group]++;
+        State& average = places.getState<State>(group);
+        average._total = addToAverageTotal(average._total, *value);
+        average._count++;
     }
 }
 
 // Tally every row into its group (count(*) over a never-null column): each row
 // charges its group regardless of value, so the input values are never read.
-void groupFoldCountAll(Column* accumulator,
-                       std::vector<uint64_t>& counts,
-                       std::vector<__int128>& durationTotals,
+void groupFoldCountAll(NLGroupStatePlaces places,
                        const Column* input,
                        const std::vector<size_t>& groups,
+                       size_t beginRow,
+                       size_t endRow,
                        NLGroupDistinctTally& distinct,
                        NLValueStore& values) {
-    for (const size_t group : groups) {
-        counts[group]++;
+    for (size_t row = beginRow; row < endRow; row++) {
+        places.getState<uint64_t>(groups[row])++;
     }
 }
 
 // Tally each group's present (non-null) rows (count(x)): a null row is not charged,
 // matching Cypher's count(x).
 template <typename Primitive>
-void groupFoldCountPresent(Column* accumulator,
-                           std::vector<uint64_t>& counts,
-                           std::vector<__int128>& durationTotals,
+void groupFoldCountPresent(NLGroupStatePlaces places,
                            const Column* input,
                            const std::vector<size_t>& groups,
+                           size_t beginRow,
+                           size_t endRow,
                            NLGroupDistinctTally& distinct,
                            NLValueStore& values) {
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
-    for (size_t row = 0; row < inputRaw.size(); row++) {
+    for (size_t row = beginRow; row < endRow; row++) {
         if (inputRaw[row].has_value()) {
-            counts[groups[row]]++;
+            places.getState<uint64_t>(groups[row])++;
         }
     }
 }
@@ -4694,34 +4619,34 @@ void groupFoldCountPresent(Column* accumulator,
 // Tally each group's rows holding a valid ID (count(n) over a node/edge column): an
 // invalid ID is a null, so it is not charged - the ID sibling of groupFoldCountPresent.
 template <typename ID>
-void groupFoldCountValidID(Column* accumulator,
-                           std::vector<uint64_t>& counts,
-                           std::vector<__int128>& durationTotals,
+void groupFoldCountValidID(NLGroupStatePlaces places,
                            const Column* input,
                            const std::vector<size_t>& groups,
+                           size_t beginRow,
+                           size_t endRow,
                            NLGroupDistinctTally& distinct,
                            NLValueStore& values) {
     const std::vector<ID>& inputRaw = static_cast<const ColumnVector<ID>*>(input)->getRaw();
 
-    for (size_t row = 0; row < inputRaw.size(); row++) {
+    for (size_t row = beginRow; row < endRow; row++) {
         if (inputRaw[row].isValid()) {
-            counts[groups[row]]++;
+            places.getState<uint64_t>(groups[row])++;
         }
     }
 }
 
-void groupFoldCountPresentPath(Column* accumulator,
-                               std::vector<uint64_t>& counts,
-                               std::vector<__int128>& durationTotals,
+void groupFoldCountPresentPath(NLGroupStatePlaces places,
                                const Column* input,
                                const std::vector<size_t>& groups,
+                               size_t beginRow,
+                               size_t endRow,
                                NLGroupDistinctTally& distinct,
                                NLValueStore& values) {
     const std::vector<GraphPath>& inputRaw = static_cast<const ColumnVector<GraphPath>*>(input)->getRaw();
 
-    for (size_t row = 0; row < inputRaw.size(); row++) {
+    for (size_t row = beginRow; row < endRow; row++) {
         if (!inputRaw[row].isNull()) {
-            counts[groups[row]]++;
+            places.getState<uint64_t>(groups[row])++;
         }
     }
 }
@@ -4746,16 +4671,16 @@ bool presentChunkRow(const GraphPath& path) {
 // whole-row DISTINCT keys it, so two rows count once exactly when DISTINCT would fold
 // them together.
 template <typename ElementType>
-void groupFoldCountDistinctChunk(Column* accumulator,
-                                 std::vector<uint64_t>& counts,
-                                 std::vector<__int128>& durationTotals,
+void groupFoldCountDistinctChunk(NLGroupStatePlaces places,
                                  const Column* input,
                                  const std::vector<size_t>& groups,
+                                 size_t beginRow,
+                                 size_t endRow,
                                  NLGroupDistinctTally& distinct,
                                  NLValueStore& values) {
     const std::vector<ElementType>& inputRaw = static_cast<const ColumnVector<ElementType>*>(input)->getRaw();
 
-    for (size_t row = 0; row < inputRaw.size(); row++) {
+    for (size_t row = beginRow; row < endRow; row++) {
         if (!presentChunkRow(inputRaw[row])) {
             continue;
         }
@@ -4766,7 +4691,7 @@ void groupFoldCountDistinctChunk(Column* accumulator,
         distinct.appendRowKey(input, row);
 
         if (distinct.insertIfNew()) {
-            counts[group]++;
+            places.getState<uint64_t>(group)++;
         }
     }
 }
@@ -4776,16 +4701,16 @@ void groupFoldCountDistinctChunk(Column* accumulator,
 // the DISTINCT serializer's, so two rows count as one exactly when a whole-row DISTINCT
 // would fold them together.
 template <typename Primitive>
-void groupFoldCountDistinctPresent(Column* accumulator,
-                                   std::vector<uint64_t>& counts,
-                                   std::vector<__int128>& durationTotals,
+void groupFoldCountDistinctPresent(NLGroupStatePlaces places,
                                    const Column* input,
                                    const std::vector<size_t>& groups,
+                                   size_t beginRow,
+                                   size_t endRow,
                                    NLGroupDistinctTally& distinct,
                                    NLValueStore& values) {
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
-    for (size_t row = 0; row < inputRaw.size(); row++) {
+    for (size_t row = beginRow; row < endRow; row++) {
         const std::optional<Primitive>& value = inputRaw[row];
         if (!value.has_value()) {
             continue;
@@ -4797,7 +4722,7 @@ void groupFoldCountDistinctPresent(Column* accumulator,
         distinctAppendValueBytes(distinct.getKey(), *value);
 
         if (distinct.insertIfNew()) {
-            counts[group]++;
+            places.getState<uint64_t>(group)++;
         }
     }
 }
@@ -4806,18 +4731,18 @@ void groupFoldCountDistinctPresent(Column* accumulator,
 // grouped count(x) over a heterogeneous unwind charges the same rows a nullable value
 // column would.
 template <typename Cell>
-void groupFoldCountPresentCell(Column* accumulator,
-                                      std::vector<uint64_t>& counts,
-                                      std::vector<__int128>& durationTotals,
-                                      const Column* input,
-                                      const std::vector<size_t>& groups,
-                                      NLGroupDistinctTally& distinct,
-                                      NLValueStore& values) {
+void groupFoldCountPresentCell(NLGroupStatePlaces places,
+                               const Column* input,
+                               const std::vector<size_t>& groups,
+                               size_t beginRow,
+                               size_t endRow,
+                               NLGroupDistinctTally& distinct,
+                               NLValueStore& values) {
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
-    for (size_t row = 0; row < inputRaw.size(); row++) {
+    for (size_t row = beginRow; row < endRow; row++) {
         if (presentCell(inputRaw[row])) {
-            counts[groups[row]]++;
+            places.getState<uint64_t>(groups[row])++;
         }
     }
 }
@@ -4826,16 +4751,16 @@ void groupFoldCountPresentCell(Column* accumulator,
 // The key carries the tag as well as the value, so cells of different types are told
 // apart the way a whole-row DISTINCT tells them apart.
 template <typename Cell>
-void groupFoldCountDistinctCell(Column* accumulator,
-                                       std::vector<uint64_t>& counts,
-                                       std::vector<__int128>& durationTotals,
-                                       const Column* input,
-                                       const std::vector<size_t>& groups,
-                                       NLGroupDistinctTally& distinct,
-                                       NLValueStore& values) {
+void groupFoldCountDistinctCell(NLGroupStatePlaces places,
+                                const Column* input,
+                                const std::vector<size_t>& groups,
+                                size_t beginRow,
+                                size_t endRow,
+                                NLGroupDistinctTally& distinct,
+                                NLValueStore& values) {
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
-    for (size_t row = 0; row < inputRaw.size(); row++) {
+    for (size_t row = beginRow; row < endRow; row++) {
         const std::optional<CellView> element = presentCell(inputRaw[row]);
         if (!element) {
             continue;
@@ -4847,23 +4772,23 @@ void groupFoldCountDistinctCell(Column* accumulator,
         distinctAppendElementBytes(distinct.getKey(), *element);
 
         if (distinct.insertIfNew()) {
-            counts[group]++;
+            places.getState<uint64_t>(group)++;
         }
     }
 }
 
 // Tally each group's distinct present lists, keying on the elements rather than on the
 // view, so two rows count once when their lists are equal.
-void groupFoldCountDistinctPresentList(Column* accumulator,
-                                       std::vector<uint64_t>& counts,
-                                       std::vector<__int128>& durationTotals,
+void groupFoldCountDistinctPresentList(NLGroupStatePlaces places,
                                        const Column* input,
                                        const std::vector<size_t>& groups,
+                                       size_t beginRow,
+                                       size_t endRow,
                                        NLGroupDistinctTally& distinct,
                                        NLValueStore& values) {
     const auto& inputRaw = static_cast<const ColumnOptVector<ListView>*>(input)->getRaw();
 
-    for (size_t row = 0; row < inputRaw.size(); row++) {
+    for (size_t row = beginRow; row < endRow; row++) {
         const std::optional<ListView>& value = inputRaw[row];
         if (!value.has_value()) {
             continue;
@@ -4875,21 +4800,21 @@ void groupFoldCountDistinctPresentList(Column* accumulator,
         distinctAppendListBytes(distinct.getKey(), *value);
 
         if (distinct.insertIfNew()) {
-            counts[group]++;
+            places.getState<uint64_t>(group)++;
         }
     }
 }
 
-void groupFoldCountDistinctPresentMap(Column* accumulator,
-                                      std::vector<uint64_t>& counts,
-                                      std::vector<__int128>& durationTotals,
+void groupFoldCountDistinctPresentMap(NLGroupStatePlaces places,
                                       const Column* input,
                                       const std::vector<size_t>& groups,
+                                      size_t beginRow,
+                                      size_t endRow,
                                       NLGroupDistinctTally& distinct,
                                       NLValueStore& values) {
     const auto& inputRaw = static_cast<const ColumnOptVector<MapView>*>(input)->getRaw();
 
-    for (size_t row = 0; row < inputRaw.size(); row++) {
+    for (size_t row = beginRow; row < endRow; row++) {
         const std::optional<MapView>& value = inputRaw[row];
         if (!value.has_value()) {
             continue;
@@ -4901,7 +4826,7 @@ void groupFoldCountDistinctPresentMap(Column* accumulator,
         distinctAppendMapBytes(distinct.getKey(), *value);
 
         if (distinct.insertIfNew()) {
-            counts[group]++;
+            places.getState<uint64_t>(group)++;
         }
     }
 }
@@ -6239,131 +6164,105 @@ void selectCollectOptIDHandlers(bool distinctValues,
     listEmit = &collectListEmit<IDType>;
 }
 
-// Emit a sum/min/max slice: the accumulator holds each group's reduced value in the
-// result's own type, so copy groups [begin, begin + count) into the output.
-template <typename Primitive>
-void groupEmitCopy(const Column* accumulator,
-                   const std::vector<uint64_t>& counts,
-                   const std::vector<__int128>& durationTotals,
-                   size_t begin,
-                   size_t count,
-                   Column* output,
-                   NLStepBuffers* stepBuffers) {
-    const auto& raw = static_cast<const ColumnOptVector<Primitive>*>(accumulator)->getRaw();
-    auto& outputRaw = static_cast<ColumnOptVector<Primitive>*>(output)->getRaw();
-    outputRaw.assign(raw.begin() + begin, raw.begin() + begin + count);
+// Finalize the states of groups [begin, begin + count) into the rows of an output column of
+// Element, one row per group
+template <typename State, typename Element, typename Finalize>
+void finalizeGroupStates(NLGroupStatePlaces places, size_t begin, size_t count, Column* output, Finalize finalize) {
+    std::vector<Element>& outputRaw = static_cast<ColumnVector<Element>*>(output)->getRaw();
+    outputRaw.resize(count);
+
+    for (size_t index = 0; index < count; index++) {
+        outputRaw[index] = finalize(places.getState<State>(begin + index));
+    }
 }
 
-// Emit an avg slice: divide each group's running total by its non-null count. A
-// group with no non-null row (count zero) averages to null, matching Cypher.
+// Emit what a state holds as it is: a count's tally, a sum's present total, or the value min,
+// max and first kept, null for a group that kept none
+template <typename State, typename Element>
+void groupEmitCopy(NLGroupStatePlaces places, size_t begin, size_t count, Column* output, NLStepBuffers* stepBuffers) {
+    finalizeGroupStates<State, Element>(places, begin, count, output, [](const State& state) {
+        return Element(state);
+    });
+}
+
+// Emit an average: the total divided by the count, a double over numbers and a duration over
+// durations. A group with no value averages to null, matching Cypher.
 template <typename Total>
-void groupEmitAvg(const Column* accumulator,
-                  const std::vector<uint64_t>& counts,
-                  const std::vector<__int128>& durationTotals,
-                  size_t begin,
-                  size_t count,
-                  Column* output,
-                  NLStepBuffers* stepBuffers) {
-    const auto& raw = static_cast<const ColumnOptVector<Total>*>(accumulator)->getRaw();
-    auto& outputRaw = static_cast<ColumnOptVector<Total>*>(output)->getRaw();
-    outputRaw.resize(count);
+void groupEmitAverage(NLGroupStatePlaces places, size_t begin, size_t count, Column* output, NLStepBuffers* stepBuffers) {
+    using Average = decltype(averageOf(Total {}, uint64_t {0}));
+    using State = NLAverageState<Total>;
 
-    for (size_t index = 0; index < count; index++) {
-        const size_t group = begin + index;
-        if (counts[group] == 0) {
-            outputRaw[index] = std::nullopt;
+    finalizeGroupStates<State, std::optional<Average>>(places, begin, count, output, [](const State& average) {
+        if (average._count == 0) {
+            return std::optional<Average>();
         } else {
-            outputRaw[index] = std::optional<Total>(averageOf(raw[group].value(), counts[group]));
+            return std::optional<Average>(averageOf(average._total, average._count));
         }
-    }
+    });
 }
 
-void groupEmitDurationSum(const Column* accumulator,
-                          const std::vector<uint64_t>& counts,
-                          const std::vector<__int128>& durationTotals,
-                          size_t begin,
-                          size_t count,
-                          Column* output,
-                          NLStepBuffers* stepBuffers) {
-    auto& outputRaw = static_cast<ColumnOptVector<types::Duration::Primitive>*>(output)->getRaw();
-    outputRaw.resize(count);
+void groupEmitDurationSum(NLGroupStatePlaces places, size_t begin, size_t count, Column* output, NLStepBuffers* stepBuffers) {
+    using Element = std::optional<types::Duration::Primitive>;
 
-    for (size_t index = 0; index < count; index++) {
-        outputRaw[index] = durationOfTotal(durationTotals[begin + index]);
-    }
+    finalizeGroupStates<__int128, Element>(places, begin, count, output, [](__int128 total) {
+        return Element(durationOfTotal(total));
+    });
 }
 
-void groupEmitDurationAverage(const Column* accumulator,
-                              const std::vector<uint64_t>& counts,
-                              const std::vector<__int128>& durationTotals,
-                              size_t begin,
-                              size_t count,
-                              Column* output,
-                              NLStepBuffers* stepBuffers) {
-    auto& outputRaw = static_cast<ColumnOptVector<types::Duration::Primitive>*>(output)->getRaw();
-    outputRaw.resize(count);
-
-    for (size_t index = 0; index < count; index++) {
-        const size_t group = begin + index;
-        if (counts[group] == 0) {
-            outputRaw[index] = std::nullopt;
-        } else {
-            outputRaw[index] = averageOf(durationTotals[group], counts[group]);
-        }
-    }
+template <bool Population>
+void groupEmitDeviation(NLGroupStatePlaces places, size_t begin, size_t count, Column* output, NLStepBuffers* stepBuffers) {
+    finalizeGroupStates<NLDeviationState, std::optional<double>>(places, begin, count, output, [](const NLDeviationState& state) {
+        return std::optional<double>(deviation<Population>(state._squaredDeviations, state._count));
+    });
 }
 
-void groupEmitTaggedSum(const Column* accumulator,
-                        const std::vector<uint64_t>& counts,
-                        const std::vector<__int128>& durationTotals,
-                        size_t begin,
-                        size_t count,
-                        Column* output,
-                        NLStepBuffers* stepBuffers) {
-    const auto& raw = static_cast<const ColumnOptVector<CellView>*>(accumulator)->getRaw();
-    auto& outputRaw = static_cast<ColumnOptVector<CellView>*>(output)->getRaw();
+void groupEmitTaggedSum(NLGroupStatePlaces places, size_t begin, size_t count, Column* output, NLStepBuffers* stepBuffers) {
     QueryListBuffer& cells = stepBuffers->listBuffer();
-    outputRaw.resize(count);
 
-    for (size_t index = 0; index < count; index++) {
-        const size_t group = begin + index;
-        const NLTaggedSum sum(raw[group], durationTotals[group]);
-
-        outputRaw[index] = sum.sum(cells);
-    }
+    finalizeGroupStates<NLTaggedSum, std::optional<CellView>>(places, begin, count, output, [&](const NLTaggedSum& sum) {
+        return std::optional<CellView>(sum.sum(cells));
+    });
 }
 
-void groupEmitTaggedAvg(const Column* accumulator,
-                        const std::vector<uint64_t>& counts,
-                        const std::vector<__int128>& durationTotals,
-                        size_t begin,
-                        size_t count,
-                        Column* output,
-                        NLStepBuffers* stepBuffers) {
-    const auto& raw = static_cast<const ColumnOptVector<CellView>*>(accumulator)->getRaw();
-    auto& outputRaw = static_cast<ColumnOptVector<CellView>*>(output)->getRaw();
+void groupEmitTaggedAverage(NLGroupStatePlaces places, size_t begin, size_t count, Column* output, NLStepBuffers* stepBuffers) {
+    using State = NLAverageState<NLTaggedSum>;
+
     QueryListBuffer& cells = stepBuffers->listBuffer();
-    outputRaw.resize(count);
 
-    for (size_t index = 0; index < count; index++) {
-        const size_t group = begin + index;
-        const NLTaggedSum sum(raw[group], durationTotals[group]);
-
-        outputRaw[index] = sum.average(counts[group], cells);
-    }
+    finalizeGroupStates<State, std::optional<CellView>>(places, begin, count, output, [&](const State& average) {
+        return average._total.average(average._count, cells);
+    });
 }
 
-// Emit a count slice: each group's tally is a present unsigned i64, so copy the
-// tallies of groups [begin, begin + count) into the ui64 output.
-void groupEmitCount(const Column* accumulator,
-                    const std::vector<uint64_t>& counts,
-                    const std::vector<__int128>& durationTotals,
-                    size_t begin,
-                    size_t count,
-                    Column* output,
-                    NLStepBuffers* stepBuffers) {
-    auto& outputRaw = static_cast<ColumnVector<uint64_t>*>(output)->getRaw();
-    outputRaw.assign(counts.begin() + begin, counts.begin() + begin + count);
+template <typename Primitive>
+void describeGroupNumberSumState(NLGroupAggregateStateType& stateType) {
+    describeGroupState<Primitive>(&groupEmitCopy<Primitive, std::optional<Primitive>>, stateType);
+}
+
+// The state of a grouped sum over a column of this value type: the running sum in the
+// column's own type, or the 128-bit total of microseconds of durations
+void describeGroupSumState(ValueType accumulatorType, NLGroupAggregateStateType& stateType) {
+    switch (accumulatorType) {
+        case ValueType::Int64:
+            describeGroupNumberSumState<types::Int64::Primitive>(stateType);
+        break;
+
+        case ValueType::UInt64:
+            describeGroupNumberSumState<types::UInt64::Primitive>(stateType);
+        break;
+
+        case ValueType::Double:
+            describeGroupNumberSumState<types::Double::Primitive>(stateType);
+        break;
+
+        case ValueType::Duration:
+            describeGroupState<__int128>(&groupEmitDurationSum, stateType);
+        break;
+
+        default:
+            throw IRException("sum requires a numeric or a duration column");
+        break;
+    }
 }
 
 // The grouped sum fold for a column of this value type. sum adds the values, so
@@ -12071,7 +11970,7 @@ void NLExecutor::runGroupAggregateUpdate(NLExecutionContext* context, NLFunction
     NLGroupAggregateState* state = update->getState();
 
     std::vector<NLGroupAggregateState::KeyColumn>& keyColumns = state->keyColumns();
-    std::vector<NLGroupAggregateState::Aggregate>& aggregates = state->aggregates();
+    NLGroupAggregates& aggregates = state->aggregates();
     bioassert(!keyColumns.empty(), "nl.group_aggregate_update needs at least one grouping key");
 
     // Every column is row-aligned, so the first grouping key sizes this step's rows.
@@ -12088,7 +11987,7 @@ void NLExecutor::runGroupAggregateUpdate(NLExecutionContext* context, NLFunction
                   "nl.group_aggregate_update grouping keys must be row-aligned");
     }
 
-    for (const NLGroupAggregateState::Aggregate& aggregate : aggregates) {
+    for (const NLGroupAggregates::Aggregate& aggregate : aggregates.getAggregates()) {
         bioassert(aggregate._input->size() == rowCount,
                   "nl.group_aggregate_update aggregate inputs must be row-aligned with the grouping keys");
     }
@@ -12124,30 +12023,16 @@ void NLExecutor::runGroupAggregateUpdate(NLExecutionContext* context, NLFunction
 
     const size_t groupCount = groupTable.getGroupCount();
 
-    // Grow the key buffers with the new groups' key values, then grow every
-    // accumulator to the new group count - initializing the new groups to their
-    // reduction's identity - before folding this step's rows into their groups.
+    // Grow the key buffers with the new groups' key values, then give the new groups
+    // their states - each the identity of its reduction - before folding this step's
+    // rows into their groups.
     for (NLGroupAggregateState::KeyColumn& keyColumn : keyColumns) {
         keyColumn._gatherAppend(keyColumn._input, newGroupRows, keyColumn._buffer, state->keyValues());
     }
 
-    for (NLGroupAggregateState::Aggregate& aggregate : aggregates) {
-        aggregate._grow(aggregate._accumulator, aggregate._counts, aggregate._durationTotals, groupCount);
-    }
-
-    NLValueStore& accumulatorValues = state->accumulatorValues();
-
-    for (NLGroupAggregateState::Aggregate& aggregate : aggregates) {
-        aggregate._fold(aggregate._accumulator,
-                        aggregate._counts,
-                        aggregate._durationTotals,
-                        aggregate._input,
-                        groupIndices,
-                        aggregate._distinct,
-                        accumulatorValues);
-    }
-
-    state->compactAccumulatorValues();
+    aggregates.grow(groupCount);
+    aggregates.fold(groupIndices);
+    aggregates.compactValues();
 }
 
 void NLExecutor::runGroupAggregateLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -12159,7 +12044,7 @@ void NLExecutor::runGroupAggregateLoop(NLExecutionContext* context, NLFunctionDa
     const NLStmtContainer* loopBody = loopData->getStmts();
 
     std::vector<NLGroupAggregateState::KeyColumn>& keyColumns = state->keyColumns();
-    std::vector<NLGroupAggregateState::Aggregate>& aggregates = state->aggregates();
+    NLGroupAggregates& aggregates = state->aggregates();
 
     const NLLimitState* limit = loopData->getLimit();
     NLStepBuffers* const stepBuffers = loopData->getStepBuffers();
@@ -12177,16 +12062,7 @@ void NLExecutor::runGroupAggregateLoop(NLExecutionContext* context, NLFunctionDa
         }
 
         stepBuffers->clear();
-
-        for (const NLGroupAggregateState::Aggregate& aggregate : aggregates) {
-            aggregate._emit(aggregate._accumulator,
-                            aggregate._counts,
-                            aggregate._durationTotals,
-                            offset,
-                            stepGroups,
-                            aggregate._output,
-                            stepBuffers);
-        }
+        aggregates.emit(offset, stepGroups, stepBuffers);
 
         runBody(context, loopBody);
     };
@@ -12235,8 +12111,8 @@ void NLExecutor::runCollectUpdate(NLExecutionContext* context, NLFunctionData* d
                   "nl.collect_update value columns must be row-aligned with the grouping keys");
     }
 
-    std::vector<NLGroupAggregateState::Aggregate>& aggregates = state->aggregates();
-    for (const NLGroupAggregateState::Aggregate& aggregate : aggregates) {
+    NLGroupAggregates& aggregates = state->aggregates();
+    for (const NLGroupAggregates::Aggregate& aggregate : aggregates.getAggregates()) {
         bioassert(aggregate._input->size() == rowCount,
                   "nl.collect_update aggregate inputs must be row-aligned with the grouping keys");
     }
@@ -12293,23 +12169,9 @@ void NLExecutor::runCollectUpdate(NLExecutionContext* context, NLFunctionData* d
 
     // The reductions taken over the same groups fold beside the list, off the group
     // assignment computed once above, exactly as nl.group_aggregate_update folds them.
-    for (NLGroupAggregateState::Aggregate& aggregate : aggregates) {
-        aggregate._grow(aggregate._accumulator, aggregate._counts, aggregate._durationTotals, groupCount);
-    }
-
-    NLValueStore& accumulatorValues = state->accumulatorValues();
-
-    for (NLGroupAggregateState::Aggregate& aggregate : aggregates) {
-        aggregate._fold(aggregate._accumulator,
-                        aggregate._counts,
-                        aggregate._durationTotals,
-                        aggregate._input,
-                        groupIndices,
-                        aggregate._distinct,
-                        accumulatorValues);
-    }
-
-    state->compactAccumulatorValues();
+    aggregates.grow(groupCount);
+    aggregates.fold(groupIndices);
+    aggregates.compactValues();
 }
 
 // Only the scalar value types are collectable for now; an embedding column (a span of
@@ -12716,6 +12578,7 @@ void NLExecutor::runCollectLoop(NLExecutionContext* context, NLFunctionData* dat
     const NLStmtContainer* loopBody = loopData->getStmts();
 
     std::vector<NLCollectState::KeyColumn>& keyColumns = state->keyColumns();
+    NLGroupAggregates& aggregates = state->aggregates();
     NLStepBuffers* const stepBuffers = loopData->getStepBuffers();
 
     // Re-chunk the groups: each step slices the next chunk of key values from the key
@@ -12741,16 +12604,7 @@ void NLExecutor::runCollectLoop(NLExecutionContext* context, NLFunctionData* dat
         }
 
         stepBuffers->clear();
-
-        for (const NLGroupAggregateState::Aggregate& aggregate : state->aggregates()) {
-            aggregate._emit(aggregate._accumulator,
-                            aggregate._counts,
-                            aggregate._durationTotals,
-                            offset,
-                            stepGroups,
-                            aggregate._output,
-                            stepBuffers);
-        }
+        aggregates.emit(offset, stepGroups, stepBuffers);
 
         runBody(context, loopBody);
     }
@@ -13865,72 +13719,61 @@ NLAggregateResultFunction NLExecutor::selectAggregateResult(AggregateKind kind, 
     return result;
 }
 
-NLGroupAggregateGrowFunction NLExecutor::selectGroupAggregateGrow(GroupAggregateKind kind, ValueType accumulatorType) {
-    // count keeps only a per-group tally, so its grow ignores the accumulator type;
-    // avg carries a running total - an f64 over numbers, a 128-bit duration total over
-    // durations - plus that tally, and is the only value reduction besides count that
-    // grows the counts vector. A switch (not an if/else) over every kind so a new one is a
-    // compile error here rather than silently taking the sum/min/max path.
+void NLExecutor::selectGroupAggregateState(GroupAggregateKind kind,
+                                           ValueType accumulatorType,
+                                           NLGroupAggregateStateType& stateType) {
+    // count keeps only a tally, so it ignores the accumulator type; avg carries a running
+    // total - an f64 over numbers, a 128-bit total over durations - and its count. A switch
+    // (not an if/else) over every kind so a new one is a compile error here rather than
+    // silently taking the sum/min/max path.
     switch (kind) {
         case GroupAggregateKind::Count:
         case GroupAggregateKind::CountDistinct:
         case GroupAggregateKind::CountRows:
-            return &groupGrowCount;
+            describeGroupState<uint64_t>(&groupEmitCopy<uint64_t, uint64_t>, stateType);
         break;
 
         case GroupAggregateKind::Avg:
-        case GroupAggregateKind::AvgDistinct: {
-            NLGroupAggregateGrowFunction grow = nullptr;
+        case GroupAggregateKind::AvgDistinct:
             dispatchAverageTotal(accumulatorType, [&]<typename Total>() {
                 if constexpr (std::is_same_v<Total, types::Duration::Primitive>) {
-                    grow = &groupGrowDurationTotal</*Averages=*/true>;
+                    describeGroupState<NLAverageState<__int128>>(&groupEmitAverage<__int128>, stateType);
                 } else {
-                    grow = &groupGrowAvg<Total>;
+                    describeGroupState<NLAverageState<Total>>(&groupEmitAverage<Total>, stateType);
                 }
             });
-
-            return grow;
-        }
         break;
 
         case GroupAggregateKind::StDev:
-        case GroupAggregateKind::StDevP:
         case GroupAggregateKind::StDevDistinct:
+            describeGroupState<NLDeviationState>(&groupEmitDeviation</*Population=*/false>, stateType);
+        break;
+
+        case GroupAggregateKind::StDevP:
         case GroupAggregateKind::StDevPDistinct:
-            return &groupGrowDeviation;
+            describeGroupState<NLDeviationState>(&groupEmitDeviation</*Population=*/true>, stateType);
         break;
 
         case GroupAggregateKind::Sum:
         case GroupAggregateKind::SumDistinct:
+            describeGroupSumState(accumulatorType, stateType);
+        break;
+
         case GroupAggregateKind::Min:
         case GroupAggregateKind::Max:
         case GroupAggregateKind::First: {
-            // sum grows each new group to a present zero (its additive identity),
-            // min/max/first to null (no value seen yet); neither carries a per-group
-            // tally. Both compile for any value type, and lowering has already
-            // validated the kind / type pairing (and the fold selector re-checks it),
-            // so one dispatch over the accumulator type suffices - the grouped sibling
-            // of selectAggregateReset.
-            const bool growsToZero = (kind == GroupAggregateKind::Sum) || (kind == GroupAggregateKind::SumDistinct);
-
-            if (growsToZero && accumulatorType == ValueType::Duration) {
-                return &groupGrowDurationTotal</*Averages=*/false>;
-            }
-
-            NLGroupAggregateGrowFunction grow = nullptr;
+            // min/max/first keep the value itself, null until a group sees one. The kept
+            // state compiles for any value type, and lowering has already validated the kind
+            // / type pairing (and the fold selector re-checks it), so one dispatch over the
+            // accumulator type suffices - the grouped sibling of selectAggregateReset.
             const auto select = [&]<SupportedType T>() {
-                grow = growsToZero ? &groupGrowZero<typename T::Primitive>
-                                   : &groupGrowNull<typename T::Primitive>;
+                using Kept = std::optional<typename T::Primitive>;
+                describeGroupState<Kept>(&groupEmitCopy<Kept, Kept>, stateType);
             };
             ValueTypeDispatcher(accumulatorType).execute(select);
-
-            return grow;
         }
         break;
     }
-
-    bioassert(false, "Unhandled group aggregate kind");
-    return nullptr;
 }
 
 NLGroupAggregateFoldFunction NLExecutor::selectTaggedGroupAggregateFold(GroupAggregateKind kind) {
@@ -13941,30 +13784,34 @@ NLGroupAggregateFoldFunction NLExecutor::selectOptTaggedGroupAggregateFold(Group
     return taggedGroupAggregateFoldFor<std::optional<CellView>>(kind);
 }
 
-NLGroupAggregateGrowFunction NLExecutor::selectTaggedGroupAggregateGrow(GroupAggregateKind kind) {
-    const bool sums = (kind == GroupAggregateKind::Sum) || (kind == GroupAggregateKind::SumDistinct);
-    const bool averages = (kind == GroupAggregateKind::Avg) || (kind == GroupAggregateKind::AvgDistinct);
+void NLExecutor::selectTaggedGroupAggregateState(GroupAggregateKind kind, NLGroupAggregateStateType& stateType) {
+    switch (kind) {
+        case GroupAggregateKind::Sum:
+        case GroupAggregateKind::SumDistinct:
+            describeGroupState<NLTaggedSum>(&groupEmitTaggedSum, stateType);
+        break;
 
-    if (sums) {
-        return &groupGrowTaggedSum</*Averages=*/false>;
-    } else if (averages) {
-        return &groupGrowTaggedSum</*Averages=*/true>;
+        case GroupAggregateKind::Avg:
+        case GroupAggregateKind::AvgDistinct:
+            describeGroupState<NLAverageState<NLTaggedSum>>(&groupEmitTaggedAverage, stateType);
+        break;
+
+        case GroupAggregateKind::Min:
+        case GroupAggregateKind::Max:
+        case GroupAggregateKind::First:
+            describeGroupState<std::optional<CellView>>(&groupEmitCopy<std::optional<CellView>, std::optional<CellView>>, stateType);
+        break;
+
+        case GroupAggregateKind::Count:
+        case GroupAggregateKind::CountDistinct:
+        case GroupAggregateKind::CountRows:
+        case GroupAggregateKind::StDev:
+        case GroupAggregateKind::StDevP:
+        case GroupAggregateKind::StDevDistinct:
+        case GroupAggregateKind::StDevPDistinct:
+            bioassert(false, "A tally or a spread of tagged cells keeps no cell");
+        break;
     }
-
-    return &groupGrowNull<CellView>;
-}
-
-NLGroupAggregateEmitFunction NLExecutor::selectTaggedGroupAggregateEmit(GroupAggregateKind kind) {
-    const bool sums = (kind == GroupAggregateKind::Sum) || (kind == GroupAggregateKind::SumDistinct);
-    const bool averages = (kind == GroupAggregateKind::Avg) || (kind == GroupAggregateKind::AvgDistinct);
-
-    if (sums) {
-        return &groupEmitTaggedSum;
-    } else if (averages) {
-        return &groupEmitTaggedAvg;
-    }
-
-    return &groupEmitCopy<CellView>;
 }
 
 NLGroupAggregateFoldFunction NLExecutor::selectGroupAggregateFold(GroupAggregateKind kind, ValueType inputType) {
@@ -14115,72 +13962,6 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctChunkFold(NLChu
     dispatchChunkKind(kind, [&]<typename ElementType>() { fold = &groupFoldCountDistinctChunk<ElementType>; });
 
     return fold;
-}
-
-NLGroupAggregateEmitFunction NLExecutor::selectGroupAggregateEmit(GroupAggregateKind kind, ValueType resultType) {
-    // A switch (not an if/else) over every kind so a new one is a compile error here
-    // rather than silently taking the sum/min/max path.
-    switch (kind) {
-        case GroupAggregateKind::Count:
-        case GroupAggregateKind::CountDistinct:
-        case GroupAggregateKind::CountRows:
-            // count emits its per-group tally as an unsigned i64, whatever the input was.
-            return &groupEmitCount;
-        break;
-
-        case GroupAggregateKind::Avg:
-        case GroupAggregateKind::AvgDistinct: {
-            // avg emits the running total divided by the count, per group: a double over
-            // numbers and a duration over durations
-            NLGroupAggregateEmitFunction emit = nullptr;
-            dispatchAverageTotal(resultType, [&]<typename Total>() {
-                if constexpr (std::is_same_v<Total, types::Duration::Primitive>) {
-                    emit = &groupEmitDurationAverage;
-                } else {
-                    emit = &groupEmitAvg<Total>;
-                }
-            });
-
-            return emit;
-        }
-        break;
-
-        case GroupAggregateKind::StDev:
-        case GroupAggregateKind::StDevDistinct:
-            return &groupEmitDeviation</*Population=*/false>;
-        break;
-
-        case GroupAggregateKind::StDevP:
-        case GroupAggregateKind::StDevPDistinct:
-            return &groupEmitDeviation</*Population=*/true>;
-        break;
-
-        case GroupAggregateKind::Sum:
-        case GroupAggregateKind::SumDistinct:
-        case GroupAggregateKind::Min:
-        case GroupAggregateKind::Max:
-        case GroupAggregateKind::First: {
-            // sum/min/max/first hold each group's reduced value in the result's own type, so
-            // the emit copies the accumulator slice - valid for any value type, the
-            // grouped sibling of selectAggregateResult.
-            const bool sums = (kind == GroupAggregateKind::Sum) || (kind == GroupAggregateKind::SumDistinct);
-            if (sums && resultType == ValueType::Duration) {
-                return &groupEmitDurationSum;
-            }
-
-            NLGroupAggregateEmitFunction emit = nullptr;
-            const auto select = [&]<SupportedType T>() {
-                emit = &groupEmitCopy<typename T::Primitive>;
-            };
-            ValueTypeDispatcher(resultType).execute(select);
-
-            return emit;
-        }
-        break;
-    }
-
-    bioassert(false, "Unhandled group aggregate kind");
-    return nullptr;
 }
 
 NLGroupKeyGatherFunction NLExecutor::selectGroupKeyGather(NLChunkKind kind) {
