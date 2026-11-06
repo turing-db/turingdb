@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 
-import { ColumnType, TuringClient, TuringQueryError } from "turingdb";
+import { ColumnType, Point, TuringClient, TuringQueryError } from "turingdb";
 import type { ColumnTypeName, QueryOptions, Value } from "turingdb";
 
 export type Row = Value[];
@@ -59,6 +59,13 @@ export function embedding(...values: number[]): Float32Array {
     return new Float32Array(values);
 }
 
+// The typings keep Point's constructor private, since no parameter holds a point, so the
+// expected value is built through the class the client decodes into
+export function point(srid: Point["srid"], x: number, y: number, z?: number): Point {
+    const PointConstructor = Point as unknown as new (srid: number, x: number, y: number, z: number | undefined) => Point;
+    return new PointConstructor(srid, x, y, z);
+}
+
 // Renders a decoded value so an Int64 (480) reads apart from a Double (480.0)
 function describeValue(value: Value | undefined): string {
     if (value === undefined) {
@@ -75,6 +82,9 @@ function describeValue(value: Value | undefined): string {
         return value.toString();
     } else if (value instanceof Float32Array) {
         return `embedding(${Array.from(value).join(", ")})`;
+    } else if (value instanceof Point) {
+        const z = value.z === undefined ? "" : `, ${describeValue(value.z)}`;
+        return `point(${value.srid}, ${describeValue(value.x)}, ${describeValue(value.y)}${z})`;
     } else if (Array.isArray(value)) {
         return `[${value.map(describeValue).join(", ")}]`;
     }

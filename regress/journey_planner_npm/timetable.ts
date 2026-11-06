@@ -29,19 +29,19 @@ type FixedLink = {
 };
 
 const STATIONS =
-    "CREATE (:STATION {crs: 'OXF', nlc: '3115', name: 'Oxford', minInterchange: 5, maxInterchange: 60, lat: 51.7535, lon: -1.27, " +
+    "CREATE (:STATION {crs: 'OXF', nlc: '3115', name: 'Oxford', minInterchange: 5, maxInterchange: 60, lat: 51.7535, lon: -1.27, location: point({longitude: -1.27, latitude: 51.7535}), " +
     "stepFree: true, opened: datetime('1852-10-01T00:00:00Z'), minConnection: duration({minutes: 5}), platforms: [1, 2, 3, 4], " +
     "facilities: {parking: true, cycleSpaces: 400, retail: ['café', 'newsagent']}, profile: (0.9, 0.3, 0.5), sign: 'Oxford 🚆'}), " +
-    "(:STATION {crs: 'DID', nlc: '3128', name: 'Didcot Parkway', minInterchange: 4, maxInterchange: 45, lat: 51.611, lon: -1.2429, " +
+    "(:STATION {crs: 'DID', nlc: '3128', name: 'Didcot Parkway', minInterchange: 4, maxInterchange: 45, lat: 51.611, lon: -1.2429, location: point({longitude: -1.2429, latitude: 51.611}), " +
     "stepFree: true, opened: datetime('1844-06-12T00:00:00Z'), minConnection: duration({minutes: 4}), platforms: [1, 2, 3, 4, 5], " +
     "facilities: {parking: true, cycleSpaces: 120, retail: ['café']}, profile: (0.4, 0.8, 0.2)}), " +
-    "(:STATION {crs: 'RDG', nlc: '3149', name: 'Reading', minInterchange: 6, maxInterchange: 50, lat: 51.4589, lon: -0.9718, " +
+    "(:STATION {crs: 'RDG', nlc: '3149', name: 'Reading', minInterchange: 6, maxInterchange: 50, lat: 51.4589, lon: -0.9718, location: point({longitude: -0.9718, latitude: 51.4589}), " +
     "stepFree: true, opened: datetime('1840-03-30T00:00:00Z'), minConnection: duration({minutes: 6}), platforms: [7, 8, 9, 10, 11, 12, 13, 14, 15], " +
     "facilities: {parking: true, cycleSpaces: 800, retail: ['café', 'pharmacy', 'bookshop']}, profile: (0.8, 0.9, 0.4)}), " +
-    "(:STATION {crs: 'PAD', nlc: '3087', name: 'London Paddington', minInterchange: 10, maxInterchange: 90, lat: 51.5154, lon: -0.1755, " +
+    "(:STATION {crs: 'PAD', nlc: '3087', name: 'London Paddington', minInterchange: 10, maxInterchange: 90, lat: 51.5154, lon: -0.1755, location: point({longitude: -0.1755, latitude: 51.5154}), " +
     "stepFree: true, opened: datetime('1854-01-16T00:00:00Z'), minConnection: duration({minutes: 10}), platforms: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], " +
     "facilities: {parking: false, cycleSpaces: 250, retail: ['bookshop', 'café', 'florist']}, profile: (1.0, 0.7, 0.9)}), " +
-    "(:STATION {crs: 'SWI', nlc: '3138', name: 'Swindon', minInterchange: 5, maxInterchange: 40, lat: 51.5655, lon: -1.7856, " +
+    "(:STATION {crs: 'SWI', nlc: '3138', name: 'Swindon', minInterchange: 5, maxInterchange: 40, lat: 51.5655, lon: -1.7856, location: point({longitude: -1.7856, latitude: 51.5655}), " +
     "stepFree: false, opened: datetime('1842-07-17T00:00:00Z'), minConnection: duration({minutes: 5}), platforms: [1, 2, 3, 4], " +
     "facilities: {parking: true, cycleSpaces: 60, retail: []}, profile: (0.5, 0.6, 0.3)})";
 

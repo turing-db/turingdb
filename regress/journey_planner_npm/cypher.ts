@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 
 import { Column, ColumnEncoding, ColumnType, TuringClient, TuringQueryError, double } from "turingdb";
-import type { Parameters, QueryResult, Value } from "turingdb";
+import type { Parameters, Point, QueryResult, Value } from "turingdb";
 
-import { at, embedding, minutes } from "./harness.js";
+import { at, embedding, minutes, point } from "./harness.js";
 import type { Case, Check } from "./harness.js";
 import { TIMETABLE_GRAPH } from "./timetable.js";
 
@@ -11,7 +11,8 @@ const OXFORD_FACILITIES = { parking: true, cycleSpaces: 400n, retail: ["café", 
 
 // Every value type the engine stores or computes, as the npm client decodes it: a 64-bit
 // integer or an ID as a BigInt, a double as a number, a DateTime as microseconds since the
-// epoch and a Duration as microseconds, both BigInt, and an embedding as a Float32Array
+// epoch and a Duration as microseconds, both BigInt, an embedding as a Float32Array and a
+// point as a Point
 export const VALUE_CASES: Case[] = [
     {
         name: "reads the scalar properties of the stations",
@@ -38,6 +39,42 @@ export const VALUE_CASES: Case[] = [
             ["OXF", at("1852-10-01T00:00:00Z"), minutes(5), 1852n],
             ["PAD", at("1854-01-16T00:00:00Z"), minutes(10), 1854n],
         ],
+    },
+    {
+        name: "reads the point property of the stations",
+        query: "MATCH (s:STATION) RETURN s.crs, s.location ORDER BY s.crs",
+        types: ["STRING", "POINT"],
+        ordered: true,
+        rows: [
+            ["DID", point(4326, -1.2429, 51.611)],
+            ["OXF", point(4326, -1.27, 51.7535)],
+            ["PAD", point(4326, -0.1755, 51.5154)],
+            ["RDG", point(4326, -0.9718, 51.4589)],
+            ["SWI", point(4326, -1.7856, 51.5655)],
+        ],
+    },
+    {
+        name: "reads the components of a station's location",
+        query: "MATCH (s:STATION {crs: 'OXF'}) " +
+            "RETURN s.location.longitude, s.location.latitude, s.location.x, s.location.crs, s.location.srid",
+        types: ["DOUBLE", "DOUBLE", "DOUBLE", "STRING", "INT64"],
+        rows: [[-1.27, 51.7535, -1.27, "wgs-84", 4326n]],
+    },
+    {
+        name: "reads the location of a node that has none as null",
+        query: "MATCH (s:STATION {crs: 'OXF'})-[:THU]->(m:MODE) RETURN s.location, m.location",
+        types: ["POINT", "POINT"],
+        rows: [[point(4326, -1.27, 51.7535), null]],
+    },
+    {
+        name: "returns a point in each coordinate reference system",
+        query: "RETURN point({x: 1.5, y: -2}), point({x: 1, y: 2, z: 3}), " +
+            "point({longitude: 2.3522, latitude: 48.8566}), point({longitude: 6.8652, latitude: 45.8326, height: 4808})",
+        types: ["POINT", "POINT", "POINT", "POINT"],
+        rows: [[point(7203, 1.5, -2), point(9157, 1, 2, 3), point(4326, 2.3522, 48.8566), point(4979, 6.8652, 45.8326, 4808)]],
+        check: ({ rows }) => {
+            assert.deepEqual((rows[0] as Point[]).map((value) => value.crs), ["cartesian", "cartesian-3d", "wgs-84", "wgs-84-3d"]);
+        },
     },
     {
         name: "reads the list and map properties of the stations",
@@ -94,6 +131,7 @@ export const VALUE_CASES: Case[] = [
             maxInterchange: 60n,
             lat: 51.7535,
             lon: -1.27,
+            location: point(4326, -1.27, 51.7535),
             stepFree: true,
             opened: at("1852-10-01T00:00:00Z"),
             minConnection: minutes(5),
@@ -108,7 +146,7 @@ export const VALUE_CASES: Case[] = [
         query: "MATCH (s:STATION {crs: 'OXF'}) UNWIND keys(s) AS key RETURN key ORDER BY key",
         ordered: true,
         rows: [
-            ["crs"], ["facilities"], ["lat"], ["lon"], ["maxInterchange"], ["minConnection"], ["minInterchange"],
+            ["crs"], ["facilities"], ["lat"], ["location"], ["lon"], ["maxInterchange"], ["minConnection"], ["minInterchange"],
             ["name"], ["nlc"], ["opened"], ["platforms"], ["profile"], ["sign"], ["stepFree"],
         ],
     },
@@ -132,8 +170,9 @@ export const VALUE_CASES: Case[] = [
     },
     {
         name: "returns a list holding every kind of value",
-        query: "RETURN [1, 2.5, 'three', true, null, [4, [5]], {six: 6}, datetime('2026-11-04T08:00:00Z'), duration({minutes: 5})]",
-        rows: [[[1n, 2.5, "three", true, null, [4n, [5n]], { six: 6n }, at("2026-11-04T08:00:00Z"), minutes(5)]]],
+        query: "RETURN [1, 2.5, 'three', true, null, [4, [5]], {six: 6}, datetime('2026-11-04T08:00:00Z'), duration({minutes: 5}), " +
+            "point({x: 1, y: 2})]",
+        rows: [[[1n, 2.5, "three", true, null, [4n, [5n]], { six: 6n }, at("2026-11-04T08:00:00Z"), minutes(5), point(7203, 1, 2)]]],
     },
     {
         name: "returns maps nested in maps and lists",
@@ -198,11 +237,11 @@ export const VALUE_CASES: Case[] = [
     },
     {
         name: "returns a cell of each kind, one kind per row",
-        query: "UNWIND [1, 'two', 2.5, true, null, [3], {four: 4}, datetime('2026-11-04T08:00:00Z'), duration({minutes: 5})] AS cell " +
-            "RETURN cell",
+        query: "UNWIND [1, 'two', 2.5, true, null, [3], {four: 4}, datetime('2026-11-04T08:00:00Z'), duration({minutes: 5}), " +
+            "point({x: 1, y: 2})] AS cell RETURN cell",
         types: ["CELL_VIEW"],
         ordered: true,
-        rows: [[1n], ["two"], [2.5], [true], [null], [[3n]], [{ four: 4n }], [at("2026-11-04T08:00:00Z")], [minutes(5)]],
+        rows: [[1n], ["two"], [2.5], [true], [null], [[3n]], [{ four: 4n }], [at("2026-11-04T08:00:00Z")], [minutes(5)], [point(7203, 1, 2)]],
     },
     {
         name: "returns cells holding a node, an edge and a path",
@@ -563,6 +602,15 @@ export function clientChecks(url: string): Check[] {
             },
         },
         {
+            name: "rejects a point a query returned as a parameter before sending it",
+            run: async (client) => {
+                const location = firstValue(await client.query("MATCH (s:STATION {crs: 'OXF'}) RETURN s.location"));
+                const parameters = { at: location } as unknown as Parameters;
+
+                await assert.rejects(client.query("RETURN 1", { parameters }), expectStatus("PARAMETER_ERROR", "$at is a Point"));
+            },
+        },
+        {
             name: "returns plain numbers from queryData",
             run: async (client) => {
                 const data = await client.queryData("MATCH (s:STATION) RETURN s.crs, s.minInterchange, s.lat ORDER BY s.crs");
@@ -761,7 +809,7 @@ export function authChecks(url: string, token: string): Check[] {
 }
 
 // db::ValueType's ordinals, which are append-only on disk
-const VALUE_TYPE = { INT64: 1, DOUBLE: 3, STRING: 4, BOOL: 5, EMBEDDING: 6, LIST: 7, DATE_TIME: 8, MAP: 9, DURATION: 10 };
+const VALUE_TYPE = { INT64: 1, DOUBLE: 3, STRING: 4, BOOL: 5, EMBEDDING: 6, LIST: 7, DATE_TIME: 8, MAP: 9, DURATION: 10, POINT: 11 };
 
 export const SYSTEM_CASES: Case[] = [
     {
@@ -787,7 +835,7 @@ export const SYSTEM_CASES: Case[] = [
         types: ["PROPERTY_TYPE_ID", "STRING", "VALUE_TYPE"],
         check: ({ rows }) => {
             const ids = rows.map((row) => row[0] as number).sort((left, right) => left - right);
-            assert.deepEqual(ids, Array.from({ length: 22 }, (_, index) => index));
+            assert.deepEqual(ids, Array.from({ length: 23 }, (_, index) => index));
         },
     },
     {
@@ -802,6 +850,7 @@ export const SYSTEM_CASES: Case[] = [
             ["end", VALUE_TYPE.INT64],
             ["facilities", VALUE_TYPE.MAP],
             ["lat", VALUE_TYPE.DOUBLE],
+            ["location", VALUE_TYPE.POINT],
             ["lon", VALUE_TYPE.DOUBLE],
             ["maxInterchange", VALUE_TYPE.INT64],
             ["minConnection", VALUE_TYPE.DURATION],

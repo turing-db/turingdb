@@ -636,4 +636,19 @@ export const JOURNEY_PLUS_CASES: Case[] = [
         ordered: true,
         rows: [["DID", 16.0], ["RDG", 39.0], ["SWI", 41.0], ["PAD", 80.0]],
     },
+    {
+        name: "measures each station's distance from Oxford between their locations",
+        query: "MATCH (o:STATION {crs: 'OXF'}), (s:STATION) WHERE s <> o " +
+            "WITH s, point.distance(o.location, s.location) / 1000 AS kilometres " +
+            "RETURN s.crs, round(kilometres) ORDER BY kilometres",
+        ordered: true,
+        rows: [["DID", 16.0], ["RDG", 39.0], ["SWI", 41.0], ["PAD", 80.0]],
+    },
+    {
+        name: "finds the stations inside a box around Didcot and Reading",
+        query: "MATCH (s:STATION) " +
+            "WHERE point.withinBBox(s.location, point({longitude: -1.3, latitude: 51.4}), point({longitude: -0.9, latitude: 51.7})) " +
+            "RETURN s.crs",
+        rows: [["DID"], ["RDG"]],
+    },
 ];
