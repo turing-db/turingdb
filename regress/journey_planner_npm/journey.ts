@@ -209,6 +209,32 @@ export const LEG_CASES: Case[] = [
         ],
     },
     {
+        name: "reads the window from parameters",
+        query: "MATCH (o:STATION {crs: 'OXF'}), (d:STATION {crs: 'PAD'}) " +
+            "WITH o, d, ['DID', 'RDG', 'PAD'] AS interchanges " +
+            "MATCH leg1=(o)-[:WED]->(firstStop:MODE) -[:NEXT * 0..99]-> (lastStop:MODE)-[:ARRIVE]-(inter:STATION) " +
+            "WHERE inter.crs IN interchanges " +
+            "AND NOT EXISTS {(lastStop)-[:NEXT|ARRIVE]->{2,20}(d)} " +
+            "AND CASE WHEN firstStop:FIXED " +
+            "THEN ($depart_before > firstStop.start AND $depart_from < firstStop.end) " +
+            "ELSE $depart_before >= firstStop.depart >= $depart_from " +
+            "END " +
+            "RETURN firstStop.service, " +
+            "coalesce(lastStop.arrive, $depart_from) + inter.minInterchange AS departAfter, " +
+            "coalesce(lastStop.arrive, $depart_before) + inter.maxInterchange AS departBefore",
+        options: { parameters: { depart_from: 470, depart_before: 500 } },
+        rows: [
+            ["S1", 555n, 635n],
+            ["S2", 509n, 550n],
+            ["S3", 531n, 575n],
+            ["S5", 504n, 545n],
+            ["S6", 514n, 555n],
+            ["S7", 506n, 547n],
+            ["S10", 501n, 542n],
+            ["F1", 474n, 545n],
+        ],
+    },
+    {
         name: "slices the interchanges at coll.indexOf",
         query: LEGS_FROM_OXFORD + "RETURN firstStop.service, interchanges[coll.indexOf(interchanges, inter.crs)+1..]",
         rows: [
