@@ -149,13 +149,13 @@ ListView fillList(const json& array, ListContainer& lists) {
     return lists.insert(elements);
 }
 
-JsonlImportResult<DateTime> tryGetDateTime(std::string_view name, const json& value, size_t lineNo) {
+JsonlImportResult<DateTime> tryGetDateTime(std::string_view name, const json& value, size_t lineNumber) {
     // The query said this property holds an instant, so a value that names none is the
     // malformed input it reports rather than a property silently written as something
     // else. A null is not such a value - the caller drops it before reaching here.
     if (!value.is_string()) {
         return JsonlImportError::result(JsonlImportErrorType::NON_DATETIME_VALUE,
-                                        lineNo,
+                                        lineNumber,
                                         fmt::format("property '{}' is not a string", name));
     }
 
@@ -163,7 +163,7 @@ JsonlImportResult<DateTime> tryGetDateTime(std::string_view name, const json& va
     const std::optional<DateTime> instant = DateTime::parse(text);
     if (!instant) {
         return JsonlImportError::result(JsonlImportErrorType::NON_DATETIME_VALUE,
-                                        lineNo,
+                                        lineNumber,
                                         fmt::format("property '{}' reads '{}'", name, text));
     }
 
@@ -182,9 +182,39 @@ JsonlImportResult<Duration> tryGetDuration(std::string_view name, const json& va
     return Duration(value.get<int64_t>());
 }
 
+// The map point() reads a JSON object as. point() reads no deeper than the kind of a value,
+// so a nested object or array goes in empty.
+MapView fillPointMap(const json& object, MapContainer& maps, ListContainer& lists) {
+    std::vector<MapContainer::MapKeyValuePair> entries;
+    entries.reserve(object.size());
+
+    for (const auto& [key, field] : object.items()) {
+        if (field.is_object()) {
+            entries.push_back({key, maps.insert({})});
+        } else if (field.is_array()) {
+            entries.push_back({key, lists.insert({})});
+        } else if (field.is_null()) {
+            entries.push_back({key, PropertyNull {}});
+        } else if (field.is_boolean()) {
+            entries.push_back({key, types::Bool::Primitive(field.get<bool>())});
+        } else if (field.is_number_unsigned()) {
+            entries.push_back({key, field.get<uint64_t>()});
+        } else if (field.is_number_integer()) {
+            entries.push_back({key, field.get<int64_t>()});
+        } else if (field.is_number_float()) {
+            entries.push_back({key, field.get<double>()});
+        } else {
+            entries.push_back({key, field.get<std::string_view>()});
+        }
+    }
+
+    return maps.insert(entries);
+}
+
 JsonlImportResult<Point> tryGetPoint(std::string_view name,
                                      const json& value,
                                      MapContainer& maps,
+                                     ListContainer& lists,
                                      size_t lineNumber) {
     if (!value.is_object()) {
         return JsonlImportError::result(JsonlImportErrorType::NON_POINT_VALUE,
@@ -192,28 +222,9 @@ JsonlImportResult<Point> tryGetPoint(std::string_view name,
                                         fmt::format("property '{}' is not an object", name));
     }
 
-    std::vector<MapContainer::MapKeyValuePair> entries;
-    for (const auto& [key, field] : value.items()) {
-        if (field.is_number_unsigned()) {
-            entries.push_back({key, field.get<uint64_t>()});
-        } else if (field.is_number_integer()) {
-            entries.push_back({key, field.get<int64_t>()});
-        } else if (field.is_number_float()) {
-            entries.push_back({key, field.get<double>()});
-        } else if (field.is_string()) {
-            entries.push_back({key, field.get<std::string_view>()});
-        } else if (field.is_null()) {
-            entries.push_back({key, PropertyNull {}});
-        } else {
-            return JsonlImportError::result(JsonlImportErrorType::NON_POINT_VALUE,
-                                            lineNumber,
-                                            fmt::format("property '{}' holds '{}' under '{}'", name, field.dump(), key));
-        }
-    }
-
     Point point;
     try {
-        if (!Point::fromMap(maps.insert(entries), point)) {
+        if (!Point::fromMap(fillPointMap(value, maps, lists), point)) {
             return JsonlImportError::result(JsonlImportErrorType::NON_POINT_VALUE,
                                             lineNumber,
                                             fmt::format("property '{}' holds a null", name));
@@ -233,11 +244,10 @@ using TypedValue = std::variant<DateTime, Duration, Point>;
 
 JsonlImportResult<std::optional<TypedValue>> tryGetTypedValue(std::string_view name,
                                                               const json& value,
-                                                              const TypedPropertySpec& typedProperties,
+                                                              ValueType type,
                                                               MapContainer& maps,
+                                                              ListContainer& lists,
                                                               size_t lineNumber) {
-    const ValueType type = typedProperties.getType(name);
-
     if (type == ValueType::DateTime) {
         const JsonlImportResult<DateTime> instant = tryGetDateTime(name, value, lineNumber);
         if (!instant) {
@@ -253,7 +263,7 @@ JsonlImportResult<std::optional<TypedValue>> tryGetTypedValue(std::string_view n
 
         return std::optional<TypedValue> {duration.value()};
     } else if (type == ValueType::Point) {
-        const JsonlImportResult<Point> point = tryGetPoint(name, value, maps, lineNumber);
+        const JsonlImportResult<Point> point = tryGetPoint(name, value, maps, lists, lineNumber);
         if (!point) {
             return point.get_unexpected();
         }
@@ -385,8 +395,9 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                             continue;
                         }
 
+                        const ValueType typedType = typedProperties.getType(ptName);
                         const JsonlImportResult<std::optional<TypedValue>> typed =
-                            tryGetTypedValue(ptName, value, typedProperties, mapBacking, lineNumber);
+                            tryGetTypedValue(ptName, value, typedType, mapBacking, listBacking, lineNumber);
                         if (!typed) {
                             return typed.get_unexpected();
                         }
@@ -394,7 +405,7 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                         const std::optional<TypedValue>& typedValue = typed.value();
 
                         if (typedValue) {
-                            vt = typedProperties.getType(ptName);
+                            vt = typedType;
                         } else if (value.is_number_float()) {
                             vt = ValueType::Double;
                         } else if (value.is_boolean()) {
@@ -491,8 +502,9 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                             continue;
                         }
 
+                        const ValueType typedType = typedProperties.getType(ptName);
                         const JsonlImportResult<std::optional<TypedValue>> typed =
-                            tryGetTypedValue(ptName, value, typedProperties, mapBacking, lineNumber);
+                            tryGetTypedValue(ptName, value, typedType, mapBacking, listBacking, lineNumber);
                         if (!typed) {
                             return typed.get_unexpected();
                         }
@@ -500,7 +512,7 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                         const std::optional<TypedValue>& typedValue = typed.value();
 
                         if (typedValue) {
-                            vt = typedProperties.getType(ptName);
+                            vt = typedType;
                         } else if (value.is_number_float()) {
                             vt = ValueType::Double;
                         } else if (value.is_boolean()) {

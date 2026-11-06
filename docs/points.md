@@ -116,4 +116,9 @@ GeoParquet "crs": null                            cartesian, or cartesian-3d
 any other                                         rejected
 ```
 
-A geometry that is no point, a point with a measure, and bytes that are no WKB are rejected.
+A CRS given as PROJJSON is read by its `id`: GeoParquet's `crs` object, a `projjson:<key>` naming
+a key of the file metadata, or the PROJJSON text Arrow writes in the logical type itself.
+
+A geometry that is no point, a point with a measure, and bytes that are no WKB are rejected, a
+WKB type outside ISO's dimension codes 0 to 3 included. An EWKB SRID other than 0 has to name the
+column's CRS: 4326 or 4979 in a wgs-84 column, none in a cartesian one.

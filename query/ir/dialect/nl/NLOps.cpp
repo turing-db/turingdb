@@ -1547,6 +1547,14 @@ LogicalResult SetEdgeProperties::verify() {
     return success();
 }
 
+LogicalResult ImportGraph::verify() {
+    if (!::db::namesImportedPropertyTypes(getFormat(), getTypesAttr())) {
+        return emitOpError("types each property as a datetime, duration or point a jsonl import reads, or a duration a parquet import reads");
+    }
+
+    return success();
+}
+
 // A grouped accumulator needs at least one grouping key and one aggregate (with
 // no key it is a whole-stream aggregate, with no aggregate a projection), and
 // every kind must be a valid GroupAggregateKind. The column count is not known

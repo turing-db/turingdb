@@ -10,4 +10,6 @@ public:
     static void splitString(std::string_view str,
                             char sep,
                             std::vector<std::string_view>& res);
+
+    static bool equalsIgnoringCase(std::string_view lhs, std::string_view rhs);
 };

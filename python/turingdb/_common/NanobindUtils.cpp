@@ -655,24 +655,24 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 break;
             }
             case db::ColumnConst<db::types::Point::Primitive>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<db::types::Point::Primitive>*>(col)->getRaw();
-                const nb::object pointObj = listVisitor.point(v);
-                nb::list lst;
-                for (size_t i = 0; i < rowCount; ++i) {
-                    lst.append(pointObj);
+                const auto& constant = static_cast<const db::ColumnConst<db::types::Point::Primitive>*>(col)->getRaw();
+                const nb::object point = listVisitor.point(constant);
+                nb::list points;
+                for (size_t row = 0; row < rowCount; ++row) {
+                    points.append(point);
                 }
-                value = lst;
+                value = points;
                 dtypeName = "Point";
                 break;
             }
             case db::ColumnConst<std::optional<db::types::Point::Primitive>>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<std::optional<db::types::Point::Primitive>>*>(col)->getRaw();
-                const nb::object pointObj = listVisitor.point(v);
-                nb::list lst;
-                for (size_t i = 0; i < rowCount; ++i) {
-                    lst.append(pointObj);
+                const auto& constant = static_cast<const db::ColumnConst<std::optional<db::types::Point::Primitive>>*>(col)->getRaw();
+                const nb::object point = listVisitor.point(constant);
+                nb::list points;
+                for (size_t row = 0; row < rowCount; ++row) {
+                    points.append(point);
                 }
-                value = lst;
+                value = points;
                 dtypeName = "Point";
                 break;
             }

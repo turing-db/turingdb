@@ -3,6 +3,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Builders.h"
 
+#include "StorageEnums.h"
 #include "StorageTypes.h"
 
 #include "IRException.h"
@@ -125,6 +126,30 @@ bool db::namesPropertyElementTypes(mlir::DictionaryAttr types) {
         const mlir::TypeAttr typeAttr = mlir::dyn_cast<mlir::TypeAttr>(entry.getValue());
         const bool namesAnElementType = typeAttr && elementTypeToValueType(typeAttr.getValue()) != ValueType::Invalid;
         if (!namesAnElementType) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool db::namesImportedPropertyTypes(mlir::storage::GraphImportFormat format, mlir::DictionaryAttr types) {
+    if (!types) {
+        return true;
+    }
+
+    for (const mlir::NamedAttribute entry : types) {
+        const mlir::TypeAttr typeAttr = mlir::dyn_cast<mlir::TypeAttr>(entry.getValue());
+        if (!typeAttr) {
+            return false;
+        }
+
+        const ValueType type = elementTypeToValueType(typeAttr.getValue());
+        const bool readsJsonlType = format == mlir::storage::GraphImportFormat::Jsonl
+                                 && (type == ValueType::DateTime || type == ValueType::Duration || type == ValueType::Point);
+        const bool readsParquetType = format == mlir::storage::GraphImportFormat::Parquet && type == ValueType::Duration;
+
+        if (!readsJsonlType && !readsParquetType) {
             return false;
         }
     }

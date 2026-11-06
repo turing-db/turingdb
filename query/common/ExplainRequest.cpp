@@ -1,20 +1,13 @@
 #include "ExplainRequest.h"
 
-#include <ctype.h>
 #include <algorithm>
 #include <array>
+
+#include "StringUtils.h"
 
 using namespace db;
 
 namespace {
-
-bool equalsInsensitive(std::string_view left, std::string_view right) {
-    const auto sameLetter = [](char leftChar, char rightChar) {
-        return tolower(static_cast<unsigned char>(leftChar)) == tolower(static_cast<unsigned char>(rightChar));
-    };
-
-    return std::ranges::equal(left, right, sameLetter);
-}
 
 struct StageWord {
     std::string_view word;
@@ -32,17 +25,17 @@ const std::array<StageWord, 6> stageWords {{
 
 bool isStageWord(std::string_view word) {
     return std::ranges::any_of(stageWords, [word](const StageWord& stageWord) {
-        return equalsInsensitive(stageWord.word, word);
+        return StringUtils::equalsIgnoringCase(stageWord.word, word);
     });
 }
 
 bool isPassSelector(std::string_view word) {
-    return equalsInsensitive(word, "around") || equalsInsensitive(word, "before") || equalsInsensitive(word, "after");
+    return StringUtils::equalsIgnoringCase(word, "around") || StringUtils::equalsIgnoringCase(word, "before") || StringUtils::equalsIgnoringCase(word, "after");
 }
 
 bool contains(const std::vector<std::string_view>& passNames, std::string_view passName) {
     return std::ranges::any_of(passNames, [passName](std::string_view name) {
-        return equalsInsensitive(name, passName);
+        return StringUtils::equalsIgnoringCase(name, passName);
     });
 }
 
@@ -67,7 +60,7 @@ void ExplainRequest::requestAll() {
 
 bool ExplainRequest::requestStage(std::string_view word) {
     for (const StageWord& stageWord : stageWords) {
-        if (equalsInsensitive(stageWord.word, word)) {
+        if (StringUtils::equalsIgnoringCase(stageWord.word, word)) {
             request(stageWord.stage);
             return true;
         }
@@ -77,9 +70,9 @@ bool ExplainRequest::requestStage(std::string_view word) {
 }
 
 bool ExplainRequest::requestPass(std::string_view selector, std::string_view passName) {
-    const bool isAround = equalsInsensitive(selector, "around");
-    const bool printsBefore = isAround || equalsInsensitive(selector, "before");
-    const bool printsAfter = isAround || equalsInsensitive(selector, "after");
+    const bool isAround = StringUtils::equalsIgnoringCase(selector, "around");
+    const bool printsBefore = isAround || StringUtils::equalsIgnoringCase(selector, "before");
+    const bool printsAfter = isAround || StringUtils::equalsIgnoringCase(selector, "after");
 
     if (!printsBefore && !printsAfter) {
         return false;
@@ -112,7 +105,7 @@ std::string_view ExplainRequest::findUnknownPass(std::span<const std::string_vie
     for (const std::vector<std::string_view>* named : {&_passesBefore, &_passesAfter}) {
         for (const std::string_view passName : *named) {
             const bool isInPipeline = std::ranges::any_of(pipelinePasses, [passName](std::string_view name) {
-                return equalsInsensitive(name, passName);
+                return StringUtils::equalsIgnoringCase(name, passName);
             });
 
             if (!isInPipeline) {

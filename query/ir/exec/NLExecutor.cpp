@@ -10102,8 +10102,9 @@ template void NLExecutor::runReplace<std::optional<types::String::Primitive>>(NL
 void NLExecutor::runPointDistance(NLExecutionContext*, NLFunctionData* data) {
     const NLPointFunctionData* function = static_cast<NLPointFunctionData*>(data);
 
-    const NLPointFunctionData::PointArgument& lhs = function->getArguments()[0];
-    const NLPointFunctionData::PointArgument& rhs = function->getArguments()[1];
+    const std::vector<NLPointFunctionData::PointArgument>& arguments = function->getArguments();
+    const NLPointFunctionData::PointArgument& lhs = arguments[0];
+    const NLPointFunctionData::PointArgument& rhs = arguments[1];
 
     const size_t rowCount = lhs._column->size();
     bioassert(rhs._column->size() == rowCount, "Columns of a point.distance are not row-aligned.");
@@ -10127,9 +10128,10 @@ void NLExecutor::runPointDistance(NLExecutionContext*, NLFunctionData* data) {
 void NLExecutor::runPointWithinBBox(NLExecutionContext*, NLFunctionData* data) {
     const NLPointFunctionData* function = static_cast<NLPointFunctionData*>(data);
 
-    const NLPointFunctionData::PointArgument& point = function->getArguments()[0];
-    const NLPointFunctionData::PointArgument& lowerLeft = function->getArguments()[1];
-    const NLPointFunctionData::PointArgument& upperRight = function->getArguments()[2];
+    const std::vector<NLPointFunctionData::PointArgument>& arguments = function->getArguments();
+    const NLPointFunctionData::PointArgument& point = arguments[0];
+    const NLPointFunctionData::PointArgument& lowerLeft = arguments[1];
+    const NLPointFunctionData::PointArgument& upperRight = arguments[2];
 
     const size_t rowCount = point._column->size();
     bioassert(lowerLeft._column->size() == rowCount, "Columns of a point.withinBBox are not row-aligned.");

@@ -74,6 +74,14 @@ Speculation::Speculatability speculatableOverNumbers(Operation* op) {
     return speculatableWhen(llvm::all_of(op->getOperands(), isNumberColumn));
 }
 
+Speculation::Speculatability speculatableWhenReadingPoints(Operation* op) {
+    const bool readsPoints = llvm::all_of(op->getOperands(), [](Value operand) {
+        return isa<storage::PointType>(columnElement(operand));
+    });
+
+    return speculatableWhen(readsPoints);
+}
+
 // A tagged cell, or a column whose type lowering resolves, may hold a value of any type. The
 // null literal is a nullable none.
 bool mayHoldAnyType(Value operand) {
@@ -265,7 +273,10 @@ bool isMaskColumn(Type type) {
     return isa<storage::BoolType>(value) || isa<NoneType>(value) || value.isInteger(1);
 }
 
-bool isStringColumn(Type type) {
+// Whether @param type is a column of @param Element, nullable or not, or of a cell typed at
+// run time
+template <typename Element>
+bool isColumnOf(Type type) {
     const auto column = dyn_cast<ColumnType>(type);
     if (!column) {
         return false;
@@ -275,20 +286,26 @@ bool isStringColumn(Type type) {
     const auto nullable = dyn_cast<storage::NullableType>(element);
     const Type value = nullable ? nullable.getValueType() : element;
 
-    return isa<storage::StringType, storage::AnyType, NoneType>(value);
+    return isa<Element, storage::AnyType, NoneType>(value);
 }
 
-bool isPointColumn(Type type) {
-    const auto column = dyn_cast<ColumnType>(type);
-    if (!column) {
-        return false;
+// A point function reads columns of points into a column of @param Result
+template <typename Result>
+LogicalResult verifyPointFunction(Operation* op, Value result, StringRef resultName) {
+    const bool readsPoints = llvm::all_of(op->getOperands(), [](Value operand) {
+        return isColumnOf<storage::PointType>(operand.getType());
+    });
+
+    if (!readsPoints) {
+        return op->emitOpError("operands must be point columns");
     }
 
-    const Type element = column.getType();
-    const auto nullable = dyn_cast<storage::NullableType>(element);
-    const Type value = nullable ? nullable.getValueType() : element;
+    const ColumnType resultColumn = dyn_cast<ColumnType>(result.getType());
+    if (!resultColumn || !isa<Result>(resultColumn.getType())) {
+        return op->emitOpError("result must be a column of ") << resultName;
+    }
 
-    return isa<storage::PointType, storage::AnyType, NoneType>(value);
+    return success();
 }
 
 bool isIntegerColumn(Value column) {
@@ -306,7 +323,7 @@ LogicalResult verifyStringResult(Operation* op, Value result) {
 }
 
 LogicalResult verifyStringEnd(Operation* op, Value string, Value length, Value result) {
-    const bool readsAStringAndALength = isStringColumn(string.getType()) && isIntegerColumn(length);
+    const bool readsAStringAndALength = isColumnOf<storage::StringType>(string.getType()) && isIntegerColumn(length);
     if (!readsAStringAndALength) {
         return op->emitOpError("operands must be a string column and an integer column");
     }
@@ -1621,6 +1638,14 @@ LogicalResult SetEdgeProperties::verify() {
     return success();
 }
 
+LogicalResult ImportGraph::verify() {
+    if (!::db::namesImportedPropertyTypes(getFormat(), getTypesAttr())) {
+        return emitOpError("types each property as a datetime, duration or point a jsonl import reads, or a duration a parquet import reads");
+    }
+
+    return success();
+}
+
 // A label scan must name at least one label to filter by; a label-free scan of
 // every node is db.scan_nodes, so an empty label list is malformed IR here.
 LogicalResult ScanNodesByLabel::verify() {
@@ -2475,7 +2500,7 @@ LogicalResult Range::verify() {
 
 LogicalResult Replace::verify() {
     const bool readsStrings = llvm::all_of(getOperation()->getOperands(), [](Value operand) {
-        return isStringColumn(operand.getType());
+        return isColumnOf<storage::StringType>(operand.getType());
     });
 
     if (!readsStrings) {
@@ -2486,44 +2511,18 @@ LogicalResult Replace::verify() {
 }
 
 LogicalResult PointDistance::verify() {
-    const bool readsPoints = llvm::all_of(getOperation()->getOperands(), [](Value operand) {
-        return isPointColumn(operand.getType());
-    });
-
-    if (!readsPoints) {
-        return emitOpError("operands must be point columns");
-    }
-
-    const ColumnType resultColumn = dyn_cast<ColumnType>(getResult().getType());
-    if (!resultColumn || !isa<Float64Type>(resultColumn.getType())) {
-        return emitOpError("result must be a column of f64");
-    }
-
-    return success();
+    return verifyPointFunction<Float64Type>(getOperation(), getResult(), "f64");
 }
 
 LogicalResult PointWithinBBox::verify() {
-    const bool readsPoints = llvm::all_of(getOperation()->getOperands(), [](Value operand) {
-        return isPointColumn(operand.getType());
-    });
-
-    if (!readsPoints) {
-        return emitOpError("operands must be point columns");
-    }
-
-    const ColumnType resultColumn = dyn_cast<ColumnType>(getResult().getType());
-    if (!resultColumn || !isa<storage::BoolType>(resultColumn.getType())) {
-        return emitOpError("result must be a column of booleans");
-    }
-
-    return success();
+    return verifyPointFunction<storage::BoolType>(getOperation(), getResult(), "booleans");
 }
 
 LogicalResult Split::verify() {
     const Value delimiter = getDelimiter();
 
-    const bool readsAString = isStringColumn(getString().getType());
-    const bool readsDelimiters = isStringColumn(delimiter.getType()) || isa<storage::ListType>(columnElement(delimiter));
+    const bool readsAString = isColumnOf<storage::StringType>(getString().getType());
+    const bool readsDelimiters = isColumnOf<storage::StringType>(delimiter.getType()) || isa<storage::ListType>(columnElement(delimiter));
     if (!readsAString || !readsDelimiters) {
         return emitOpError("operands must be a string column, then a string or list column");
     }
@@ -3236,19 +3235,11 @@ Speculation::Speculatability Replace::getSpeculatability() {
 }
 
 Speculation::Speculatability PointDistance::getSpeculatability() {
-    const bool readsPoints = llvm::all_of(getOperation()->getOperands(), [](Value operand) {
-        return isa<storage::PointType>(columnElement(operand));
-    });
-
-    return speculatableWhen(readsPoints);
+    return speculatableWhenReadingPoints(getOperation());
 }
 
 Speculation::Speculatability PointWithinBBox::getSpeculatability() {
-    const bool readsPoints = llvm::all_of(getOperation()->getOperands(), [](Value operand) {
-        return isa<storage::PointType>(columnElement(operand));
-    });
-
-    return speculatableWhen(readsPoints);
+    return speculatableWhenReadingPoints(getOperation());
 }
 
 Speculation::Speculatability Split::getSpeculatability() {

@@ -97,6 +97,8 @@ def ImportGraph : SystemOp<"import_graph"> {
     $format `(` $path `)` `as` $graph_name (`embeddings` $embeddings^)?
     (`types` $types^)? attr-dict `:` qualified(type($graph))
   }];
+
+  let hasVerifier = 1;
 }
 
 /**

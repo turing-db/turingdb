@@ -1,101 +1,16 @@
 #include <gtest/gtest.h>
 
-#include <fstream>
-#include <memory>
-#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
-#include "QueryInterpreterV3.h"
-#include "QueryStatus.h"
+#include "PointImportTest.h"
 
-#include "FileUtils.h"
-#include "Graph.h"
-#include "SimpleGraph.h"
-#include "SystemAccessor.h"
-#include "SystemManager.h"
-#include "versioning/ChangeID.h"
-#include "versioning/CommitHash.h"
-
-#include "StringRowSink.h"
-#include "TuringTest.h"
-#include "TuringTestEnv.h"
-
-using namespace db;
 using namespace turing::test;
 
 // JSON has no point, so LOAD JSONL is told which object properties hold one with
 // WITH POINTS [...]. An object is read as point() reads a map.
-class LoadJsonlPointTest : public TuringTest {
-public:
-    void initialize() override {
-        _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
-
-        SystemAccessor system = _env->getSystemManager().accessUnique();
-        Graph* graph = system.createGraph(_sessionGraph);
-        SimpleGraph::createSimpleGraph(graph);
-
-        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager(), &_env->getMem(), &_env->getCompilerContext());
-    }
-
-protected:
-    void writeFixture(std::string_view fileName, std::string_view contents) {
-        const FileUtils::Path dataDir {_env->getConfig().getDataDir().get()};
-
-        std::ofstream file(dataDir / std::string {fileName});
-        ASSERT_TRUE(file.is_open());
-
-        file << contents;
-    }
-
-    void runQuery(std::string_view query, std::string_view graphName, NLOutputSink& sink) {
-        QueryStatus status;
-        _interpreter->execute(status,
-                              query,
-                              graphName,
-                              CommitHash::head(),
-                              ChangeID::head(),
-                              &sink);
-
-        ASSERT_TRUE(status.isOk()) << query << ": " << status.getError();
-    }
-
-    void load(std::string_view query) {
-        StringRowSink sink;
-        runQuery(query, _sessionGraph, sink);
-    }
-
-    void runQueryExpectingError(std::string_view query, std::string_view reason) {
-        StringRowSink sink;
-        QueryStatus status;
-        _interpreter->execute(status,
-                              query,
-                              _sessionGraph,
-                              CommitHash::head(),
-                              ChangeID::head(),
-                              &sink);
-
-        ASSERT_FALSE(status.isOk()) << "accepted: " << query;
-
-        const std::string error = status.getError();
-        EXPECT_NE(error.find(reason), std::string::npos) << query << ": " << error;
-    }
-
-    void expectSortedRows(std::string_view query,
-                          std::string_view graphName,
-                          const std::vector<StringRowSink::Row>& expected) {
-        StringRowSink sink;
-        runQuery(query, graphName, sink);
-
-        std::vector<StringRowSink::Row> rows;
-        sink.sortedRows(rows);
-        EXPECT_EQ(rows, expected) << query;
-    }
-
-    const std::string _sessionGraph = "simpledb";
-    std::unique_ptr<TuringTestEnv> _env;
-    std::unique_ptr<QueryInterpreterV3> _interpreter;
+class LoadJsonlPointTest : public PointImportTest {
 };
 
 TEST_F(LoadJsonlPointTest, ReadsANamedObjectAsAPoint) {
@@ -173,7 +88,7 @@ TEST_F(LoadJsonlPointTest, RejectsAnObjectNamingNoPoint) {
         {R"({"type":"node","id":"0","labels":["City"],"properties":{"at":{"x":1,"y":null}}})",
          "property 'at' holds a null"},
         {R"({"type":"node","id":"0","labels":["City"],"properties":{"at":{"x":[1],"y":2}}})",
-         "property 'at' holds '[1]' under 'x'"},
+         "property 'at': point() reads a number for 'x', not 'List'"},
     };
 
     for (const auto& [line, reason] : cases) {

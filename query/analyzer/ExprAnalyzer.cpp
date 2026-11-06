@@ -65,7 +65,7 @@ constexpr std::string_view mapKeyNotAProperty =
     "A map key is a value inside a property, not a property of its own. "
     "Only a property can be set, removed or indexed.";
 
-constexpr std::string_view pointComponentNotAProperty =
+constexpr std::string_view POINT_COMPONENT_NOT_A_PROPERTY =
     "A point component is computed from a property, not stored as one. "
     "Only a property can be set, removed or indexed.";
 
@@ -794,7 +794,7 @@ void ExprAnalyzer::throwTargetInsideAProperty(const PropertyExpr* expr, const Va
     } else if (namesADurationPart) {
         throwError("A duration component cannot name a property.", expr);
     } else if (namesAPointPart) {
-        throwError(pointComponentNotAProperty, expr);
+        throwError(POINT_COMPONENT_NOT_A_PROPERTY, expr);
     } else {
         throwError(fmt::format("'{}' is not a component of a datetime, a duration or a point", componentName), expr);
     }
@@ -808,7 +808,7 @@ void ExprAnalyzer::throwIfReadsPartOfAProperty(const PropertyExpr* expr) {
     } else if (expr->readsADurationComponent()) {
         throwError("A duration component cannot name a property.", expr);
     } else if (expr->readsAPointComponent()) {
-        throwError(pointComponentNotAProperty, expr);
+        throwError(POINT_COMPONENT_NOT_A_PROPERTY, expr);
     } else if (expr->readsAMapKey()) {
         throwError(mapKeyNotAProperty, expr);
     }

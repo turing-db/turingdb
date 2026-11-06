@@ -591,7 +591,7 @@ function makeItemReader(buffers, nestedReader) {
         }
         const values = fixed.wrap(buffers.values.buffer);
         const read = fixed.read ?? ((array, index) => array[index]);
-        return { read: (index) => read(values, index), values, direct: fixed.read === undefined };
+        return { read: (index) => read(values, index), values: values instanceof DataView ? null : values, direct: fixed.read === undefined };
     }
 
     const offsets = buffers.offsets !== undefined ? new Uint32Array(buffers.offsets.buffer) : null;
@@ -655,8 +655,9 @@ export class Column {
     }
 
     // Fixed-width vector columns as their typed array (Float64Array, BigUint64Array, ...),
-    // one element per row with no per-row work; null for constants and variable-width
-    // kinds. A missing optional row holds 0 here: consult validity.
+    // one element per row with no per-row work; null for constants, variable-width kinds
+    // and points, which no typed array holds. A missing optional row holds 0 here: consult
+    // validity.
     get values() {
         return this.isConstant ? null : this._typedValues;
     }

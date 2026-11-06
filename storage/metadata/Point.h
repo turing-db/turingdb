@@ -60,6 +60,11 @@ public:
 
     static std::string_view getCRSName(PointCRS crs);
 
+    // The CRS @param name names, whatever its case
+    static bool crsNamed(std::string_view name, PointCRS& crs);
+
+    static bool crsOfSRID(int64_t srid, PointCRS& crs);
+
     static bool partNamed(std::string_view name, PointPart& part);
 
     static std::string_view getPartName(PointPart part);
@@ -92,6 +97,10 @@ private:
     double _z;
     PointCRS _crs;
     uint8_t _padding[7];
+
+    static std::string_view requiredKeys(PointCRS crs);
+
+    static double haversineDistance(Point lhs, Point rhs, double radius);
 };
 
 }

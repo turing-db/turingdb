@@ -65,8 +65,29 @@ std::string getKey(nb::handle key) {
     return nb::cast<std::string>(key);
 }
 
-// A bool is checked before an int: in Python, bool is a subclass of int.
-void readValue(nb::handle source, db::ParameterValue& target, PyTimeTypes& times, std::vector<Item>& worklist) {
+bool isPoint(nb::handle value, nb::object& pointType) {
+    if (!pointType.is_valid()) {
+        pointType = nb::module_::import_("turingdb.point").attr("Point");
+    }
+
+    const int isInstance = PyObject_IsInstance(value.ptr(), pointType.ptr());
+    if (isInstance < 0) {
+        throw nb::python_error();
+    }
+
+    return isInstance == 1;
+}
+
+// A bool is checked before an int: in Python, bool is a subclass of int. A Point is a tuple
+// too, but a value rather than a list, and no parameter holds a point.
+void readValue(nb::handle source,
+               db::ParameterValue& target,
+               PyTimeTypes& times,
+               nb::object& pointType,
+               std::vector<Item>& worklist) {
+    const bool readsAsAList = nb::isinstance<nb::list>(source)
+                           || (nb::isinstance<nb::tuple>(source) && !isPoint(source, pointType));
+
     if (source.is_none()) {
         target.setNull();
     } else if (nb::isinstance<nb::bool_>(source)) {
@@ -83,7 +104,7 @@ void readValue(nb::handle source, db::ParameterValue& target, PyTimeTypes& times
         target.setDouble(nb::cast<double>(source));
     } else if (nb::isinstance<nb::str>(source)) {
         target.setString(nb::cast<std::string>(source));
-    } else if (nb::isinstance<nb::list>(source) || nb::isinstance<nb::tuple>(source)) {
+    } else if (readsAsAList) {
         db::ParameterValue::List& list = target.setList();
         list.resize(nb::len(source));
 
@@ -123,6 +144,7 @@ void readParameters(nb::handle source, db::ParameterMap& parameters) {
     }
 
     PyTimeTypes times;
+    nb::object pointType;
 
     std::vector<Item> worklist;
     for (const auto& [name, value] : nb::borrow<nb::dict>(source)) {
@@ -133,7 +155,7 @@ void readParameters(nb::handle source, db::ParameterMap& parameters) {
         const auto [value, target] = worklist.back();
         worklist.pop_back();
 
-        readValue(value, *target, times, worklist);
+        readValue(value, *target, times, pointType, worklist);
     }
 }
 

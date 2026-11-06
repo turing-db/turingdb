@@ -11,10 +11,6 @@ ValueType TypedPropertySpec::getType(std::string_view propertyName) const {
     return it->second;
 }
 
-bool TypedPropertySpec::contains(std::string_view propertyName) const {
-    return _types.contains(propertyName);
-}
-
 void TypedPropertySpec::emplace(std::string_view propertyName, ValueType type) {
     const auto [it, inserted] = _types.emplace(propertyName, type);
 

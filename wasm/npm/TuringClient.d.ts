@@ -128,7 +128,7 @@ export declare class Column {
     readonly isOptional: boolean;
     /**
      * Fixed-width vector columns as their typed array, one element per row. Null for
-     * constants and variable-width kinds. A missing optional row holds 0: read validity.
+     * constants, variable-width kinds and points. A missing optional row holds 0: read validity.
      */
     readonly values:
         | BigUint64Array

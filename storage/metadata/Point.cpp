@@ -1,18 +1,17 @@
 #include "Point.h"
 
-#include <ctype.h>
 #include <math.h>
 #include <stdint.h>
 
+#include <algorithm>
 #include <array>
 #include <iterator>
 #include <numbers>
-#include <unordered_map>
-#include <utility>
 
 #include <spdlog/fmt/fmt.h>
 
 #include "QueryTypeName.h"
+#include "StringUtils.h"
 #include "TuringException.h"
 #include "columns/ValueText.h"
 #include "map/MapView.h"
@@ -23,97 +22,41 @@ namespace {
 
 constexpr double EARTH_MEAN_RADIUS_METRES = 6371008.8;
 
-enum class PointKey : uint8_t {
-    X = 0,
-    Y,
-    Z,
-    Longitude,
-    Latitude,
-    Height,
-    CRS,
-    SRID,
-    _SIZE,
+constexpr std::array<PointCRS, 4> CRS_SYSTEMS = {
+    PointCRS::Cartesian,
+    PointCRS::Cartesian3D,
+    PointCRS::WGS84,
+    PointCRS::WGS84_3D,
 };
 
+// The name of each PointPart, at its ordinal
+constexpr std::array<std::string_view, 8> PART_NAMES = {
+    "x", "y", "z", "longitude", "latitude", "height", "crs", "srid",
+};
+
+static_assert(PART_NAMES.size() == static_cast<size_t>(PointPart::SRID) + 1);
+
 struct PointKeys {
-    std::array<double, static_cast<size_t>(PointKey::_SIZE)> _coordinates {};
-    std::array<bool, static_cast<size_t>(PointKey::_SIZE)> _present {};
+    std::array<double, PART_NAMES.size()> _coordinates {};
+    std::array<bool, PART_NAMES.size()> _present {};
     std::string_view _crsName;
     int64_t _srid {0};
 
-    bool has(PointKey key) const { return _present[static_cast<size_t>(key)]; }
-    double get(PointKey key) const { return _coordinates[static_cast<size_t>(key)]; }
+    bool has(PointPart part) const { return _present[static_cast<size_t>(part)]; }
+    double get(PointPart part) const { return _coordinates[static_cast<size_t>(part)]; }
 };
 
-bool equalsIgnoringCase(std::string_view lhs, std::string_view rhs) {
-    if (lhs.size() != rhs.size()) {
+// point() reads its keys whatever their case, as Neo4j does
+bool keyNamed(std::string_view name, PointPart& part) {
+    const auto it = std::ranges::find_if(PART_NAMES, [name](std::string_view partName) {
+        return StringUtils::equalsIgnoringCase(partName, name);
+    });
+
+    if (it == PART_NAMES.end()) {
         return false;
     }
 
-    for (size_t index = 0; index < lhs.size(); index++) {
-        const int lhsCharacter = tolower(static_cast<unsigned char>(lhs[index]));
-        const int rhsCharacter = tolower(static_cast<unsigned char>(rhs[index]));
-
-        if (lhsCharacter != rhsCharacter) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool keyNamed(std::string_view name, PointKey& key) {
-    static constexpr std::array<std::pair<std::string_view, PointKey>, 8> keys = {{
-        {"x",         PointKey::X        },
-        {"y",         PointKey::Y        },
-        {"z",         PointKey::Z        },
-        {"longitude", PointKey::Longitude},
-        {"latitude",  PointKey::Latitude },
-        {"height",    PointKey::Height   },
-        {"crs",       PointKey::CRS      },
-        {"srid",      PointKey::SRID     },
-    }};
-
-    for (const auto& [keyName, namedKey] : keys) {
-        if (equalsIgnoringCase(keyName, name)) {
-            key = namedKey;
-            return true;
-        }
-    }
-
-    return false;
-}
-
-bool crsNamed(std::string_view name, PointCRS& crs) {
-    static constexpr std::array<PointCRS, 4> systems = {
-        PointCRS::Cartesian,
-        PointCRS::Cartesian3D,
-        PointCRS::WGS84,
-        PointCRS::WGS84_3D,
-    };
-
-    for (const PointCRS system : systems) {
-        if (equalsIgnoringCase(Point::getCRSName(system), name)) {
-            crs = system;
-            return true;
-        }
-    }
-
-    return false;
-}
-
-bool crsOfSRID(int64_t srid, PointCRS& crs) {
-    if (srid == 7203) {
-        crs = PointCRS::Cartesian;
-    } else if (srid == 9157) {
-        crs = PointCRS::Cartesian3D;
-    } else if (srid == 4326) {
-        crs = PointCRS::WGS84;
-    } else if (srid == 4979) {
-        crs = PointCRS::WGS84_3D;
-    } else {
-        return false;
-    }
+    part = static_cast<PointPart>(std::distance(PART_NAMES.begin(), it));
 
     return true;
 }
@@ -146,25 +89,25 @@ bool readKeys(const MapView& map, PointKeys& keys) {
             continue;
         }
 
-        PointKey key {PointKey::X};
-        if (!keyNamed(name, key)) {
+        PointPart part {PointPart::X};
+        if (!keyNamed(name, part)) {
             continue;
         }
 
-        const size_t index = static_cast<size_t>(key);
+        const size_t index = static_cast<size_t>(part);
         if (keys._present[index]) {
             throw TuringException(fmt::format("point() reads the key '{}' twice", name));
         }
 
         keys._present[index] = true;
 
-        if (key == PointKey::CRS) {
+        if (part == PointPart::CRS) {
             if (tag != CellTag::String) {
                 throw TuringException(fmt::format("point() reads a string for 'crs', not '{}'", queryTypeName(tag)));
             }
 
             keys._crsName = value.getAs<std::string_view>();
-        } else if (key == PointKey::SRID) {
+        } else if (part == PointPart::SRID) {
             if (tag == CellTag::Int) {
                 keys._srid = value.getAs<int64_t>();
             } else if (tag == CellTag::UInt) {
@@ -183,19 +126,19 @@ bool readKeys(const MapView& map, PointKeys& keys) {
 
 // The CRS the map names with 'crs' or 'srid', false where it names none
 bool namedCRS(const PointKeys& keys, PointCRS& crs) {
-    const bool namesACRS = keys.has(PointKey::CRS);
-    const bool namesAnSRID = keys.has(PointKey::SRID);
+    const bool namesACRS = keys.has(PointPart::CRS);
+    const bool namesAnSRID = keys.has(PointPart::SRID);
 
     if (namesACRS && namesAnSRID) {
         throw TuringException("point() takes a 'crs' or an 'srid', not both");
     } else if (namesACRS) {
-        if (!crsNamed(keys._crsName, crs)) {
+        if (!Point::crsNamed(keys._crsName, crs)) {
             throw TuringException(fmt::format("Unknown coordinate reference system: '{}'", keys._crsName));
         }
 
         return true;
     } else if (namesAnSRID) {
-        if (!crsOfSRID(keys._srid, crs)) {
+        if (!Point::crsOfSRID(keys._srid, crs)) {
             throw TuringException(fmt::format("Unknown coordinate reference system SRID: {}", keys._srid));
         }
 
@@ -203,25 +146,6 @@ bool namedCRS(const PointKeys& keys, PointCRS& crs) {
     }
 
     return false;
-}
-
-std::string_view requiredKeys(PointCRS crs) {
-    switch (crs) {
-        case PointCRS::Cartesian:
-            return "'x' and 'y'";
-        break;
-        case PointCRS::Cartesian3D:
-            return "'x', 'y' and 'z'";
-        break;
-        case PointCRS::WGS84:
-            return "'longitude' and 'latitude'";
-        break;
-        case PointCRS::WGS84_3D:
-            return "'longitude', 'latitude' and 'height'";
-        break;
-    }
-
-    return "";
 }
 
 double finiteCoordinate(double coordinate) {
@@ -232,8 +156,12 @@ double finiteCoordinate(double coordinate) {
     return coordinate == 0.0 ? 0.0 : coordinate;
 }
 
+bool withinRange(double value, double lower, double upper) {
+    return value >= lower && value <= upper;
+}
+
 double wrappedLongitude(double longitude) {
-    if (longitude <= 180.0 && longitude >= -180.0) {
+    if (withinRange(longitude, -180.0, 180.0)) {
         return longitude;
     }
 
@@ -257,10 +185,6 @@ std::strong_ordering compareCoordinates(double lhs, double rhs) {
     return std::strong_ordering::equal;
 }
 
-bool withinRange(double value, double lower, double upper) {
-    return value >= lower && value <= upper;
-}
-
 // A longitude range whose lower end lies east of its upper end crosses the 180th meridian
 bool withinLongitudes(double longitude, double west, double east) {
     if (west <= east) {
@@ -268,23 +192,6 @@ bool withinLongitudes(double longitude, double west, double east) {
     }
 
     return longitude >= west || longitude <= east;
-}
-
-double haversineDistance(Point lhs, Point rhs, double radius) {
-    constexpr double radiansPerDegree = std::numbers::pi / 180.0;
-
-    const double lhsLongitude = lhs.getX() * radiansPerDegree;
-    const double lhsLatitude = lhs.getY() * radiansPerDegree;
-    const double rhsLongitude = rhs.getX() * radiansPerDegree;
-    const double rhsLatitude = rhs.getY() * radiansPerDegree;
-
-    const double halfLatitudeSine = sin((rhsLatitude - lhsLatitude) / 2.0);
-    const double halfLongitudeSine = sin((rhsLongitude - lhsLongitude) / 2.0);
-
-    const double alpha = halfLatitudeSine * halfLatitudeSine
-                       + cos(lhsLatitude) * cos(rhsLatitude) * halfLongitudeSine * halfLongitudeSine;
-
-    return radius * 2.0 * atan2(sqrt(alpha), sqrt(1.0 - alpha));
 }
 
 }
@@ -388,56 +295,18 @@ std::string_view Point::getCRSName(PointCRS crs) {
 }
 
 bool Point::partNamed(std::string_view name, PointPart& part) {
-    static const std::unordered_map<std::string_view, PointPart> parts = {
-        {"x",         PointPart::X        },
-        {"y",         PointPart::Y        },
-        {"z",         PointPart::Z        },
-        {"longitude", PointPart::Longitude},
-        {"latitude",  PointPart::Latitude },
-        {"height",    PointPart::Height   },
-        {"crs",       PointPart::CRS      },
-        {"srid",      PointPart::SRID     },
-    };
-
-    const auto it = parts.find(name);
-    if (it == parts.end()) {
+    const auto it = std::ranges::find(PART_NAMES, name);
+    if (it == PART_NAMES.end()) {
         return false;
     }
 
-    part = it->second;
+    part = static_cast<PointPart>(std::distance(PART_NAMES.begin(), it));
 
     return true;
 }
 
 std::string_view Point::getPartName(PointPart part) {
-    switch (part) {
-        case PointPart::X:
-            return "x";
-        break;
-        case PointPart::Y:
-            return "y";
-        break;
-        case PointPart::Z:
-            return "z";
-        break;
-        case PointPart::Longitude:
-            return "longitude";
-        break;
-        case PointPart::Latitude:
-            return "latitude";
-        break;
-        case PointPart::Height:
-            return "height";
-        break;
-        case PointPart::CRS:
-            return "crs";
-        break;
-        case PointPart::SRID:
-            return "srid";
-        break;
-    }
-
-    return "";
+    return PART_NAMES[static_cast<size_t>(part)];
 }
 
 double Point::coordinate(Point value, PointPart part) {
@@ -488,8 +357,8 @@ bool Point::fromMap(const MapView& map, Point& value) {
     PointCRS crs {PointCRS::Cartesian};
     const bool namesACRS = namedCRS(keys, crs);
 
-    const bool hasXY = keys.has(PointKey::X) && keys.has(PointKey::Y);
-    const bool hasLongitudeLatitude = keys.has(PointKey::Longitude) && keys.has(PointKey::Latitude);
+    const bool hasXY = keys.has(PointPart::X) && keys.has(PointPart::Y);
+    const bool hasLongitudeLatitude = keys.has(PointPart::Longitude) && keys.has(PointPart::Latitude);
 
     double x = 0.0;
     double y = 0.0;
@@ -497,11 +366,11 @@ bool Point::fromMap(const MapView& map, Point& value) {
     size_t dimension = 2;
 
     if (hasXY) {
-        x = keys.get(PointKey::X);
-        y = keys.get(PointKey::Y);
+        x = keys.get(PointPart::X);
+        y = keys.get(PointPart::Y);
 
-        if (keys.has(PointKey::Z)) {
-            z = keys.get(PointKey::Z);
+        if (keys.has(PointPart::Z)) {
+            z = keys.get(PointPart::Z);
             dimension = 3;
         }
 
@@ -509,14 +378,14 @@ bool Point::fromMap(const MapView& map, Point& value) {
             crs = dimension == 3 ? PointCRS::Cartesian3D : PointCRS::Cartesian;
         }
     } else if (hasLongitudeLatitude) {
-        x = keys.get(PointKey::Longitude);
-        y = keys.get(PointKey::Latitude);
+        x = keys.get(PointPart::Longitude);
+        y = keys.get(PointPart::Latitude);
 
-        if (keys.has(PointKey::Z)) {
-            z = keys.get(PointKey::Z);
+        if (keys.has(PointPart::Z)) {
+            z = keys.get(PointPart::Z);
             dimension = 3;
-        } else if (keys.has(PointKey::Height)) {
-            z = keys.get(PointKey::Height);
+        } else if (keys.has(PointPart::Height)) {
+            z = keys.get(PointPart::Height);
             dimension = 3;
         }
 
@@ -532,10 +401,11 @@ bool Point::fromMap(const MapView& map, Point& value) {
         throw TuringException("point() needs 'x' and 'y', or 'longitude' and 'latitude'");
     }
 
-    if (getDimension(crs) != dimension) {
+    const size_t crsDimension = getDimension(crs);
+    if (crsDimension != dimension) {
         throw TuringException(fmt::format("A {} point has {} coordinates, not {}",
                                           getCRSName(crs),
-                                          getDimension(crs),
+                                          crsDimension,
                                           dimension));
     }
 
@@ -544,13 +414,76 @@ bool Point::fromMap(const MapView& map, Point& value) {
     return true;
 }
 
+bool Point::crsNamed(std::string_view name, PointCRS& crs) {
+    for (const PointCRS system : CRS_SYSTEMS) {
+        if (StringUtils::equalsIgnoringCase(getCRSName(system), name)) {
+            crs = system;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool Point::crsOfSRID(int64_t srid, PointCRS& crs) {
+    for (const PointCRS system : CRS_SYSTEMS) {
+        if (getSRID(system) == srid) {
+            crs = system;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+std::string_view Point::requiredKeys(PointCRS crs) {
+    switch (crs) {
+        case PointCRS::Cartesian:
+            return "'x' and 'y'";
+        break;
+        case PointCRS::Cartesian3D:
+            return "'x', 'y' and 'z'";
+        break;
+        case PointCRS::WGS84:
+            return "'longitude' and 'latitude'";
+        break;
+        case PointCRS::WGS84_3D:
+            return "'longitude', 'latitude' and 'height'";
+        break;
+    }
+
+    return "";
+}
+
+double Point::haversineDistance(Point lhs, Point rhs, double radius) {
+    constexpr double RADIANS_PER_DEGREE = std::numbers::pi / 180.0;
+
+    const double lhsLatitude = lhs.getY();
+    const double rhsLatitude = rhs.getY();
+
+    // Subtracting in degrees keeps a point at 0 from itself and the distance the same either
+    // way, which a product contracted into an FMA breaks
+    const double halfLatitudeSine = sin((rhsLatitude - lhsLatitude) * RADIANS_PER_DEGREE / 2.0);
+    const double halfLongitudeSine = sin((rhs.getX() - lhs.getX()) * RADIANS_PER_DEGREE / 2.0);
+    const double latitudeCosines = cos(lhsLatitude * RADIANS_PER_DEGREE) * cos(rhsLatitude * RADIANS_PER_DEGREE);
+
+    // The square of a half chord, which rounding can push past 1 between antipodes
+    const double alpha = std::clamp(halfLatitudeSine * halfLatitudeSine + latitudeCosines * halfLongitudeSine * halfLongitudeSine,
+                                    0.0,
+                                    1.0);
+
+    return radius * 2.0 * atan2(sqrt(alpha), sqrt(1.0 - alpha));
+}
+
 std::optional<double> Point::distance(Point lhs, Point rhs) {
     const PointCRS crs = lhs.getCRS();
     if (crs != rhs.getCRS()) {
         return std::nullopt;
     }
 
-    const double heightDifference = lhs.getZ() - rhs.getZ();
+    const double lhsHeight = lhs.getZ();
+    const double rhsHeight = rhs.getZ();
+    const double heightDifference = lhsHeight - rhsHeight;
 
     if (!isGeographic(crs)) {
         const double xDifference = lhs.getX() - rhs.getX();
@@ -561,7 +494,7 @@ std::optional<double> Point::distance(Point lhs, Point rhs) {
         return haversineDistance(lhs, rhs, EARTH_MEAN_RADIUS_METRES);
     }
 
-    const double averageHeight = (lhs.getZ() + rhs.getZ()) / 2.0;
+    const double averageHeight = (lhsHeight + rhsHeight) / 2.0;
     const double surfaceDistance = haversineDistance(lhs, rhs, EARTH_MEAN_RADIUS_METRES + averageHeight);
 
     return sqrt(surfaceDistance * surfaceDistance + heightDifference * heightDifference);
@@ -593,16 +526,21 @@ Point Point::addToMean(Point mean, uint64_t count, Point value) {
     }
 
     const PointCRS crs = mean.getCRS();
-    if (value.getCRS() != crs) {
+    const PointCRS valueCRS = value.getCRS();
+    if (valueCRS != crs) {
         throw TuringException(fmt::format("avg() reads points of one CRS, not {} and {}",
                                           getCRSName(crs),
-                                          getCRSName(value.getCRS())));
+                                          getCRSName(valueCRS)));
     }
 
+    const double meanX = mean.getX();
+    const double meanY = mean.getY();
+    const double meanZ = mean.getZ();
+
     const double total = static_cast<double>(count + 1);
-    const double x = mean.getX() + (value.getX() - mean.getX()) / total;
-    const double y = mean.getY() + (value.getY() - mean.getY()) / total;
-    const double z = mean.getZ() + (value.getZ() - mean.getZ()) / total;
+    const double x = meanX + (value.getX() - meanX) / total;
+    const double y = meanY + (value.getY() - meanY) / total;
+    const double z = meanZ + (value.getZ() - meanZ) / total;
 
     return Point(crs, x, y, z);
 }
@@ -611,14 +549,16 @@ void Point::format(std::string& out, Point value) {
     ValueTextScratch scratch;
     const auto output = std::back_inserter(out);
 
+    const PointCRS crs = value.getCRS();
+
     fmt::format_to(output, "point({{x: {}", valueTextInto(value.getX(), scratch));
     fmt::format_to(output, ", y: {}", valueTextInto(value.getY(), scratch));
 
-    if (getDimension(value.getCRS()) == 3) {
+    if (getDimension(crs) == 3) {
         fmt::format_to(output, ", z: {}", valueTextInto(value.getZ(), scratch));
     }
 
-    fmt::format_to(output, ", crs: '{}'}})", getCRSName(value.getCRS()));
+    fmt::format_to(output, ", crs: '{}'}})", getCRSName(crs));
 }
 
 size_t std::hash<Point>::operator()(const Point& value) const noexcept {

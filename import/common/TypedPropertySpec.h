@@ -26,8 +26,6 @@ public:
     // ValueType::Invalid where the query names no type for @param propertyName
     ValueType getType(std::string_view propertyName) const;
 
-    bool contains(std::string_view propertyName) const;
-
     void emplace(std::string_view propertyName, ValueType type);
 
     const std::vector<Clash>& getClashes() const { return _clashes; }

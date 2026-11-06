@@ -1,5 +1,9 @@
 #include "StringUtils.h"
 
+#include <ctype.h>
+
+#include <algorithm>
+
 void StringUtils::splitString(std::string_view str,
                               char sep,
                               std::vector<std::string_view>& res) {
@@ -16,4 +20,12 @@ void StringUtils::splitString(std::string_view str,
             pos = delimiterPos+1;
         }
     }
+}
+
+bool StringUtils::equalsIgnoringCase(std::string_view lhs, std::string_view rhs) {
+    const auto sameLetter = [](char lhsCharacter, char rhsCharacter) {
+        return tolower(static_cast<unsigned char>(lhsCharacter)) == tolower(static_cast<unsigned char>(rhsCharacter));
+    };
+
+    return std::ranges::equal(lhs, rhs, sameLetter);
 }

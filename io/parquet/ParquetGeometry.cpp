@@ -1,6 +1,5 @@
 #include "ParquetGeometry.h"
 
-#include <ctype.h>
 #include <math.h>
 #include <string.h>
 
@@ -15,6 +14,7 @@
 #include <parquet/types.h>
 #include <spdlog/fmt/fmt.h>
 
+#include "StringUtils.h"
 #include "TuringException.h"
 
 using namespace db;
@@ -25,6 +25,7 @@ namespace {
 
 constexpr uint32_t WKB_POINT = 1;
 constexpr uint32_t WKB_DIMENSION_STEP = 1000;
+constexpr uint32_t WKB_DIMENSION_CODE_COUNT = 4;
 constexpr uint32_t EWKB_Z_FLAG = 0x80000000;
 constexpr uint32_t EWKB_M_FLAG = 0x40000000;
 constexpr uint32_t EWKB_SRID_FLAG = 0x20000000;
@@ -103,51 +104,55 @@ std::string_view geometryName(uint32_t kind) {
     throw TuringException(fmt::format("Geometry column '{}' holds a value that is no WKB.", columnName));
 }
 
-bool equalsIgnoringCase(std::string_view lhs, std::string_view rhs) {
-    return lhs.size() == rhs.size()
-        && std::equal(lhs.begin(), lhs.end(), rhs.begin(), [](char lhsCharacter, char rhsCharacter) {
-               return tolower(static_cast<unsigned char>(lhsCharacter)) == tolower(static_cast<unsigned char>(rhsCharacter));
-           });
-}
-
 bool namesAGeographicCRS(std::string_view crs) {
-    constexpr std::array<std::string_view, 6> geographic = {
+    constexpr std::array<std::string_view, 6> GEOGRAPHIC_CRS_NAMES = {
         "OGC:CRS84", "OGC:CRS84h", "EPSG:4326", "EPSG:4979", "srid:4326", "srid:4979",
     };
 
-    return std::ranges::any_of(geographic, [crs](std::string_view name) {
-        return equalsIgnoringCase(name, crs);
+    return std::ranges::any_of(GEOGRAPHIC_CRS_NAMES, [crs](std::string_view name) {
+        return StringUtils::equalsIgnoringCase(name, crs);
     });
+}
+
+// The text a JSON value spells: a string's own characters, any other value's JSON
+void jsonText(const json& value, std::string& text) {
+    text = value.is_string() ? value.get<std::string>() : value.dump();
 }
 
 ParquetGeometryCRS crsOfProjJson(std::string_view columnName, const json& projjson) {
     const auto id = projjson.find("id");
-    if (id != projjson.end() && id->is_object()) {
-        const std::string authority = id->value("authority", "");
-        const json& code = id->value("code", json());
-        const std::string codeText = code.is_string() ? code.get<std::string>() : code.dump();
+    const bool hasAnID = id != projjson.end() && id->is_object();
 
-        if (namesAGeographicCRS(fmt::format("{}:{}", authority, codeText))) {
-            return ParquetGeometryCRS::Geographic;
+    if (hasAnID) {
+        const auto authority = id->find("authority");
+        const auto code = id->find("code");
+        const bool namesAnAuthority = authority != id->end() && authority->is_string();
+        const bool namesACode = code != id->end();
+
+        if (namesAnAuthority && namesACode) {
+            std::string codeText;
+            jsonText(*code, codeText);
+
+            if (namesAGeographicCRS(fmt::format("{}:{}", authority->get<std::string_view>(), codeText))) {
+                return ParquetGeometryCRS::Geographic;
+            }
         }
     }
+
+    const auto name = projjson.find("name");
+    std::string crsName;
+    jsonText(name != projjson.end() ? *name : projjson, crsName);
 
     throw TuringException(fmt::format("Geometry column '{}' is in the CRS '{}', and a point is cartesian or wgs-84.",
                                       columnName,
-                                      projjson.value("name", projjson.dump())));
+                                      crsName));
 }
 
 }
 
-ParquetGeometry::ParquetGeometry(const parquet::FileMetaData& metadata) {
-    const std::shared_ptr<const parquet::KeyValueMetadata>& keyValues = metadata.key_value_metadata();
-
-    if (keyValues) {
-        for (int64_t index = 0; index < keyValues->size(); index++) {
-            _keyValues.emplace(keyValues->key(index), keyValues->value(index));
-        }
-    }
-
+ParquetGeometry::ParquetGeometry(const parquet::FileMetaData& metadata)
+    : _keyValues(metadata.key_value_metadata().get())
+{
     readGeoParquetColumns();
 }
 
@@ -199,15 +204,17 @@ bool ParquetGeometry::readPoint(std::string_view columnName,
     const uint32_t isoType = type & ~EWKB_FLAGS;
     const uint32_t kind = isoType % WKB_DIMENSION_STEP;
     const uint32_t isoDimensions = isoType / WKB_DIMENSION_STEP;
+    if (isoDimensions >= WKB_DIMENSION_CODE_COUNT) {
+        throwNoWKB(columnName);
+    }
 
     const bool hasZ = (type & EWKB_Z_FLAG) != 0 || isoDimensions == 1 || isoDimensions == 3;
     const bool hasM = (type & EWKB_M_FLAG) != 0 || isoDimensions == 2 || isoDimensions == 3;
 
-    if ((type & EWKB_SRID_FLAG) != 0) {
-        uint32_t srid = 0;
-        if (!reader.read(srid)) {
-            throwNoWKB(columnName);
-        }
+    uint32_t srid = 0;
+    const bool hasSRID = (type & EWKB_SRID_FLAG) != 0;
+    if (hasSRID && !reader.read(srid)) {
+        throwNoWKB(columnName);
     }
 
     if (kind != WKB_POINT) {
@@ -226,12 +233,22 @@ bool ParquetGeometry::readPoint(std::string_view columnName,
         throwNoWKB(columnName);
     }
 
+    const bool isGeographic = crs == ParquetGeometryCRS::Geographic;
+    PointCRS sridCRS {PointCRS::Cartesian};
+    const bool sridIsGeographic = Point::crsOfSRID(srid, sridCRS) && Point::isGeographic(sridCRS);
+    const bool sridNamesTheColumnCRS = srid == 0 || (isGeographic && sridIsGeographic);
+
+    if (!sridNamesTheColumnCRS) {
+        throw TuringException(fmt::format("Geometry column '{}' holds a point with SRID {}, which is not the column's CRS.",
+                                          columnName,
+                                          srid));
+    }
+
     // WKB spells an empty point with NaN coordinates
     if (isnan(x) && isnan(y)) {
         return false;
     }
 
-    const bool isGeographic = crs == ParquetGeometryCRS::Geographic;
     const PointCRS pointCRS = isGeographic ? (hasZ ? PointCRS::WGS84_3D : PointCRS::WGS84)
                                            : (hasZ ? PointCRS::Cartesian3D : PointCRS::Cartesian);
 
@@ -243,20 +260,32 @@ bool ParquetGeometry::readPoint(std::string_view columnName,
 // GeoParquet names its geometry columns in the JSON of the file's "geo" key. A column with no
 // "crs" is in OGC:CRS84, and one whose "crs" is null in an undefined, cartesian CRS.
 void ParquetGeometry::readGeoParquetColumns() {
-    const auto geo = _keyValues.find(std::string(GEOPARQUET_KEY));
-    if (geo == _keyValues.end()) {
+    const std::string* geo = findKeyValue(GEOPARQUET_KEY);
+    if (!geo) {
         return;
     }
 
-    const json document = json::parse(geo->second, nullptr, false);
-    if (document.is_discarded() || !document.contains("columns") || !document["columns"].is_object()) {
+    const json document = json::parse(*geo, nullptr, false);
+    const auto columns = document.find("columns");
+    const bool namesColumns = columns != document.end() && columns->is_object();
+
+    if (!namesColumns) {
         throw TuringException("The GeoParquet metadata of the file names no columns.");
     }
 
-    for (const auto& [name, column] : document["columns"].items()) {
-        const std::string encoding = column.value("encoding", "");
-        if (!equalsIgnoringCase(encoding, "WKB")) {
-            throw TuringException(fmt::format("Geometry column '{}' is encoded as '{}', not as WKB.", name, encoding));
+    for (const auto& [name, column] : columns->items()) {
+        if (!column.is_object()) {
+            throw TuringException(fmt::format("The GeoParquet metadata of column '{}' is no object.", name));
+        }
+
+        const auto encoding = column.find("encoding");
+        std::string encodingText;
+        if (encoding != column.end()) {
+            jsonText(*encoding, encodingText);
+        }
+
+        if (!StringUtils::equalsIgnoringCase(encodingText, "WKB")) {
+            throw TuringException(fmt::format("Geometry column '{}' is encoded as '{}', not as WKB.", name, encodingText));
         }
 
         const auto crs = column.find("crs");
@@ -272,21 +301,33 @@ void ParquetGeometry::readGeoParquetColumns() {
     }
 }
 
+const std::string* ParquetGeometry::findKeyValue(std::string_view key) const {
+    if (!_keyValues) {
+        return nullptr;
+    }
+
+    const int index = _keyValues->FindKey(key);
+    if (index < 0) {
+        return nullptr;
+    }
+
+    return &_keyValues->value(index);
+}
+
 // Parquet's logical types name a CRS by a string, OGC:CRS84 where it is empty. A
-// "projjson:<key>" one names a key of the file metadata holding the PROJJSON.
+// "projjson:<key>" one names a key of the file metadata holding the PROJJSON, and Arrow writes
+// any other CRS as the PROJJSON text itself.
 ParquetGeometryCRS ParquetGeometry::crsOfString(std::string_view columnName, std::string_view crs) const {
     if (crs.empty() || namesAGeographicCRS(crs)) {
         return ParquetGeometryCRS::Geographic;
     }
 
-    if (crs.starts_with(PROJJSON_PREFIX)) {
-        const auto projjson = _keyValues.find(std::string(crs.substr(PROJJSON_PREFIX.size())));
-        if (projjson != _keyValues.end()) {
-            const json document = json::parse(projjson->second, nullptr, false);
-            if (!document.is_discarded()) {
-                return crsOfProjJson(columnName, document);
-            }
-        }
+    const std::string* referenced = crs.starts_with(PROJJSON_PREFIX) ? findKeyValue(crs.substr(PROJJSON_PREFIX.size())) : nullptr;
+    const std::string_view projjsonText = referenced ? std::string_view(*referenced) : crs;
+    const json projjson = json::parse(projjsonText.begin(), projjsonText.end(), nullptr, false);
+
+    if (projjson.is_object()) {
+        return crsOfProjJson(columnName, projjson);
     }
 
     throw TuringException(fmt::format("Geometry column '{}' is in the CRS '{}', and a point is cartesian or wgs-84.",

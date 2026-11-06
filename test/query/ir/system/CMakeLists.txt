@@ -7,6 +7,8 @@ add_ir_tests(test_query_ir_system_ops_dialect SystemOpsDialectTest.cpp)
 target_compile_definitions(test_query_ir_system_ops_dialect
     PRIVATE MLIR_SAMPLES_DIR="${CMAKE_SOURCE_DIR}/samples/mlir")
 
+add_ir_tests(test_query_ir_import_graph_types ImportGraphTypesTest.cpp)
+
 add_ir_tests(test_query_ir_system_command_lowering SystemCommandLoweringTest.cpp)
 target_compile_definitions(test_query_ir_system_command_lowering
     PRIVATE MLIR_SAMPLES_DIR="${CMAKE_SOURCE_DIR}/samples/mlir")
