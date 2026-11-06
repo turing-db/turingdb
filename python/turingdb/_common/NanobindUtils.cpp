@@ -28,6 +28,7 @@
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "versioning/ChangeID.h"
+#include "OutputValues.h"
 
 #include "TuringException.h"
 
@@ -211,19 +212,6 @@ struct ValueToPyObject {
         return _point(db::Point::getSRID(crs), value.getX(), value.getY(), z);
     }
 
-    nb::object point(const std::optional<db::Point>& value) const {
-        return value.has_value() ? point(*value) : nb::none();
-    }
-
-    template <typename T>
-    nb::object pointColumn(const std::vector<T>& src) const {
-        nb::list out;
-        for (const T& value : src) {
-            out.append(point(value));
-        }
-        return out;
-    }
-
     nb::object view(const db::ListView& listView) const {
         nb::list out;
         for (const db::CellView element : listView.elements()) {
@@ -281,6 +269,171 @@ struct ValueToPyObject {
 
 };
 
+template <typename T>
+concept HasNullSentinel = db::IsDateTime<T> || db::IsDuration<T>;
+
+template <typename T>
+concept HasArrayForm = HasNullSentinel<T>
+                    || db::IsBool<T>
+                    || (db::IDLike<T> && !db::EntityIDLike<T>)
+                    || db::Hash<T>
+                    || std::is_arithmetic_v<T>;
+
+template <HasArrayForm T>
+auto arrayValue(const T& value) {
+    if constexpr (HasNullSentinel<T>) {
+        return temporalMicroseconds(value);
+    } else if constexpr (db::IsBool<T>) {
+        return static_cast<uint8_t>(value._boolean ? 1 : 0);
+    } else if constexpr (db::IDLike<T>) {
+        return static_cast<uint64_t>(value.getValue());
+    } else if constexpr (db::Hash<T>) {
+        return value.get();
+    } else {
+        return value;
+    }
+}
+
+template <HasArrayForm T>
+using ArrayValue = decltype(arrayValue(std::declval<const T&>()));
+
+// A null datetime or duration is numpy's NaT, so a nullable one stays an array where any
+// other nullable column becomes a list holding None.
+struct ColumnToPyObject {
+    db::Column* _column {nullptr};
+    size_t _rowCount {0};
+    const ValueToPyObject& _values;
+    nb::object& _value;
+    std::string& _dtypeName;
+
+    ColumnToPyObject(db::Column* column,
+                     size_t rowCount,
+                     const ValueToPyObject& values,
+                     nb::object& value,
+                     std::string& dtypeName)
+        : _column(column),
+        _rowCount(rowCount),
+        _values(values),
+        _value(value),
+        _dtypeName(dtypeName)
+    {
+    }
+
+    template <typename T>
+    void operator()(const db::ColumnVector<T>* column) {
+        db::ColumnTypeGenerator {_dtypeName}(column);
+
+        if constexpr (std::is_arithmetic_v<T>) {
+            _value = wrapVectorAsNdarray(std::move(static_cast<db::ColumnVector<T>*>(_column)->getRaw()));
+        } else if constexpr (HasArrayForm<T>) {
+            _value = transformVectorAsNdarray<ArrayValue<T>>(column->getRaw(), arrayValue<T>);
+        } else {
+            nb::list rows;
+            for (const T& value : column->getRaw()) {
+                rows.append(object(value));
+            }
+            _value = rows;
+        }
+    }
+
+    template <typename T>
+    void operator()(const db::ColumnVector<std::optional<T>>* column) {
+        db::ColumnTypeGenerator {_dtypeName}(column);
+
+        if constexpr (HasNullSentinel<T>) {
+            _value = temporalColumnAsNdarray(column->getRaw());
+        } else {
+            nb::list rows;
+            for (const std::optional<T>& value : column->getRaw()) {
+                if (value) {
+                    rows.append(object(*value));
+                } else {
+                    rows.append(nb::none());
+                }
+            }
+            _value = rows;
+        }
+    }
+
+    template <typename T>
+    void operator()(const db::ColumnConst<T>* column) {
+        db::ColumnTypeGenerator {_dtypeName}(column);
+        const T& value = column->getRaw();
+
+        if constexpr (HasArrayForm<T>) {
+            _value = repeatValueAsNdarray(arrayValue(value), _rowCount);
+        } else {
+            _value = repeatObject(object(value));
+        }
+    }
+
+    template <typename T>
+    void operator()(const db::ColumnConst<std::optional<T>>* column) {
+        db::ColumnTypeGenerator {_dtypeName}(column);
+        const std::optional<T>& value = column->getRaw();
+
+        if constexpr (HasNullSentinel<T>) {
+            _value = repeatValueAsNdarray(temporalMicroseconds(value), _rowCount);
+        } else if (value) {
+            _value = repeatObject(object(*value));
+        } else {
+            _value = repeatObject(nb::none());
+        }
+    }
+
+    void operator()(const db::ColumnMask* column) {
+        db::ColumnTypeGenerator {_dtypeName}(column);
+        _value = transformVectorAsNdarray<uint8_t>(column->getRaw(), [](const db::ColumnMask::Bool_t& value) {
+            return static_cast<uint8_t>(value._value ? 1 : 0);
+        });
+    }
+
+    template <typename T>
+    nb::object object(const T& value) const {
+        if constexpr (db::IsEmbedding<T>) {
+            return embeddingToNdarray(value);
+        } else if constexpr (db::IsPath<T>) {
+            if (value.isNull()) {
+                return nb::none();
+            }
+
+            nb::list ids;
+            for (const uint64_t id : value.getIDs()) {
+                ids.append(nb::cast(id));
+            }
+            return ids;
+        } else if constexpr (db::IsListView<T> || db::IsMap<T>) {
+            return _values.view(value);
+        } else if constexpr (db::IsCell<T>) {
+            return _values.element(value);
+        } else if constexpr (db::IsNull<T>) {
+            return nb::none();
+        } else if constexpr (db::IsValueType<T>) {
+            return toPyString(db::ValueTypeName::value(value));
+        } else if constexpr (db::IsDateTime<T>) {
+            return _values.dateTime(value);
+        } else if constexpr (db::IsDuration<T>) {
+            return _values.duration(value);
+        } else if constexpr (db::IsPoint<T>) {
+            return _values.point(value);
+        } else if constexpr (db::Hash<T>) {
+            return nb::cast(value.get());
+        } else if constexpr (std::is_arithmetic_v<T>) {
+            return nb::cast(value);
+        } else {
+            return toPy(value);
+        }
+    }
+
+    nb::object repeatObject(const nb::object& value) const {
+        nb::list rows;
+        for (size_t row = 0; row < _rowCount; row++) {
+            rows.append(value);
+        }
+        return rows;
+    }
+};
+
 }
 
 nb::dict dataframeToNumpy(db::Dataframe* df) {
@@ -298,447 +451,10 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
 
         db::Column* col = namedCol->getColumn();
         nb::object value;
-        const char* dtypeName = "object";
+        std::string dtypeName;
 
-        switch (col->getKind()) {
-            case db::ColumnVector<db::types::UInt64::Primitive>::staticKind(): {
-                auto& src = static_cast<db::ColumnVector<db::types::UInt64::Primitive>*>(col)->getRaw();
-                value = wrapVectorAsNdarray(std::move(src));
-                dtypeName = "UInt64";
-                break;
-            }
-            case db::ColumnVector<db::types::Int64::Primitive>::staticKind(): {
-                auto& src = static_cast<db::ColumnVector<db::types::Int64::Primitive>*>(col)->getRaw();
-                value = wrapVectorAsNdarray(std::move(src));
-                dtypeName = "Int64";
-                break;
-            }
-            case db::ColumnVector<db::types::Double::Primitive>::staticKind(): {
-                auto& src = static_cast<db::ColumnVector<db::types::Double::Primitive>*>(col)->getRaw();
-                value = wrapVectorAsNdarray(std::move(src));
-                dtypeName = "Double";
-                break;
-            }
-            case db::ColumnVector<db::types::Bool::Primitive>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnVector<db::types::Bool::Primitive>*>(col)->getRaw();
-                value = transformVectorAsNdarray<uint8_t>(src, [](const db::CustomBool& b) -> uint8_t { return b._boolean ? 1 : 0; });
-                dtypeName = "Bool";
-                break;
-            }
-            case db::ColumnVector<db::NodeID>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnVector<db::NodeID>*>(col)->getRaw();
-                value = vectorAsList(src);
-                dtypeName = "UInt64";
-                break;
-            }
-            case db::ColumnVector<db::EdgeID>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnVector<db::EdgeID>*>(col)->getRaw();
-                value = vectorAsList(src);
-                dtypeName = "UInt64";
-                break;
-            }
-            case db::ColumnVector<db::EdgeTypeID>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnVector<db::EdgeTypeID>*>(col)->getRaw();
-                value = transformVectorAsNdarray<uint64_t>(src, [](const db::EdgeTypeID& v) { return v.getValue(); });
-                dtypeName = "UInt64";
-                break;
-            }
-            case db::ColumnVector<db::PropertyTypeID>::staticKind(): {
-                // Widen to uint64 and report as "UInt64"; a bespoke "PropertyTypeID" name
-                // would fall through DTYPE_MAP to object dtype on the Python side.
-                const auto& src = static_cast<const db::ColumnVector<db::PropertyTypeID>*>(col)->getRaw();
-                value = transformVectorAsNdarray<uint64_t>(src, [](const db::PropertyTypeID& v) { return v.getValue(); });
-                dtypeName = "UInt64";
-                break;
-            }
-            case db::ColumnVector<db::LabelID>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnVector<db::LabelID>*>(col)->getRaw();
-                value = transformVectorAsNdarray<uint64_t>(src, [](const db::LabelID& v) { return v.getValue(); });
-                dtypeName = "UInt64";
-                break;
-            }
-            case db::ColumnVector<db::LabelSetID>::staticKind(): {
-                // Widen to uint64 and report as "UInt64"; a bespoke "LabelSetID" name
-                // would fall through DTYPE_MAP to object dtype on the Python side.
-                const auto& src = static_cast<const db::ColumnVector<db::LabelSetID>*>(col)->getRaw();
-                value = transformVectorAsNdarray<uint64_t>(src, [](const db::LabelSetID& v) { return v.getValue(); });
-                dtypeName = "UInt64";
-                break;
-            }
-            case db::ColumnVector<db::ChangeID>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnVector<db::ChangeID>*>(col)->getRaw();
-                value = transformVectorAsNdarray<uint64_t>(src, [](const db::ChangeID& v) { return v.get(); });
-                dtypeName = "UInt64";
-                break;
-            }
-            case db::ColumnVector<db::ValueType>::staticKind(): {
-                // Surface ValueType columns as their string names ("Int64", "String", …).
-                const auto& src = static_cast<const db::ColumnVector<db::ValueType>*>(col)->getRaw();
-                nb::list lst;
-                for (db::ValueType v : src) {
-                    lst.append(nb::cast(std::string(db::ValueTypeName::value(v))));
-                }
-                value = lst;
-                dtypeName = "String";
-                break;
-            }
-            case db::ColumnVector<db::types::DateTime::Primitive>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnVector<db::types::DateTime::Primitive>*>(col)->getRaw();
-                value = temporalColumnAsNdarray(src);
-                dtypeName = "DateTime";
-                break;
-            }
-            case db::ColumnVector<db::types::Duration::Primitive>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnVector<db::types::Duration::Primitive>*>(col)->getRaw();
-                value = temporalColumnAsNdarray(src);
-                dtypeName = "Duration";
-                break;
-            }
-            case db::ColumnVector<db::types::Point::Primitive>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnVector<db::types::Point::Primitive>*>(col)->getRaw();
-                value = listVisitor.pointColumn(src);
-                dtypeName = "Point";
-                break;
-            }
-            case db::ColumnVector<db::types::Embedding::Primitive>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnVector<db::types::Embedding::Primitive>*>(col)->getRaw();
-                nb::list lst;
-                for (const auto& s : src) {
-                    lst.append(embeddingToNdarray(s));
-                }
-                value = lst;
-                dtypeName = "Embedding";
-                break;
-            }
-            case db::ColumnVector<db::types::String::Primitive>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnVector<db::types::String::Primitive>*>(col)->getRaw();
-                value = vectorAsList(src);
-                dtypeName = "String";
-                break;
-            }
-            case db::ColumnVector<db::GraphPath>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnVector<db::GraphPath>*>(col)->getRaw();
-                nb::list lst;
-                for (const db::GraphPath& path : src) {
-                    if (path.isNull()) {
-                        lst.append(nb::none());
-                        continue;
-                    }
-
-                    nb::list rowList;
-                    for (const uint64_t id : path.getIDs()) {
-                        rowList.append(nb::cast(id));
-                    }
-                    lst.append(rowList);
-                }
-                value = lst;
-                dtypeName = "Path";
-                break;
-            }
-            case db::ColumnVector<db::ListView>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnVector<db::ListView>*>(col)->getRaw();
-                nb::list lst;
-                for (const db::ListView& listView : src) {
-                    lst.append(listVisitor.view(listView));
-                }
-                value = lst;
-                dtypeName = "List";
-                break;
-            }
-            case db::ColumnVector<db::MapView>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnVector<db::MapView>*>(col)->getRaw();
-                nb::list lst;
-                for (const db::MapView& mapView : src) {
-                    lst.append(listVisitor.view(mapView));
-                }
-                value = lst;
-                dtypeName = "Map";
-                break;
-            }
-
-            case db::ColumnVector<db::CellView>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnVector<db::CellView>*>(col)->getRaw();
-                nb::list lst;
-                for (const db::CellView element : src) {
-                    lst.append(listVisitor.element(element));
-                }
-                value = lst;
-                dtypeName = "Cell";
-                break;
-            }
-
-            case db::ColumnOptVector<db::types::UInt64::Primitive>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnOptVector<db::types::UInt64::Primitive>*>(col)->getRaw();
-                value = vectorAsList(src);
-                dtypeName = "UInt64";
-                break;
-            }
-            case db::ColumnOptVector<db::types::Int64::Primitive>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnOptVector<db::types::Int64::Primitive>*>(col)->getRaw();
-                value = vectorAsList(src);
-                dtypeName = "Int64";
-                break;
-            }
-            case db::ColumnOptVector<db::types::Double::Primitive>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnOptVector<db::types::Double::Primitive>*>(col)->getRaw();
-                value = vectorAsList(src);
-                dtypeName = "Double";
-                break;
-            }
-            case db::ColumnOptVector<db::types::Bool::Primitive>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnOptVector<db::types::Bool::Primitive>*>(col)->getRaw();
-                value = vectorAsList(src);
-                dtypeName = "Bool";
-                break;
-            }
-            case db::ColumnOptVector<db::types::String::Primitive>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnOptVector<db::types::String::Primitive>*>(col)->getRaw();
-                value = vectorAsList(src);
-                dtypeName = "String";
-                break;
-            }
-            case db::ColumnOptVector<db::NodeID>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnOptVector<db::NodeID>*>(col)->getRaw();
-                value = vectorAsList(src);
-                dtypeName = "UInt64";
-                break;
-            }
-            case db::ColumnOptVector<db::EdgeID>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnOptVector<db::EdgeID>*>(col)->getRaw();
-                value = vectorAsList(src);
-                dtypeName = "UInt64";
-                break;
-            }
-            case db::ColumnOptVector<db::types::Embedding::Primitive>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnOptVector<db::types::Embedding::Primitive>*>(col)->getRaw();
-                nb::list lst;
-                for (const auto& v : src) {
-                    if (!v) {
-                        lst.append(nb::none());
-                    } else {
-                        lst.append(embeddingToNdarray(*v));
-                    }
-                }
-                value = lst;
-                dtypeName = "Embedding";
-                break;
-            }
-            case db::ColumnOptVector<db::ListView>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnOptVector<db::ListView>*>(col)->getRaw();
-                nb::list lst;
-                for (const std::optional<db::ListView>& listView : src) {
-                    if (!listView) {
-                        lst.append(nb::none());
-                    } else {
-                        lst.append(listVisitor.view(*listView));
-                    }
-                }
-                value = lst;
-                dtypeName = "List";
-                break;
-            }
-            case db::ColumnOptVector<db::MapView>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnOptVector<db::MapView>*>(col)->getRaw();
-                nb::list lst;
-                for (const std::optional<db::MapView>& mapView : src) {
-                    if (!mapView) {
-                        lst.append(nb::none());
-                    } else {
-                        lst.append(listVisitor.view(*mapView));
-                    }
-                }
-                value = lst;
-                dtypeName = "Map";
-                break;
-            }
-
-            case db::ColumnOptVector<db::types::DateTime::Primitive>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnOptVector<db::types::DateTime::Primitive>*>(col)->getRaw();
-                value = temporalColumnAsNdarray(src);
-                dtypeName = "DateTime";
-                break;
-            }
-
-            case db::ColumnOptVector<db::types::Duration::Primitive>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnOptVector<db::types::Duration::Primitive>*>(col)->getRaw();
-                value = temporalColumnAsNdarray(src);
-                dtypeName = "Duration";
-                break;
-            }
-
-            case db::ColumnOptVector<db::types::Point::Primitive>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnOptVector<db::types::Point::Primitive>*>(col)->getRaw();
-                value = listVisitor.pointColumn(src);
-                dtypeName = "Point";
-                break;
-            }
-
-            case db::ColumnConst<db::types::UInt64::Primitive>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<db::types::UInt64::Primitive>*>(col)->getRaw();
-                value = repeatValueAsNdarray(v, rowCount);
-                dtypeName = "UInt64";
-                break;
-            }
-            case db::ColumnConst<db::types::Int64::Primitive>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<db::types::Int64::Primitive>*>(col)->getRaw();
-                value = repeatValueAsNdarray(v, rowCount);
-                dtypeName = "Int64";
-                break;
-            }
-            case db::ColumnConst<db::types::Double::Primitive>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<db::types::Double::Primitive>*>(col)->getRaw();
-                value = repeatValueAsNdarray(v, rowCount);
-                dtypeName = "Double";
-                break;
-            }
-            case db::ColumnConst<db::types::Bool::Primitive>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<db::types::Bool::Primitive>*>(col)->getRaw();
-                const uint8_t byte = v._boolean ? 1 : 0;
-                value = repeatValueAsNdarray(byte, rowCount);
-                dtypeName = "Bool";
-                break;
-            }
-            case db::ColumnConst<std::optional<db::types::Int64::Primitive>>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<std::optional<db::types::Int64::Primitive>>*>(col)->getRaw();
-                value = repeatValueAsList(v, rowCount);
-                dtypeName = "Int64";
-                break;
-            }
-            case db::ColumnConst<std::optional<db::types::Double::Primitive>>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<std::optional<db::types::Double::Primitive>>*>(col)->getRaw();
-                value = repeatValueAsList(v, rowCount);
-                dtypeName = "Double";
-                break;
-            }
-            case db::ColumnConst<std::optional<db::types::Bool::Primitive>>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<std::optional<db::types::Bool::Primitive>>*>(col)->getRaw();
-                value = repeatValueAsList(v, rowCount);
-                dtypeName = "Bool";
-                break;
-            }
-            case db::ColumnConst<db::NodeID>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<db::NodeID>*>(col)->getRaw();
-                value = repeatValueAsNdarray(v.getValue(), rowCount);
-                dtypeName = "UInt64";
-                break;
-            }
-            case db::ColumnConst<db::EdgeID>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<db::EdgeID>*>(col)->getRaw();
-                value = repeatValueAsNdarray(v.getValue(), rowCount);
-                dtypeName = "UInt64";
-                break;
-            }
-            case db::ColumnConst<db::types::DateTime::Primitive>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<db::types::DateTime::Primitive>*>(col)->getRaw();
-                value = repeatValueAsNdarray(temporalMicroseconds(v), rowCount);
-                dtypeName = "DateTime";
-                break;
-            }
-            case db::ColumnConst<db::types::Duration::Primitive>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<db::types::Duration::Primitive>*>(col)->getRaw();
-                value = repeatValueAsNdarray(temporalMicroseconds(v), rowCount);
-                dtypeName = "Duration";
-                break;
-            }
-            // datetime() reads its own nulls, so a constant one is nullable even where
-            // every row of it holds an instant
-            case db::ColumnConst<std::optional<db::types::DateTime::Primitive>>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<std::optional<db::types::DateTime::Primitive>>*>(col)->getRaw();
-                value = repeatValueAsNdarray(temporalMicroseconds(v), rowCount);
-                dtypeName = "DateTime";
-                break;
-            }
-            case db::ColumnConst<std::optional<db::types::Duration::Primitive>>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<std::optional<db::types::Duration::Primitive>>*>(col)->getRaw();
-                value = repeatValueAsNdarray(temporalMicroseconds(v), rowCount);
-                dtypeName = "Duration";
-                break;
-            }
-            case db::ColumnConst<db::types::Point::Primitive>::staticKind(): {
-                const auto& constant = static_cast<const db::ColumnConst<db::types::Point::Primitive>*>(col)->getRaw();
-                const nb::object point = listVisitor.point(constant);
-                nb::list points;
-                for (size_t row = 0; row < rowCount; ++row) {
-                    points.append(point);
-                }
-                value = points;
-                dtypeName = "Point";
-                break;
-            }
-            case db::ColumnConst<std::optional<db::types::Point::Primitive>>::staticKind(): {
-                const auto& constant = static_cast<const db::ColumnConst<std::optional<db::types::Point::Primitive>>*>(col)->getRaw();
-                const nb::object point = listVisitor.point(constant);
-                nb::list points;
-                for (size_t row = 0; row < rowCount; ++row) {
-                    points.append(point);
-                }
-                value = points;
-                dtypeName = "Point";
-                break;
-            }
-            case db::ColumnConst<db::types::Embedding::Primitive>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<db::types::Embedding::Primitive>*>(col)->getRaw();
-                nb::object py = embeddingToNdarray(v);
-                nb::list lst;
-                for (size_t i = 0; i < rowCount; ++i) {
-                    lst.append(py);
-                }
-                value = lst;
-                dtypeName = "Embedding";
-                break;
-            }
-            case db::ColumnConst<db::types::String::Primitive>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<db::types::String::Primitive>*>(col)->getRaw();
-                value = repeatValueAsList(v, rowCount);
-                dtypeName = "String";
-                break;
-            }
-            case db::ColumnConst<db::PropertyNull>::staticKind(): {
-                nb::list lst;
-                for (size_t i = 0; i < rowCount; ++i) {
-                    lst.append(nb::none());
-                }
-                value = lst;
-                dtypeName = "Null";
-                break;
-            }
-            case db::ColumnConst<db::ListView>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<db::ListView>*>(col)->getRaw();
-                const nb::object listObj = listVisitor.view(v);
-                nb::list lst;
-                for (size_t i = 0; i < rowCount; ++i) {
-                    lst.append(listObj);
-                }
-                value = lst;
-                dtypeName = "List";
-                break;
-            }
-            case db::ColumnConst<db::CellView>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<db::CellView>*>(col)->getRaw();
-                const nb::object elementObj = listVisitor.element(v);
-                nb::list lst;
-                for (size_t i = 0; i < rowCount; ++i) {
-                    lst.append(elementObj);
-                }
-                value = lst;
-                dtypeName = "Cell";
-                break;
-            }
-
-            case db::ColumnConst<db::MapView>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<db::MapView>*>(col)->getRaw();
-                const nb::object mapObj = listVisitor.view(v);
-                nb::list lst;
-                for (size_t i = 0; i < rowCount; ++i) {
-                    lst.append(mapObj);
-                }
-                value = lst;
-                dtypeName = "Map";
-                break;
-            }
-            default:
-                throw TuringException(std::string("dataframeToNumpy: unhandled column kind: ") + std::string(col->getTypeName()));
-        }
+        ColumnToPyObject converter(col, rowCount, listVisitor, value, dtypeName);
+        db::ColumnSingleDispatcher<db::OutputtedTypes::Allowed, ColumnToPyObject, db::OutputtedTypes::Excluded>::dispatch(col, converter);
 
         const nb::object key = toPyString(keyStr);
         data[key] = value;

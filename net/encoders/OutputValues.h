@@ -116,7 +116,7 @@ struct ColumnTypeGenerator {
         } else if constexpr (IsPath<T>) {
             _name = fmt::format("Path");
         } else if constexpr (IsNull<T>) {
-            _name = fmt::format("NULL");
+            _name = fmt::format("Null");
         } else if constexpr (IsListView<T>) {
             _name = fmt::format("List");
         } else if constexpr (IsCell<T>) {
