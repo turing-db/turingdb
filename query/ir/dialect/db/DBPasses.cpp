@@ -97,66 +97,9 @@ namespace {
 
 const DBPassContext defaultPassContext;
 
-struct LabelScanChain {
-    ScanNodes scan;
-    GetNodeLabelSet labelSet;
-    CheckLabelConstraint check;
-    ArrayAttr labels;
-};
-
-bool matchLabelScanChain(FilterOp filter, LabelScanChain& chain) {
-    const Operation::operand_range columns = filter.getColumnsToFilter();
-    if (columns.size() != 1) {
-        return false;
-    }
-
-    const Value scanColumn = columns[0];
-
-    chain.check = filter.getMask().getDefiningOp<CheckLabelConstraint>();
-    if (!chain.check) {
-        return false;
-    }
-
-    chain.labels = chain.check.getConjunction();
-    if (!chain.labels) {
-        return false;
-    }
-
-    chain.labelSet = chain.check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
-    if (!chain.labelSet || chain.labelSet.getInputNodes() != scanColumn) {
-        return false;
-    }
-
-    chain.scan = scanColumn.getDefiningOp<ScanNodes>();
-    if (!chain.scan) {
-        return false;
-    }
-
-    return true;
-}
-
 void eraseIfUnused(Operation* op) {
     if (op && op->use_empty()) {
         op->erase();
-    }
-}
-
-// The driver every filter pass shares: collect the filters first, since rewriting erases
-// ops and would invalidate the walk, then rewrite each one that matches.
-template <typename Match, typename MatchFilter, typename RewriteFilter>
-void runFilterPass(Operation* root, MatchFilter matchFilter, RewriteFilter rewriteFilter, mlir::OpBuilder& builder) {
-    llvm::SmallVector<FilterOp> filters;
-    root->walk([&](FilterOp filter) {
-        filters.push_back(filter);
-    });
-
-    for (FilterOp filter : filters) {
-        Match match;
-        if (!matchFilter(filter, match)) {
-            continue;
-        }
-
-        rewriteFilter(filter, match, builder);
     }
 }
 
@@ -242,33 +185,6 @@ void runFilterWorklist(Operation* root, MatchFilter matchFilter, RewriteFilter r
         return true;
     });
 }
-
-void fuseScanByLabel(FilterOp filter, const LabelScanChain& chain, mlir::OpBuilder& builder) {
-    ScanNodes scan = chain.scan;
-    GetNodeLabelSet labelSet = chain.labelSet;
-    CheckLabelConstraint check = chain.check;
-
-    builder.setInsertionPoint(filter);
-    ScanNodesByLabel scanByLabel = builder.create<ScanNodesByLabel>(filter.getLoc(),
-                                                                    scan.getResult().getType(),
-                                                                    chain.labels);
-
-    Operation* const filterOp = filter.getOperation();
-    filterOp->getResult(0).replaceAllUsesWith(scanByLabel.getResult());
-    filterOp->erase();
-
-    // Drop the now-dead chain, consumer to producer, each only if unused.
-    eraseIfUnused(check);
-    eraseIfUnused(labelSet);
-    eraseIfUnused(scan);
-}
-
-struct FuseScanByLabel : public impl::FuseScanByLabelBase<FuseScanByLabel> {
-    void runOnOperation() override {
-        mlir::OpBuilder builder(&getContext());
-        runFilterPass<LabelScanChain>(getOperation(), matchLabelScanChain, fuseScanByLabel, builder);
-    }
-};
 
 bool isGraphWrite(Operation* op) {
     return isa<CreateNode,
@@ -418,9 +334,9 @@ void stepTowardLineageAnchor(Value column, LineageStep& step) {
 }
 
 // The climbs of one pass run, each built from the climb one step up. A push_down_filters push
-// moves a single-variable predicate, which changes no anchor and crosses no row op, so a
-// climb stays true across pushes; its equalities are kept as their sides' anchors, which a
-// push never erases. A rewrite that replaces an anchor has to clear() them.
+// moves a predicate onto the op making its anchors, which changes no anchor and crosses no row
+// op, so a climb stays true across pushes; its equalities are kept as their sides' anchors,
+// which a push never erases. A rewrite that replaces an anchor has to clear() them.
 class LineageClimbs {
 public:
     Value anchorOf(Value column) {
@@ -540,15 +456,6 @@ private:
     }
 };
 
-bool isMaskComputeOp(Operation* op) {
-    return isa<EqOp, NeqOp, GtOp, LtOp, GteOp, LteOp,
-               StartsWithOp, EndsWithOp, ContainsOp, InOp,
-               AndOp, OrOp, XorOp, NotOp, IsNullOp, IsNotNullOp,
-               AddOp, SubOp, MulOp, DivOp, ModOp, PowOp, ConcatOp, Negate, UnaryPlus,
-               ConstantOp,
-               GetNodeProperties, GetEdgeProperties, ElementID>(op);
-}
-
 struct MaskCone {
     llvm::SmallVector<Operation*> _ops;
     llvm::SmallSetVector<Value, 4> _inputs;
@@ -616,11 +523,13 @@ void collectConePostOrder(Value mask,
     }
 }
 
+bool computesFromTheRow(Operation* op);
+
 MaskCone collectMaskCone(Value mask) {
     MaskCone cone;
 
     const auto movesOntoOtherRows = [](Operation* op) {
-        return isMaskComputeOp(op) && !raisesOnSomeRows(op);
+        return computesFromTheRow(op) && !raisesOnSomeRows(op);
     };
 
     llvm::SmallPtrSet<Operation*, 8> visited;
@@ -629,12 +538,21 @@ MaskCone collectMaskCone(Value mask) {
     return cone;
 }
 
-// A single-variable property-predicate filter and where its mask should be rebuilt:
-// the lineage anchor of the one column its mask reads.
+// A filter whose mask reads the columns one op makes, such as an edge and its type, and where
+// its mask should be rebuilt: right after that op, over the anchor of each input of the cone,
+// in the order of the inputs.
 struct PushablePredicate {
-    Value _anchor;
+    llvm::SmallVector<Value, 2> _anchors;
     MaskCone _cone;
 };
+
+bool madeByOneOp(llvm::ArrayRef<Value> anchors) {
+    Operation* const producer = anchors.front().getDefiningOp();
+
+    return llvm::all_of(anchors, [producer](Value anchor) {
+        return anchor.getDefiningOp() == producer;
+    });
+}
 
 // The anchor a predicate can be rebuilt on instead of @param anchor: the equalities the climb
 // crossed hold whole classes of columns to the same node, and where one of the class was
@@ -716,7 +634,7 @@ bool matchPushablePredicate(FilterOp filter,
                             LineageClimbs& climbs,
                             PushablePredicate& pushable) {
     Operation* const maskDef = filter.getMask().getDefiningOp();
-    if (!maskDef || !isMaskComputeOp(maskDef)) {
+    if (!maskDef || !computesFromTheRow(maskDef)) {
         return false;
     }
 
@@ -733,17 +651,26 @@ bool matchPushablePredicate(FilterOp filter,
             return false;
         }
 
-        if (!pushable._anchor) {
-            pushable._anchor = inputAnchor;
-        } else if (pushable._anchor != inputAnchor) {
-            // More than one lineage feeds the mask: not a single-variable predicate.
-            return false;
-        }
+        pushable._anchors.push_back(inputAnchor);
     }
 
-    const Value equatedAnchor = scannedAnchorEqualTo(pushable._anchor, anchorEqualities);
-    if (equatedAnchor) {
-        pushable._anchor = equatedAnchor;
+    if (!madeByOneOp(pushable._anchors)) {
+        return false;
+    }
+
+    llvm::SmallVector<Value, 2> equatedAnchors;
+    for (const Value anchor : pushable._anchors) {
+        const Value equatedAnchor = scannedAnchorEqualTo(anchor, anchorEqualities);
+        if (!equatedAnchor) {
+            break;
+        }
+
+        equatedAnchors.push_back(equatedAnchor);
+    }
+
+    const bool scansEveryAnchor = equatedAnchors.size() == pushable._anchors.size() && madeByOneOp(equatedAnchors);
+    if (scansEveryAnchor) {
+        pushable._anchors = equatedAnchors;
         crossedRowOp = true;
     }
 
@@ -754,7 +681,7 @@ bool matchPushablePredicate(FilterOp filter,
         return false;
     }
 
-    return !order.writesBetween(pushable._anchor.getDefiningOp(), filter.getOperation());
+    return !order.writesBetween(pushable._anchors.front().getDefiningOp(), filter.getOperation());
 }
 
 void bypassFilter(FilterOp filter) {
@@ -766,11 +693,10 @@ void bypassFilter(FilterOp filter) {
 }
 
 void pushDownPredicate(FilterOp filter, const PushablePredicate& pushable, mlir::OpBuilder& builder) {
-    Value anchor = pushable._anchor;
     const MaskCone& cone = pushable._cone;
     const mlir::Location loc = filter.getLoc();
 
-    Operation* const anchorProducer = anchor.getDefiningOp();
+    Operation* const anchorProducer = pushable._anchors.front().getDefiningOp();
 
     llvm::SmallVector<mlir::Value> liveColumns;
     for (const mlir::Value result : anchorProducer->getResults()) {
@@ -779,9 +705,9 @@ void pushDownPredicate(FilterOp filter, const PushablePredicate& pushable, mlir:
         }
     }
 
-    // Rebuild the mask over the anchor version of the column, right after it is bound.
+    // Rebuild the mask over the anchor version of each column, right after they are bound.
     mlir::IRMapping mapping;
-    for (const Value input : cone._inputs) {
+    for (const auto [input, anchor] : llvm::zip_equal(cone._inputs, pushable._anchors)) {
         mapping.map(input, anchor);
     }
 
@@ -3088,6 +3014,79 @@ void mergeStackedFilters(StackedFilters& stacked, mlir::RewriterBase& rewriter) 
 struct MergeFilters : public impl::MergeFiltersBase<MergeFilters> {
     void runOnOperation() override {
         runFilterWorklist<StackedFilters>(getOperation(), matchStackedFilters, mergeStackedFilters);
+    }
+};
+
+// A test of labels every node a scan makes has to carry, in the mask of a filter nothing but
+// which reads the scan: the scan reads the nodes carrying them alone instead
+struct LabelScanChain {
+    FilterOp _filter;
+    Value _conjunct;
+    Operation* _scan {nullptr};
+    ArrayAttr _labels;
+};
+
+bool matchLabelScanConjunct(Value conjunct, Value scanned, LabelScanChain& chain) {
+    CheckLabelConstraint check = conjunct.getDefiningOp<CheckLabelConstraint>();
+    const ArrayAttr conjunction = check ? check.getConjunction() : ArrayAttr();
+    if (!conjunction) {
+        return false;
+    }
+
+    GetNodeLabelSet labelSet = check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
+    if (!labelSet || labelSet.getInputNodes() != scanned) {
+        return false;
+    }
+
+    chain._conjunct = conjunct;
+    chain._labels = conjunction;
+
+    return true;
+}
+
+bool matchLabelScanChain(FilterOp filter, LabelScanChain& chain) {
+    Operation* const scan = filteredSource(filter);
+    if (!isa_and_nonnull<ScanNodes, ScanNodesByLabel>(scan) || !readsOnlyIntoTheFilter(scan, filter)) {
+        return false;
+    }
+
+    chain._filter = filter;
+    chain._scan = scan;
+
+    const Value scanned = scan->getResult(0);
+
+    return matchAConjunct(filter, [scanned, &chain](Value conjunct) {
+        return matchLabelScanConjunct(conjunct, scanned, chain);
+    });
+}
+
+void fuseScanByLabel(LabelScanChain& chain, mlir::RewriterBase& rewriter) {
+    Operation* const scan = chain._scan;
+
+    llvm::SmallVector<Attribute, 4> labels;
+    if (ScanNodesByLabel scanByLabel = dyn_cast<ScanNodesByLabel>(scan)) {
+        const ArrayAttr scanLabels = scanByLabel.getLabels();
+        labels.append(scanLabels.begin(), scanLabels.end());
+    }
+
+    for (const Attribute label : chain._labels) {
+        if (!llvm::is_contained(labels, label)) {
+            labels.push_back(label);
+        }
+    }
+
+    rewriter.setInsertionPoint(scan);
+    ScanNodesByLabel fused = rewriter.create<ScanNodesByLabel>(chain._filter.getLoc(),
+                                                               scan->getResult(0).getType(),
+                                                               rewriter.getArrayAttr(labels));
+
+    rewriter.replaceOp(scan, fused.getResult());
+    dropConjunct(chain._filter, chain._conjunct, rewriter);
+}
+
+struct FuseScanByLabel : public impl::FuseScanByLabelBase<FuseScanByLabel> {
+    void runOnOperation() override {
+        runFilterWorklist<LabelScanChain>(getOperation(), matchLabelScanChain, fuseScanByLabel);
     }
 };
 
@@ -6444,8 +6443,13 @@ struct HoistHopConjuncts : public impl::HoistHopConjunctsBase<HoistHopConjuncts>
 // A row-wise op: one output row per input row, computed from that row alone, so a relation
 // deduplicated before it yields the same set after it.
 bool isRowWiseOp(Operation* op) {
-    return isMaskComputeOp(op)
-        || isa<GetNodeLabelSet, CheckLabelConstraint, CheckEdgeTypeConstraint,
+    return isa<EqOp, NeqOp, GtOp, LtOp, GteOp, LteOp,
+               StartsWithOp, EndsWithOp, ContainsOp, InOp,
+               AndOp, OrOp, XorOp, NotOp, IsNullOp, IsNotNullOp,
+               AddOp, SubOp, MulOp, DivOp, ModOp, PowOp, ConcatOp, Negate, UnaryPlus,
+               ConstantOp,
+               GetNodeProperties, GetEdgeProperties, ElementID,
+               GetNodeLabelSet, CheckLabelConstraint, CheckEdgeTypeConstraint,
                Labels, EdgeType, ToInteger, ToFloat, ToBoolean,
                CosineSimilarity, EuclideanDistance, BroadcastConstant>(op);
 }
