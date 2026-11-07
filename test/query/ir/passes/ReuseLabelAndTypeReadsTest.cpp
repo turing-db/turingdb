@@ -152,8 +152,8 @@ TEST_F(ReuseLabelAndTypeReadsTest, readsTheLabelSetOnceForEachEndOfAHop) {
     expectRows(query, {{"9"}});
 }
 
-// A WITH republishes the edges without their type column, so the type tests after it read
-// the types again. Ghosts -> Remy is the one KNOWS_WELL edge lasting over 100, and
+// A WITH republishes the edges, and the type tests after it test the types the scan output
+// beside them. Ghosts -> Remy is the one KNOWS_WELL edge lasting over 100, and
 // Martina -> Cooking the one INTERESTED_IN edge lasting under 15.
 TEST_F(ReuseLabelAndTypeReadsTest, readsTheEdgeTypesOnceForADisjunctionOfConjunctions) {
     const std::string_view query = "MATCH ()-[e]->() WITH e "
@@ -162,7 +162,7 @@ TEST_F(ReuseLabelAndTypeReadsTest, readsTheEdgeTypesOnceForADisjunctionOfConjunc
 
     std::string program;
     nlProgram(query, program);
-    EXPECT_EQ(countOccurrences(program, "nl.get_edge_types("), 1u) << program;
+    EXPECT_EQ(countOccurrences(program, "nl.get_edge_types("), 0u) << program;
 
     expectRows(query, {
         {"Ghosts -> Remy"},
@@ -185,15 +185,16 @@ TEST_F(ReuseLabelAndTypeReadsTest, readsTheEdgeTypesOnceForUnwoundEdges) {
     });
 }
 
-// With one read left, the two tests read one type column and fold into one check. Every one
-// of the 18 edges is KNOWS_WELL or INTERESTED_IN.
-TEST_F(ReuseLabelAndTypeReadsTest, foldsTheTypeTestsOfRepublishedEdgesIntoOneCheck) {
+// The two tests read the type column the scan output, fold into one check, and the check
+// into the scan. Every one of the 18 edges is KNOWS_WELL or INTERESTED_IN.
+TEST_F(ReuseLabelAndTypeReadsTest, foldsTheTypeTestsOfRepublishedEdgesIntoTheScan) {
     const std::string_view query = "MATCH ()-[e]->() WITH e WHERE e:KNOWS_WELL OR e:INTERESTED_IN RETURN count(e)";
 
     std::string program;
     nlProgram(query, program);
-    EXPECT_EQ(countOccurrences(program, "nl.get_edge_types("), 1u) << program;
-    EXPECT_EQ(countOccurrences(program, "nl.check_edge_type_constraint("), 1u) << program;
+    EXPECT_EQ(countOccurrences(program, "nl.get_edge_types("), 0u) << program;
+    EXPECT_EQ(countOccurrences(program, "nl.check_edge_type_constraint("), 0u) << program;
+    EXPECT_EQ(countOccurrences(program, "nl.scan_edges_by_type("), 1u) << program;
 
     expectRows(query, {{"18"}});
 }

@@ -221,7 +221,7 @@ TEST_F(HopImportPropertyReadsTest, readsTheLabelSetOfAnImportedNodeOnce) {
 TEST_F(HopImportPropertyReadsTest, readsTheTypeOfAnImportedEdgeOnce) {
     expectEveryRead<mlir::db::GetEdgeTypes>("MATCH (a:Person)-[r]->(n) WITH a, r, n WHERE r:KNOWS_WELL OR r.duration > 15 "
                                             "MATCH (n)(()-[e]->() WHERE r:KNOWS_WELL AND e.duration > 15){1}(m) RETURN a, n, m",
-                                            1,
+                                            0,
                                             0);
 }
 
