@@ -44,6 +44,45 @@ Duration truncatedDuration(double microseconds) {
     return Duration(static_cast<int64_t>(microseconds));
 }
 
+Duration roundedDuration(double microseconds) {
+    return truncatedDuration(round(microseconds));
+}
+
+// A sum of whole microseconds and a fraction of any sign, rounded once: the fraction is
+// first given the sign of the total, so a tie rounds away from zero as roundedDuration does
+Duration roundedSum(Duration whole, double fraction) {
+    const Duration total = whole + truncatedDuration(fraction);
+    const double remainder = fraction - trunc(fraction);
+    const int64_t totalMicroseconds = total.getMicroseconds();
+
+    if (totalMicroseconds > 0 && remainder < 0.0) {
+        return total - Duration(1) + roundedDuration(remainder + 1.0);
+    } else if (totalMicroseconds < 0 && remainder > 0.0) {
+        return total + Duration(1) + roundedDuration(remainder - 1.0);
+    }
+
+    return total + roundedDuration(remainder);
+}
+
+uint64_t magnitudeOf(int64_t value) {
+    return value < 0 ? uint64_t {0} - static_cast<uint64_t>(value) : static_cast<uint64_t>(value);
+}
+
+Duration roundedQuotient(int64_t dividend, int64_t divisor) {
+    const Duration truncated = Duration(dividend) / divisor;
+    const uint64_t remainderMagnitude = magnitudeOf(dividend % divisor);
+    const uint64_t divisorMagnitude = magnitudeOf(divisor);
+    const bool roundsAway = remainderMagnitude >= divisorMagnitude - remainderMagnitude;
+
+    if (!roundsAway) {
+        return truncated;
+    }
+
+    const bool isNegative = (dividend < 0) != (divisor < 0);
+
+    return Duration(truncated.getMicroseconds() + (isNegative ? -1 : 1));
+}
+
 bool productOverflows(int64_t a, int64_t b) {
     if (a == 0 || b == 0) {
         return false;
@@ -58,6 +97,18 @@ bool productOverflows(int64_t a, int64_t b) {
 
 bool isAWholeInt64(double value) {
     return value == trunc(value) && value >= -TWO_TO_THE_63 && value < TWO_TO_THE_63;
+}
+
+void splitProduct(Duration duration, double factor, Duration& whole, double& fraction) {
+    if (isAWholeInt64(factor)) {
+        whole = duration * static_cast<int64_t>(factor);
+        fraction = 0.0;
+        return;
+    }
+
+    const double microseconds = static_cast<double>(duration.getMicroseconds()) * factor;
+    whole = truncatedDuration(microseconds);
+    fraction = microseconds - trunc(microseconds);
 }
 
 // The ...Of... parts are remainders, not units, so they have no length
@@ -153,11 +204,11 @@ Duration Duration::operator*(int64_t factor) const {
 }
 
 Duration Duration::operator*(double factor) const {
-    if (isAWholeInt64(factor)) {
-        return *this * static_cast<int64_t>(factor);
-    }
+    Duration whole {0};
+    double fraction = 0.0;
+    splitProduct(*this, factor, whole, fraction);
 
-    return truncatedDuration(static_cast<double>(_microseconds) * factor);
+    return roundedSum(whole, fraction);
 }
 
 Duration Duration::operator/(int64_t divisor) const {
@@ -174,10 +225,10 @@ Duration Duration::operator/(int64_t divisor) const {
 
 Duration Duration::operator/(double divisor) const {
     if (isAWholeInt64(divisor)) {
-        return *this / static_cast<int64_t>(divisor);
+        return roundedQuotient(_microseconds, static_cast<int64_t>(divisor));
     }
 
-    return truncatedDuration(static_cast<double>(_microseconds) / divisor);
+    return roundedDuration(static_cast<double>(_microseconds) / divisor);
 }
 
 Duration db::operator*(int64_t factor, const Duration& duration) {
@@ -318,16 +369,18 @@ void Duration::fromMap(const MapView& map, Duration& out) {
     }
 
     Duration sum {0};
+    double fraction = 0.0;
 
     for (const MapEntryView entry : map) {
         const std::string_view unit = entry.getKey();
         const Duration perUnit(microsecondsOf(unit));
-        const CellTag tag = entry.getValue().getTag();
+        const CellView value = entry.getValue();
+        const CellTag tag = value.getTag();
 
         if (tag == CellTag::Int) {
-            sum = sum + perUnit * entry.getValue().getAs<int64_t>();
+            sum = sum + perUnit * value.getAs<int64_t>();
         } else if (tag == CellTag::UInt) {
-            const uint64_t count = entry.getValue().getAs<uint64_t>();
+            const uint64_t count = value.getAs<uint64_t>();
 
             if (count > static_cast<uint64_t>(INT64_MAX)) {
                 throw TuringException("Duration overflow");
@@ -335,23 +388,25 @@ void Duration::fromMap(const MapView& map, Duration& out) {
 
             sum = sum + perUnit * static_cast<int64_t>(count);
         } else if (tag == CellTag::Double) {
-            sum = sum + perUnit * entry.getValue().getAs<double>();
+            Duration whole {0};
+            double termFraction = 0.0;
+            splitProduct(perUnit, value.getAs<double>(), whole, termFraction);
+
+            sum = sum + whole;
+            fraction += termFraction;
         } else {
             throw TuringException(fmt::format("duration() reads a number for the unit '{}', not '{}'", unit, queryTypeName(tag)));
         }
     }
 
-    out = sum;
+    out = roundedSum(sum, fraction);
 }
 
 void Duration::format(std::string& out, Duration value) {
     const int64_t microseconds = value.getMicroseconds();
     const bool isNegative = microseconds < 0;
 
-    // The magnitude of INT64_MIN has no int64, so it is taken unsigned
-    const uint64_t magnitude = isNegative
-                                 ? uint64_t {0} - static_cast<uint64_t>(microseconds)
-                                 : static_cast<uint64_t>(microseconds);
+    const uint64_t magnitude = magnitudeOf(microseconds);
 
     const uint64_t totalSeconds = magnitude / MICROSECONDS_PER_SECOND;
     const uint64_t fraction = magnitude % MICROSECONDS_PER_SECOND;
