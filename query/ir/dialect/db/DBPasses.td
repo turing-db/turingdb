@@ -4,12 +4,12 @@
 include "mlir/Pass/PassBase.td"
 
 def FuseScanByLabel : Pass<"fuse_scan_by_label"> {
-    let summary = "Fuse a scan_nodes and its label-set filter into a scan_nodes_by_label";
+    let summary = "Fold a label test of the nodes a scan makes into the labels the scan reads them by";
     let dependentDialects = ["mlir::db::DB"];
 }
 
 def PushDownFilters : Pass<"push_down_filters"> {
-    let summary = "Sink a single-variable property-predicate filter to its variable's scan";
+    let summary = "Sink a filter whose predicate reads the columns of one op alone to just after that op";
     let dependentDialects = ["mlir::db::DB"];
 }
 

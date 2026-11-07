@@ -129,8 +129,9 @@ TEST_F(ExplainTest, reportsEveryPassOfABracketedList) {
 
     std::vector<std::string> stages;
     collectStages(sink, stages);
-    EXPECT_EQ(stages, (std::vector<std::string> {"after fuse_scan_by_label",
+    EXPECT_EQ(stages, (std::vector<std::string> {"after fuse_scan_by_label 1",
                                                  "after trim_unread_columns 1",
+                                                 "after fuse_scan_by_label 2",
                                                  "after trim_unread_columns 2"}));
 }
 
@@ -172,7 +173,7 @@ TEST_F(ExplainTest, reportsEveryPassThatChangedTheModule) {
 
     ASSERT_FALSE(stages.empty());
     EXPECT_EQ(stages.front(), "codegen");
-    EXPECT_NE(std::find(stages.begin(), stages.end(), "after fuse_scan_by_label"), stages.end());
+    EXPECT_NE(std::find(stages.begin(), stages.end(), "after fuse_scan_by_label 1"), stages.end());
 
     // The passes that rewrite nothing here report nothing
     EXPECT_EQ(std::find(stages.begin(), stages.end(), "after fuse_unwind_equality"), stages.end());
@@ -185,10 +186,13 @@ TEST_F(ExplainTest, reportsBothSidesOfANamedPass) {
 
     std::vector<std::string> stages;
     collectStages(sink, stages);
-    EXPECT_EQ(stages, (std::vector<std::string> {"before fuse_scan_by_label", "after fuse_scan_by_label"}));
+    EXPECT_EQ(stages, (std::vector<std::string> {"before fuse_scan_by_label 1",
+                                                 "after fuse_scan_by_label 1",
+                                                 "before fuse_scan_by_label 2",
+                                                 "after fuse_scan_by_label 2"}));
 
-    EXPECT_FALSE(contains(dumpOf(sink, "before fuse_scan_by_label"), "db.scan_nodes_by_label"));
-    EXPECT_TRUE(contains(dumpOf(sink, "after fuse_scan_by_label"), "db.scan_nodes_by_label"));
+    EXPECT_FALSE(contains(dumpOf(sink, "before fuse_scan_by_label 1"), "db.scan_nodes_by_label"));
+    EXPECT_TRUE(contains(dumpOf(sink, "after fuse_scan_by_label 1"), "db.scan_nodes_by_label"));
 }
 
 TEST_F(ExplainTest, reportsANamedPassThatChangedNothing) {
