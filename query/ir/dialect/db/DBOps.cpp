@@ -3284,8 +3284,12 @@ Speculation::Speculatability Split::getSpeculatability() {
     return speculatableWhen(readsAString && splitsOnStrings);
 }
 
+bool AndOp::isSpeculatableOver(Value lhs, Value rhs) {
+    return !mayHoldAnyType(lhs) && !mayHoldAnyType(rhs);
+}
+
 Speculation::Speculatability AndOp::getSpeculatability() {
-    return speculatableOverKnownTypes(getOperands());
+    return speculatableWhen(isSpeculatableOver(getLhs(), getRhs()));
 }
 
 Speculation::Speculatability OrOp::getSpeculatability() {

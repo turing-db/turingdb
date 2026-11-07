@@ -3413,6 +3413,11 @@ class PredicateOp<string mnemonic, list<Trait> traits = []>
 def AndOp : PredicateOp<"and", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Performs row-wise logical AND on its two input columns";
   let arguments = (ins Column : $lhs, Column : $rhs);
+
+  let extraClassDeclaration = [{
+    // Whether an and over these two columns raises on no row
+    static bool isSpeculatableOver(::mlir::Value lhs, ::mlir::Value rhs);
+  }];
 }
 
 def OrOp : PredicateOp<"or", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {

@@ -18,6 +18,11 @@ def PlaceInFactors : Pass<"place_in_factors"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def MergeFilters : Pass<"merge_filters"> {
+    let summary = "Merge a filter over the rows another filter keeps into that one, its mask joining the other's, but for each conjunct that may raise on a row the other removes";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FuseUnwindEquality : Pass<"fuse_unwind_equality"> {
     let summary = "Replace a constant unwind crossed into one equality by that equality's disjunction";
     let dependentDialects = ["mlir::db::DB"];
