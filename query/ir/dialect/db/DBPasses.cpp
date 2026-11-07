@@ -48,6 +48,7 @@ namespace mlir::db {
 
 #define GEN_PASS_DEF_FUSESCANBYLABEL
 #define GEN_PASS_DEF_PUSHDOWNFILTERS
+#define GEN_PASS_DEF_MERGEFILTERS
 #define GEN_PASS_DEF_FUSEUNWINDEQUALITY
 #define GEN_PASS_DEF_FUSEUNWINDRANGE
 #define GEN_PASS_DEF_UNNESTUNWINDCOMPREHENSION
@@ -567,16 +568,12 @@ bool raisesOnSomeRows(Operation* op) {
     return !::db::runsWithoutRaising(op);
 }
 
-// Gathers the mask's compute cone and the external columns feeding it. Valid
-// even when the cone spans blocks.
+// Gathers the mask's compute cone, the ops @param joinsTheCone accepts, and the external
+// columns feeding it. Valid even when the cone spans blocks.
 void collectConePostOrder(Value mask,
-                          llvm::function_ref<bool(Operation*)> inCone,
+                          llvm::function_ref<bool(Operation*)> joinsTheCone,
                           llvm::SmallPtrSet<Operation*, 8>& visited,
                           MaskCone& cone) {
-    const auto joinsTheCone = [inCone](Operation* op) {
-        return inCone(op) && !raisesOnSomeRows(op);
-    };
-
     Operation* const maskDef = mask.getDefiningOp();
 
     if (!maskDef || !joinsTheCone(maskDef)) {
@@ -622,8 +619,12 @@ void collectConePostOrder(Value mask,
 MaskCone collectMaskCone(Value mask) {
     MaskCone cone;
 
+    const auto movesOntoOtherRows = [](Operation* op) {
+        return isMaskComputeOp(op) && !raisesOnSomeRows(op);
+    };
+
     llvm::SmallPtrSet<Operation*, 8> visited;
-    collectConePostOrder(mask, isMaskComputeOp, visited, cone);
+    collectConePostOrder(mask, movesOntoOtherRows, visited, cone);
 
     return cone;
 }
@@ -894,18 +895,6 @@ void keepLabelledRows(llvm::SmallVectorImpl<Value>& columns, ArrayAttr labels, L
     FilterOp labelFilter = builder.create<FilterOp>(loc, columnRange.getTypes(), mask, columnRange);
 
     columns.assign(labelFilter.getResults().begin(), labelFilter.getResults().end());
-}
-
-void replaceFilterWithSource(FilterOp filter, Value fused, Operation* source, const MaskCone& cone) {
-    for (Value filtered : filter.getFilteredColumns()) {
-        filtered.replaceAllUsesWith(fused);
-    }
-    filter.erase();
-
-    for (Operation* const coneOp : llvm::reverse(cone._ops)) {
-        eraseIfUnused(coneOp);
-    }
-    eraseIfUnused(source);
 }
 
 // The node column a side of an id comparison names, compared as itself or through id()
@@ -1473,6 +1462,7 @@ void eraseIfUnused(Operation* op, mlir::RewriterBase& rewriter);
 Value appendCarriedColumn(Operation* op, Value column, mlir::RewriterBase& rewriter);
 BlockArgument carryIntoRegion(Region& region, Value column, mlir::RewriterBase& rewriter);
 Value seedColumnOf(ExplorePaths exploration, Value column);
+Type boolColumnType(mlir::MLIRContext* context);
 
 // What an unwound list is when it is a run of a range: the range, the one slice taken of it
 // in its own order - db.tail being the slice from 1 - and whether the run is reversed. The
@@ -1891,7 +1881,7 @@ bool computesFromTheRow(Operation* op) {
 
 void collectRowCone(llvm::ArrayRef<Value> roots, Block* block, MaskCone& cone) {
     const auto computedInTheBlock = [block](Operation* op) {
-        return op->getBlock() == block && computesFromTheRow(op);
+        return op->getBlock() == block && computesFromTheRow(op) && !raisesOnSomeRows(op);
     };
 
     llvm::SmallPtrSet<Operation*, 8> visited;
@@ -2581,10 +2571,25 @@ bool matchProductCut(FilterOp filter, CrossProduct product, ConeCache& cache, Pr
     return pushes || cut._rotation._rotates;
 }
 
+bool isUntypedNullMask(Value mask) {
+    const auto columnType = dyn_cast<ColumnType>(mask.getType());
+
+    return columnType && isNullLiteralType(columnType.getType());
+}
+
+// An `and` holds a bool on every row, as codegen types it, but over two null literals, where it
+// is the null itself: a second one adds nothing to the mask
 Value conjoin(llvm::ArrayRef<Value> conjuncts, Location loc, mlir::RewriterBase& rewriter) {
+    const Type boolType = boolColumnType(rewriter.getContext());
+
     Value mask = conjuncts.front();
     for (const Value conjunct : conjuncts.drop_front()) {
-        mask = rewriter.create<AndOp>(loc, mask.getType(), mask, conjunct).getResult();
+        const bool bothUnknown = isUntypedNullMask(mask) && isUntypedNullMask(conjunct);
+        if (bothUnknown) {
+            continue;
+        }
+
+        mask = rewriter.create<AndOp>(loc, boolType, mask, conjunct).getResult();
     }
 
     return mask;
@@ -2643,22 +2648,44 @@ void eraseUnusedConjunction(Value mask, mlir::RewriterBase& rewriter) {
 }
 
 // Drops a conjunct the filter's rows now hold without it from its mask, and the ops that
-// computed nothing else
+// computed nothing else. The `and` holding it then holds what its other side does on every
+// row, so it gives way to that side. A conjunct read more than once, or a null literal on
+// that side, which could meet another in an `and`, leaves the others to be joined again.
 void dropConjunct(FilterOp filter, Value conjunct, mlir::RewriterBase& rewriter) {
     const Value mask = filter.getMask();
 
-    if (mask == conjunct) {
-        bypassFilter(filter);
-        rewriter.eraseOp(filter);
-    } else {
-        AndOp conjunction = cast<AndOp>(*conjunct.getUsers().begin());
-        const Value other = conjunction.getLhs() == conjunct ? conjunction.getRhs() : conjunction.getLhs();
+    AndOp conjunction = mask != conjunct && conjunct.hasOneUse() ? dyn_cast<AndOp>(*conjunct.getUsers().begin()) : AndOp();
+    const Value other = !conjunction ? Value() : (conjunction.getLhs() == conjunct ? conjunction.getRhs() : conjunction.getLhs());
 
-        conjunction.getResult().replaceAllUsesWith(other);
+    if (other && !isUntypedNullMask(other)) {
+        rewriter.replaceAllUsesWith(conjunction.getResult(), other);
         rewriter.eraseOp(conjunction);
+    } else {
+        llvm::SmallVector<Value, 4> kept;
+        collectConjuncts(mask, kept);
+        llvm::erase(kept, conjunct);
+
+        if (kept.empty()) {
+            bypassFilter(filter);
+            rewriter.eraseOp(filter);
+        } else {
+            rewriter.setInsertionPoint(filter);
+            const Value keptMask = conjoin(kept, filter.getLoc(), rewriter);
+
+            rewriter.modifyOpInPlace(filter, [&filter, keptMask]() {
+                filter.getMaskMutable().assign(keptMask);
+            });
+        }
+
+        eraseUnusedConjunction(mask, rewriter);
     }
 
-    llvm::SmallVector<Operation*> dead {conjunct.getDefiningOp()};
+    Operation* const conjunctDef = conjunct.getDefiningOp();
+    if (!conjunctDef) {
+        return;
+    }
+
+    llvm::SmallVector<Operation*> dead {conjunctDef};
     llvm::SmallPtrSet<Operation*, 8> erased;
     while (!dead.empty()) {
         Operation* const op = dead.pop_back_val();
@@ -2678,6 +2705,76 @@ void dropConjunct(FilterOp filter, Value conjunct, mlir::RewriterBase& rewriter)
         rewriter.eraseOp(op);
         dead.append(operandDefs.begin(), operandDefs.end());
     }
+}
+
+void dropConjuncts(FilterOp filter, llvm::ArrayRef<Value> conjuncts, mlir::RewriterBase& rewriter) {
+    llvm::SmallDenseSet<Value, 4> dropped;
+    for (const Value conjunct : conjuncts) {
+        if (dropped.insert(conjunct).second) {
+            dropConjunct(filter, conjunct, rewriter);
+        }
+    }
+}
+
+// Whether @param matchConjunct accepts a conjunct of @param filter's mask, tried in their order
+template <typename MatchConjunct>
+bool matchAConjunct(FilterOp filter, MatchConjunct matchConjunct) {
+    llvm::SmallVector<Value, 4> conjuncts;
+    collectConjuncts(filter.getMask(), conjuncts);
+
+    return llvm::any_of(conjuncts, matchConjunct);
+}
+
+// Whether nothing but @param filter reads the rows @param op makes, but the row computations
+// of its mask, so a rewrite cutting those rows changes what no other op sees. A computation
+// nothing reads is a reader of its own: it may raise on a row the cut takes away.
+bool readsOnlyIntoTheFilter(Operation* op, FilterOp filter) {
+    Operation* const filterOp = filter.getOperation();
+    Block* const block = filterOp->getBlock();
+
+    llvm::SmallVector<Operation*> pending(op->getUsers().begin(), op->getUsers().end());
+    llvm::SmallPtrSet<Operation*, 16> visited;
+    while (!pending.empty()) {
+        Operation* const reader = pending.pop_back_val();
+        if (reader == filterOp || !visited.insert(reader).second) {
+            continue;
+        }
+
+        const bool computesTheMask = reader->getBlock() == block && computesFromTheRow(reader) && !reader->use_empty();
+        if (!computesTheMask) {
+            return false;
+        }
+
+        llvm::append_range(pending, reader->getUsers());
+    }
+
+    return true;
+}
+
+using OpAnswers = llvm::SmallDenseMap<Operation*, bool, 2>;
+
+// The answer @param compute gives about @param op, worked out once however many conjuncts of
+// one mask ask about the same op
+template <typename Compute>
+bool answerOnce(OpAnswers& answers, Operation* op, Compute compute) {
+    const auto [found, inserted] = answers.try_emplace(op, false);
+    if (inserted) {
+        found->second = compute();
+    }
+
+    return found->second;
+}
+
+// The op making every column @param filter cuts, null when they come from more than one
+Operation* filteredSource(FilterOp filter) {
+    const Operation::operand_range columns = filter.getColumnsToFilter();
+    Operation* const source = columns.empty() ? nullptr : columns.front().getDefiningOp();
+
+    const bool makesEveryColumn = llvm::all_of(columns, [source](Value column) {
+        return column.getDefiningOp() == source;
+    });
+
+    return makesEveryColumn ? source : nullptr;
 }
 
 void cutFactors(ProductCut& cut, ConeCache& cache, mlir::RewriterBase& rewriter) {
@@ -2871,10 +2968,134 @@ struct PlaceInFactors : public impl::PlaceInFactorsBase<PlaceInFactors> {
     }
 };
 
+// A filter over the rows another filter keeps, and nothing else reads. The two masks hold over
+// the rows of the op below both, so a conjunct of the upper one joins the lower mask, unless it
+// may raise: there it would run on the rows the lower one removes, and it stays above.
+struct StackedFilters {
+    FilterOp _upper;
+    FilterOp _lower;
+    llvm::SmallPtrSet<Operation*, 8> _between;
+    llvm::SmallVector<Value, 4> _merged;
+    llvm::SmallVector<Value, 2> _kept;
+};
+
+// Whether @param conjunct can be computed ahead of the lower filter instead: every op computing
+// it @param between the two filters is a row computation that raises on no row, and an `and`
+// joining it to @param lowerMask raises on no row either
+bool computesAheadOf(Value conjunct, Value lowerMask, const llvm::SmallPtrSetImpl<Operation*>& between) {
+    if (!AndOp::isSpeculatableOver(lowerMask, conjunct)) {
+        return false;
+    }
+
+    llvm::SmallVector<Value> pending {conjunct};
+    llvm::SmallPtrSet<Operation*, 8> visited;
+    while (!pending.empty()) {
+        Operation* const def = pending.pop_back_val().getDefiningOp();
+        const bool boundAhead = !def || !between.contains(def);
+
+        if (boundAhead || !visited.insert(def).second) {
+            continue;
+        } else if (!computesFromTheRow(def) || raisesOnSomeRows(def)) {
+            return false;
+        }
+
+        llvm::append_range(pending, def->getOperands());
+    }
+
+    return true;
+}
+
+bool matchStackedFilters(FilterOp upper, StackedFilters& stacked) {
+    FilterOp lower = dyn_cast_or_null<FilterOp>(filteredSource(upper));
+    if (!lower || lower->getBlock() != upper->getBlock() || !readsOnlyIntoTheFilter(lower, upper)) {
+        return false;
+    }
+
+    Operation* const upperOp = upper.getOperation();
+    for (Operation* op = lower->getNextNode(); op != upperOp; op = op->getNextNode()) {
+        stacked._between.insert(op);
+    }
+
+    llvm::SmallVector<Value, 4> conjuncts;
+    collectConjuncts(upper.getMask(), conjuncts);
+
+    const Value lowerMask = lower.getMask();
+    for (const Value conjunct : conjuncts) {
+        if (computesAheadOf(conjunct, lowerMask, stacked._between)) {
+            stacked._merged.push_back(conjunct);
+        } else {
+            stacked._kept.push_back(conjunct);
+        }
+    }
+
+    stacked._upper = upper;
+    stacked._lower = lower;
+
+    return !stacked._merged.empty();
+}
+
+void mergeStackedFilters(StackedFilters& stacked, mlir::RewriterBase& rewriter) {
+    FilterOp upper = stacked._upper;
+    FilterOp lower = stacked._lower;
+    const llvm::SmallPtrSetImpl<Operation*>& between = stacked._between;
+    const Location loc = upper.getLoc();
+
+    const auto computedBetween = [&between](Operation* op) {
+        return between.contains(op) && computesFromTheRow(op) && !raisesOnSomeRows(op);
+    };
+
+    MaskCone cone;
+    llvm::SmallPtrSet<Operation*, 8> visited;
+    for (const Value conjunct : stacked._merged) {
+        collectConePostOrder(conjunct, computedBetween, visited, cone);
+    }
+
+    mlir::IRMapping mapping;
+    for (const auto [filtered, column] : llvm::zip_equal(lower.getFilteredColumns(), lower.getColumnsToFilter())) {
+        mapping.map(filtered, column);
+    }
+
+    rewriter.setInsertionPoint(lower);
+    cloneRowCone(cone, mapping, rewriter);
+
+    llvm::SmallVector<Value, 4> conjuncts {lower.getMask()};
+    for (const Value conjunct : stacked._merged) {
+        conjuncts.push_back(mapping.lookupOrDefault(conjunct));
+    }
+
+    const Value mask = conjoin(conjuncts, loc, rewriter);
+    rewriter.modifyOpInPlace(lower, [&lower, mask]() {
+        lower.getMaskMutable().assign(mask);
+    });
+
+    const Value upperMask = upper.getMask();
+    if (stacked._kept.empty()) {
+        bypassFilter(upper);
+        rewriter.eraseOp(upper);
+    } else {
+        rewriter.setInsertionPoint(upper);
+        const Value keptMask = conjoin(stacked._kept, loc, rewriter);
+
+        rewriter.modifyOpInPlace(upper, [&upper, keptMask]() {
+            upper.getMaskMutable().assign(keptMask);
+        });
+    }
+
+    eraseUnusedConjunction(upperMask, rewriter);
+    eraseUnusedRowCone(cone, rewriter);
+}
+
+struct MergeFilters : public impl::MergeFiltersBase<MergeFilters> {
+    void runOnOperation() override {
+        runFilterWorklist<StackedFilters>(getOperation(), matchStackedFilters, mergeStackedFilters);
+    }
+};
+
 struct NodeIDScanChain {
+    FilterOp _filter;
+    Value _conjunct;
     ScanSource _source;
     llvm::SmallVector<int64_t> _nodeIDs;
-    bool _afterThePattern {false};
 };
 
 Value disjunctionColumn(Value mask) {
@@ -2934,7 +3155,7 @@ bool rowsReachTheFilter(Operation* source, FilterOp filter, bool (*keepsTheRows)
 
 // A disjunction over the scanned node read after the hops and filters of the pattern
 // rooted at the scan: it restricts the scan itself
-bool matchPatternScanSource(FilterOp filter, Value column, LineageClimbs& climbs, ScanSource& source) {
+bool matchPatternScanSource(FilterOp filter, Value column, LineageClimbs& climbs, OpAnswers& reaching, ScanSource& source) {
     const Value anchor = climbs.anchorOf(column);
     Operation* const scan = anchor ? anchor.getDefiningOp() : nullptr;
     const bool isNodeScan = isa_and_nonnull<ScanNodes, ScanNodesByLabel>(scan);
@@ -2942,7 +3163,11 @@ bool matchPatternScanSource(FilterOp filter, Value column, LineageClimbs& climbs
         return false;
     }
 
-    if (!rowsReachTheFilter(scan, filter, keepsTheSourceRows)) {
+    const bool reachesTheFilter = answerOnce(reaching, scan, [scan, &filter]() {
+        return rowsReachTheFilter(scan, filter, keepsTheSourceRows);
+    });
+
+    if (!reachesTheFilter) {
         return false;
     }
 
@@ -2957,76 +3182,60 @@ bool matchPatternScanSource(FilterOp filter, Value column, LineageClimbs& climbs
     return true;
 }
 
-bool matchNodeIDScanChain(FilterOp filter, LineageClimbs& climbs, NodeIDScanChain& chain) {
-    const Value mask = filter.getMask();
+bool matchNodeIDConjunct(FilterOp filter, Value conjunct, LineageClimbs& climbs, OpAnswers& reaching, NodeIDScanChain& chain) {
+    chain._nodeIDs.clear();
 
-    if (matchSoleScanSource(filter, chain._source)) {
-        if (!collectNodeIDDisjunction(mask, chain._source._column, chain._nodeIDs)) {
-            return false;
-        }
-    } else {
-        const Value column = disjunctionColumn(mask);
-        if (!column || !collectNodeIDDisjunction(mask, column, chain._nodeIDs)) {
-            return false;
-        }
-
-        if (!matchPatternScanSource(filter, column, climbs, chain._source)) {
-            return false;
-        }
-
-        chain._afterThePattern = true;
+    const Value column = disjunctionColumn(conjunct);
+    if (!column || !collectNodeIDDisjunction(conjunct, column, chain._nodeIDs)) {
+        return false;
     }
 
-    return true;
+    chain._filter = filter;
+    chain._conjunct = conjunct;
+
+    return matchPatternScanSource(filter, column, climbs, reaching, chain._source);
 }
 
-void fuseScanByNodeIDs(FilterOp filter, const NodeIDScanChain& chain, mlir::OpBuilder& builder) {
-    const mlir::Location loc = filter.getLoc();
-    const Type nodeColumnType = chain._source._column.getType();
+bool matchNodeIDScanChain(FilterOp filter, LineageClimbs& climbs, NodeIDScanChain& chain) {
+    OpAnswers reaching;
 
-    builder.setInsertionPoint(chain._afterThePattern ? chain._source._op : filter.getOperation());
-    ConstScanNodes constScan = builder.create<ConstScanNodes>(loc, nodeColumnType, chain._nodeIDs);
+    return matchAConjunct(filter, [&filter, &climbs, &reaching, &chain](Value conjunct) {
+        return matchNodeIDConjunct(filter, conjunct, climbs, reaching, chain);
+    });
+}
+
+// The listed nodes start the pattern in the scan's place, and every row it builds from them
+// holds the disjunction
+void fuseScanByNodeIDs(NodeIDScanChain& chain, mlir::RewriterBase& rewriter) {
+    Operation* const scan = chain._source._op;
+    const mlir::Location loc = chain._filter.getLoc();
+
+    rewriter.setInsertionPoint(scan);
+    ConstScanNodes constScan = rewriter.create<ConstScanNodes>(loc, scan->getResult(0).getType(), chain._nodeIDs);
 
     llvm::SmallVector<Value> fused {constScan.getResult()};
     if (chain._source._labels) {
-        keepLabelledRows(fused, chain._source._labels, loc, builder);
+        keepLabelledRows(fused, chain._source._labels, loc, rewriter);
     }
 
-    if (!chain._afterThePattern) {
-        replaceFilterWithSource(filter, fused.front(), chain._source._op, collectMaskCone(filter.getMask()));
-        return;
-    }
-
-    // The listed nodes start the pattern in the scan's place, and every row it builds
-    // from them holds the disjunction
-    Operation* const scan = chain._source._op;
-    scan->getResult(0).replaceAllUsesWith(fused.front());
-    scan->erase();
-
-    const MaskCone cone = collectMaskCone(filter.getMask());
-    bypassFilter(filter);
-    filter.erase();
-
-    for (Operation* const coneOp : llvm::reverse(cone._ops)) {
-        eraseIfUnused(coneOp);
-    }
+    rewriter.replaceOp(scan, fused.front());
+    dropConjunct(chain._filter, chain._conjunct, rewriter);
 }
 
 struct FuseScanByNodeIDs : public impl::FuseScanByNodeIDsBase<FuseScanByNodeIDs> {
     void runOnOperation() override {
-        mlir::OpBuilder builder(&getContext());
         LineageClimbs climbs;
 
         const auto matchChain = [&climbs](FilterOp filter, NodeIDScanChain& chain) {
             return matchNodeIDScanChain(filter, climbs, chain);
         };
 
-        const auto fuseChain = [&climbs](FilterOp filter, const NodeIDScanChain& chain, mlir::OpBuilder& builder) {
+        const auto fuseChain = [&climbs](NodeIDScanChain& chain, mlir::RewriterBase& rewriter) {
             climbs.clear();
-            fuseScanByNodeIDs(filter, chain, builder);
+            fuseScanByNodeIDs(chain, rewriter);
         };
 
-        runFilterPass<NodeIDScanChain>(getOperation(), matchChain, fuseChain, builder);
+        runFilterWorklist<NodeIDScanChain>(getOperation(), matchChain, fuseChain);
     }
 };
 
@@ -3101,14 +3310,16 @@ struct FuseScanEdges : public impl::FuseScanEdgesBase<FuseScanEdges> {
 // hop spelled the long way, since the walk itself can keep the edges of those types and
 // never build the rows the filter goes on to drop.
 struct TypedHop {
+    FilterOp _filter;
+    Value _conjunct;
     Operation* _hop {nullptr};
-    CheckEdgeTypeConstraint _check;
     ArrayAttr _edgeTypes;
 };
 
-bool matchTypedHop(FilterOp filter, TypedHop& typedHop) {
-    CheckEdgeTypeConstraint check = filter.getMask().getDefiningOp<CheckEdgeTypeConstraint>();
-    if (!check) {
+bool matchTypedHopConjunct(Value conjunct, Operation* hop, TypedHop& typedHop) {
+    constexpr size_t etypesResultIndex = 2;
+    CheckEdgeTypeConstraint check = conjunct.getDefiningOp<CheckEdgeTypeConstraint>();
+    if (!check || check.getEdgeTypeIds() != hop->getResult(etypesResultIndex)) {
         return false;
     }
 
@@ -3118,39 +3329,27 @@ bool matchTypedHop(FilterOp filter, TypedHop& typedHop) {
         return false;
     }
 
-    const Value edgeTypeIds = check.getEdgeTypeIds();
-    Operation* const hop = edgeTypeIds.getDefiningOp();
-    if (!hop || !isa<GetOutEdges, GetInEdges>(hop)) {
-        return false;
-    }
-
-    constexpr size_t etypesResultIndex = 2;
-    if (edgeTypeIds != hop->getResult(etypesResultIndex)) {
-        return false;
-    }
-
-    // Every column the filter cuts has to be one the hop bound, or the fused hop has nothing
-    // of its own to hand back in its place.
-    for (const Value column : filter.getColumnsToFilter()) {
-        if (column.getDefiningOp() != hop) {
-            return false;
-        }
-    }
-
-    // And nothing outside the pair may read the hop, or that reader would go on seeing the
-    // rows the type turns away.
-    for (const Value result : hop->getResults()) {
-        for (Operation* const user : result.getUsers()) {
-            const bool readsThePair = user == filter.getOperation() || user == check.getOperation();
-            if (!readsThePair) {
-                return false;
-            }
-        }
-    }
-
-    typedHop = TypedHop {._hop = hop, ._check = check, ._edgeTypes = edgeTypes};
+    typedHop._conjunct = conjunct;
+    typedHop._edgeTypes = edgeTypes;
 
     return true;
+}
+
+bool matchTypedHop(FilterOp filter, TypedHop& typedHop) {
+    // Every column the filter cuts has to be one the hop bound, or the fused hop has nothing
+    // of its own to hand back in its place. And nothing outside the filter may read the hop,
+    // or that reader would go on seeing the rows the type turns away.
+    Operation* const hop = filteredSource(filter);
+    if (!isa_and_nonnull<GetOutEdges, GetInEdges>(hop) || !readsOnlyIntoTheFilter(hop, filter)) {
+        return false;
+    }
+
+    typedHop._filter = filter;
+    typedHop._hop = hop;
+
+    return matchAConjunct(filter, [hop, &typedHop](Value conjunct) {
+        return matchTypedHopConjunct(conjunct, hop, typedHop);
+    });
 }
 
 template <typename ByTypeOp>
@@ -3170,55 +3369,24 @@ Operation* createByTypeHop(Operation* hop, ArrayAttr edgeTypes, mlir::OpBuilder&
     return byTypeHop.getOperation();
 }
 
-void fuseEdgesByType(FilterOp filter, const TypedHop& typedHop, mlir::OpBuilder& builder) {
+void fuseEdgesByType(TypedHop& typedHop, mlir::RewriterBase& rewriter) {
     Operation* const hop = typedHop._hop;
 
-    builder.setInsertionPoint(hop);
+    rewriter.setInsertionPoint(hop);
 
     // A by-type hop declares the same four fixed results and the same carry set behind them,
     // so the plain hop's results map onto it one for one.
     Operation* const byTypeHop = isa<GetOutEdges>(hop)
-                                     ? createByTypeHop<GetOutEdgesByType>(hop, typedHop._edgeTypes, builder)
-                                     : createByTypeHop<GetInEdgesByType>(hop, typedHop._edgeTypes, builder);
+                                     ? createByTypeHop<GetOutEdgesByType>(hop, typedHop._edgeTypes, rewriter)
+                                     : createByTypeHop<GetInEdgesByType>(hop, typedHop._edgeTypes, rewriter);
 
-    hop->replaceAllUsesWith(byTypeHop);
-
-    // The hop now yields the rows the filter used to leave, so each column the filter handed
-    // on is the one it was given.
-    const Operation::operand_range columns = filter.getColumnsToFilter();
-    const mlir::ResultRange filtered = filter.getFilteredColumns();
-    for (size_t index = 0; index < filtered.size(); index++) {
-        filtered[index].replaceAllUsesWith(columns[index]);
-    }
-
-    filter.erase();
-    eraseIfUnused(typedHop._check);
-    hop->erase();
+    rewriter.replaceOp(hop, byTypeHop->getResults());
+    dropConjunct(typedHop._filter, typedHop._conjunct, rewriter);
 }
 
 struct FuseEdgesByType : public impl::FuseEdgesByTypeBase<FuseEdgesByType> {
     void runOnOperation() override {
-        Operation* const root = getOperation();
-
-        // Collect first: fusing erases the filter, its check and its hop, which would
-        // invalidate the walk.
-        llvm::SmallVector<FilterOp> filters;
-        root->walk([&](FilterOp filter) {
-            TypedHop typedHop;
-            if (matchTypedHop(filter, typedHop)) {
-                filters.push_back(filter);
-            }
-        });
-
-        mlir::OpBuilder builder(&getContext());
-        for (FilterOp filter : filters) {
-            TypedHop typedHop;
-            if (!matchTypedHop(filter, typedHop)) {
-                continue;
-            }
-
-            fuseEdgesByType(filter, typedHop, builder);
-        }
+        runFilterWorklist<TypedHop>(getOperation(), matchTypedHop, fuseEdgesByType);
     }
 };
 
@@ -3226,14 +3394,15 @@ struct FuseEdgesByType : public impl::FuseEdgesByTypeBase<FuseEdgesByType> {
 // scan spelled the long way, since the scan itself can keep the edges of those types and
 // never build the rows the filter goes on to drop.
 struct TypedEdgeScan {
+    FilterOp _filter;
+    Value _conjunct;
     ScanEdges _scan;
-    CheckEdgeTypeConstraint _check;
     ArrayAttr _edgeTypes;
 };
 
-bool matchTypedEdgeScan(FilterOp filter, TypedEdgeScan& typedScan) {
-    CheckEdgeTypeConstraint check = filter.getMask().getDefiningOp<CheckEdgeTypeConstraint>();
-    if (!check) {
+bool matchTypedEdgeScanConjunct(Value conjunct, ScanEdges scan, TypedEdgeScan& typedScan) {
+    CheckEdgeTypeConstraint check = conjunct.getDefiningOp<CheckEdgeTypeConstraint>();
+    if (!check || check.getEdgeTypeIds() != scan.getEtypes()) {
         return false;
     }
 
@@ -3244,89 +3413,47 @@ bool matchTypedEdgeScan(FilterOp filter, TypedEdgeScan& typedScan) {
         return false;
     }
 
-    const Value edgeTypeIds = check.getEdgeTypeIds();
-    ScanEdges scan = edgeTypeIds.getDefiningOp<ScanEdges>();
-    if (!scan) {
-        return false;
-    }
-
-    if (edgeTypeIds != scan.getEtypes()) {
-        return false;
-    }
-
-    for (const Value column : filter.getColumnsToFilter()) {
-        if (column.getDefiningOp() != scan.getOperation()) {
-            return false;
-        }
-    }
-
-    Operation* const filterOp = filter.getOperation();
-    Operation* const checkOp = check.getOperation();
-    for (const Value result : scan->getResults()) {
-        for (Operation* const user : result.getUsers()) {
-            const bool readsThePair = user == filterOp || user == checkOp;
-            if (!readsThePair) {
-                return false;
-            }
-        }
-    }
-
-    typedScan = TypedEdgeScan {._scan = scan, ._check = check, ._edgeTypes = edgeTypes};
+    typedScan._conjunct = conjunct;
+    typedScan._edgeTypes = edgeTypes;
 
     return true;
 }
 
-void fuseScanEdgesByType(FilterOp filter, const TypedEdgeScan& typedScan, mlir::OpBuilder& builder) {
-    ScanEdges scan = typedScan._scan;
-    Operation* const scanOp = scan.getOperation();
+bool matchTypedEdgeScan(FilterOp filter, TypedEdgeScan& typedScan) {
+    ScanEdges scan = dyn_cast_or_null<ScanEdges>(filteredSource(filter));
+    if (!scan || !readsOnlyIntoTheFilter(scan, filter)) {
+        return false;
+    }
 
-    builder.setInsertionPoint(scanOp);
+    typedScan._filter = filter;
+    typedScan._scan = scan;
+
+    return matchAConjunct(filter, [scan, &typedScan](Value conjunct) {
+        return matchTypedEdgeScanConjunct(conjunct, scan, typedScan);
+    });
+}
+
+void fuseScanEdgesByType(TypedEdgeScan& typedScan, mlir::RewriterBase& rewriter) {
+    ScanEdges scan = typedScan._scan;
+
+    rewriter.setInsertionPoint(scan);
 
     // A by-type scan declares the same four results in the same order, so the plain scan's
     // map onto it one for one.
-    ScanEdgesByType byTypeScan = builder.create<ScanEdgesByType>(scan.getLoc(),
-                                                                 scan.getSrcids().getType(),
-                                                                 scan.getEids().getType(),
-                                                                 scan.getEtypes().getType(),
-                                                                 scan.getTgtids().getType(),
-                                                                 typedScan._edgeTypes);
+    ScanEdgesByType byTypeScan = rewriter.create<ScanEdgesByType>(scan.getLoc(),
+                                                                  scan.getSrcids().getType(),
+                                                                  scan.getEids().getType(),
+                                                                  scan.getEtypes().getType(),
+                                                                  scan.getTgtids().getType(),
+                                                                  typedScan._edgeTypes);
 
-    scanOp->replaceAllUsesWith(byTypeScan.getOperation());
-
-    const Operation::operand_range columns = filter.getColumnsToFilter();
-    const mlir::ResultRange filtered = filter.getFilteredColumns();
-    for (size_t index = 0; index < filtered.size(); index++) {
-        filtered[index].replaceAllUsesWith(columns[index]);
-    }
-
-    filter.erase();
-    eraseIfUnused(typedScan._check);
-    scanOp->erase();
+    rewriter.replaceOp(scan, byTypeScan->getResults());
+    dropConjunct(typedScan._filter, typedScan._conjunct, rewriter);
 }
 
 struct FuseScanEdgesByType : public impl::FuseScanEdgesByTypeBase<FuseScanEdgesByType> {
     void runOnOperation() override {
-        Operation* const root = getOperation();
-
-        // Collect first: fusing erases the filter, its check and its scan, which would
-        // invalidate the walk.
-        llvm::SmallVector<FilterOp> filters;
-        root->walk([&](FilterOp filter) {
-            TypedEdgeScan typedScan;
-            if (matchTypedEdgeScan(filter, typedScan)) {
-                filters.push_back(filter);
-            }
-        });
-
-        mlir::OpBuilder builder(&getContext());
-        for (FilterOp filter : filters) {
-            TypedEdgeScan typedScan;
-            if (!matchTypedEdgeScan(filter, typedScan)) {
-                continue;
-            }
-
-            fuseScanEdgesByType(filter, typedScan, builder);
-        }
+        runFilterWorklist<TypedEdgeScan>(getOperation(), matchTypedEdgeScan, fuseScanEdgesByType);
     }
 };
 
@@ -3857,14 +3984,13 @@ struct FuseLabelPredicates : public impl::FuseLabelPredicatesBase<FuseLabelPredi
 
 // A type check over a read that already narrows by type is that read's types ANDed with the
 // check's: the rows that survive are the ones both keep. Folding the check into the read
-// leaves the walk to skip everything else, and the check and its filter go. A check the read
-// already guarantees is the case where the intersection changes nothing, so only the check
-// goes.
-struct TypeCheckOverRead {
-    CheckEdgeTypeConstraint _check;
-    Operation* _read {nullptr};
-    llvm::SmallVector<Attribute, 4> _intersection;
-    bool _narrowsTheRead {false};
+// leaves the walk to skip everything else, and the check goes. A check the read already
+// guarantees is the case where the intersection changes nothing, so only the check goes.
+struct TypeChecksOverReads {
+    FilterOp _filter;
+    llvm::SmallVector<Value, 2> _conjuncts;
+    Operation* _narrowedRead {nullptr};
+    ArrayAttr _narrowedTypes;
 };
 
 // The by-type read a column comes off, or null for a column no read constrains. The by-type
@@ -3884,101 +4010,84 @@ Operation* byTypeReadOf(Value column) {
     return producer;
 }
 
-// Narrowing a read changes what every reader of it sees, so it is only safe when the check
-// and the filter over it are the only ones.
-bool readOnlyFeeds(Operation* read, CheckEdgeTypeConstraint check, FilterOp filter) {
-    Operation* const checkOp = check.getOperation();
-    Operation* const filterOp = filter.getOperation();
+// Narrowing a read changes what every reader of it sees, so the one read a filter narrows is
+// the one making every column it cuts, which nothing but the filter reads
+Operation* narrowableReadOf(FilterOp filter) {
+    constexpr size_t etypesResultIndex = 2;
+    Operation* const source = filteredSource(filter);
+    const bool readsByType = source && source->getNumResults() > etypesResultIndex
+                             && byTypeReadOf(source->getResult(etypesResultIndex)) == source;
 
-    for (const Value result : read->getResults()) {
-        for (Operation* const user : result.getUsers()) {
-            const bool feedsThePair = user == checkOp || user == filterOp;
-            if (!feedsThePair) {
-                return false;
+    return readsByType && readsOnlyIntoTheFilter(source, filter) ? source : nullptr;
+}
+
+bool matchTypeChecksOverReads(FilterOp filter, TypeChecksOverReads& matched) {
+    Operation* const narrowable = narrowableReadOf(filter);
+    ArrayAttr narrowedTypes = narrowable ? narrowable->getAttrOfType<ArrayAttr>("edge_types") : ArrayAttr();
+
+    llvm::SmallVector<Value, 4> conjuncts;
+    collectConjuncts(filter.getMask(), conjuncts);
+
+    for (const Value conjunct : conjuncts) {
+        CheckEdgeTypeConstraint check = conjunct.getDefiningOp<CheckEdgeTypeConstraint>();
+        Operation* const read = check ? byTypeReadOf(check.getEdgeTypeIds()) : nullptr;
+        if (!read) {
+            continue;
+        }
+
+        const ArrayAttr readTypes = read == narrowable ? narrowedTypes : read->getAttrOfType<ArrayAttr>("edge_types");
+        const ArrayAttr checkTypes = check.getEdgeTypes();
+
+        const bool readIsWithinCheck = llvm::all_of(readTypes, [checkTypes](Attribute edgeType) {
+            return llvm::is_contained(checkTypes, edgeType);
+        });
+
+        const bool holdsAParameter = holdsParameter(readTypes) || holdsParameter(checkTypes);
+        if (holdsAParameter && !readIsWithinCheck) {
+            continue;
+        }
+
+        // An empty intersection is a read that matches no edge, which an empty type set on the
+        // read says outright: the loop is then unmatchable and walks nothing.
+        // The intersection is a subset of the read's types, so a smaller one is a narrower read
+        llvm::SmallVector<Attribute, 4> intersection;
+        combineEdgeTypes(false, readTypes, checkTypes, intersection);
+
+        if (intersection.size() < readTypes.size()) {
+            const bool narrowsTheRead = read == narrowable && check.getResult().hasOneUse();
+            if (!narrowsTheRead) {
+                continue;
             }
+
+            narrowedTypes = ArrayAttr::get(filter.getContext(), intersection);
+            matched._narrowedRead = read;
+            matched._narrowedTypes = narrowedTypes;
         }
+
+        matched._conjuncts.push_back(conjunct);
     }
 
-    return true;
+    matched._filter = filter;
+
+    return !matched._conjuncts.empty();
 }
 
-// Every column the filter cuts has to be one the read bound, or narrowing the read shortens
-// its own columns while the carried one comes back whole.
-bool readBindsEveryColumn(Operation* read, FilterOp filter) {
-    for (const Value column : filter.getColumnsToFilter()) {
-        if (column.getDefiningOp() != read) {
-            return false;
-        }
+void foldTypeChecksIntoReads(TypeChecksOverReads& matched, mlir::RewriterBase& rewriter) {
+    Operation* const read = matched._narrowedRead;
+
+    if (read) {
+        const ArrayAttr narrowedTypes = matched._narrowedTypes;
+        rewriter.modifyOpInPlace(read, [read, narrowedTypes]() {
+            read->setAttr("edge_types", narrowedTypes);
+        });
     }
 
-    return true;
-}
-
-bool matchTypeCheckOverRead(FilterOp filter, TypeCheckOverRead& matched) {
-    CheckEdgeTypeConstraint check = filter.getMask().getDefiningOp<CheckEdgeTypeConstraint>();
-    if (!check) {
-        return false;
-    }
-
-    Operation* const read = byTypeReadOf(check.getEdgeTypeIds());
-    if (!read) {
-        return false;
-    }
-
-    const ArrayAttr readTypes = read->getAttrOfType<ArrayAttr>("edge_types");
-    const ArrayAttr checkTypes = check.getEdgeTypes();
-
-    const bool readIsWithinCheck = llvm::all_of(readTypes, [checkTypes](Attribute edgeType) {
-        return llvm::is_contained(checkTypes, edgeType);
-    });
-
-    const bool holdsAParameter = holdsParameter(readTypes) || holdsParameter(checkTypes);
-    if (holdsAParameter && !readIsWithinCheck) {
-        return false;
-    }
-
-    combineEdgeTypes(false, readTypes, checkTypes, matched._intersection);
-
-    // An empty intersection is a read that matches no edge, which an empty type set on the
-    // read says outright: the loop is then unmatchable and walks nothing.
-    // The intersection is a subset of the read's types, so a smaller one is a narrower read
-    matched._narrowsTheRead = matched._intersection.size() < readTypes.size();
-
-    const bool checkIsPrivate = check.getResult().hasOneUse();
-    const bool columnsAreTheReads = readBindsEveryColumn(read, filter);
-    const bool narrowingIsSafe = checkIsPrivate && columnsAreTheReads && readOnlyFeeds(read, check, filter);
-    if (matched._narrowsTheRead && !narrowingIsSafe) {
-        return false;
-    }
-
-    matched._check = check;
-    matched._read = read;
-
-    return true;
-}
-
-void foldTypeCheckIntoRead(FilterOp filter, const TypeCheckOverRead& matched, mlir::OpBuilder& builder) {
-    if (matched._narrowsTheRead) {
-        matched._read->setAttr("edge_types", builder.getArrayAttr(matched._intersection));
-    }
-
-    // The read now emits only the rows the check kept, so each column the filter handed on is
-    // the one it was given.
-    const Operation::operand_range columns = filter.getColumnsToFilter();
-    const mlir::ResultRange filtered = filter.getFilteredColumns();
-    for (size_t index = 0; index < filtered.size(); index++) {
-        filtered[index].replaceAllUsesWith(columns[index]);
-    }
-
-    filter.erase();
-    CheckEdgeTypeConstraint check = matched._check;
-    eraseIfUnused(check.getOperation());
+    dropConjuncts(matched._filter, matched._conjuncts, rewriter);
 }
 
 struct NarrowEdgeTypeReads : public impl::NarrowEdgeTypeReadsBase<NarrowEdgeTypeReads> {
     void runOnOperation() override {
-        mlir::OpBuilder builder(&getContext());
-        runFilterPass<TypeCheckOverRead>(getOperation(), matchTypeCheckOverRead, foldTypeCheckIntoRead, builder);
+        runFilterWorklist<TypeChecksOverReads>(getOperation(), matchTypeChecksOverReads, foldTypeChecksIntoReads);
     }
 };
 
@@ -4151,17 +4260,16 @@ bool indexesByTarget(const EdgeScanLabels& scanLabels, const DBPassContext& cont
 // the rows the filter goes on to drop.
 struct EndpointLabelledEdgeScan {
     FilterOp _filter;
+    Value _conjunct;
     Operation* _scan {nullptr};
-    GetNodeLabelSet _labelSet;
-    CheckLabelConstraint _check;
     EdgeScanLabels _scanLabels;
     llvm::SmallVector<Attribute, 4> _endLabels;
     bool _labelledTarget {false};
     bool _endWasLabelled {false};
 };
 
-bool matchEndpointLabelledEdgeScan(FilterOp filter, EndpointLabelledEdgeScan& labelledScan) {
-    CheckLabelConstraint check = filter.getMask().getDefiningOp<CheckLabelConstraint>();
+bool matchEndpointLabelledEdgeScanConjunct(Value conjunct, EndpointLabelledEdgeScan& labelledScan) {
+    CheckLabelConstraint check = conjunct.getDefiningOp<CheckLabelConstraint>();
     if (!check) {
         return false;
     }
@@ -4176,36 +4284,14 @@ bool matchEndpointLabelledEdgeScan(FilterOp filter, EndpointLabelledEdgeScan& la
         return false;
     }
 
-    const Value labelledColumn = labelSet.getInputNodes();
-    Operation* const scan = labelledColumn.getDefiningOp();
-    EdgeScanLabels scanLabels;
-    if (!scan || !readEdgeScanLabels(scan, scanLabels)) {
-        return false;
-    }
-
     constexpr size_t SRC_RESULT_INDEX = 0;
     constexpr size_t TGT_RESULT_INDEX = 3;
+    Operation* const scan = labelledScan._scan;
+    const Value labelledColumn = labelSet.getInputNodes();
     const bool labelledTarget = labelledColumn == scan->getResult(TGT_RESULT_INDEX);
     const bool labelledSource = labelledColumn == scan->getResult(SRC_RESULT_INDEX);
     if (!labelledTarget && !labelledSource) {
         return false;
-    }
-
-    for (const Value column : filter.getColumnsToFilter()) {
-        if (column.getDefiningOp() != scan) {
-            return false;
-        }
-    }
-
-    Operation* const filterOp = filter.getOperation();
-    Operation* const labelSetOp = labelSet.getOperation();
-    for (const Value result : scan->getResults()) {
-        for (Operation* const user : result.getUsers()) {
-            const bool readsTheChain = user == filterOp || user == labelSetOp;
-            if (!readsTheChain) {
-                return false;
-            }
-        }
     }
 
     const bool chainIsPrivate = labelSet.getResult().hasOneUse() && check.getResult().hasOneUse();
@@ -4213,7 +4299,10 @@ bool matchEndpointLabelledEdgeScan(FilterOp filter, EndpointLabelledEdgeScan& la
         return false;
     }
 
+    const EdgeScanLabels& scanLabels = labelledScan._scanLabels;
     const ArrayAttr endLabels = labelledTarget ? scanLabels._target : scanLabels._source;
+
+    labelledScan._endLabels.clear();
     if (endLabels) {
         labelledScan._endLabels.assign(endLabels.begin(), endLabels.end());
     }
@@ -4224,15 +4313,25 @@ bool matchEndpointLabelledEdgeScan(FilterOp filter, EndpointLabelledEdgeScan& la
         }
     }
 
-    labelledScan._filter = filter;
-    labelledScan._scan = scan;
-    labelledScan._labelSet = labelSet;
-    labelledScan._check = check;
-    labelledScan._scanLabels = scanLabels;
+    labelledScan._conjunct = conjunct;
     labelledScan._labelledTarget = labelledTarget;
     labelledScan._endWasLabelled = endLabels != nullptr;
 
     return true;
+}
+
+bool matchEndpointLabelledEdgeScan(FilterOp filter, EndpointLabelledEdgeScan& labelledScan) {
+    Operation* const scan = filteredSource(filter);
+    if (!scan || !readEdgeScanLabels(scan, labelledScan._scanLabels) || !readsOnlyIntoTheFilter(scan, filter)) {
+        return false;
+    }
+
+    labelledScan._filter = filter;
+    labelledScan._scan = scan;
+
+    return matchAConjunct(filter, [&labelledScan](Value conjunct) {
+        return matchEndpointLabelledEdgeScanConjunct(conjunct, labelledScan);
+    });
 }
 
 // The by-label edge scan reading the endpoints by these labels. A scan labelled on one end
@@ -4280,11 +4379,7 @@ void fuseScanEdgesByEndpointLabel(EndpointLabelledEdgeScan& labelledScan,
         rewriter.replaceOp(scan, labelledEdgeScan->getResults());
     }
 
-    FilterOp filter = labelledScan._filter;
-    rewriter.replaceOp(filter, filter.getColumnsToFilter());
-
-    eraseIfUnused(labelledScan._check.getOperation(), rewriter);
-    eraseIfUnused(labelledScan._labelSet.getOperation(), rewriter);
+    dropConjunct(labelledScan._filter, labelledScan._conjunct, rewriter);
 }
 
 struct FuseScanEdgesByEndpointLabel : public impl::FuseScanEdgesByEndpointLabelBase<FuseScanEdgesByEndpointLabel> {
@@ -4312,14 +4407,14 @@ private:
 // labels on: the by-label hop spelled the long way, since the walk itself can keep those
 // edges and never build the rows the filter goes on to drop.
 struct EndpointLabelledHop {
+    FilterOp _filter;
+    Value _conjunct;
     Operation* _hop {nullptr};
-    GetNodeLabelSet _labelSet;
-    CheckLabelConstraint _check;
     ArrayAttr _labels;
 };
 
-bool matchEndpointLabelledHop(FilterOp filter, EndpointLabelledHop& labelledHop) {
-    CheckLabelConstraint check = filter.getMask().getDefiningOp<CheckLabelConstraint>();
+bool matchEndpointLabelledHopConjunct(Value conjunct, Operation* hop, EndpointLabelledHop& labelledHop) {
+    CheckLabelConstraint check = conjunct.getDefiningOp<CheckLabelConstraint>();
     if (!check) {
         return false;
     }
@@ -4334,41 +4429,14 @@ bool matchEndpointLabelledHop(FilterOp filter, EndpointLabelledHop& labelledHop)
         return false;
     }
 
-    const Value labelledColumn = labelSet.getInputNodes();
-    Operation* const hop = labelledColumn.getDefiningOp();
-    if (!hop || !isa<GetOutEdges, GetInEdges, GetOutEdgesByType, GetInEdgesByType>(hop)) {
-        return false;
-    }
-
     // Only the end the hop reaches can ride onto it. The end it leaves is the input column,
     // which a by-label node scan constrains instead - and there the labels are no longer
     // this hop's to carry.
     constexpr size_t srcResultIndex = 0;
     constexpr size_t tgtResultIndex = 3;
     const size_t reachedResultIndex = isReverseHop(hop) ? srcResultIndex : tgtResultIndex;
-    if (labelledColumn != hop->getResult(reachedResultIndex)) {
+    if (labelSet.getInputNodes() != hop->getResult(reachedResultIndex)) {
         return false;
-    }
-
-    // Every column the filter cuts has to be one the hop bound, or the fused hop has nothing
-    // of its own to hand back in its place.
-    for (const Value column : filter.getColumnsToFilter()) {
-        if (column.getDefiningOp() != hop) {
-            return false;
-        }
-    }
-
-    // And nothing outside the chain may read the hop, or that reader would go on seeing the
-    // rows the labels turn away.
-    Operation* const filterOp = filter.getOperation();
-    Operation* const labelSetOp = labelSet.getOperation();
-    for (const Value result : hop->getResults()) {
-        for (Operation* const user : result.getUsers()) {
-            const bool readsTheChain = user == filterOp || user == labelSetOp;
-            if (!readsTheChain) {
-                return false;
-            }
-        }
     }
 
     const bool chainIsPrivate = labelSet.getResult().hasOneUse() && check.getResult().hasOneUse();
@@ -4376,12 +4444,28 @@ bool matchEndpointLabelledHop(FilterOp filter, EndpointLabelledHop& labelledHop)
         return false;
     }
 
-    labelledHop = EndpointLabelledHop {._hop = hop,
-                                       ._labelSet = labelSet,
-                                       ._check = check,
-                                       ._labels = labels};
+    labelledHop._conjunct = conjunct;
+    labelledHop._labels = labels;
 
     return true;
+}
+
+bool matchEndpointLabelledHop(FilterOp filter, EndpointLabelledHop& labelledHop) {
+    // Every column the filter cuts has to be one the hop bound, or the fused hop has nothing
+    // of its own to hand back in its place. And nothing outside the filter may read the hop,
+    // or that reader would go on seeing the rows the labels turn away.
+    Operation* const hop = filteredSource(filter);
+    const bool fusesLabels = isa_and_nonnull<GetOutEdges, GetInEdges, GetOutEdgesByType, GetInEdgesByType>(hop);
+    if (!fusesLabels || !readsOnlyIntoTheFilter(hop, filter)) {
+        return false;
+    }
+
+    labelledHop._filter = filter;
+    labelledHop._hop = hop;
+
+    return matchAConjunct(filter, [hop, &labelledHop](Value conjunct) {
+        return matchEndpointLabelledHopConjunct(conjunct, hop, labelledHop);
+    });
 }
 
 template <typename ByLabelOp>
@@ -4491,40 +4575,24 @@ Operation* createReversedHop(Operation* hop, Value from, ArrayAttr labels, Value
     }
 }
 
-void fuseEdgesByEndpointLabel(FilterOp filter, const EndpointLabelledHop& labelledHop, mlir::OpBuilder& builder) {
+void fuseEdgesByEndpointLabel(EndpointLabelledHop& labelledHop, mlir::RewriterBase& rewriter) {
     Operation* const hop = labelledHop._hop;
 
-    builder.setInsertionPoint(hop);
+    rewriter.setInsertionPoint(hop);
 
     // A by-label hop declares the same four fixed results and the same carry set behind
     // them, so the plain hop's results map onto it one for one. Which one it becomes is the
     // hop the query wrote: an out-hop reaches its target, an in-hop its source, and a by-type
     // hop keeps its types.
-    Operation* const byLabelHop = createEndpointLabelledHop(hop, labelledHop._labels, builder);
+    Operation* const byLabelHop = createEndpointLabelledHop(hop, labelledHop._labels, rewriter);
 
-    hop->replaceAllUsesWith(byLabelHop);
-
-    // The hop now yields the rows the filter used to leave, so each column the filter handed
-    // on is the one it was given.
-    const Operation::operand_range columns = filter.getColumnsToFilter();
-    const mlir::ResultRange filtered = filter.getFilteredColumns();
-    for (size_t index = 0; index < filtered.size(); index++) {
-        filtered[index].replaceAllUsesWith(columns[index]);
-    }
-
-    filter.erase();
-    eraseIfUnused(labelledHop._check);
-    eraseIfUnused(labelledHop._labelSet);
-    hop->erase();
+    rewriter.replaceOp(hop, byLabelHop->getResults());
+    dropConjunct(labelledHop._filter, labelledHop._conjunct, rewriter);
 }
 
 struct FuseEdgesByEndpointLabel : public impl::FuseEdgesByEndpointLabelBase<FuseEdgesByEndpointLabel> {
     void runOnOperation() override {
-        mlir::OpBuilder builder(&getContext());
-        runFilterPass<EndpointLabelledHop>(getOperation(),
-                                           matchEndpointLabelledHop,
-                                           fuseEdgesByEndpointLabel,
-                                           builder);
+        runFilterWorklist<EndpointLabelledHop>(getOperation(), matchEndpointLabelledHop, fuseEdgesByEndpointLabel);
     }
 };
 
@@ -4631,15 +4699,15 @@ void collectKnownLabels(Value column, llvm::DenseSet<Attribute>& labels) {
     }
 }
 
-// A label filter over nodes already known to carry every label of one of its alternatives
+// A label check over nodes already known to carry every label of one of its alternatives
 // keeps every row.
-struct RedundantLabelCheck {
-    CheckLabelConstraint _check;
-    GetNodeLabelSet _labelSet;
+struct RedundantLabelChecks {
+    FilterOp _filter;
+    llvm::SmallVector<Value, 2> _conjuncts;
 };
 
-bool matchRedundantLabelCheck(FilterOp filter, RedundantLabelCheck& redundant) {
-    CheckLabelConstraint check = filter.getMask().getDefiningOp<CheckLabelConstraint>();
+bool isRedundantLabelCheck(Value conjunct) {
+    CheckLabelConstraint check = conjunct.getDefiningOp<CheckLabelConstraint>();
     if (!check) {
         return false;
     }
@@ -4660,34 +4728,26 @@ bool matchRedundantLabelCheck(FilterOp filter, RedundantLabelCheck& redundant) {
         return llvm::all_of(cast<ArrayAttr>(alternative), isKnown);
     };
 
-    if (!llvm::any_of(check.getAlternatives(), isGuaranteed)) {
-        return false;
-    }
-
-    redundant = RedundantLabelCheck {._check = check, ._labelSet = labelSet};
-
-    return true;
+    return llvm::any_of(check.getAlternatives(), isGuaranteed);
 }
 
-void removeRedundantLabelCheck(FilterOp filter, const RedundantLabelCheck& redundant, mlir::OpBuilder& builder) {
-    const Operation::operand_range columns = filter.getColumnsToFilter();
-    const mlir::ResultRange filtered = filter.getFilteredColumns();
-    for (size_t index = 0; index < filtered.size(); index++) {
-        filtered[index].replaceAllUsesWith(columns[index]);
-    }
+bool matchRedundantLabelChecks(FilterOp filter, RedundantLabelChecks& redundant) {
+    llvm::SmallVector<Value, 4> conjuncts;
+    collectConjuncts(filter.getMask(), conjuncts);
 
-    filter.erase();
-    eraseIfUnused(redundant._check);
-    eraseIfUnused(redundant._labelSet);
+    redundant._filter = filter;
+    llvm::copy_if(conjuncts, std::back_inserter(redundant._conjuncts), isRedundantLabelCheck);
+
+    return !redundant._conjuncts.empty();
+}
+
+void removeRedundantLabelChecks(RedundantLabelChecks& redundant, mlir::RewriterBase& rewriter) {
+    dropConjuncts(redundant._filter, redundant._conjuncts, rewriter);
 }
 
 struct RemoveRedundantLabelChecks : public impl::RemoveRedundantLabelChecksBase<RemoveRedundantLabelChecks> {
     void runOnOperation() override {
-        mlir::OpBuilder builder(&getContext());
-        runFilterPass<RedundantLabelCheck>(getOperation(),
-                                           matchRedundantLabelCheck,
-                                           removeRedundantLabelCheck,
-                                           builder);
+        runFilterWorklist<RedundantLabelChecks>(getOperation(), matchRedundantLabelChecks, removeRedundantLabelChecks);
     }
 };
 
@@ -4695,59 +4755,54 @@ struct RemoveRedundantLabelChecks : public impl::RemoveRedundantLabelChecksBase<
 // end constraint spelled the long way, since the walk itself can keep to those ends and
 // never build the rows the filter goes on to drop.
 struct EndConstrainedExploration {
+    FilterOp _filter;
     ExplorePaths _exploration;
-    GetNodeLabelSet _labelSet;
-    CheckLabelConstraint _check;
-    ArrayAttr _labels;
+    llvm::SmallVector<Value, 2> _conjuncts;
+    llvm::SmallVector<Attribute, 4> _labels;
 };
 
+// The labels @param conjunct asks of every end of @param exploration, or null
+ArrayAttr endLabelsAsked(Value conjunct, ExplorePaths exploration) {
+    CheckLabelConstraint check = conjunct.getDefiningOp<CheckLabelConstraint>();
+    GetNodeLabelSet labelSet = check ? check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>() : GetNodeLabelSet();
+    if (!labelSet || labelSet.getInputNodes() != exploration.getTgtids()) {
+        return ArrayAttr();
+    }
+
+    return check.getConjunction();
+}
+
 bool matchEndConstrainedExploration(FilterOp filter, EndConstrainedExploration& constrained) {
-    CheckLabelConstraint check = filter.getMask().getDefiningOp<CheckLabelConstraint>();
-    if (!check) {
-        return false;
-    }
-
-    const ArrayAttr labels = check.getConjunction();
-    if (!labels) {
-        return false;
-    }
-
-    GetNodeLabelSet labelSet = check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
-    if (!labelSet) {
-        return false;
-    }
-
-    const Value ends = labelSet.getInputNodes();
-    ExplorePaths exploration = ends.getDefiningOp<ExplorePaths>();
-    if (!exploration || ends != exploration.getTgtids()) {
-        return false;
-    }
-
     // Every column the filter cuts has to be one the exploration bound, or the constrained
-    // exploration has nothing of its own to hand back in its place.
-    for (const Value column : filter.getColumnsToFilter()) {
-        if (column.getDefiningOp() != exploration.getOperation()) {
-            return false;
-        }
+    // exploration has nothing of its own to hand back in its place. And nothing outside the
+    // filter may read the exploration, or that reader would go on seeing the rows the end
+    // labels turn away.
+    ExplorePaths exploration = dyn_cast_or_null<ExplorePaths>(filteredSource(filter));
+    if (!exploration || !readsOnlyIntoTheFilter(exploration, filter)) {
+        return false;
     }
 
-    // And nothing outside the trio may read the exploration, or that reader would go on
-    // seeing the rows the end labels turn away.
-    for (const Value result : exploration.getResults()) {
-        for (Operation* const user : result.getUsers()) {
-            const bool readsTheTrio = user == filter.getOperation() || user == labelSet.getOperation();
-            if (!readsTheTrio) {
-                return false;
+    llvm::SmallVector<Value, 4> conjuncts;
+    collectConjuncts(filter.getMask(), conjuncts);
+
+    for (const Value conjunct : conjuncts) {
+        const ArrayAttr labels = endLabelsAsked(conjunct, exploration);
+        if (!labels) {
+            continue;
+        }
+
+        constrained._conjuncts.push_back(conjunct);
+        for (const Attribute label : labels) {
+            if (!llvm::is_contained(constrained._labels, label)) {
+                constrained._labels.push_back(label);
             }
         }
     }
 
-    constrained = EndConstrainedExploration {._exploration = exploration,
-                                             ._labelSet = labelSet,
-                                             ._check = check,
-                                             ._labels = labels};
+    constrained._filter = filter;
+    constrained._exploration = exploration;
 
-    return true;
+    return !constrained._conjuncts.empty();
 }
 
 // The end labels the exploration already carries joined with the filter's, each once
@@ -4767,30 +4822,20 @@ ArrayAttr mergedEndLabels(ExplorePaths exploration, ArrayAttr filterLabels, mlir
     return builder.getArrayAttr(merged);
 }
 
-void fuseExploreEndConstraint(FilterOp filter, const EndConstrainedExploration& constrained, mlir::OpBuilder& builder) {
+void fuseExploreEndConstraint(EndConstrainedExploration& constrained, mlir::RewriterBase& rewriter) {
     ExplorePaths exploration = constrained._exploration;
-    GetNodeLabelSet labelSet = constrained._labelSet;
-    CheckLabelConstraint check = constrained._check;
+    const ArrayAttr endLabels = mergedEndLabels(exploration, rewriter.getArrayAttr(constrained._labels), rewriter);
 
-    exploration.setEndLabelsAttr(mergedEndLabels(exploration, constrained._labels, builder));
+    rewriter.modifyOpInPlace(exploration, [&exploration, endLabels]() {
+        exploration.setEndLabelsAttr(endLabels);
+    });
 
-    // The exploration now yields the rows the filter used to leave, so each column the
-    // filter handed on is the one it was given.
-    const Operation::operand_range columns = filter.getColumnsToFilter();
-    const mlir::ResultRange filtered = filter.getFilteredColumns();
-    for (size_t index = 0; index < filtered.size(); index++) {
-        filtered[index].replaceAllUsesWith(columns[index]);
-    }
-
-    filter.erase();
-    eraseIfUnused(check);
-    eraseIfUnused(labelSet);
+    dropConjuncts(constrained._filter, constrained._conjuncts, rewriter);
 }
 
 struct FuseExploreEndConstraint : public impl::FuseExploreEndConstraintBase<FuseExploreEndConstraint> {
     void runOnOperation() override {
-        mlir::OpBuilder builder(&getContext());
-        runFilterPass<EndConstrainedExploration>(getOperation(), matchEndConstrainedExploration, fuseExploreEndConstraint, builder);
+        runFilterWorklist<EndConstrainedExploration>(getOperation(), matchEndConstrainedExploration, fuseExploreEndConstraint);
     }
 };
 
@@ -5292,28 +5337,22 @@ struct FusePathLength : public impl::FusePathLengthBase<FusePathLength> {
 // since the walk itself can head for that node and never build the rows the filter goes on
 // to drop. An absent _endColumn is the seed, which no carried column names.
 struct EndBoundExploration {
+    FilterOp _filter;
+    Value _conjunct;
     ExplorePaths _exploration;
-    EqOp _equality;
     std::optional<uint64_t> _endColumn;
 };
 
-bool matchEndBoundExploration(FilterOp filter, EndBoundExploration& bound) {
-    EqOp equality = filter.getMask().getDefiningOp<EqOp>();
+bool matchEndBoundConjunct(Value conjunct, ExplorePaths exploration, EndBoundExploration& bound) {
+    EqOp equality = conjunct.getDefiningOp<EqOp>();
     if (!equality) {
         return false;
     }
 
     // One side is the end node column, the other the carried copy of the bound variable
-    Value ends = equality.getLhs();
-    Value carried = equality.getRhs();
-    ExplorePaths exploration = ends.getDefiningOp<ExplorePaths>();
-    if (!exploration || ends != exploration.getTgtids()) {
-        std::swap(ends, carried);
-        exploration = ends.getDefiningOp<ExplorePaths>();
-    }
-
-    const bool alreadyBound = exploration && (exploration.getEndColumn() || exploration.getEndsOnSeed() || exploration.getEndNodes());
-    if (!exploration || ends != exploration.getTgtids() || alreadyBound) {
+    const Value ends = exploration.getTgtids();
+    const Value carried = equality.getLhs() == ends ? equality.getRhs() : equality.getLhs();
+    if (equality.getLhs() != ends && equality.getRhs() != ends) {
         return false;
     }
 
@@ -5330,28 +5369,25 @@ bool matchEndBoundExploration(FilterOp filter, EndBoundExploration& bound) {
         return false;
     }
 
-    for (const Value column : filter.getColumnsToFilter()) {
-        if (column.getDefiningOp() != exploration.getOperation()) {
-            return false;
-        }
-    }
-
-    for (const Value result : exploration.getResults()) {
-        for (Operation* const user : result.getUsers()) {
-            const bool readsThePair = user == filter.getOperation() || user == equality.getOperation();
-            if (!readsThePair) {
-                return false;
-            }
-        }
-    }
-
-    bound = EndBoundExploration {._exploration = exploration,
-                                 ._equality = equality,
-                                 ._endColumn = endsOnSeed
-                                                 ? std::nullopt
-                                                 : std::optional<uint64_t> {resultIndex - pathFixedResultCount}};
+    bound._conjunct = conjunct;
+    bound._endColumn = endsOnSeed ? std::nullopt : std::optional<uint64_t> {resultIndex - pathFixedResultCount};
 
     return true;
+}
+
+bool matchEndBoundExploration(FilterOp filter, EndBoundExploration& bound) {
+    ExplorePaths exploration = dyn_cast_or_null<ExplorePaths>(filteredSource(filter));
+    const bool alreadyBound = exploration && (exploration.getEndColumn() || exploration.getEndsOnSeed() || exploration.getEndNodes());
+    if (!exploration || alreadyBound || !readsOnlyIntoTheFilter(exploration, filter)) {
+        return false;
+    }
+
+    bound._filter = filter;
+    bound._exploration = exploration;
+
+    return matchAConjunct(filter, [exploration, &bound](Value conjunct) {
+        return matchEndBoundConjunct(conjunct, exploration, bound);
+    });
 }
 
 IntegerAttr unsignedAttribute(uint64_t value, mlir::OpBuilder& builder) {
@@ -5360,30 +5396,24 @@ IntegerAttr unsignedAttribute(uint64_t value, mlir::OpBuilder& builder) {
     return IntegerAttr::get(type, value);
 }
 
-void fuseExploreEndNodes(FilterOp filter, const EndBoundExploration& bound, mlir::OpBuilder& builder) {
+void fuseExploreEndNodes(EndBoundExploration& bound, mlir::RewriterBase& rewriter) {
     ExplorePaths exploration = bound._exploration;
-    EqOp equality = bound._equality;
+    const std::optional<uint64_t> endColumn = bound._endColumn;
 
-    if (bound._endColumn) {
-        exploration.setEndColumnAttr(unsignedAttribute(*bound._endColumn, builder));
-    } else {
-        exploration.setEndsOnSeed(true);
-    }
+    rewriter.modifyOpInPlace(exploration, [&exploration, &rewriter, endColumn]() {
+        if (endColumn) {
+            exploration.setEndColumnAttr(unsignedAttribute(*endColumn, rewriter));
+        } else {
+            exploration.setEndsOnSeed(true);
+        }
+    });
 
-    const Operation::operand_range columns = filter.getColumnsToFilter();
-    const mlir::ResultRange filtered = filter.getFilteredColumns();
-    for (size_t index = 0; index < filtered.size(); index++) {
-        filtered[index].replaceAllUsesWith(columns[index]);
-    }
-
-    filter.erase();
-    eraseIfUnused(equality);
+    dropConjunct(bound._filter, bound._conjunct, rewriter);
 }
 
 struct FuseExploreEndNodes : public impl::FuseExploreEndNodesBase<FuseExploreEndNodes> {
     void runOnOperation() override {
-        mlir::OpBuilder builder(&getContext());
-        runFilterPass<EndBoundExploration>(getOperation(), matchEndBoundExploration, fuseExploreEndNodes, builder);
+        runFilterWorklist<EndBoundExploration>(getOperation(), matchEndBoundExploration, fuseExploreEndNodes);
     }
 };
 
@@ -5856,6 +5886,8 @@ bool matchExploreEndSet(FilterOp filter,
     llvm::SmallVector<Value, 4> conjuncts;
     collectConjuncts(filter.getMask(), conjuncts);
 
+    OpAnswers reaching;
+
     for (const Value conjunct : conjuncts) {
         NodeScanPredicate predicate;
         if (!matchNodeScanPredicate(conjunct, predicate)) {
@@ -5877,7 +5909,15 @@ bool matchExploreEndSet(FilterOp filter,
         // would miss them
         const bool alreadyBound = exploration.getEndColumn() || exploration.getEndsOnSeed() || exploration.getEndNodes();
         const bool besideTheFilter = exploration->getBlock() == filter->getBlock();
-        if (alreadyBound || !besideTheFilter || !rowsReachTheFilter(exploration, filter, keepsTheSourceRows)) {
+        if (alreadyBound || !besideTheFilter) {
+            continue;
+        }
+
+        const bool reachesTheFilter = answerOnce(reaching, exploration, [&exploration, &filter]() {
+            return rowsReachTheFilter(exploration, filter, keepsTheSourceRows);
+        });
+
+        if (!reachesTheFilter) {
             continue;
         }
 
@@ -6032,8 +6072,8 @@ bool matchHopTest(ListPredicate predicate, ExplorePaths exploration, llvm::Small
     return true;
 }
 
-bool matchExploreListPredicate(FilterOp filter, ExploreListPredicate& match) {
-    ListPredicate predicate = filter.getMask().getDefiningOp<ListPredicate>();
+bool matchExploreListConjunct(FilterOp filter, Value conjunct, OpAnswers& reaching, ExploreListPredicate& match) {
+    ListPredicate predicate = conjunct.getDefiningOp<ListPredicate>();
     if (!predicate || !predicate.getResult().hasOneUse()) {
         return false;
     }
@@ -6067,7 +6107,9 @@ bool matchExploreListPredicate(FilterOp filter, ExploreListPredicate& match) {
     }
 
     const bool reachesTheFilter = exploration->getBlock() == filter->getBlock()
-                               && rowsReachTheFilter(exploration, filter, keepsTheWalkedRows);
+                               && answerOnce(reaching, exploration, [&exploration, &filter]() {
+                                      return rowsReachTheFilter(exploration, filter, keepsTheWalkedRows);
+                                  });
     if (!reachesTheFilter) {
         return false;
     }
@@ -6092,6 +6134,14 @@ bool matchExploreListPredicate(FilterOp filter, ExploreListPredicate& match) {
                                   ._imports = imports};
 
     return true;
+}
+
+bool matchExploreListPredicate(FilterOp filter, ExploreListPredicate& match) {
+    OpAnswers reaching;
+
+    return matchAConjunct(filter, [&filter, &reaching, &match](Value conjunct) {
+        return matchExploreListConjunct(filter, conjunct, reaching, match);
+    });
 }
 
 // The argument of a step's hop region holding the element a list of the expansion kind reads
@@ -6227,11 +6277,8 @@ void fuseExploreListPredicate(ExploreListPredicate& match, mlir::RewriterBase& r
         }
     }
 
-    const storage::PathExpansionKind expansionKind = expansion.getKind();
-
-    if (expansionKind != storage::PathExpansionKind::Nodes) {
-        bypassFilter(filter);
-        rewriter.eraseOp(filter);
+    if (expansion.getKind() != storage::PathExpansionKind::Nodes) {
+        dropConjunct(filter, predicate.getResult(), rewriter);
     } else {
         // nodes() holds the seed, which no hop ends on, so the seed is still tested row by row
         const Operation::operand_range predicateCarried = predicate.getColumnsToFilter();
@@ -6240,16 +6287,12 @@ void fuseExploreListPredicate(ExploreListPredicate& match, mlir::RewriterBase& r
         rewriter.setInsertionPoint(predicate);
         const Value seedTest = cloneElementTest(predicate, expansion.getSrcids(), rowCarried, rewriter);
 
-        rewriter.modifyOpInPlace(filter, [&filter, seedTest]() {
-            filter->setOperand(0, seedTest);
-        });
-    }
+        Operation* const widened = predicate.getSource().getDefiningOp<ToNullable>();
+        rewriter.replaceOp(predicate, seedTest);
 
-    Operation* const widened = predicate.getSource().getDefiningOp<ToNullable>();
-    rewriter.eraseOp(predicate);
-
-    if (widened && widened->use_empty()) {
-        rewriter.eraseOp(widened);
+        if (widened && widened->use_empty()) {
+            rewriter.eraseOp(widened);
+        }
     }
 
     if (expansion->use_empty()) {
@@ -7472,15 +7515,14 @@ struct HoistUnconditionalRegions : public impl::HoistUnconditionalRegionsBase<Ho
     }
 };
 
-// A property equality fuses into the scan and every other conjunct of the mask is rebuilt
-// over the fused rows, so the whole cone is cloned or dropped: it must read nothing but
-// the scanned column, and nothing outside it may read a part of it.
+// A property equality the scan answers in place of the filter, which keeps its other conjuncts
+// over the rows the scan by value makes
 struct PropertyValueScanChain {
+    FilterOp _filter;
+    Value _conjunct;
     ScanSource _source;
-    MaskCone _cone;
     StringAttr _property;
     TypedAttr _value;
-    llvm::SmallVector<Value> _residual;
 };
 
 // The conjuncts of a mask, as an `and` tree spells them: the predicates that all have to
@@ -7499,156 +7541,51 @@ void collectConjuncts(Value mask, llvm::SmallVectorImpl<Value>& conjuncts) {
     }
 }
 
-bool maskConeIsPrivateTo(const MaskCone& cone, FilterOp filter) {
-    llvm::SmallPtrSet<Operation*, 8> coneOps;
-    for (Operation* const coneOp : cone._ops) {
-        coneOps.insert(coneOp);
-    }
-
-    Operation* const filterOp = filter.getOperation();
-    for (Operation* const coneOp : cone._ops) {
-        for (Operation* const user : coneOp->getUsers()) {
-            if (user != filterOp && !coneOps.contains(user)) {
-                return false;
-            }
-        }
-    }
-
-    return true;
-}
-
 bool matchPropertyValueScanChain(FilterOp filter, PropertyValueScanChain& chain) {
-    if (!matchSoleScanSource(filter, chain._source)) {
+    if (!matchSoleScanSource(filter, chain._source) || !readsOnlyIntoTheFilter(chain._source._op, filter)) {
         return false;
     }
-
-    chain._cone = collectMaskCone(filter.getMask());
-
-    const MaskCone& cone = chain._cone;
-    const bool readsTheScannedColumnAlone = cone._inputs.size() == 1 && cone._inputs.front() == chain._source._column;
-    if (!readsTheScannedColumnAlone || !maskConeIsPrivateTo(cone, filter)) {
-        return false;
-    }
-
-    llvm::SmallVector<Value> conjuncts;
-    collectConjuncts(filter.getMask(), conjuncts);
 
     // The first property equality in the mask wins, not the most selective one: there are
     // no column statistics to choose with, so `n.gender = 'M' AND n.ssn = '...'` fuses the
     // unselective conjunct and leaves the selective one a residual filter.
-    for (size_t candidate = 0; candidate < conjuncts.size(); candidate++) {
-        EqOp equality = conjuncts[candidate].getDefiningOp<EqOp>();
+    return matchAConjunct(filter, [&filter, &chain](Value conjunct) {
+        EqOp equality = conjunct.getDefiningOp<EqOp>();
         PropertyEquality property;
         if (!equality || !matchPropertyEquality(equality, property)) {
-            continue;
+            return false;
         }
 
         if (property._read.getInputNodes() != chain._source._column) {
-            continue;
+            return false;
         }
 
+        chain._filter = filter;
+        chain._conjunct = conjunct;
         chain._property = property._read.getPropertyAttr();
         chain._value = property._value;
 
-        for (size_t other = 0; other < conjuncts.size(); other++) {
-            if (other == candidate) {
-                continue;
-            }
-
-            // Only a conjunct the cone built can be rebuilt over the fused rows.
-            Operation* const conjunctDef = conjuncts[other].getDefiningOp();
-            if (!conjunctDef || !isMaskComputeOp(conjunctDef)) {
-                return false;
-            }
-
-            chain._residual.push_back(conjuncts[other]);
-        }
-
         return true;
-    }
-
-    return false;
+    });
 }
 
-bool isUntypedNullMask(Value mask) {
-    const auto columnType = dyn_cast<ColumnType>(mask.getType());
+void fuseScanByPropertyValue(PropertyValueScanChain& chain, mlir::RewriterBase& rewriter) {
+    Operation* const scan = chain._source._op;
 
-    return columnType && isNullLiteralType(columnType.getType());
-}
+    rewriter.setInsertionPoint(scan);
+    ScanNodesByPropertyValue fused = rewriter.create<ScanNodesByPropertyValue>(chain._filter.getLoc(),
+                                                                               chain._source._column.getType(),
+                                                                               chain._property,
+                                                                               chain._value,
+                                                                               chain._source._labels);
 
-// Rebuilds the conjuncts the fused scan does not carry over its rows, as the mask of the
-// filter that stays. The clone reads the fused column wherever the original read the scan.
-Value cloneResidualMask(llvm::ArrayRef<Value> residual,
-                        Value scanColumn,
-                        Value fused,
-                        Type maskType,
-                        mlir::Location loc,
-                        mlir::OpBuilder& builder) {
-    MaskCone cone;
-    llvm::SmallPtrSet<Operation*, 8> visited;
-    for (const Value conjunct : residual) {
-        collectConePostOrder(conjunct, isMaskComputeOp, visited, cone);
-    }
-
-    mlir::IRMapping mapping;
-    mapping.map(scanColumn, fused);
-    for (Operation* const coneOp : cone._ops) {
-        builder.clone(*coneOp, mapping);
-    }
-
-    Value mask = mapping.lookup(residual.front());
-    for (const Value conjunct : residual.drop_front()) {
-        const Value clonedConjunct = mapping.lookup(conjunct);
-
-        // null AND null is null, so a second null conjunct adds nothing to the mask
-        const bool bothUnknown = isUntypedNullMask(mask) && isUntypedNullMask(clonedConjunct);
-        if (bothUnknown) {
-            continue;
-        }
-
-        AndOp conjunction = builder.create<AndOp>(loc, maskType, mask, clonedConjunct);
-        mask = conjunction.getResult();
-    }
-
-    return mask;
-}
-
-void fuseScanByPropertyValue(FilterOp filter, const PropertyValueScanChain& chain, mlir::OpBuilder& builder) {
-    const mlir::Location loc = filter.getLoc();
-    const Type nodeColumnType = chain._source._column.getType();
-
-    builder.setInsertionPoint(filter);
-    ScanNodesByPropertyValue scan = builder.create<ScanNodesByPropertyValue>(loc,
-                                                                             nodeColumnType,
-                                                                             chain._property,
-                                                                             chain._value,
-                                                                             chain._source._labels);
-
-    Value fused = scan.getResult();
-    if (!chain._residual.empty()) {
-        const Value mask = cloneResidualMask(chain._residual,
-                                             chain._source._column,
-                                             fused,
-                                             filter.getMask().getType(),
-                                             loc,
-                                             builder);
-
-        const llvm::SmallVector<Type> resultTypes {nodeColumnType};
-        const llvm::SmallVector<Value> columns {fused};
-        FilterOp residualFilter = builder.create<FilterOp>(loc, resultTypes, mask, columns);
-        fused = residualFilter.getResult(0);
-    }
-
-    replaceFilterWithSource(filter, fused, chain._source._op, chain._cone);
+    rewriter.replaceOp(scan, fused.getResult());
+    dropConjunct(chain._filter, chain._conjunct, rewriter);
 }
 
 struct FuseScanByPropertyValue : public impl::FuseScanByPropertyValueBase<FuseScanByPropertyValue> {
     void runOnOperation() override {
-        mlir::OpBuilder builder(&getContext());
-        runFilterPass<PropertyValueScanChain>(getOperation(),
-                                              matchPropertyValueScanChain,
-                                              fuseScanByPropertyValue,
-                                              builder);
+        runFilterWorklist<PropertyValueScanChain>(getOperation(), matchPropertyValueScanChain, fuseScanByPropertyValue);
     }
 };
 
@@ -8928,35 +8865,6 @@ bool keyConeIsPrivateTo(const JoinKeySide& side, EqOp equality, FilterOp filter)
     return true;
 }
 
-// Whether the product's rows reach nothing but the equality and the filter it masks. The
-// join emits the rows the filter kept, so a reader of the product's own rows would go
-// from seeing every pair to seeing only the matching ones.
-bool productRowsReachOnly(CrossProduct product, const EqualityCross& match) {
-    EqOp equality = match._equality;
-    FilterOp filter = match._filter;
-
-    llvm::SmallPtrSet<Operation*, 8> readers;
-    readers.insert(equality.getOperation());
-    readers.insert(filter.getOperation());
-
-    const JoinKeySide* const sides[] = {&match._left, &match._right};
-    for (const JoinKeySide* const side : sides) {
-        for (Operation* const coneOp : side->_cone._ops) {
-            readers.insert(coneOp);
-        }
-    }
-
-    for (const Value column : product.getResults()) {
-        for (Operation* const user : column.getUsers()) {
-            if (!readers.contains(user)) {
-                return false;
-            }
-        }
-    }
-
-    return true;
-}
-
 // Whether every column the filter carries is one the join hands back as a result of its
 // own: a column the product made, or a key, which the join yields beside the columns its
 // factor already had. One computed from them outside was computed over the rows the join
@@ -9016,9 +8924,16 @@ struct CutRowsReader {
 
 // The rows the cut must produce for a limit downstream of it to be met, and none when no
 // limit bounds them. The budget reaches the cut only through ops handing each row on as at
-// least one row as they read it. A skip adds the rows it drops to the limit after it, and a
-// LIMIT 0 needs no row: the loops stop before their first step.
-std::optional<uint64_t> limitOverTheCut(FilterOp filter) {
+// least one row as they read it, which the filter keeping other conjuncts than the equality
+// does not. A skip adds the rows it drops to the limit after it, and a LIMIT 0 needs no row:
+// the loops stop before their first step.
+std::optional<uint64_t> limitOverTheCut(const EqualityCross& match) {
+    FilterOp filter = match._filter;
+    EqOp equality = match._equality;
+    if (filter.getMask() != equality.getResult()) {
+        return std::nullopt;
+    }
+
     Block* const cutBlock = filter->getBlock();
 
     llvm::SmallVector<CutRowsReader, 8> pending;
@@ -9083,7 +8998,7 @@ bool prefersTheProduct(const EqualityCross& match, const DBPassContext& context)
 
     const ::db::CardinalityEstimation estimation(view);
 
-    return estimation.shouldPreferCartesian(leftLabels, rightLabels, limitOverTheCut(match._filter));
+    return estimation.shouldPreferCartesian(leftLabels, rightLabels, limitOverTheCut(match));
 }
 
 // What the db level puts on rows it cannot count - the figure the v2 planner reads a
@@ -9831,12 +9746,13 @@ bool buildsTheLeftFactor(const EqualityCross& match, const DBPassContext& contex
     return estimateFactorRows(leftFactor, estimator) < estimateFactorRows(rightFactor, estimator);
 }
 
-bool matchEqualityCross(FilterOp filter, EqualityCross& match) {
-    EqOp equality = filter.getMask().getDefiningOp<EqOp>();
+bool matchEqualityConjunct(FilterOp filter, Value conjunct, OpAnswers& readAlone, EqualityCross& match) {
+    EqOp equality = conjunct.getDefiningOp<EqOp>();
     if (!equality || !equality.getResult().hasOneUse()) {
         return false;
     }
 
+    match = EqualityCross {};
     match._filter = filter;
     match._equality = equality;
 
@@ -9883,7 +9799,11 @@ bool matchEqualityCross(FilterOp filter, EqualityCross& match) {
         return false;
     }
 
-    return carriesJoinColumnsOnly(filter, match) && productRowsReachOnly(product, match);
+    // The join emits the rows the equality holds on, so a reader of the product's own rows
+    // would go from seeing every pair to seeing only the matching ones
+    return carriesJoinColumnsOnly(filter, match) && answerOnce(readAlone, product, [&product, &filter]() {
+        return readsOnlyIntoTheFilter(product, filter);
+    });
 }
 
 // Sinks the ops rebuilding a side's key into its factor, so the key becomes a column the
@@ -9912,7 +9832,7 @@ size_t sinkKeyIntoFactor(JoinKeySide& side, size_t factorFirstResult, mlir::OpBu
     return keyColumn;
 }
 
-void fuseHashJoin(EqualityCross& match, mlir::OpBuilder& builder) {
+void fuseHashJoin(EqualityCross& match, mlir::RewriterBase& rewriter) {
     CrossProduct product = match._product;
 
     Yield leftYield = cast<Yield>(product.getLeftFactor().front().getTerminator());
@@ -9920,8 +9840,8 @@ void fuseHashJoin(EqualityCross& match, mlir::OpBuilder& builder) {
     const size_t leftCount = leftYield.getNumOperands();
     const size_t rightCount = rightYield.getNumOperands();
 
-    const size_t leftKey = sinkKeyIntoFactor(match._left, 0, builder);
-    const size_t rightKey = sinkKeyIntoFactor(match._right, leftCount, builder);
+    const size_t leftKey = sinkKeyIntoFactor(match._left, 0, rewriter);
+    const size_t rightKey = sinkKeyIntoFactor(match._right, leftCount, rewriter);
 
     // The join probes its left factor and builds its right, so the two sides go in the
     // way round the match chose rather than the way round the product held them.
@@ -9938,8 +9858,8 @@ void fuseHashJoin(EqualityCross& match, mlir::OpBuilder& builder) {
     const size_t probeKey = buildsTheLeftFactor ? rightKey : leftKey;
     const size_t buildKey = buildsTheLeftFactor ? leftKey : rightKey;
 
-    builder.setInsertionPoint(product);
-    HashJoin join = builder.create<HashJoin>(product.getLoc(), resultTypes, probeKey, buildKey);
+    rewriter.setInsertionPoint(product);
+    HashJoin join = rewriter.create<HashJoin>(product.getLoc(), resultTypes, probeKey, buildKey);
     join.getLeftFactor().takeBody(probeFactor);
     join.getRightFactor().takeBody(buildFactor);
 
@@ -9961,39 +9881,30 @@ void fuseHashJoin(EqualityCross& match, mlir::OpBuilder& builder) {
     const Value leftKeyColumn = join.getResult(leftFirstResult + leftKey);
     const Value rightKeyColumn = join.getResult(rightFirstResult + rightKey);
 
-    // The join keeps only the rows the equality held on, so what the filter handed
-    // downstream now comes from the join directly - a carried key from the column the
-    // join yields for it, which is that key over the joined rows.
-    const Operation::operand_range carried = match._filter.getColumnsToFilter();
-    const ResultRange filtered = match._filter.getFilteredColumns();
-    for (size_t columnIndex = 0; columnIndex < carried.size(); columnIndex++) {
-        const Value carriedColumn = carried[columnIndex];
+    // The join keeps only the rows the equality held on, so what the filter carries now
+    // comes from the join directly - a carried key from the column the join yields for it,
+    // which is that key over the joined rows.
+    FilterOp filter = match._filter;
+    const Operation::operand_range carried = filter.getColumnsToFilter();
+    rewriter.modifyOpInPlace(filter, [&]() {
+        for (size_t columnIndex = 0; columnIndex < carried.size(); columnIndex++) {
+            const Value carriedColumn = carried[columnIndex];
+            const unsigned operandIndex = static_cast<unsigned>(columnIndex) + 1;
 
-        if (carriedColumn == match._left._key) {
-            filtered[columnIndex].replaceAllUsesWith(leftKeyColumn);
-        } else if (carriedColumn == match._right._key) {
-            filtered[columnIndex].replaceAllUsesWith(rightKeyColumn);
-        } else {
-            const unsigned productIndex = cast<OpResult>(carriedColumn).getResultNumber();
-            filtered[columnIndex].replaceAllUsesWith(joinColumns[productIndex]);
+            if (carriedColumn == match._left._key) {
+                filter->setOperand(operandIndex, leftKeyColumn);
+            } else if (carriedColumn == match._right._key) {
+                filter->setOperand(operandIndex, rightKeyColumn);
+            }
         }
-    }
+    });
 
     for (size_t columnIndex = 0; columnIndex < joinColumns.size(); columnIndex++) {
-        product.getResult(columnIndex).replaceAllUsesWith(joinColumns[columnIndex]);
+        rewriter.replaceAllUsesWith(product.getResult(columnIndex), joinColumns[columnIndex]);
     }
 
-    match._filter.erase();
-    match._equality.erase();
-
-    const JoinKeySide* const sides[] = {&match._left, &match._right};
-    for (const JoinKeySide* const side : sides) {
-        for (Operation* const coneOp : llvm::reverse(side->_cone._ops)) {
-            eraseIfUnused(coneOp);
-        }
-    }
-
-    product.erase();
+    dropConjunct(filter, match._equality.getResult(), rewriter);
+    rewriter.eraseOp(product);
 }
 
 struct FuseHashJoin : public impl::FuseHashJoinBase<FuseHashJoin> {
@@ -10005,25 +9916,22 @@ struct FuseHashJoin : public impl::FuseHashJoinBase<FuseHashJoin> {
     }
 
     void runOnOperation() override {
-        Operation* const root = getOperation();
-
-        // Collect the matches first: fusing erases ops, which would invalidate the walk.
         const DBPassContext& context = *_context;
-        llvm::SmallVector<EqualityCross, 2> matches;
-        root->walk([&matches, &context](FilterOp filter) {
-            EqualityCross match;
-            if (!matchEqualityCross(filter, match) || prefersTheProduct(match, context)) {
-                return;
-            }
 
-            matches.push_back(match);
-        });
+        const auto match = [&context](FilterOp filter, EqualityCross& cross) {
+            OpAnswers readAlone;
 
-        mlir::OpBuilder builder(&getContext());
-        for (EqualityCross& match : matches) {
-            match._buildsTheLeftFactor = buildsTheLeftFactor(match, context);
-            fuseHashJoin(match, builder);
-        }
+            return matchAConjunct(filter, [&filter, &cross, &context, &readAlone](Value conjunct) {
+                return matchEqualityConjunct(filter, conjunct, readAlone, cross) && !prefersTheProduct(cross, context);
+            });
+        };
+
+        const auto fuse = [&context](EqualityCross& cross, mlir::RewriterBase& rewriter) {
+            cross._buildsTheLeftFactor = buildsTheLeftFactor(cross, context);
+            fuseHashJoin(cross, rewriter);
+        };
+
+        runFilterWorklist<EqualityCross>(getOperation(), match, fuse);
     }
 
 private:
@@ -10036,6 +9944,7 @@ private:
 struct FetchNodesChain {
     FilterOp _filter {nullptr};
     EqOp _equality {nullptr};
+    llvm::SmallVector<Value, 2> _otherConjuncts;
     Value _nodes;
     Value _ids;
     Operation* _scan {nullptr};
@@ -10241,8 +10150,35 @@ bool isEqualityOfTheFilter(EqOp equality, FilterOp filter) {
     return readOnce && besideTheFilter;
 }
 
-bool matchFetchNodes(FilterOp filter, FetchNodesChain& chain) {
-    EqOp equality = filter.getMask().getDefiningOp<EqOp>();
+// Whether @param conjunct is computed by row computations from the columns @param filter
+// carries alone, so it can be rebuilt over the rows a fusion makes in place of those columns
+bool computesFromTheCarriedColumns(FilterOp filter, Value conjunct) {
+    const Operation::operand_range carried = filter.getColumnsToFilter();
+    Block* const block = filter->getBlock();
+
+    llvm::SmallVector<Value> pending {conjunct};
+    llvm::DenseSet<Value> visited;
+    while (!pending.empty()) {
+        const Value value = pending.pop_back_val();
+        if (llvm::is_contained(carried, value) || !visited.insert(value).second) {
+            continue;
+        }
+
+        Operation* const def = value.getDefiningOp();
+        if (def && def->getBlock() != block && ::db::yieldsConstantColumn(value)) {
+            continue;
+        } else if (!def || def->getBlock() != block || !computesFromTheRow(def)) {
+            return false;
+        }
+
+        llvm::append_range(pending, def->getOperands());
+    }
+
+    return true;
+}
+
+bool matchFetchNodesConjunct(FilterOp filter, Value conjunct, FetchNodesChain& chain) {
+    EqOp equality = conjunct.getDefiningOp<EqOp>();
     if (!isEqualityOfTheFilter(equality, filter)) {
         return false;
     }
@@ -10254,6 +10190,79 @@ bool matchFetchNodes(FilterOp filter, FetchNodesChain& chain) {
     const Value rhs = equality.getRhs();
 
     return matchFetchNodesChain(lhs, rhs, chain) || matchFetchNodesChain(rhs, lhs, chain);
+}
+
+// The fetch takes one conjunct and rebuilds the others over the fetched rows, so at most one
+// conjunct may be one it cannot rebuild, and that one has to be the one it takes
+bool matchFetchNodes(FilterOp filter, FetchNodesChain& chain) {
+    llvm::SmallVector<Value, 4> conjuncts;
+    collectConjuncts(filter.getMask(), conjuncts);
+
+    Value unrebuilt;
+    for (const Value conjunct : conjuncts) {
+        if (computesFromTheCarriedColumns(filter, conjunct)) {
+            continue;
+        } else if (unrebuilt && unrebuilt != conjunct) {
+            return false;
+        }
+
+        unrebuilt = conjunct;
+    }
+
+    for (const Value conjunct : conjuncts) {
+        const bool rebuildsTheOthers = !unrebuilt || unrebuilt == conjunct;
+        if (!rebuildsTheOthers || !matchFetchNodesConjunct(filter, conjunct, chain)) {
+            continue;
+        }
+
+        chain._otherConjuncts.assign(conjuncts.begin(), conjuncts.end());
+        llvm::erase(chain._otherConjuncts, conjunct);
+
+        return true;
+    }
+
+    return false;
+}
+
+// Cuts @param columns, the rows a fusion makes in place of the columns @param filter carries,
+// one for one, to the rows @param conjuncts keep, their computation rebuilt over them. Fills
+// @param cone with the ops computing them over the filter's own rows.
+void keepConjunctsOver(FilterOp filter,
+                       llvm::ArrayRef<Value> conjuncts,
+                       llvm::SmallVectorImpl<Value>& columns,
+                       MaskCone& cone,
+                       mlir::RewriterBase& rewriter) {
+    if (conjuncts.empty()) {
+        return;
+    }
+
+    Block* const block = filter->getBlock();
+    const auto computedFromTheRows = [block](Operation* op) {
+        return op->getBlock() == block && computesFromTheRow(op);
+    };
+
+    llvm::SmallPtrSet<Operation*, 8> visited;
+    for (const Value conjunct : conjuncts) {
+        collectConePostOrder(conjunct, computedFromTheRows, visited, cone);
+    }
+
+    mlir::IRMapping mapping;
+    for (const auto [carried, column] : llvm::zip_equal(filter.getColumnsToFilter(), columns)) {
+        mapping.map(carried, column);
+    }
+
+    cloneRowCone(cone, mapping, rewriter);
+
+    llvm::SmallVector<Value, 4> rebuilt;
+    for (const Value conjunct : conjuncts) {
+        rebuilt.push_back(mapping.lookupOrDefault(conjunct));
+    }
+
+    const ValueRange columnRange(columns);
+    const Value mask = conjoin(rebuilt, filter.getLoc(), rewriter);
+    FilterOp kept = rewriter.create<FilterOp>(filter.getLoc(), columnRange.getTypes(), mask, columnRange);
+
+    columns.assign(kept.getResults().begin(), kept.getResults().end());
 }
 
 CrossProduct dropProductColumn(CrossProduct product, size_t resultIndex, mlir::RewriterBase& rewriter) {
@@ -10359,14 +10368,25 @@ void fuseFetchNodes(FetchNodesChain& chain, mlir::RewriterBase& rewriter) {
         keepLabelledRows(fetched, chain._labels, loc, rewriter);
     }
 
+    llvm::SmallVector<Value> columns;
     size_t fetchedIndex = 1;
-    for (size_t index = 0; index < carried.size(); index++) {
-        const bool holdsTheNodes = carried[index] == chain._nodes;
-        filtered[index].replaceAllUsesWith(holdsTheNodes ? fetched.front() : fetched[fetchedIndex++]);
+    for (const Value column : carried) {
+        const bool holdsTheNodes = column == chain._nodes;
+        columns.push_back(holdsTheNodes ? fetched.front() : fetched[fetchedIndex++]);
     }
 
+    MaskCone otherConjunctsCone;
+    keepConjunctsOver(filter, chain._otherConjuncts, columns, otherConjunctsCone, rewriter);
+
+    for (size_t index = 0; index < filtered.size(); index++) {
+        filtered[index].replaceAllUsesWith(columns[index]);
+    }
+
+    const Value mask = filter.getMask();
     rewriter.eraseOp(filter);
+    eraseUnusedConjunction(mask, rewriter);
     rewriter.eraseOp(chain._equality);
+    eraseUnusedRowCone(otherConjunctsCone, rewriter);
 
     llvm::SmallVector<CrossProduct> products;
     for (const OpResult link : chain._links) {

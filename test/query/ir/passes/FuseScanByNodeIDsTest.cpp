@@ -203,13 +203,27 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(FuseScanByNodeIDsTest, leavesConjunctionAlone) {
+// The scan lists the node of the first conjunct, and the filter keeps the second over it
+TEST_F(FuseScanByNodeIDsTest, listsTheFirstConjunctAndFiltersOnTheSecond) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(conjunction);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runFuse(*module));
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
 
-    expectUntouched(*module);
+    llvm::SmallVector<mlir::db::ConstScanNodes> constScans = collect<mlir::db::ConstScanNodes>(*module);
+    ASSERT_EQ(constScans.size(), 1u);
+
+    const llvm::ArrayRef<int64_t> nodeIDs = constScans.front().getNodeIDs();
+    const std::vector<int64_t> expected {1};
+    EXPECT_EQ(std::vector<int64_t>(nodeIDs.begin(), nodeIDs.end()), expected);
+
+    llvm::SmallVector<mlir::db::FilterOp> filters = collect<mlir::db::FilterOp>(*module);
+    ASSERT_EQ(filters.size(), 1u);
+    EXPECT_TRUE(filters.front().getMask().getDefiningOp<mlir::db::EqOp>());
+    EXPECT_EQ(filters.front().getColumnsToFilter().front().getDefiningOp(), constScans.front().getOperation());
+
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::AndOp>(*module), 0u);
 }
 
 // MATCH (n) WHERE n = -1 RETURN n

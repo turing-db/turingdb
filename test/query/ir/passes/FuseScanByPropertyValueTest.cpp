@@ -583,24 +583,17 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(FuseScanByPropertyValueTest, keepsTheScanAliveWhenSomethingElseReadsIt) {
+// The scan by value takes the scan's place, where the other reader would see only the rows
+// it keeps
+TEST_F(FuseScanByPropertyValueTest, leavesAScanReadBesideTheFilterAlone) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(scanReadBesideTheFilter);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runFuse(*module));
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
 
-    llvm::SmallVector<mlir::db::ScanNodesByPropertyValue> scans = collect<mlir::db::ScanNodesByPropertyValue>(*module);
-    ASSERT_EQ(scans.size(), 1u);
-
-    // The other reader keeps the original scan alive, so the program now opens two.
+    EXPECT_EQ(countOps<mlir::db::ScanNodesByPropertyValue>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 1u);
-    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 0u);
-
-    llvm::SmallVector<mlir::db::Output> outputs = collect<mlir::db::Output>(*module);
-    ASSERT_EQ(outputs.size(), 1u);
-    ASSERT_EQ(outputs.front().getColumns().size(), 2u);
-    EXPECT_TRUE(mlir::isa<mlir::db::ScanNodes>(outputs.front().getColumns()[0].getDefiningOp()));
-    EXPECT_EQ(outputs.front().getColumns()[1].getDefiningOp(), scans.front().getOperation());
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 1u);
 }
 
 // The filter sits in a factor region while the scan it reads is in the enclosing block
@@ -631,11 +624,10 @@ TEST_F(FuseScanByPropertyValueTest, fusesAFactorFilterOverAnOuterScan) {
     llvm::SmallVector<mlir::db::ScanNodesByPropertyValue> scans = collect<mlir::db::ScanNodesByPropertyValue>(*module);
     ASSERT_EQ(scans.size(), 1u);
 
-    // The fused scan takes the filter's place inside the factor, so the source the factor
-    // reads is now its own; the enclosing scan had no other reader and is gone.
+    // The fused scan takes the place of the enclosing scan, which the factor reads
     llvm::SmallVector<mlir::db::CrossProduct> products = collect<mlir::db::CrossProduct>(*module);
     ASSERT_EQ(products.size(), 1u);
-    EXPECT_EQ(scans.front().getOperation()->getParentOp(), products.front().getOperation());
+    EXPECT_EQ(scans.front()->getBlock(), products.front()->getBlock());
 
     mlir::db::Yield leftYield = mlir::cast<mlir::db::Yield>(products.front().getLeftFactor().front().getTerminator());
     ASSERT_EQ(leftYield.getColumns().size(), 1u);
