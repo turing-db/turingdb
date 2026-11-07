@@ -1689,8 +1689,8 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
     `MATCH (n)-[e*1..3 WHERE e.since > n.born]->(m)` reads the seed. Each is row-aligned
     with `input_nodes` and becomes one further block argument of the region, in that order,
     holding the seed row's own value repeated over the candidates of the hop. They are the
-    carry set into the hop regions, apart from `columns_to_filter`: that one is trimmed and
-    reordered, and each of its columns comes back as a result, where an import does not. An
+    carry set into the hop regions, apart from `columns_to_filter`: that one is reordered,
+    and each of its columns comes back as a result, where an import does not. An
     exploration that imports is walked seed by seed, so the distinct search, which expands
     many seeds at one level, is not used for it.
 
