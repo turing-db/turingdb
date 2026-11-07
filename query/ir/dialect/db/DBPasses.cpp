@@ -7017,77 +7017,67 @@ void trimHashJoin(HashJoin join, mlir::OpBuilder& builder) {
     joinOp->erase();
 }
 
-// A lazy case or a coalesce hands its carried columns to every region as block arguments,
-// so a column no region reads leaves the operands and the arguments of every region
-// together. A column carried twice - the subject of `CASE t WHEN ...` beside the variable
-// t - is read through its first argument. One row-carrying column stays for the lowering to
-// size the selection by.
-void trimSelectionCarrySet(Operation* selection) {
-    const OperandRange carried = selection->getOperands();
-    const MutableArrayRef<Region> regions = selection->getRegions();
+// A CASE or a coalesce lays its rows out over a column it carries into its regions, and so
+// does an op over the elements of a constant list, so one row-carrying column stays for them
+bool sizesItsRowsByItsRegionCarrySet(Operation* op) {
+    if (isa<LazyCase, Coalesce>(op)) {
+        return true;
+    } else if (ListComprehension comprehension = dyn_cast<ListComprehension>(op)) {
+        return ::db::yieldsConstantColumn(comprehension.getSource());
+    } else if (ListPredicate predicate = dyn_cast<ListPredicate>(op)) {
+        return ::db::yieldsConstantColumn(predicate.getSource());
+    } else if (Reduce reduce = dyn_cast<Reduce>(op)) {
+        return ::db::yieldsConstantColumn(reduce.getSource());
+    } else if (AllReduce allReduce = dyn_cast<AllReduce>(op)) {
+        return ::db::yieldsConstantColumn(allReduce.getSource());
+    } else {
+        return false;
+    }
+}
+
+// A column no region reads leaves the operands and the arguments of every region with a body
+// together. A column carried twice - the subject of `CASE t WHEN ...` beside the variable t -
+// is read through its first argument.
+void trimRegionCarrySet(Operation* op) {
+    ColumnCarrierOpInterface carrier = cast<ColumnCarrierOpInterface>(op);
+    MutableOperandRange carriedOperands = carrier.getRegionCarrySetMutable();
+    const OperandRange carried = carriedOperands;
+
+    llvm::SmallVector<std::pair<Block*, size_t>, 4> bodies;
+    for (Region& region : op->getRegions()) {
+        if (region.empty()) {
+            continue;
+        }
+
+        RegionCarrySet carrySet;
+        const bool carries = carrier.getRegionCarrySet(region, carrySet);
+        bioassert(carries, "An op carrying columns into a region carries them into all of them");
+
+        bodies.emplace_back(&region.front(), carrySet._argumentOffset);
+    }
 
     for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
-        const auto firstIt = llvm::find(carried, carried[carriedIndex]);
-        const size_t firstIndex = static_cast<size_t>(firstIt - carried.begin());
-
+        const size_t firstIndex = static_cast<size_t>(llvm::find(carried, carried[carriedIndex]) - carried.begin());
         if (firstIndex == carriedIndex) {
             continue;
         }
 
-        for (Region& region : regions) {
-            Block& block = region.front();
-            block.getArgument(carriedIndex).replaceAllUsesWith(block.getArgument(firstIndex));
+        for (const auto& [body, argumentOffset] : bodies) {
+            BlockArgument repeated = body->getArgument(static_cast<unsigned>(argumentOffset + carriedIndex));
+            repeated.replaceAllUsesWith(body->getArgument(static_cast<unsigned>(argumentOffset + firstIndex)));
         }
     }
 
     llvm::SmallBitVector keep(carried.size());
-    for (Region& region : regions) {
-        const Block::BlockArgListType arguments = region.front().getArguments();
-
-        for (size_t argumentIndex = 0; argumentIndex < arguments.size(); argumentIndex++) {
-            if (!arguments[argumentIndex].use_empty()) {
-                keep.set(argumentIndex);
-            }
-        }
-    }
-
-    keepRowCarryingColumn(carried, 0, keep);
-
-    if (keep.all()) {
-        return;
-    }
-
-    llvm::BitVector erased(carried.size());
-    for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
-        if (!keep[carriedIndex]) {
-            erased.set(carriedIndex);
-        }
-    }
-
-    for (Region& region : regions) {
-        region.front().eraseArguments(erased);
-    }
-
-    selection->eraseOperands(erased);
-}
-
-// The ops over the elements of a list repeat every carried column once per element, so a
-// column none of their regions reads leaves the operands and every region's arguments
-// together. A constant list is laid out over the rows of a carried column, so one
-// row-carrying column stays for it.
-void trimElementCarrySet(Operation* op, Value source, OperandRange carried) {
-    llvm::SmallBitVector keep(carried.size());
-    for (Region& region : op->getRegions()) {
-        const Block::BlockArgListType carriedArguments = region.front().getArguments().take_back(carried.size());
-
+    for (const auto& [body, argumentOffset] : bodies) {
         for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
-            if (!carriedArguments[carriedIndex].use_empty()) {
+            if (!body->getArgument(static_cast<unsigned>(argumentOffset + carriedIndex)).use_empty()) {
                 keep.set(carriedIndex);
             }
         }
     }
 
-    if (::db::yieldsConstantColumn(source)) {
+    if (sizesItsRowsByItsRegionCarrySet(op)) {
         keepRowCarryingColumn(carried, 0, keep);
     }
 
@@ -7095,30 +7085,25 @@ void trimElementCarrySet(Operation* op, Value source, OperandRange carried) {
         return;
     }
 
-    const size_t operandOffset = carried.getBeginOperandIndex();
-
-    llvm::BitVector erasedOperands(op->getNumOperands());
+    llvm::SmallVector<Value> keptColumns;
     for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
-        if (!keep[carriedIndex]) {
-            erasedOperands.set(operandOffset + carriedIndex);
+        if (keep[carriedIndex]) {
+            keptColumns.push_back(carried[carriedIndex]);
         }
     }
 
-    for (Region& region : op->getRegions()) {
-        Block& block = region.front();
-        const size_t argumentOffset = block.getNumArguments() - carried.size();
-
-        llvm::BitVector erasedArguments(block.getNumArguments());
+    for (const auto& [body, argumentOffset] : bodies) {
+        llvm::BitVector erasedArguments(body->getNumArguments());
         for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
             if (!keep[carriedIndex]) {
                 erasedArguments.set(argumentOffset + carriedIndex);
             }
         }
 
-        block.eraseArguments(erasedArguments);
+        body->eraseArguments(erasedArguments);
     }
 
-    op->eraseOperands(erasedOperands);
+    carriedOperands.assign(keptColumns);
 }
 
 bool matchRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
@@ -7203,7 +7188,7 @@ BlockArgument carryIntoRegion(Region& region, Value column, mlir::RewriterBase& 
 }
 
 bool trimsItsRegionCarrySet(Operation* op) {
-    return isa<LazyCase, Coalesce, ListComprehension, ListPredicate, Reduce, AllReduce>(op);
+    return isa<LazyCase, Coalesce, ListComprehension, ListPredicate, Reduce, AllReduce, ExplorePaths>(op);
 }
 
 struct TrimVisit {
@@ -7222,8 +7207,8 @@ void pushNestedOps(Operation* op, llvm::SmallVectorImpl<TrimVisit>& worklist) {
 }
 
 // Each block is swept backwards, so a reader is trimmed before the ops feeding it. An op
-// reading its carried columns inside its regions is trimmed after what they hold; a hop or
-// a two-factor op only reads what its regions yield, so it is trimmed before them.
+// reading its carried columns inside its regions is trimmed after what they hold; a
+// two-factor op only reads what its regions yield, so it is trimmed before them.
 void collectTrimOrder(Operation* root, llvm::SmallVectorImpl<Operation*>& order) {
     llvm::SmallVector<TrimVisit> worklist;
     pushNestedOps(root, worklist);
@@ -7247,11 +7232,7 @@ void collectTrimOrder(Operation* root, llvm::SmallVectorImpl<Operation*>& order)
     }
 }
 
-void trimCarriedColumns(Operation* op, mlir::OpBuilder& builder) {
-    CarrySet carrySet;
-    const bool carries = matchTrimmedColumns(op, carrySet);
-    bioassert(carries, "A trimming op that is neither a cross product nor a join has a carry set");
-
+void trimCarriedColumns(Operation* op, const CarrySet& carrySet, mlir::OpBuilder& builder) {
     llvm::SmallVector<size_t> kept;
     selectKeptCarriedColumns(op, carrySet, kept);
 
@@ -7351,24 +7332,19 @@ void trimOptionalMatch(OptionalMatch optional, mlir::OpBuilder& builder, llvm::S
 }
 
 void trimUnreadColumnsOf(Operation* op, mlir::OpBuilder& builder, llvm::SmallPtrSetImpl<Operation*>& erased) {
-    if (isa<LazyCase, Coalesce>(op)) {
-        trimSelectionCarrySet(op);
-    } else if (ListComprehension comprehension = dyn_cast<ListComprehension>(op)) {
-        trimElementCarrySet(op, comprehension.getSource(), comprehension.getColumnsToFilter());
-    } else if (ListPredicate predicate = dyn_cast<ListPredicate>(op)) {
-        trimElementCarrySet(op, predicate.getSource(), predicate.getColumnsToFilter());
-    } else if (Reduce reduce = dyn_cast<Reduce>(op)) {
-        trimElementCarrySet(op, reduce.getSource(), reduce.getColumnsToFilter());
-    } else if (AllReduce allReduce = dyn_cast<AllReduce>(op)) {
-        trimElementCarrySet(op, allReduce.getSource(), allReduce.getColumnsToFilter());
-    } else if (CrossProduct product = dyn_cast<CrossProduct>(op)) {
+    if (trimsItsRegionCarrySet(op)) {
+        trimRegionCarrySet(op);
+    }
+
+    CarrySet carrySet;
+    if (CrossProduct product = dyn_cast<CrossProduct>(op)) {
         trimCrossProduct(product, builder);
     } else if (HashJoin join = dyn_cast<HashJoin>(op)) {
         trimHashJoin(join, builder);
     } else if (OptionalMatch optional = dyn_cast<OptionalMatch>(op)) {
         trimOptionalMatch(optional, builder, erased);
-    } else {
-        trimCarriedColumns(op, builder);
+    } else if (matchTrimmedColumns(op, carrySet)) {
+        trimCarriedColumns(op, carrySet, builder);
     }
 }
 
