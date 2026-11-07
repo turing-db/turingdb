@@ -125,10 +125,10 @@ TEST_F(WhereExprRegistrationTest, singleNodeProp) {
 }
 
 TEST_F(WhereExprRegistrationTest, twoNodePropsInAnd) {
-    // WHERE n.age > 5 AND n.name = 'Remy' should produce GetNodeProperties for
+    // WHERE n.age > 5 AND n.name <> 'Remy' should produce GetNodeProperties for
     // both "age" and "name".
     const RegisteredProps ops = generateAndCollect(
-        "MATCH (n) WHERE n.age > 5 AND n.name = 'Remy' RETURN n");
+        "MATCH (n) WHERE n.age > 5 AND n.name <> 'Remy' RETURN n");
 
     const std::multiset<std::string> expected = {"age", "name"};
     EXPECT_EQ(ops.nodeProps, expected);
@@ -138,7 +138,7 @@ TEST_F(WhereExprRegistrationTest, twoNodePropsInAnd) {
 TEST_F(WhereExprRegistrationTest, threeNodePropsInNestedAnd) {
     // Three properties in a nested AND structure should each get their own op.
     const RegisteredProps ops = generateAndCollect(
-        "MATCH (n) WHERE n.age > 5 AND n.isFrench = true AND n.hasPhD = true RETURN n");
+        "MATCH (n) WHERE n.age > 5 AND n.isFrench <> false AND n.hasPhD <> false RETURN n");
 
     const std::multiset<std::string> expected = {"age", "hasPhD", "isFrench"};
     EXPECT_EQ(ops.nodeProps, expected);
