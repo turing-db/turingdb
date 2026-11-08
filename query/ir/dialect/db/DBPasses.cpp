@@ -7087,10 +7087,66 @@ bool sizesItsRowsByItsRegionCarrySet(Operation* op) {
     }
 }
 
+// A column a region forwards that no region after it reads leaves its yield and the arguments
+// of every region after it
+void trimForwardedColumns(Operation* op) {
+    ColumnCarrierOpInterface carrier = cast<ColumnCarrierOpInterface>(op);
+    const size_t regionCount = op->getNumRegions();
+
+    for (size_t sourceIndex = 0; sourceIndex < regionCount; sourceIndex++) {
+        Region& source = op->getRegion(static_cast<unsigned>(sourceIndex));
+        if (!carrier.forwardsColumns(source)) {
+            continue;
+        }
+
+        MutableOperandRange forwarded = carrier.getForwardedColumnsMutable(source);
+        const OperandRange columns = forwarded;
+        const size_t forwardOffset = forwardedArgumentCount(source);
+
+        llvm::SmallBitVector read(columns.size());
+        for (size_t laterIndex = sourceIndex + 1; laterIndex < regionCount; laterIndex++) {
+            Block& later = op->getRegion(static_cast<unsigned>(laterIndex)).front();
+            for (size_t forwardIndex = 0; forwardIndex < columns.size(); forwardIndex++) {
+                if (!later.getArgument(static_cast<unsigned>(forwardOffset + forwardIndex)).use_empty()) {
+                    read.set(forwardIndex);
+                }
+            }
+        }
+
+        if (read.all()) {
+            continue;
+        }
+
+        llvm::SmallVector<Value> keptColumns;
+        for (size_t forwardIndex = 0; forwardIndex < columns.size(); forwardIndex++) {
+            if (read[forwardIndex]) {
+                keptColumns.push_back(columns[forwardIndex]);
+            }
+        }
+
+        for (size_t laterIndex = sourceIndex + 1; laterIndex < regionCount; laterIndex++) {
+            Block& later = op->getRegion(static_cast<unsigned>(laterIndex)).front();
+
+            llvm::BitVector erasedArguments(later.getNumArguments());
+            for (size_t forwardIndex = 0; forwardIndex < columns.size(); forwardIndex++) {
+                if (!read[forwardIndex]) {
+                    erasedArguments.set(forwardOffset + forwardIndex);
+                }
+            }
+
+            later.eraseArguments(erasedArguments);
+        }
+
+        forwarded.assign(keptColumns);
+    }
+}
+
 // A column no region reads leaves the operands and the arguments of every region with a body
 // together. A column carried twice - the subject of `CASE t WHEN ...` beside the variable t -
 // is read through its first argument.
 void trimRegionCarrySet(Operation* op) {
+    trimForwardedColumns(op);
+
     ColumnCarrierOpInterface carrier = cast<ColumnCarrierOpInterface>(op);
     MutableOperandRange carriedOperands = carrier.getRegionCarrySetMutable();
     const OperandRange carried = carriedOperands;
@@ -7237,6 +7293,51 @@ BlockArgument carryIntoRegion(Region& region, Value column, mlir::RewriterBase& 
     const size_t carriedIndex = carryIntoRegions(region.getParentOp(), column, rewriter, appended);
 
     return carriedArgument(region, carriedIndex);
+}
+
+// The argument @param target, a region after @param source, takes @param column of
+// @param source as. A column @param source takes itself comes into @param target the same
+// way; any other @param source forwards, as an argument of every region after it.
+BlockArgument forwardColumn(Region& source, Value column, Region& target, mlir::RewriterBase& rewriter) {
+    Block& targetBody = target.front();
+
+    BlockArgument argument = dyn_cast<BlockArgument>(column);
+    if (argument && argument.getParentRegion() == &source) {
+        Region* forwardingSource = nullptr;
+        size_t forwardIndex = 0;
+        if (matchForwardedArgument(argument, forwardingSource, forwardIndex)) {
+            return targetBody.getArgument(static_cast<unsigned>(forwardedArgumentCount(*forwardingSource) + forwardIndex));
+        }
+
+        RegionCarrySet carrySet;
+        matchRegionCarrySet(source, carrySet);
+
+        return carriedArgument(target, argument.getArgNumber() - carrySet._argumentOffset);
+    }
+
+    Operation* const op = source.getParentOp();
+    ColumnCarrierOpInterface carrier = cast<ColumnCarrierOpInterface>(op);
+    MutableOperandRange forwarded = carrier.getForwardedColumnsMutable(source);
+
+    const size_t forwardOffset = forwardedArgumentCount(source);
+    const OperandRange current = forwarded;
+    const size_t forwardIndex = static_cast<size_t>(llvm::find(current, column) - current.begin());
+
+    if (forwardIndex == current.size()) {
+        const unsigned position = static_cast<unsigned>(forwardOffset + forwardIndex);
+        Operation* const yield = source.front().getTerminator();
+
+        rewriter.modifyOpInPlace(yield, [&forwarded, column] {
+            forwarded.append(column);
+        });
+
+        for (size_t regionIndex = source.getRegionNumber() + 1; regionIndex < op->getNumRegions(); regionIndex++) {
+            Block& later = op->getRegion(static_cast<unsigned>(regionIndex)).front();
+            later.insertArgument(position, column.getType(), column.getLoc());
+        }
+    }
+
+    return targetBody.getArgument(static_cast<unsigned>(forwardOffset + forwardIndex));
 }
 
 bool trimsItsRegionCarrySet(Operation* op) {
@@ -7482,6 +7583,46 @@ bool computesOverCarriedColumns(Region& region) {
     return computedInTheRegion && readsACarriedColumn;
 }
 
+// The columns a region hoisted in front of its op forwards are computed there over every row,
+// so the regions after it take them as carried columns instead
+void carryForwardedColumns(Region& region, mlir::RewriterBase& rewriter) {
+    Operation* const op = region.getParentOp();
+    ColumnCarrierOpInterface carrier = cast<ColumnCarrierOpInterface>(op);
+    if (!carrier.forwardsColumns(region)) {
+        return;
+    }
+
+    MutableOperandRange forwarded = carrier.getForwardedColumnsMutable(region);
+    const OperandRange current = forwarded;
+    const llvm::SmallVector<Value> columns(current.begin(), current.end());
+    if (columns.empty()) {
+        return;
+    }
+
+    const size_t forwardOffset = forwardedArgumentCount(region);
+    const size_t regionCount = op->getNumRegions();
+
+    for (size_t forwardIndex = 0; forwardIndex < columns.size(); forwardIndex++) {
+        bool appended = false;
+        const size_t carriedIndex = carryIntoRegions(op, columns[forwardIndex], rewriter, appended);
+
+        for (size_t laterIndex = region.getRegionNumber() + 1; laterIndex < regionCount; laterIndex++) {
+            Region& later = op->getRegion(static_cast<unsigned>(laterIndex));
+            const BlockArgument forwardedArgument = later.getArgument(static_cast<unsigned>(forwardOffset + forwardIndex));
+            rewriter.replaceAllUsesWith(forwardedArgument, carriedArgument(later, carriedIndex));
+        }
+    }
+
+    rewriter.modifyOpInPlace(region.front().getTerminator(), [&forwarded] {
+        forwarded.clear();
+    });
+
+    for (size_t laterIndex = region.getRegionNumber() + 1; laterIndex < regionCount; laterIndex++) {
+        Block& later = op->getRegion(static_cast<unsigned>(laterIndex)).front();
+        later.eraseArguments(static_cast<unsigned>(forwardOffset), static_cast<unsigned>(columns.size()));
+    }
+}
+
 void hoistUnconditionalRegion(Operation* selection, mlir::RewriterBase& rewriter) {
     Region& region = unconditionalRegion(selection);
     Block& body = region.front();
@@ -7494,6 +7635,8 @@ void hoistUnconditionalRegion(Operation* selection, mlir::RewriterBase& rewriter
     for (const BlockArgument argument : body.getArguments()) {
         rewriter.replaceAllUsesWith(argument, carriedColumnOf(argument));
     }
+
+    carryForwardedColumns(region, rewriter);
 
     const Value yielded = yield->getOperand(0);
     if (::db::yieldsConstantColumn(yielded)) {
@@ -7861,6 +8004,7 @@ private:
 enum class RowsStepKind {
     MapsRows,
     IntoRegion,
+    FromForwardingRegion,
     ReadsRowConstant,
     LaysOutConstant,
     OutOfRegion,
@@ -7869,8 +8013,9 @@ enum class RowsStepKind {
 };
 
 // The rows _rows come from _outerRows across one op: _op maps them through or reads them as a
-// run constant, or they come into _body, out of its yield, or out of the op holding it. Into
-// the body and handed back, _position is the column's place in the op's region carry set.
+// run constant, or they come into _body, out of its yield, out of the op holding it, or out of
+// _body, a region before theirs that forwards columns. Into the body, from a forwarding region
+// and handed back, _position is the column's place in the op's region carry set.
 struct RowsStep {
     RowsStepKind _kind {RowsStepKind::MapsRows};
     Operation* _op {nullptr};
@@ -8298,6 +8443,7 @@ Operation* outerUseSite(const RowsStep& step) {
             return step._body->getParentOp();
         break;
         case RowsStepKind::OutOfRegion:
+        case RowsStepKind::FromForwardingRegion:
             return step._body->getTerminator();
         break;
         case RowsStepKind::LaysOutConstant:
@@ -8396,10 +8542,51 @@ private:
                 return {};
             }
 
+            RowsStep forwarding;
+            if (const Value forwarded = findInForwardingRegion(step, forwarding)) {
+                steps.push_back(forwarding);
+                collapseRunConstantRoundTrips(steps);
+                return forwarded;
+            }
+
             steps.push_back(step);
             rows = step._outerRows;
             useSite = outerUseSite(step);
         }
+    }
+
+    // The column a region before the one @param intoRegion steps into holds for the same
+    // carried rows, nearest first, where that region forwards columns
+    Value findInForwardingRegion(const RowsStep& intoRegion, RowsStep& forwarding) {
+        if (intoRegion._kind != RowsStepKind::IntoRegion) {
+            return {};
+        }
+
+        Region& region = *intoRegion._body->getParent();
+        Operation* const op = region.getParentOp();
+        ColumnCarrierOpInterface carrier = cast<ColumnCarrierOpInterface>(op);
+
+        for (size_t regionIndex = region.getRegionNumber(); regionIndex > 0; regionIndex--) {
+            Region& earlier = op->getRegion(static_cast<unsigned>(regionIndex - 1));
+            if (!carrier.forwardsColumns(earlier)) {
+                continue;
+            }
+
+            Block& earlierBody = earlier.front();
+            const BlockArgument earlierRows = carriedArgument(earlier, intoRegion._position);
+
+            const Value known = _known.find(earlierRows, _entityRead, earlierBody.getTerminator());
+            if (known) {
+                forwarding = RowsStep {._kind = RowsStepKind::FromForwardingRegion,
+                                       ._body = &earlierBody,
+                                       ._position = intoRegion._position,
+                                       ._rows = intoRegion._rows,
+                                       ._outerRows = earlierRows};
+                return known;
+            }
+        }
+
+        return {};
     }
 
     Value carryBack(const RowsStep& step, Value column, bool& rebuilt) {
@@ -8409,6 +8596,9 @@ private:
             break;
             case RowsStepKind::IntoRegion:
                 return carryIntoBody(step, column, rebuilt);
+            break;
+            case RowsStepKind::FromForwardingRegion:
+                return forwardIntoRegion(step, column);
             break;
             case RowsStepKind::ReadsRowConstant:
                 return readAsRowConstant(step, column);
@@ -8475,6 +8665,16 @@ private:
         }
 
         const BlockArgument argument = carriedArgument(*body.getParent(), carriedIndex);
+        _known.addCarried(step._rows, _entityRead, argument);
+
+        return argument;
+    }
+
+    Value forwardIntoRegion(const RowsStep& step, Value column) {
+        Region& source = *step._body->getParent();
+        Region& target = *cast<BlockArgument>(step._rows).getParentRegion();
+
+        const BlockArgument argument = forwardColumn(source, column, target, _rewriter);
         _known.addCarried(step._rows, _entityRead, argument);
 
         return argument;

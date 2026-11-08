@@ -3692,7 +3692,7 @@ def Case : TuringOp<"case", [Pure, ConstantThroughOperands, AttrSizedOperandSegm
   }];
 }
 
-def LazyCase : TuringOp<"lazy_case", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet"]>]> {
+def LazyCase : TuringOp<"lazy_case", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet", "forwardsColumns", "getForwardedColumnsMutable"]>]> {
   let summary = "A Cypher CASE, whose conditions and values are computed only over the rows reaching them";
 
   let description = [{
@@ -3721,6 +3721,31 @@ def LazyCase : TuringOp<"lazy_case", [Pure, ConstantThroughOperands, DeclareOpIn
     condition is true and null when none is and there is no ELSE. A constant needs no
     carrying.
 
+    Every later region sees a subset of the rows a condition region sees, so a condition
+    region may forward columns it computes through its db.case_yield. Each later region
+    takes them as leading arguments, ahead of the carried ones, after those of every
+    condition region before it:
+
+      %r = db.lazy_case({%n, %french}) {
+        ^bb0(%nIn: !db.column<!storage.node_id>, %frenchIn: !db.column<!storage.nullable<i1>>):
+          db.case_yield %frenchIn : !db.column<!storage.nullable<i1>>
+      }, {
+        ^bb0(%nIn: !db.column<!storage.node_id>, %frenchIn: !db.column<!storage.nullable<i1>>):
+          db.case_yield %one : !db.column<i64>
+      }, {
+        ^bb0(%nIn: !db.column<!storage.node_id>, %frenchIn: !db.column<!storage.nullable<i1>>):
+          %l = db.get_node_label_set(%nIn) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+          %c = db.check_label_constraint(%l, ["Founder"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+          db.case_yield %c : !db.column<!storage.bool> forwarding(%l : !db.column<!storage.labelset_id>)
+      }, {
+        ^bb0(%lIn: !db.column<!storage.labelset_id>, %nIn: !db.column<!storage.node_id>, %frenchIn: !db.column<!storage.nullable<i1>>):
+          db.case_yield %two : !db.column<i64>
+      }, {
+        ^bb0(%lIn: !db.column<!storage.labelset_id>, %nIn: !db.column<!storage.node_id>, %frenchIn: !db.column<!storage.nullable<i1>>):
+          %e = db.check_label_constraint(%lIn, ["Exotic"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+          db.case_yield %e : !db.column<!storage.bool>
+      } : (!db.column<!storage.node_id>, !db.column<!storage.nullable<i1>>) -> !db.column<none>
+
     The simple form `CASE s WHEN v THEN ...` is the generic one, with a db.eq of the
     subject against each WHEN value as the condition. The subject is computed once over
     every row and, unless it is a constant, carried as the last column.
@@ -3746,7 +3771,7 @@ def LazyCase : TuringOp<"lazy_case", [Pure, ConstantThroughOperands, DeclareOpIn
   }];
 }
 
-def Coalesce : TuringOp<"coalesce", [RecursiveMemoryEffects, MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet"]>]> {
+def Coalesce : TuringOp<"coalesce", [RecursiveMemoryEffects, MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet", "forwardsColumns", "getForwardedColumnsMutable"]>]> {
   let summary = "A coalesce(), whose arguments are computed only over the rows every earlier one left null";
 
   let description = [{
@@ -3767,7 +3792,8 @@ def Coalesce : TuringOp<"coalesce", [RecursiveMemoryEffects, MayRaise, DeclareOp
     Every region takes one argument per carried column, as db.lazy_case's regions do. The
     first region sees every row, and each later one the rows every earlier region yielded
     null for. A row takes the first value that is not null, and null when every region
-    yields null.
+    yields null. Every region but the last may forward columns to the regions after it,
+    as a condition region of db.lazy_case does.
 
     The result is typed as db.case's is, over the values the regions yield. The op has the
     effects of its regions, and raises where any op nested in them may, however deep: a
@@ -3800,12 +3826,18 @@ def Coalesce : TuringOp<"coalesce", [RecursiveMemoryEffects, MayRaise, DeclareOp
 }
 
 def CaseYield : TuringOp<"case_yield", [Pure, Terminator, ParentOneOf<["LazyCase", "Coalesce"]>]> {
-  let summary = "Name the condition or the value a region of a db.lazy_case or a db.coalesce computes";
+  let summary = "Name the condition or the value a region of a db.lazy_case or a db.coalesce computes, and the columns it forwards to the regions after it";
 
-  let arguments = (ins Column:$value);
+  let arguments = (ins Column:$value, Variadic<Column>:$forwarded);
+
+  let builders = [
+    OpBuilder<(ins "::mlir::Value":$value), [{
+      build($_builder, $_state, value, ::mlir::ValueRange {});
+    }]>
+  ];
 
   let assemblyFormat = [{
-    $value attr-dict `:` qualified(type($value))
+    $value attr-dict `:` qualified(type($value)) (`forwarding` `(` $forwarded^ `:` qualified(type($forwarded)) `)`)?
   }];
 }
 

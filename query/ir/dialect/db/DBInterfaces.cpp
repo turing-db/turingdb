@@ -64,3 +64,53 @@ size_t mlir::db::operandRunOffset(const MutableOperandRange& run) {
 
     return static_cast<size_t>(run.begin() - operands.begin());
 }
+
+size_t mlir::db::forwardedArgumentCount(Region& region) {
+    ColumnCarrierOpInterface carrier = dyn_cast_or_null<ColumnCarrierOpInterface>(region.getParentOp());
+    if (!carrier) {
+        return 0;
+    }
+
+    size_t count = 0;
+    for (Region& earlier : region.getParentOp()->getRegions()) {
+        if (&earlier == &region) {
+            break;
+        }
+
+        if (carrier.forwardsColumns(earlier)) {
+            count += carrier.getForwardedColumnsMutable(earlier).size();
+        }
+    }
+
+    return count;
+}
+
+bool mlir::db::matchForwardedArgument(BlockArgument argument, Region*& source, size_t& forwardIndex) {
+    Region& region = *argument.getParentRegion();
+    ColumnCarrierOpInterface carrier = dyn_cast_or_null<ColumnCarrierOpInterface>(region.getParentOp());
+    if (!carrier) {
+        return false;
+    }
+
+    size_t argumentIndex = argument.getArgNumber();
+    for (Region& earlier : region.getParentOp()->getRegions()) {
+        if (&earlier == &region) {
+            return false;
+        }
+
+        if (!carrier.forwardsColumns(earlier)) {
+            continue;
+        }
+
+        const size_t forwardedCount = carrier.getForwardedColumnsMutable(earlier).size();
+        if (argumentIndex < forwardedCount) {
+            source = &earlier;
+            forwardIndex = argumentIndex;
+            return true;
+        }
+
+        argumentIndex -= forwardedCount;
+    }
+
+    return false;
+}

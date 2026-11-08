@@ -42,6 +42,15 @@ MutableOperandRange unsegmentedRegionCarrySet(Operation* op);
 // The index of the first operand of @param run, which may be empty
 size_t operandRunOffset(const MutableOperandRange& run);
 
+// The number of leading arguments of @param region holding the columns the regions before it
+// forward, which is also where the columns @param region forwards start in a later region
+size_t forwardedArgumentCount(Region& region);
+
+// Sets @param source to the region forwarding the column @param argument takes, and
+// @param forwardIndex to its place among the columns @param source forwards; false for an
+// argument no region forwards
+bool matchForwardedArgument(BlockArgument argument, Region*& source, size_t& forwardIndex);
+
 }
 
 namespace mlir::OpTrait {

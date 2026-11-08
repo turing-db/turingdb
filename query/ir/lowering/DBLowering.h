@@ -713,6 +713,11 @@ private:
     // stands for a carried column the region does not read.
     mlir::Value lowerCaseRegion(mlir::Region& region, llvm::ArrayRef<mlir::Value> chunks, mlir::Value cardinality);
 
+    // Sets the slots of the columns @param region, a lowered region of a db.lazy_case or a
+    // db.coalesce, forwards to the chunks it computes them as, laid out over the rows
+    // @param cardinality counts
+    void forwardCaseRegionChunks(mlir::Region& region, llvm::SmallVectorImpl<mlir::Value>& slots, mlir::Value cardinality);
+
     // Lowers @param block over the rows @param cardinality counts, a computation over
     // constants included, and returns what its terminator yields laid out over them
     mlir::Value lowerBlockOverRows(mlir::Block& block, mlir::Value cardinality);

@@ -50,7 +50,17 @@ def ColumnCarrierOpInterface : OpInterface<"ColumnCarrierOpInterface"> {
       "The operands of the carry set into the op's regions, one run every region shares, as a range that keeps the operand segment holding them sized to match",
       "::mlir::MutableOperandRange", "getRegionCarrySetMutable",
       (ins), [{}],
-      [{ return ::mlir::db::unsegmentedRegionCarrySet($_op.getOperation()); }]>
+      [{ return ::mlir::db::unsegmentedRegionCarrySet($_op.getOperation()); }]>,
+    InterfaceMethod<
+      "Whether `region` may forward columns it computes to every region after it, each of which sees a subset of its rows and takes the columns of every forwarding region before it, in region order, as its leading arguments",
+      "bool", "forwardsColumns",
+      (ins "::mlir::Region&":$region), [{}],
+      [{ return false; }]>,
+    InterfaceMethod<
+      "The columns `region`, one that forwards columns, forwards to the regions after it",
+      "::mlir::MutableOperandRange", "getForwardedColumnsMutable",
+      (ins "::mlir::Region&":$region), [{}],
+      [{ return ::mlir::MutableOperandRange($_op.getOperation(), 0, 0); }]>
   ];
 }
 

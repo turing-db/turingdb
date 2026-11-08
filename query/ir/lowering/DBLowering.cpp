@@ -64,15 +64,53 @@ void forgetValuesDefinedWithin(mlir::Operation* operation, llvm::DenseMap<Key, m
     });
 }
 
-void collectLastReaders(mlir::MutableArrayRef<mlir::Region> regions, llvm::SmallVectorImpl<size_t>& lastReaders) {
-    lastReaders.assign(regions.front().getNumArguments(), 0);
+// A region of a CASE or a coalesce takes the columns the regions before it forward, then the
+// carried ones. Across the regions they are slots: every forwarded column, in the order the
+// regions forward them, then every carried column.
+size_t countForwardedColumns(mlir::Operation* op) {
+    mlir::db::ColumnCarrierOpInterface carrier = mlir::cast<mlir::db::ColumnCarrierOpInterface>(op);
+
+    size_t count = 0;
+    for (mlir::Region& region : op->getRegions()) {
+        if (carrier.forwardsColumns(region)) {
+            count += carrier.getForwardedColumnsMutable(region).size();
+        }
+    }
+
+    return count;
+}
+
+void collectArgumentChunks(mlir::Region& region,
+                           llvm::ArrayRef<mlir::Value> slots,
+                           size_t forwardedCount,
+                           llvm::SmallVectorImpl<mlir::Value>& chunks) {
+    const size_t regionForwarded = mlir::db::forwardedArgumentCount(region);
+
+    chunks.assign(slots.begin(), slots.begin() + regionForwarded);
+    chunks.append(slots.begin() + forwardedCount, slots.end());
+}
+
+bool readsSlot(mlir::Region& region, size_t slot, size_t forwardedCount) {
+    const size_t regionForwarded = mlir::db::forwardedArgumentCount(region);
+    if (slot < forwardedCount && slot >= regionForwarded) {
+        return false;
+    }
+
+    const size_t argumentIndex = slot < forwardedCount ? slot : regionForwarded + slot - forwardedCount;
+
+    return !region.getArgument(static_cast<unsigned>(argumentIndex)).use_empty();
+}
+
+void collectLastReaders(mlir::MutableArrayRef<mlir::Region> regions,
+                        size_t slotCount,
+                        size_t forwardedCount,
+                        llvm::SmallVectorImpl<size_t>& lastReaders) {
+    lastReaders.assign(slotCount, 0);
 
     for (size_t regionIndex = 0; regionIndex < regions.size(); regionIndex++) {
-        const mlir::Block::BlockArgListType columns = regions[regionIndex].front().getArguments();
-
-        for (size_t carriedIndex = 0; carriedIndex < columns.size(); carriedIndex++) {
-            if (!columns[carriedIndex].use_empty()) {
-                lastReaders[carriedIndex] = regionIndex;
+        for (size_t slot = 0; slot < slotCount; slot++) {
+            if (readsSlot(regions[regionIndex], slot, forwardedCount)) {
+                lastReaders[slot] = regionIndex;
             }
         }
     }
@@ -6748,37 +6786,44 @@ void DBLowering::lowerLazyCase(mlir::db::LazyCase caseOp) {
     mlir::MLIRContext* const context = _builder.getContext();
     const nl::ChunkType maskType = nl::ChunkType::get(context, storage::BoolType::get(context));
 
-    llvm::SmallVector<mlir::Value, 8> reaching;
+    const size_t forwardedCount = countForwardedColumns(caseOp.getOperation());
+
+    llvm::SmallVector<mlir::Value, 8> reaching(forwardedCount);
     for (const mlir::Value column : caseOp.getColumnsToFilter()) {
         reaching.push_back(mapValue(column));
     }
 
-    mlir::Value reachingCardinality = cardinalityDriver(reaching);
+    mlir::Value reachingCardinality = cardinalityDriver(llvm::ArrayRef<mlir::Value>(reaching).drop_front(forwardedCount));
 
     const mlir::MutableArrayRef<mlir::Region> regions = caseOp.getBranches();
     const size_t branchCount = regions.size() / 2;
     const bool hasDefault = regions.size() % 2 == 1;
 
     llvm::SmallVector<size_t, 8> lastReaders;
-    collectLastReaders(regions, lastReaders);
+    collectLastReaders(regions, reaching.size(), forwardedCount, lastReaders);
 
     llvm::SmallVector<mlir::Value, 4> conditions;
     llvm::SmallVector<mlir::Value, 4> values;
+    llvm::SmallVector<mlir::Value, 8> arguments;
 
     for (size_t branchIndex = 0; branchIndex < branchCount; branchIndex++) {
-        const mlir::Value condition = lowerCaseRegion(regions[2 * branchIndex], reaching, reachingCardinality);
+        mlir::Region& conditionRegion = regions[2 * branchIndex];
+        collectArgumentChunks(conditionRegion, reaching, forwardedCount, arguments);
+
+        const mlir::Value condition = lowerCaseRegion(conditionRegion, arguments, reachingCardinality);
         conditions.push_back(condition);
+        forwardCaseRegionChunks(conditionRegion, reaching, reachingCardinality);
 
         const size_t valueIndex = 2 * branchIndex + 1;
         mlir::Region& valueRegion = regions[valueIndex];
-        mlir::Block& valueBody = valueRegion.front();
-        const auto readByTheValue = [&valueBody](size_t carriedIndex) {
-            return !valueBody.getArgument(static_cast<unsigned>(carriedIndex)).use_empty();
+        const auto readByTheValue = [&valueRegion, forwardedCount](size_t slot) {
+            return readsSlot(valueRegion, slot, forwardedCount);
         };
 
         llvm::SmallVector<mlir::Value, 8> taken;
         const mlir::Value takenCardinality = cutCarriedChunks(condition, reaching, readByTheValue, taken);
-        values.push_back(lowerCaseRegion(valueRegion, taken, takenCardinality));
+        collectArgumentChunks(valueRegion, taken, forwardedCount, arguments);
+        values.push_back(lowerCaseRegion(valueRegion, arguments, takenCardinality));
 
         const bool rowsFallThrough = hasDefault || branchIndex + 1 < branchCount;
         if (!rowsFallThrough) {
@@ -6788,8 +6833,8 @@ void DBLowering::lowerLazyCase(mlir::db::LazyCase caseOp) {
         setInsertionForUnaryOp(condition);
         const mlir::Value fallsThrough = _builder.create<nl::IsNotTrue>(loc, maskType, condition).getResult();
 
-        const auto readLater = [&lastReaders, valueIndex](size_t carriedIndex) {
-            return lastReaders[carriedIndex] > valueIndex;
+        const auto readLater = [&lastReaders, &reaching, valueIndex](size_t slot) {
+            return reaching[slot] && lastReaders[slot] > valueIndex;
         };
 
         llvm::SmallVector<mlir::Value, 8> rest;
@@ -6799,7 +6844,8 @@ void DBLowering::lowerLazyCase(mlir::db::LazyCase caseOp) {
 
     mlir::Value defaultValue;
     if (hasDefault) {
-        defaultValue = lowerCaseRegion(regions.back(), reaching, reachingCardinality);
+        collectArgumentChunks(regions.back(), reaching, forwardedCount, arguments);
+        defaultValue = lowerCaseRegion(regions.back(), arguments, reachingCardinality);
     }
 
     llvm::SmallVector<mlir::Value, 5> valueChunks(values.begin(), values.end());
@@ -6838,23 +6884,29 @@ void DBLowering::lowerCoalesce(mlir::db::Coalesce coalesce) {
     const nl::ChunkType maskType = nl::ChunkType::get(context, storage::BoolType::get(context));
 
     const mlir::MutableArrayRef<mlir::Region> arguments = coalesce.getArguments();
+    const size_t forwardedCount = countForwardedColumns(coalesce.getOperation());
 
-    llvm::SmallVector<size_t, 8> lastReaders;
-    collectLastReaders(arguments, lastReaders);
-
-    llvm::SmallVector<mlir::Value, 8> reaching;
+    llvm::SmallVector<mlir::Value, 8> reaching(forwardedCount);
     for (const mlir::Value column : coalesce.getColumnsToFilter()) {
         reaching.push_back(mapValue(column));
     }
 
-    mlir::Value reachingCardinality = cardinalityDriver(reaching);
+    mlir::Value reachingCardinality = cardinalityDriver(llvm::ArrayRef<mlir::Value>(reaching).drop_front(forwardedCount));
+
+    llvm::SmallVector<size_t, 8> lastReaders;
+    collectLastReaders(arguments, reaching.size(), forwardedCount, lastReaders);
 
     llvm::SmallVector<mlir::Value, 4> values;
     llvm::SmallVector<mlir::Value, 4> nullRows;
+    llvm::SmallVector<mlir::Value, 8> argumentChunks;
     for (size_t argumentIndex = 0; argumentIndex < arguments.size(); argumentIndex++) {
-        const mlir::Value value = lowerCaseRegion(arguments[argumentIndex], reaching, reachingCardinality);
+        mlir::Region& argument = arguments[argumentIndex];
+        collectArgumentChunks(argument, reaching, forwardedCount, argumentChunks);
+
+        const mlir::Value value = lowerCaseRegion(argument, argumentChunks, reachingCardinality);
         values.push_back(value);
         nullRows.emplace_back();
+        forwardCaseRegionChunks(argument, reaching, reachingCardinality);
 
         const bool isLast = argumentIndex + 1 == arguments.size();
         const bool leavesEveryRowNull = isUntypedNullChunk(value.getType());
@@ -6866,8 +6918,8 @@ void DBLowering::lowerCoalesce(mlir::db::Coalesce coalesce) {
         const mlir::Value stillNull = _builder.create<nl::IsNull>(_builder.getUnknownLoc(), maskType, value).getResult();
         nullRows.back() = stillNull;
 
-        const auto readLater = [&lastReaders, argumentIndex](size_t carriedIndex) {
-            return lastReaders[carriedIndex] > argumentIndex;
+        const auto readLater = [&lastReaders, &reaching, argumentIndex](size_t slot) {
+            return reaching[slot] && lastReaders[slot] > argumentIndex;
         };
 
         llvm::SmallVector<mlir::Value, 8> rest;
@@ -6918,6 +6970,22 @@ mlir::Value DBLowering::lowerCaseRegion(mlir::Region& region,
     }
 
     return lowerBlockOverRows(block, cardinality);
+}
+
+void DBLowering::forwardCaseRegionChunks(mlir::Region& region,
+                                         llvm::SmallVectorImpl<mlir::Value>& slots,
+                                         mlir::Value cardinality) {
+    mlir::db::ColumnCarrierOpInterface carrier = mlir::cast<mlir::db::ColumnCarrierOpInterface>(region.getParentOp());
+    if (!carrier.forwardsColumns(region)) {
+        return;
+    }
+
+    const mlir::OperandRange forwarded = carrier.getForwardedColumnsMutable(region);
+    const size_t forwardOffset = mlir::db::forwardedArgumentCount(region);
+
+    for (size_t forwardIndex = 0; forwardIndex < forwarded.size(); forwardIndex++) {
+        slots[forwardOffset + forwardIndex] = rowAlignedChunk(mapValue(forwarded[forwardIndex]), cardinality);
+    }
 }
 
 mlir::Value DBLowering::lowerBlockOverRows(mlir::Block& block, mlir::Value cardinality) {

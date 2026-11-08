@@ -777,25 +777,69 @@ Value regionYield(Region& region) {
 }
 
 LogicalResult verifyCarriedRegions(Operation* op, MutableArrayRef<Region> regions, OperandRange carried) {
-    for (size_t regionIndex = 0; regionIndex < regions.size(); regionIndex++) {
-        Block& block = regions[regionIndex].front();
+    ColumnCarrierOpInterface carrier = cast<ColumnCarrierOpInterface>(op);
 
-        if (!dyn_cast_or_null<CaseYield>(block.empty() ? nullptr : &block.back())) {
+    llvm::SmallVector<Type> forwardedTypes;
+    for (size_t regionIndex = 0; regionIndex < regions.size(); regionIndex++) {
+        Region& region = regions[regionIndex];
+        Block& block = region.front();
+        CaseYield yield = dyn_cast_or_null<CaseYield>(block.empty() ? nullptr : &block.back());
+
+        const size_t argumentCount = forwardedTypes.size() + carried.size();
+        if (!yield) {
             return op->emitOpError("region ") << regionIndex << " must end with a db.case_yield";
-        } else if (block.getNumArguments() != carried.size()) {
-            return op->emitOpError("region ") << regionIndex << " takes one argument per carried column, expected "
-                                              << carried.size() << " but has " << block.getNumArguments();
+        } else if (block.getNumArguments() != argumentCount) {
+            return op->emitOpError("region ") << regionIndex << " takes one argument per forwarded and per carried column, expected "
+                                              << argumentCount << " but has " << block.getNumArguments();
+        } else if (!yield.getForwarded().empty() && !carrier.forwardsColumns(region)) {
+            return op->emitOpError("region ") << regionIndex << " forwards columns, but no region after it takes them";
+        }
+
+        for (size_t forwardIndex = 0; forwardIndex < forwardedTypes.size(); forwardIndex++) {
+            if (block.getArgument(forwardIndex).getType() != forwardedTypes[forwardIndex]) {
+                return op->emitOpError("region ") << regionIndex << " argument " << forwardIndex
+                                                  << " must have the type of forwarded column " << forwardIndex;
+            }
         }
 
         for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
-            if (block.getArgument(carriedIndex).getType() != carried[carriedIndex].getType()) {
-                return op->emitOpError("region ") << regionIndex << " argument " << carriedIndex
+            const size_t argumentIndex = forwardedTypes.size() + carriedIndex;
+            if (block.getArgument(argumentIndex).getType() != carried[carriedIndex].getType()) {
+                return op->emitOpError("region ") << regionIndex << " argument " << argumentIndex
                                                   << " must have the type of carried column " << carriedIndex;
             }
         }
+
+        llvm::append_range(forwardedTypes, yield.getForwarded().getTypes());
     }
 
     return success();
+}
+
+// A region of a CASE or a coalesce takes the columns forwarded to it, then the carried ones
+void collectSelectionArgument(Value value, ValueRange carriedColumns, llvm::SmallVectorImpl<Value>& carried) {
+    BlockArgument argument = dyn_cast<BlockArgument>(value);
+    if (!argument) {
+        return;
+    }
+
+    Region& region = *argument.getParentRegion();
+    ColumnCarrierOpInterface carrier = cast<ColumnCarrierOpInterface>(region.getParentOp());
+
+    Region* source = nullptr;
+    size_t forwardIndex = 0;
+    if (matchForwardedArgument(argument, source, forwardIndex)) {
+        const MutableOperandRange forwarded = carrier.getForwardedColumnsMutable(*source);
+        carried.push_back(forwarded[static_cast<unsigned>(forwardIndex)].get());
+        return;
+    }
+
+    const size_t carriedIndex = argument.getArgNumber() - forwardedArgumentCount(region);
+    carried.push_back(carriedColumns[carriedIndex]);
+}
+
+MutableOperandRange caseYieldForwards(Region& region) {
+    return cast<CaseYield>(region.front().getTerminator()).getForwardedMutable();
 }
 
 bool givesNoRowAValue(Region& argument) {
@@ -836,7 +880,7 @@ struct SimplifyCoalesceArguments : public OpRewritePattern<Coalesce> {
         for (size_t argumentIndex = 0; argumentIndex < arguments.size(); argumentIndex++) {
             Region& argument = arguments[argumentIndex];
 
-            if (givesNoRowAValue(argument)) {
+            if (givesNoRowAValue(argument) && caseYieldForwards(argument).empty()) {
                 continue;
             }
 
@@ -869,6 +913,11 @@ struct SimplifyCoalesceArguments : public OpRewritePattern<Coalesce> {
         } else if (kept.size() == arguments.size()) {
             return failure();
         }
+
+        Region& lastKept = arguments[kept.back()];
+        rewriter.modifyOpInPlace(lastKept.front().getTerminator(), [&lastKept] {
+            caseYieldForwards(lastKept).clear();
+        });
 
         rewriter.setInsertionPoint(coalesce);
         Coalesce trimmed = rewriter.create<Coalesce>(coalesce.getLoc(),
@@ -3174,7 +3223,7 @@ void LazyCase::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& 
         collectSelectedValues(carried);
     }
 
-    collectCarriedArgument(value, getColumnsToFilter(), carried);
+    collectSelectionArgument(value, getColumnsToFilter(), carried);
 }
 
 bool LazyCase::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
@@ -3182,17 +3231,35 @@ bool LazyCase::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
     return true;
 }
 
+bool LazyCase::forwardsColumns(Region& region) {
+    const size_t regionIndex = region.getRegionNumber();
+
+    return regionIndex % 2 == 0 && regionIndex + 1 < getBranches().size();
+}
+
+MutableOperandRange LazyCase::getForwardedColumnsMutable(Region& region) {
+    return caseYieldForwards(region);
+}
+
 void Coalesce::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
     if (isa<OpResult>(value)) {
         collectSelectedValues(carried);
     }
 
-    collectCarriedArgument(value, getColumnsToFilter(), carried);
+    collectSelectionArgument(value, getColumnsToFilter(), carried);
 }
 
 bool Coalesce::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
     fillTrailingRegionCarrySet(getOperation(), region, getColumnsToFilter().size(), carrySet);
     return true;
+}
+
+bool Coalesce::forwardsColumns(Region& region) {
+    return region.getRegionNumber() + 1 < getArguments().size();
+}
+
+MutableOperandRange Coalesce::getForwardedColumnsMutable(Region& region) {
+    return caseYieldForwards(region);
 }
 
 Speculation::Speculatability Range::getSpeculatability() {
