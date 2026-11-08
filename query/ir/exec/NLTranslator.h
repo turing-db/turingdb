@@ -643,10 +643,10 @@ private:
     // it, and record the reset statement (run each time the block runs)
     void translateDistinctState(mlir::nl::Distinct distinct, NLStmtContainer* body);
 
-    // Translate an nl.distinct_filter: look up the seen-set the handle names,
-    // allocate one fresh output column per input, map each result to its output,
-    // and record the filter statement (serialize each row's key across all
-    // columns, keep the not-yet-seen rows, gather them into the outputs)
+    // Translate an nl.distinct_filter: look up the seen-set the handle names and key
+    // its hash table on the types of the inputs, allocate one fresh output column per
+    // input, map each result to its output, and record the filter statement (keep the
+    // rows whose key is not yet seen, gather them into the outputs)
     void translateDistinctFilter(mlir::nl::DistinctFilter filter, NLStmtContainer* body);
 
     // Allocate the fresh output column for one filtered column, map the op result

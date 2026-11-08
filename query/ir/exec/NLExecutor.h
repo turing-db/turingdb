@@ -249,9 +249,9 @@ public:
     // Empty the seen-set of a DISTINCT; runs each time its block runs.
     static void runDistinctReset(NLExecutionContext* context, NLFunctionData* data);
 
-    // Keep only the rows of this step's chunk not seen before: serialize each row
-    // across all columns into a key, insert the new keys into the seen-set, and
-    // gather the surviving rows into fresh output chunks. The sole seen-set mutator.
+    // Keep only the rows of this step's chunk not seen before: map each row's key
+    // across all columns to a group of the seen-set's hash table, and gather the rows
+    // that created a group into fresh output chunks. The sole seen-set mutator.
     static void runDistinctFilter(NLExecutionContext* context, NLFunctionData* data);
 
     // Apply a mask to the entire carry set
@@ -792,7 +792,7 @@ public:
     static NLCopyFunction selectOptCopyFunction(NLChunkKind kind);
 
     // Row-key serialization for an ID chunk of this kind / a nullable value chunk
-    // of this value type. Used by nl.distinct_filter to build each row's seen-set
+    // of this value type. Used by a serialized group hash table to build each row's
     // key. The value-type selector throws for a value type with no byte identity
     // as a key (an embedding), which cannot be a DISTINCT key.
     static NLKeyAppendFunction selectKeyAppendFunction(NLChunkKind kind);

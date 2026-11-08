@@ -5934,7 +5934,7 @@ void NLTranslator::translateDistinctState(nl::Distinct distinct, NLStmtContainer
 }
 
 void NLTranslator::translateDistinctFilter(nl::DistinctFilter filter, NLStmtContainer* body) {
-    // The handle is a required operand, so distinctStateFor returns its set or
+    // The handle is a required operand, so distinctStateFor returns its state or
     // throws if it was not produced by an nl.distinct.
     NLDistinctState* state = distinctStateFor(filter.getState());
 
@@ -5948,8 +5948,25 @@ void NLTranslator::translateDistinctFilter(nl::DistinctFilter filter, NLStmtCont
     // downstream consumers are mapped to.
     const mlir::OperandRange columns = filter.getColumns();
     const mlir::ResultRange results = filter.getResults();
+    std::vector<NLGroupHashKey> keys(columns.size());
     for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
         addDistinctColumn(columns[columnIndex], results[columnIndex], data);
+        buildGroupHashKey(columns[columnIndex].getType(), keys[columnIndex]);
+    }
+
+    // The branches of a union each filter into the one seen-set, every one with the columns
+    // the union's result types them as, so the first filter keys the hash table for all
+    NLGroupHashTable& hashTable = state->hashTable();
+    const std::vector<NLGroupHashKey>& tableKeys = hashTable.getKeys();
+
+    if (tableKeys.empty()) {
+        for (const NLGroupHashKey& key : keys) {
+            hashTable.addKey(key);
+        }
+
+        hashTable.chooseTable();
+    } else if (tableKeys != keys) {
+        throw IRException("the filters of an nl.distinct must read columns of the same types");
     }
 
     body->emplaceStmt(&NLExecutor::runDistinctFilter, data);
@@ -5961,15 +5978,13 @@ void NLTranslator::addDistinctColumn(mlir::Value inputValue,
     const Column* input = getColumn(inputValue);
 
     // The output keeps the input's element type; only duplicate rows are removed.
-    // The key-append serializes one of its rows into the shared row key, and the
-    // gather copies the survivors into the fresh output - the same gather family
+    // The gather copies the survivors into the fresh output - the same gather family
     // the edge and sort loops use, selected by chunk type.
     Column* output = allocColumnForChunkType(inputValue.getType());
     _valueSlots[resultValue] = output;
 
     const NLDistinctFilterData::FilterColumn column {input,
                                                      output,
-                                                     selectKeyAppendForChunkType(inputValue.getType()),
                                                      selectGatherForChunkType(inputValue.getType())};
     data->addColumn(column);
 }

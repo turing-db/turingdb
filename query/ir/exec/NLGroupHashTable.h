@@ -21,7 +21,7 @@ class Column;
 // Type of handle that appends the raw bytes of one row of a column to a growing
 // row-key buffer. One per column kind / value type, selected during translation,
 // the same way the gather and append families are. The concatenated key of a row
-// (all its columns in order) is what nl.distinct_filter looks up in the seen-set:
+// (all its columns in order) is what a serialized group hash table keys the row by:
 // bytewise key equality is row equality. A null serializes to a fixed tag byte, so
 // all nulls share a key and DISTINCT dedups them together, matching Cypher; a
 // string serializes as a length prefix then its characters, so two rows never
@@ -53,6 +53,8 @@ using NLKeyPackFunction = void (*)(const Column* column,
 struct NLKeyPacking {
     NLKeyPackFunction _pack {nullptr};
     size_t _width {0};
+
+    bool operator==(const NLKeyPacking& other) const = default;
 };
 
 // What a key column's values are to a hash table: of a fixed width, which packs them into one
@@ -70,6 +72,8 @@ struct NLGroupHashKey {
     bool _nullable {false};
     NLKeyPacking _packing;
     NLKeyAppendFunction _keyAppend {nullptr};
+
+    bool operator==(const NLGroupHashKey& other) const = default;
 };
 
 // The table a group hash table maps the keys of its rows to groups with, chosen from the key

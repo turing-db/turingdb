@@ -22,6 +22,8 @@ target_include_directories(test_query_ir_constant_output PRIVATE ${IR_TEST_DIR})
 add_turing_test(test_query_ir_distinct DistinctTest.cpp)
 target_include_directories(test_query_ir_distinct PRIVATE ${IR_TEST_DIR})
 
+add_turing_test(test_query_ir_distinct_hash_table DistinctHashTableTest.cpp)
+
 add_turing_test(test_query_ir_distinct_order_by_property DistinctOrderByPropertyTest.cpp)
 target_include_directories(test_query_ir_distinct_order_by_property PRIVATE ${IR_TEST_DIR})
 

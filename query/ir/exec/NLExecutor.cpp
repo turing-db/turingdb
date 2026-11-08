@@ -12005,25 +12005,17 @@ void NLExecutor::runDistinctFilter(NLExecutionContext* context, NLFunctionData* 
     // Every column is row-aligned, so the first sizes this step's row set.
     const size_t rowCount = columns.front()._input->size();
 
-    // Collect this step's surviving row indices: a row survives iff its key - the
-    // concatenation of every column's serialized value at that row - is new to the
-    // seen-set. insertIfNew both tests membership and records the new key, so a
-    // duplicate later in the same chunk is caught by an earlier row of it too.
+    // A row survives iff its key - every column's value at that row - is new to the hash
+    // table, which is when the row creates a group in it. A duplicate later in the same
+    // chunk finds the group an earlier row of it created.
+    NLGroupHashTable& hashTable = state->hashTable();
+    hashTable.assign(filter->getKeyColumns(), rowCount);
+
+    const std::vector<size_t>& newGroupRows = hashTable.getNewGroupRows();
+
     ColumnVector<size_t>* indices = filter->getIndices();
     std::vector<size_t>& survivingRaw = indices->getRaw();
-    survivingRaw.clear();
-
-    std::string* key = filter->getKeyScratch();
-    for (size_t row = 0; row < rowCount; row++) {
-        key->clear();
-        for (const NLDistinctFilterData::FilterColumn& column : columns) {
-            column._keyAppend(column._input, row, *key);
-        }
-
-        if (state->insertIfNew(*key)) {
-            survivingRaw.push_back(row);
-        }
-    }
+    survivingRaw.assign(newGroupRows.begin(), newGroupRows.end());
 
     // Gather the survivors into the fresh output chunks, in first-seen order, so a
     // downstream consumer reads a genuinely deduped chunk.

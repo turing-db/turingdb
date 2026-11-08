@@ -2122,32 +2122,28 @@ private:
     NLStmtContainer _stmts;
 };
 
-// Runtime state of one DISTINCT: the set of serialized row keys already emitted.
-// nl.distinct resets it (once at function scope for a top-level or mid-query
-// DISTINCT), and nl.distinct_filter is the sole reader and mutator - it looks up
-// each incoming row's key and inserts the new ones. The streaming sibling of
-// NLSortState: it filters rows as they arrive rather than accumulating them, so it
-// holds only the keys, not the row values (a survivor is emitted from the incoming
-// chunk it appeared in, never rebuilt).
+// Runtime state of one DISTINCT: the hash table of the rows already emitted, keyed by
+// every column of the row. nl.distinct resets it (once at function scope for a top-level
+// or mid-query DISTINCT), and nl.distinct_filter is the sole reader and mutator - a row
+// that creates a group in the table is the first with its key, so it survives. The
+// streaming sibling of NLSortState: it filters rows as they arrive rather than
+// accumulating them, so it holds only the keys, not the row values (a survivor is
+// emitted from the incoming chunk it appeared in, never rebuilt).
 class NLDistinctState {
 public:
-    // Empty the seen-set, so DISTINCT starts fresh. Runs each time nl.distinct's
-    // block runs (once at function scope for a top-level / mid-query DISTINCT).
-    void reset() { _seen.clear(); }
+    NLGroupHashTable& hashTable() { return _hashTable; }
 
-    // Record a row's serialized key; returns true if the row is new (not seen
-    // before) and should survive, false if it duplicates an earlier row. The sole
-    // mutator of the set.
-    bool insertIfNew(const std::string& key) { return _seen.insert(key).second; }
+    // Drop every key, so DISTINCT starts fresh. Runs each time nl.distinct's block
+    // runs (once at function scope for a top-level / mid-query DISTINCT).
+    void reset() { _hashTable.clear(); }
 
 private:
-    // One serialized key per distinct row seen so far.
-    std::unordered_set<std::string> _seen;
+    NLGroupHashTable _hashTable;
 };
 
-// nl.distinct data: resets a seen-set to empty each time the block it lives in
-// runs - once at function scope for a top-level DISTINCT. The distinct sibling of
-// NLSortResetData.
+// nl.distinct data: resets a DISTINCT's hash table to empty each time the block it
+// lives in runs - once at function scope for a top-level DISTINCT. The distinct
+// sibling of NLSortResetData.
 class NLDistinctResetData : public NLFunctionData {
 public:
     NLDistinctResetData(NLDistinctState* state)
@@ -2161,19 +2157,17 @@ private:
     NLDistinctState* _state {nullptr};
 };
 
-// nl.distinct_filter data: the seen-set to look each row up in, and per column its
-// input chunk, the fresh output chunk to fill, the key-append that serializes one
-// of its rows into the row key, and the gather that copies the surviving rows into
-// the output. All columns together form each row's key; the surviving rows are
-// gathered from the incoming chunk (reusing the NLGatherFunction the edge loops
-// use), so no row values are stored. The indices scratch holds this step's
-// surviving row indices and the key scratch is reused per row.
+// nl.distinct_filter data: the DISTINCT whose hash table keys each row, and per column
+// its input chunk, the fresh output chunk to fill, and the gather that copies the
+// surviving rows into the output. All columns together form each row's key; the
+// surviving rows are gathered from the incoming chunk (reusing the NLGatherFunction the
+// edge loops use), so no row values are stored. The indices scratch holds this step's
+// surviving row indices.
 class NLDistinctFilterData : public NLFunctionData {
 public:
     struct FilterColumn {
         const Column* _input {nullptr};
         Column* _output {nullptr};
-        NLKeyAppendFunction _keyAppend {nullptr};
         NLGatherFunction _gather {nullptr};
     };
 
@@ -2185,23 +2179,22 @@ public:
     NLDistinctState* getState() const { return _state; }
 
     const std::vector<FilterColumn>& columns() const { return _columns; }
+    const std::vector<const Column*>& getKeyColumns() const { return _keyColumns; }
 
     void addColumn(const FilterColumn& column) {
         _columns.push_back(column);
+        _keyColumns.push_back(column._input);
     }
 
     ColumnVector<size_t>* getIndices() { return &_indices; }
-    std::string* getKeyScratch() { return &_key; }
 
 private:
     NLDistinctState* _state {nullptr};
     std::vector<FilterColumn> _columns;
+    std::vector<const Column*> _keyColumns;
 
     // Scratch for this step's surviving row indices, fed to the per-column gather
     ColumnVector<size_t> _indices;
-
-    // Scratch reused to build each row's key, cleared once per row
-    std::string _key;
 };
 
 class NLFilterData : public NLFunctionData {
