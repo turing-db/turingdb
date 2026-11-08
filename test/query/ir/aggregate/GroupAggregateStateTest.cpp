@@ -125,6 +125,16 @@ TEST_F(GroupAggregateStateTest, sumAndAvgOfFloatCellsCopyNothing) {
     EXPECT_EQ(count, 0);
 }
 
+TEST_F(GroupAggregateStateTest, minAndMaxOfNumberCellsCopyNothing) {
+    size_t count = 0;
+    foldedValueCount("UNWIND range(1, 40) AS x WITH x % 4 AS g, [x, 'a'][0] AS c, [toFloat(x), 'a'][0] AS f "
+                     "RETURN g, min(c), max(c), min(f), max(f)",
+                     8,
+                     count);
+
+    EXPECT_EQ(count, 0);
+}
+
 TEST_F(GroupAggregateStateTest, maxOfStringCellsKeepsItsExtremesInTheStore) {
     size_t count = 0;
     foldedValueCount("UNWIND range(1, 40) AS x WITH x % 4 AS g, [toString(x), 1][0] AS c RETURN g, max(c)", 8, count);
@@ -315,6 +325,34 @@ TEST_F(GroupAggregateStateTest, keepsExtremeStringsAcrossCompactions) {
                expected);
     expectRows("UNWIND range(1, 20000) AS x WITH x % 7 AS g, [toString(100000 - x), 1][0] AS s RETURN g, min(s), max(s)",
                expected);
+}
+
+// A kept extreme is held inline whatever its type, and a string, list or map one keeps the store's
+// copy of what it views, across the compactions of the store
+TEST_F(GroupAggregateStateTest, keepsTheExtremesOfCellsOfEveryType) {
+    expectRowsInEveryChunking("UNWIND [[1, 3], [1, 2.5], [2, 'b'], [2, 'a'], [3, true], [3, false], [4, [2]], [4, [1, 5]], "
+                              "[5, {a: 2}], [5, {a: 1}], [6, duration({seconds: 2})], [6, duration({seconds: 1})], "
+                              "[7, null], [7, datetime('2020-01-02T00:00:00Z')], [7, datetime('2020-01-01T00:00:00Z')], "
+                              "[8, point({x: 2, y: 0})], [8, point({x: 1, y: 5})]] AS p "
+                              "WITH toInteger(p[0]) AS g, p[1] AS c "
+                              "RETURN g, min(c), max(c)",
+                              {{"1", "2.500000", "3"},
+                               {"2", "a", "b"},
+                               {"3", "false", "true"},
+                               {"4", "[1, 5]", "[2]"},
+                               {"5", "{a: 1}", "{a: 2}"},
+                               {"6", "PT1S", "PT2S"},
+                               {"7", "2020-01-01T00:00:00Z", "2020-01-02T00:00:00Z"},
+                               {"8", "point({x: 1.0, y: 5.0, crs: 'cartesian'})", "point({x: 2.0, y: 0.0, crs: 'cartesian'})"}});
+    expectRows("UNWIND range(1, 20000) AS x WITH x % 7 AS g, [[toString(100000 - x)], 1][0] AS l "
+               "RETURN g, min(l), max(l)",
+               {{"0", "[80001]", "[99993]"},
+                {"1", "[80000]", "[99999]"},
+                {"2", "[80006]", "[99998]"},
+                {"3", "[80005]", "[99997]"},
+                {"4", "[80004]", "[99996]"},
+                {"5", "[80003]", "[99995]"},
+                {"6", "[80002]", "[99994]"}});
 }
 
 TEST_F(GroupAggregateStateTest, reducesBesideACollect) {

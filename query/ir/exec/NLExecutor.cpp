@@ -4404,14 +4404,6 @@ void groupInitStates(NLGroupStatePlaces places, size_t begin, size_t count) {
     }
 }
 
-template <typename State>
-void groupReownStates(NLGroupStatePlaces places, size_t groupCount, NLValueStore& values) {
-    for (size_t group = 0; group < groupCount; group++) {
-        State& state = places.getState<State>(group);
-        state = values.ownElement(state);
-    }
-}
-
 // The state type of an aggregate each group keeps a State for, finalized by emit
 template <typename State>
 void describeGroupState(NLGroupAggregateEmitFunction emit, NLGroupAggregateStateType& stateType) {
@@ -4422,11 +4414,82 @@ void describeGroupState(NLGroupAggregateEmitFunction emit, NLGroupAggregateState
     stateType._alignment = alignof(State);
     stateType._init = &groupInitStates<State>;
     stateType._emit = emit;
+    stateType._reown = nullptr;
+}
 
-    if constexpr (NLOptionalViewElement<State>) {
-        stateType._reown = &groupReownStates<State>;
-    } else {
-        stateType._reown = nullptr;
+// The value a group keeps - its min, max or first - null until the group sees one. A string,
+// list or map keeps the store's copy of what it views.
+template <typename Primitive>
+class NLKeptValue {
+public:
+    bool isKept() const { return _value.has_value(); }
+    const Primitive& getValue() const { return *_value; }
+
+    void keep(const Primitive& value, NLValueStore& values) { _value = values.ownElement(value); }
+    void reown(NLValueStore& values) { _value = values.ownElement(_value); }
+
+private:
+    std::optional<Primitive> _value;
+};
+
+// A type-erased cell is kept inline, as a list holds it: its tag, then its value's bytes. A
+// number, a boolean, an ID, a datetime or a duration is kept without a copy into the store; a
+// string, list, map, embedding or path keeps the store's copy of what its bytes view.
+template <>
+class NLKeptValue<CellView> {
+public:
+    bool isKept() const { return _bytes[0] != NOTHING_KEPT; }
+
+    // The kept cell, viewed where this state holds it
+    CellView getValue() const { return CellView {_bytes}; }
+
+    void keep(CellView cell, NLValueStore& values) {
+        const CellTag tag = cell.getTag();
+
+        CellTagDispatcher {tag}.execute([&]<typename T>(CellView view) {
+            static_assert(sizeof(T) <= VALUE_BYTES, "A kept cell holds the value of every tag inline");
+
+            T value = view.getAs<T>();
+            if constexpr (NLViewElement<T>) {
+                value = values.own(value);
+            }
+
+            _bytes[0] = std::byte {static_cast<uint8_t>(tag)};
+            std::memcpy(_bytes + 1, &value, sizeof(T));
+        }, cell);
+    }
+
+    void reown(NLValueStore& values) {
+        if (isKept()) {
+            keep(getValue(), values);
+        }
+    }
+
+private:
+    static constexpr size_t VALUE_BYTES = sizeof(types::Point::Primitive);
+    static constexpr std::byte NOTHING_KEPT {static_cast<uint8_t>(CellTag::INVALID)};
+
+    std::byte _bytes[1 + VALUE_BYTES] {NOTHING_KEPT};
+};
+
+template <typename Primitive>
+void groupReownKeptValues(NLGroupStatePlaces places, size_t groupCount, NLValueStore& values) {
+    for (size_t group = 0; group < groupCount; group++) {
+        places.getState<NLKeptValue<Primitive>>(group).reown(values);
+    }
+}
+
+// Emit the value a group keeps, null for a group that kept none
+template <typename Primitive>
+void groupEmitKeptValue(NLGroupStatePlaces places, size_t begin, size_t count, Column* output, NLStepBuffers* stepBuffers);
+
+// The state type of a min, max or first
+template <typename Primitive>
+void describeGroupKeptValueState(NLGroupAggregateStateType& stateType) {
+    describeGroupState<NLKeptValue<Primitive>>(&groupEmitKeptValue<Primitive>, stateType);
+
+    if constexpr (NLViewElement<Primitive>) {
+        stateType._reown = &groupReownKeptValues<Primitive>;
     }
 }
 
@@ -4591,9 +4654,9 @@ void groupFoldMinMax(NLGroupStatePlaces places,
             continue;
         }
 
-        std::optional<Primitive>& current = places.getState<std::optional<Primitive>>(groups[row]);
-        if (!current.has_value() || replacesExtremum<Primitive, IsMax>(*current, *value)) {
-            current = values.ownElement(*value);
+        NLKeptValue<Primitive>& current = places.getState<NLKeptValue<Primitive>>(groups[row]);
+        if (!current.isKept() || replacesExtremum<Primitive, IsMax>(current.getValue(), *value)) {
+            current.keep(*value, values);
         }
     }
 }
@@ -4611,14 +4674,14 @@ void groupFoldFirst(NLGroupStatePlaces places,
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
     for (size_t row = beginRow; row < endRow; row++) {
-        std::optional<Primitive>& current = places.getState<std::optional<Primitive>>(groups[row]);
-        if (current.has_value()) {
+        NLKeptValue<Primitive>& current = places.getState<NLKeptValue<Primitive>>(groups[row]);
+        if (current.isKept()) {
             continue;
         }
 
         const std::optional<Primitive> value = presentCell(inputRaw[row]);
         if (value.has_value()) {
-            current = values.ownElement(*value);
+            current.keep(*value, values);
         }
     }
 }
@@ -6370,12 +6433,24 @@ void finalizeGroupStates(NLGroupStatePlaces places, size_t begin, size_t count, 
     }
 }
 
-// Emit what a state holds as it is: a count's tally, a sum's present total, or the value min,
-// max and first kept, null for a group that kept none
+// Emit what a state holds as it is: a count's tally or a sum's present total
 template <typename State, typename Element>
 void groupEmitCopy(NLGroupStatePlaces places, size_t begin, size_t count, Column* output, NLStepBuffers* stepBuffers) {
     finalizeGroupStates<State, Element>(places, begin, count, output, [](const State& state) {
         return Element(state);
+    });
+}
+
+template <typename Primitive>
+void groupEmitKeptValue(NLGroupStatePlaces places, size_t begin, size_t count, Column* output, NLStepBuffers* stepBuffers) {
+    using State = NLKeptValue<Primitive>;
+
+    finalizeGroupStates<State, std::optional<Primitive>>(places, begin, count, output, [](const State& kept) {
+        if (!kept.isKept()) {
+            return std::optional<Primitive>();
+        }
+
+        return std::optional<Primitive>(kept.getValue());
     });
 }
 
@@ -14137,8 +14212,7 @@ void NLExecutor::selectGroupAggregateState(GroupAggregateKind kind,
             // / type pairing (and the fold selector re-checks it), so one dispatch over the
             // accumulator type suffices - the grouped sibling of selectAggregateReset.
             const auto select = [&]<SupportedType T>() {
-                using Kept = std::optional<typename T::Primitive>;
-                describeGroupState<Kept>(&groupEmitCopy<Kept, Kept>, stateType);
+                describeGroupKeptValueState<typename T::Primitive>(stateType);
             };
             ValueTypeDispatcher(accumulatorType).execute(select);
         }
@@ -14169,7 +14243,7 @@ void NLExecutor::selectTaggedGroupAggregateState(GroupAggregateKind kind, NLGrou
         case GroupAggregateKind::Min:
         case GroupAggregateKind::Max:
         case GroupAggregateKind::First:
-            describeGroupState<std::optional<CellView>>(&groupEmitCopy<std::optional<CellView>, std::optional<CellView>>, stateType);
+            describeGroupKeptValueState<CellView>(stateType);
         break;
 
         case GroupAggregateKind::Count:
