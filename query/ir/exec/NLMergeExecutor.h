@@ -3,8 +3,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <string>
-
 #include "NLValueStore.h"
 #include "versioning/CommitWriteBuffer.h"
 
@@ -51,8 +49,8 @@ private:
     void absorbPendingNodes(NLMergeNodeIndex* index);
     void rekeyUpdatedNodes(NLMergeNodeIndex* index);
     void rekeyNode(NLMergeNodeIndex* index, const NLMergeRef& node);
-    void appendCurrentKey(NLMergeNodeIndex* index, const NLMergeRef& node, std::string& key);
-    bool holdsTheKey(NLMergeNodeIndex* index, const NLMergeRef& node, const std::string& key);
+    void appendCurrentKey(NLMergeNodeIndex* index, const NLMergeRef& node, NLSerializedKey& key);
+    bool holdsTheKey(NLMergeNodeIndex* index, const NLMergeRef& node, const NLSerializedKey& key);
     bool isDeletedNode(const NLMergeRef& node) const;
     void absorbPendingEdges();
     bool holdsTheHopValues(const NLMergeData::Hop& hop, uint64_t offset);
@@ -63,7 +61,7 @@ private:
                       const NLMergeScanProperties& writtenProperties,
                       const NLMergeWorkingSet::PropertiesPerRow& staged,
                       size_t row,
-                      std::string& key);
+                      NLSerializedKey& key);
     void extendHop(size_t hopIndex);
 
     void collectGraphExtensions(const NLMergeData::Hop& hop, size_t hopIndex);

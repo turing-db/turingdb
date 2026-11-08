@@ -2,6 +2,7 @@
 
 #include <stddef.h>
 
+#include <string>
 #include <string_view>
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -267,4 +268,14 @@ TEST_F(GroupTableTest, growsOverThousandsOfGroups) {
     expectRowsInEveryChunking("UNWIND range(1, 30000) AS x WITH [x % 7919, 'a'][0] AS g, count(*) AS n "
                               "RETURN count(*), sum(n), min(n), max(n)",
                               {{"7919", "30000", "3", "4"}});
+}
+
+// A key of hundreds of bytes outgrows the buffer a row's key serializes into several times
+TEST_F(GroupTableTest, groupsByKeysOfHundredsOfBytes) {
+    const std::string tail(300, 'a');
+    expectRowsInEveryChunking("UNWIND range(1, 12) AS x RETURN x % 2 AS a, toString(x % 3) + '" + tail + "' AS s, count(*)",
+                              {{"0", "0" + tail, "2"}, {"0", "1" + tail, "2"}, {"0", "2" + tail, "2"},
+                               {"1", "0" + tail, "2"}, {"1", "1" + tail, "2"}, {"1", "2" + tail, "2"}});
+    expectRowsInEveryChunking("UNWIND range(1, 12) AS x WITH range(1, 40 + x % 3) AS l, count(*) AS n RETURN size(l), n",
+                              {{"40", "4"}, {"41", "4"}, {"42", "4"}});
 }

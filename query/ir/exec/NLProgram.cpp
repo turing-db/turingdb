@@ -795,7 +795,7 @@ NLMergeNodeIndex::NLMergeNodeIndex(const LabelSet& labels,
 NLMergeNodeIndex::~NLMergeNodeIndex() {
 }
 
-std::span<const NLMergeRef> NLMergeNodeIndex::find(const std::string& key) const {
+std::span<const NLMergeRef> NLMergeNodeIndex::find(std::string_view key) const {
     const auto findIt = _byKey.find(key);
     if (findIt == end(_byKey)) {
         return {};

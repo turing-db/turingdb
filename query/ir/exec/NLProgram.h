@@ -50,6 +50,8 @@
 
 #include "NLWriteProperties.h"
 
+#include "StringHashMap.h"
+
 namespace db {
 
 class NLRuntimeProperty;
@@ -3535,16 +3537,16 @@ public:
     bool hasChanged(const NLMergeRef& ref) const { return _changedNodes.contains(ref.asKey()); }
     void markChanged(const NLMergeRef& ref) { _changedNodes.insert(ref.asKey()); }
 
-    void add(const std::string& key, const NLMergeRef& ref) { _byKey[key].push_back(ref); }
+    void add(std::string_view key, const NLMergeRef& ref) { _byKey[std::string(key)].push_back(ref); }
 
-    std::span<const NLMergeRef> find(const std::string& key) const;
+    std::span<const NLMergeRef> find(std::string_view key) const;
 
 private:
     LabelSet _labels;
     LabelSet _writeLabels;
     std::vector<NLMergeScanProperty> _scanProperties;
     NLMergeScanProperties _writtenProperties;
-    std::unordered_map<std::string, std::vector<NLMergeRef>> _byKey;
+    StringHashMap<std::string, std::vector<NLMergeRef>> _byKey;
     std::unordered_set<uint64_t> _changedNodes;
     ColumnNodeIDs* _scanNodes {nullptr};
     size_t _nextPendingNode {0};

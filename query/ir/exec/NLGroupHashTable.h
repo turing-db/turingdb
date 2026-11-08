@@ -7,11 +7,11 @@
 #include <limits>
 #include <optional>
 #include <span>
-#include <string>
 #include <string_view>
 #include <variant>
 #include <vector>
 
+#include "NLSerializedKey.h"
 #include "NLValueStore.h"
 #include "columns/ColumnVector.h"
 
@@ -27,7 +27,7 @@ class Column;
 // all nulls share a key and DISTINCT dedups them together, matching Cypher; a
 // string serializes as a length prefix then its characters, so two rows never
 // collide by concatenation (e.g. "a"+"b" versus "ab"+"").
-using NLKeyAppendFunction = void (*)(const Column* column, size_t row, std::string& key);
+using NLKeyAppendFunction = void (*)(const Column* column, size_t row, NLSerializedKey& key);
 
 // Where a key column writes the keys of a batch of rows: the value of the batch's row i at
 // _values + i * _valueStride, and a null as bit _nullBit of the bytes at _nulls + i * _nullStride.
@@ -231,7 +231,7 @@ public:
 private:
     std::vector<NLKeyAppendFunction> _keyAppends;
     NLByteKeyCells _cells;
-    std::string _rowKey;
+    NLSerializedKey _rowKey;
 };
 
 // Maps the keys of each row of a step to the dense index of its group, 0, 1, 2... in the order

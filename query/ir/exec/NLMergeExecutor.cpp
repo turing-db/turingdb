@@ -39,7 +39,7 @@ using namespace db;
 namespace {
 
 template <typename Property>
-void appendMergeKey(const std::vector<Property>& properties, size_t row, std::string& key) {
+void appendMergeKey(const std::vector<Property>& properties, size_t row, NLSerializedKey& key) {
     for (const Property& property : properties) {
         property._keyAppend(property._values, row, key);
     }
@@ -140,7 +140,7 @@ void appendPendingKey(NLWrittenValues& written,
                       NLValueStore& readValues,
                       const NLMergeScanProperties& properties,
                       const CommitWriteBuffer::UntypedProperties& values,
-                      std::string& key) {
+                      NLSerializedKey& key) {
     readValues.clear();
 
     for (const NLMergeScanProperty& property : properties) {
@@ -370,7 +370,7 @@ void NLMergeExecutor::buildNodeIndex(NLMergeNodeIndex* index) {
     NLWrittenValues& written = _context->getWrittenValues();
     written.indexUpdates(_writeBuffer);
 
-    std::string key;
+    NLSerializedKey key;
     while (scan.isValid()) {
         scan.fill(_context->getChunkSize());
 
@@ -388,7 +388,7 @@ void NLMergeExecutor::buildNodeIndex(NLMergeNodeIndex* index) {
             key.clear();
             appendMergeKey(scanProperties, row, key);
 
-            index->add(key, {._id=(*nodes)[row].getValue(), ._pending=false});
+            index->add(key.getBytes(), {._id=(*nodes)[row].getValue(), ._pending=false});
         }
     }
 
@@ -421,11 +421,11 @@ void NLMergeExecutor::collectCandidates(size_t row) {
             rekeyUpdatedNodes(index);
             absorbPendingNodes(index);
 
-            std::string& key = _work->_key;
+            NLSerializedKey& key = _work->_key;
             key.clear();
             appendRowKey(node._properties, index->writtenProperties(), _work->_nodeProperties[nodeIndex], row, key);
 
-            for (const NLMergeRef& candidate : index->find(key)) {
+            for (const NLMergeRef& candidate : index->find(key.getBytes())) {
                 const bool holds = !isDeletedNode(candidate)
                                    && (!index->hasChanged(candidate) || holdsTheKey(index, candidate, key));
 
@@ -482,15 +482,15 @@ void NLMergeExecutor::rekeyNode(NLMergeNodeIndex* index, const NLMergeRef& node)
         return;
     }
 
-    std::string& key = _work->_scanKey;
+    NLSerializedKey& key = _work->_scanKey;
     key.clear();
     appendCurrentKey(index, node, key);
 
-    index->add(key, node);
+    index->add(key.getBytes(), node);
     index->markChanged(node);
 }
 
-void NLMergeExecutor::appendCurrentKey(NLMergeNodeIndex* index, const NLMergeRef& node, std::string& key) {
+void NLMergeExecutor::appendCurrentKey(NLMergeNodeIndex* index, const NLMergeRef& node, NLSerializedKey& key) {
     const NLMergeScanProperties& keyProperties = index->writtenProperties();
     NLWrittenValues& written = _context->getWrittenValues();
 
@@ -512,8 +512,8 @@ void NLMergeExecutor::appendCurrentKey(NLMergeNodeIndex* index, const NLMergeRef
     }
 }
 
-bool NLMergeExecutor::holdsTheKey(NLMergeNodeIndex* index, const NLMergeRef& node, const std::string& key) {
-    std::string& currentKey = _work->_scanKey;
+bool NLMergeExecutor::holdsTheKey(NLMergeNodeIndex* index, const NLMergeRef& node, const NLSerializedKey& key) {
+    NLSerializedKey& currentKey = _work->_scanKey;
     currentKey.clear();
     appendCurrentKey(index, node, currentKey);
 
@@ -541,7 +541,7 @@ void NLMergeExecutor::absorbPendingNodes(NLMergeNodeIndex* index) {
     const LabelSetHandle labelset(index->getWriteLabels());
     const CommitWriteBuffer::DeletedPendingEntities& deleted = _writeBuffer->deletedPendingNodes();
     NLWrittenValues& written = _context->getWrittenValues();
-    std::string& key = _work->_scanKey;
+    NLSerializedKey& key = _work->_scanKey;
 
     for (size_t offset = firstOffset; offset < pendingCount; offset++) {
         const CommitWriteBuffer::PendingNode& node = _writeBuffer->getPendingNode(offset);
@@ -552,7 +552,7 @@ void NLMergeExecutor::absorbPendingNodes(NLMergeNodeIndex* index) {
         key.clear();
         appendPendingKey(written, _readValues, index->writtenProperties(), node.properties, key);
 
-        index->add(key, {._id=offset, ._pending=true});
+        index->add(key.getBytes(), {._id=offset, ._pending=true});
     }
 
     index->setNextPendingNode(pendingCount);
@@ -582,7 +582,7 @@ void NLMergeExecutor::absorbPendingEdges() {
 }
 
 bool NLMergeExecutor::holdsTheHopValues(const NLMergeData::Hop& hop, uint64_t offset) {
-    std::string& key = _work->_scanKey;
+    NLSerializedKey& key = _work->_scanKey;
     key.clear();
 
     const CommitWriteBuffer::PendingEdge& edge = _writeBuffer->getPendingEdge(offset);
@@ -639,7 +639,7 @@ void NLMergeExecutor::appendRowKey(const std::vector<NLMergeProperty>& propertie
                                    const NLMergeScanProperties& writtenProperties,
                                    const NLMergeWorkingSet::PropertiesPerRow& staged,
                                    size_t row,
-                                   std::string& key) {
+                                   NLSerializedKey& key) {
     NLWrittenValues& written = _context->getWrittenValues();
 
     for (size_t index = 0; index < properties.size(); index++) {
@@ -839,7 +839,7 @@ void NLMergeExecutor::dropExtensionsWithOtherProperties(const NLMergeData::Hop& 
     }
 
     std::vector<NLMergeExtension>& kept = _work->_keptExtensions;
-    std::string& key = _work->_scanKey;
+    NLSerializedKey& key = _work->_scanKey;
 
     kept.clear();
     for (size_t index = 0; index < extensions.size(); index++) {

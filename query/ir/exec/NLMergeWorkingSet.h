@@ -3,7 +3,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -12,6 +11,7 @@
 #include "versioning/CommitWriteBuffer.h"
 
 #include "NLProgram.h"
+#include "NLSerializedKey.h"
 
 namespace db {
 
@@ -66,9 +66,9 @@ struct NLMergeWorkingSet {
 
     // A chain node's lookup key, a hop's, and the key a candidate edge's own values
     // serialize into
-    std::string _key;
-    std::string _hopKey;
-    std::string _scanKey;
+    NLSerializedKey _key;
+    NLSerializedKey _hopKey;
+    NLSerializedKey _scanKey;
 };
 
 }

@@ -88,6 +88,7 @@
 #include "NLSystemContext.h"
 
 #include "NLKeyHash.h"
+#include "NLSerializedKey.h"
 #include "NLProgram.h"
 #include "NLRuntimeProperty.h"
 #include "NLMergeExecutor.h"
@@ -2730,15 +2731,14 @@ int compareOptContainerColumn(const Column* column, size_t a, size_t b) {
     return 0;
 }
 
-// Append the raw bytes of a present property value to a distinct row key. The key
-// is a std::string used purely as a growable byte buffer - not text - so the value
+// Append the raw bytes of a present property value to a distinct row key. The value
 // is appended verbatim: a trivially-copyable primitive copies its object bytes; a
 // string copies a length prefix then its characters, so two rows never collide by
 // concatenation (so "a"+"b" and "ab"+"" get distinct keys). A view - a list, a map - would
 // key on its own bytes, a pointer into its buffer, so it keys through its own serializer.
 template <typename Primitive>
     requires (!NLViewElement<Primitive>)
-void distinctAppendValueBytes(std::string& key, const Primitive& value) {
+void distinctAppendValueBytes(NLSerializedKey& key, const Primitive& value) {
     key.append(reinterpret_cast<const char*>(&value), sizeof(Primitive));
 }
 
@@ -2755,22 +2755,21 @@ double normalizedKeyDouble(double value) {
     return value;
 }
 
-void distinctAppendValueBytes(std::string& key, double value) {
+void distinctAppendValueBytes(NLSerializedKey& key, double value) {
     const double normalized = normalizedKeyDouble(value);
     key.append(reinterpret_cast<const char*>(&normalized), sizeof(normalized));
 }
 
-void distinctAppendValueBytes(std::string& key, std::string_view value) {
+void distinctAppendValueBytes(NLSerializedKey& key, std::string_view value) {
     const size_t length = value.size();
     key.append(reinterpret_cast<const char*>(&length), sizeof(length));
     key.append(value.data(), value.size());
 }
 
-// Serialize one row of an ID column (node/edge/edge-type IDs) into the row key -
-// a std::string used as a byte buffer, not text - as the ID's underlying integer
-// value, byte for byte.
+// Serialize one row of an ID column (node/edge/edge-type IDs) into the row key as
+// the ID's underlying integer value, byte for byte.
 template <typename ElementType>
-void distinctKeyAppendColumn(const Column* column, size_t row, std::string& key) {
+void distinctKeyAppendColumn(const Column* column, size_t row, NLSerializedKey& key) {
     const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
     const auto value = raw[row].getValue();
     distinctAppendValueBytes(key, value);
@@ -2781,17 +2780,16 @@ void distinctKeyAppendColumn(const Column* column, size_t row, std::string& key)
 // through the ID's integer; here the element is the value, and no row of such a chunk is
 // null, so the key carries no tag byte to tell a null from a value.
 template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
-void distinctKeyAppendPlainColumn(const Column* column, size_t row, std::string& key) {
+void distinctKeyAppendPlainColumn(const Column* column, size_t row, NLSerializedKey& key) {
     const auto& raw = static_cast<const ColumnType*>(column)->getRaw();
     distinctAppendValueBytes(key, raw[row]);
 }
 
-// Serialize one row of a nullable value column into the row key - a std::string
-// used as a byte buffer, not text - as a tag byte telling null from present, then,
-// when present, the value's bytes. A null serializes to the tag alone, so all
-// nulls share a key and DISTINCT dedups them together, matching Cypher.
+// Serialize one row of a nullable value column into the row key as a tag byte telling
+// null from present, then, when present, the value's bytes. A null serializes to the
+// tag alone, so all nulls share a key and DISTINCT dedups them together, matching Cypher.
 template <typename Primitive>
-void distinctKeyAppendOptColumn(const Column* column, size_t row, std::string& key) {
+void distinctKeyAppendOptColumn(const Column* column, size_t row, NLSerializedKey& key) {
     const auto& raw = static_cast<const ColumnVector<std::optional<Primitive>>*>(column)->getRaw();
     const std::optional<Primitive>& value = raw[row];
 
@@ -2898,10 +2896,10 @@ NLKeyPacking optKeyPacking() {
     return {&packOptKeyColumn<Primitive>, sizeof(Packed)};
 }
 
-void distinctAppendElementBytes(std::string& key, CellView element);
+void distinctAppendElementBytes(NLSerializedKey& key, CellView element);
 
 // The count fixes how many IDs follow it, so they need no separator.
-void distinctAppendPathBytes(std::string& key, std::span<const uint64_t> ids) {
+void distinctAppendPathBytes(NLSerializedKey& key, std::span<const uint64_t> ids) {
     const size_t idCount = ids.size();
     key.append(reinterpret_cast<const char*>(&idCount), sizeof(idCount));
     key.append(reinterpret_cast<const char*>(ids.data()), ids.size_bytes());
@@ -2909,7 +2907,7 @@ void distinctAppendPathBytes(std::string& key, std::span<const uint64_t> ids) {
 
 // Serialize a nested list into the row key as its length then its elements, so a list
 // never keys the same as the concatenation of its neighbours.
-void distinctAppendListBytes(std::string& key, const ListView list) {
+void distinctAppendListBytes(NLSerializedKey& key, const ListView list) {
     const size_t size = list.size();
     key.append(reinterpret_cast<const char*>(&size), sizeof(size));
 
@@ -2923,16 +2921,16 @@ void distinctAppendListBytes(std::string& key, const ListView list) {
 // part keys as that integer and only a fractional one keys as a double.
 // A number keys under the Int tag whenever it holds one, so 1, 1.0 and a small unsigned 1
 // all key alike - which is what makes the key agree with numeric equality.
-void distinctAppendIntegerKey(std::string& key, const types::Int64::Primitive value) {
+void distinctAppendIntegerKey(NLSerializedKey& key, const types::Int64::Primitive value) {
     key.push_back(static_cast<char>(CellTag::Int));
     distinctAppendValueBytes(key, value);
 }
 
-void distinctAppendNumberKey(std::string& key, const types::Int64::Primitive value) {
+void distinctAppendNumberKey(NLSerializedKey& key, const types::Int64::Primitive value) {
     distinctAppendIntegerKey(key, value);
 }
 
-void distinctAppendNumberKey(std::string& key, const types::UInt64::Primitive value) {
+void distinctAppendNumberKey(NLSerializedKey& key, const types::UInt64::Primitive value) {
     if (value <= static_cast<types::UInt64::Primitive>(std::numeric_limits<types::Int64::Primitive>::max())) {
         distinctAppendIntegerKey(key, static_cast<types::Int64::Primitive>(value));
         return;
@@ -2942,7 +2940,7 @@ void distinctAppendNumberKey(std::string& key, const types::UInt64::Primitive va
     distinctAppendValueBytes(key, value);
 }
 
-void distinctAppendNumberKey(std::string& key, const types::Double::Primitive value) {
+void distinctAppendNumberKey(NLSerializedKey& key, const types::Double::Primitive value) {
     constexpr types::Double::Primitive integerBound = 9223372036854775808.0;
     constexpr types::Double::Primitive unsignedBound = 18446744073709551616.0;
 
@@ -2960,7 +2958,7 @@ void distinctAppendNumberKey(std::string& key, const types::Double::Primitive va
     }
 }
 
-void distinctAppendNumberBytes(std::string& key, const CellView element) {
+void distinctAppendNumberBytes(NLSerializedKey& key, const CellView element) {
     switch (element.getTag()) {
         case CellTag::Int:
             return distinctAppendNumberKey(key, element.getAs<types::Int64::Primitive>());
@@ -2982,7 +2980,7 @@ void distinctAppendNumberBytes(std::string& key, const CellView element) {
 
 // Serialize a map into the row key as its size, then each entry's key length, key bytes and
 // value. Both producers store entries in key order, so equal maps serialize alike.
-void distinctAppendMapBytes(std::string& key, const MapView map) {
+void distinctAppendMapBytes(NLSerializedKey& key, const MapView map) {
     const size_t size = map.size();
     key.append(reinterpret_cast<const char*>(&size), sizeof(size));
 
@@ -2999,7 +2997,7 @@ void distinctAppendMapBytes(std::string& key, const MapView map) {
 // Serialize one tagged scalar into the row key: its tag, then its value's bytes. Cells of
 // two types never collide because the tag leads, and a null is the tag alone, so all
 // nulls dedup together as they do in a nullable value column.
-void distinctAppendElementBytes(std::string& key, const CellView element) {
+void distinctAppendElementBytes(NLSerializedKey& key, const CellView element) {
     const CellTag tag = element.getTag();
 
     switch (tag) {
@@ -3135,12 +3133,12 @@ bool optColumnRowMatchable(const Column* column, size_t row) {
 }
 
 // Serialize one row of a type-erased column of tagged scalars into the row key.
-void distinctKeyAppendCellColumn(const Column* column, size_t row, std::string& key) {
+void distinctKeyAppendCellColumn(const Column* column, size_t row, NLSerializedKey& key) {
     const auto& raw = static_cast<const ColumnVector<CellView>*>(column)->getRaw();
     distinctAppendElementBytes(key, raw[row]);
 }
 
-void distinctKeyAppendOptCellColumn(const Column* column, size_t row, std::string& key) {
+void distinctKeyAppendOptCellColumn(const Column* column, size_t row, NLSerializedKey& key) {
     const std::vector<std::optional<CellView>>& raw =
         static_cast<const ColumnOptVector<CellView>*>(column)->getRaw();
     const std::optional<CellView>& element = raw[row];
@@ -3155,23 +3153,23 @@ void distinctKeyAppendOptCellColumn(const Column* column, size_t row, std::strin
 
 // Serialize one row of a list column into the row key, so two rows key alike when their
 // lists hold equal elements - the equality Cypher gives two lists.
-void distinctKeyAppendListColumn(const Column* column, size_t row, std::string& key) {
+void distinctKeyAppendListColumn(const Column* column, size_t row, NLSerializedKey& key) {
     const auto& raw = static_cast<const ColumnVector<ListView>*>(column)->getRaw();
     distinctAppendListBytes(key, raw[row]);
 }
 
-void distinctKeyAppendMapColumn(const Column* column, size_t row, std::string& key) {
+void distinctKeyAppendMapColumn(const Column* column, size_t row, NLSerializedKey& key) {
     const auto& raw = static_cast<const ColumnVector<MapView>*>(column)->getRaw();
     distinctAppendMapBytes(key, raw[row]);
 }
 
 // The null path has no ID, so it keys as count 0, apart from every path.
-void distinctKeyAppendPathColumn(const Column* column, size_t row, std::string& key) {
+void distinctKeyAppendPathColumn(const Column* column, size_t row, NLSerializedKey& key) {
     const std::vector<GraphPath>& raw = static_cast<const ColumnVector<GraphPath>*>(column)->getRaw();
     distinctAppendPathBytes(key, raw[row].getIDs());
 }
 
-void distinctKeyAppendOptListColumn(const Column* column, size_t row, std::string& key) {
+void distinctKeyAppendOptListColumn(const Column* column, size_t row, NLSerializedKey& key) {
     const std::vector<std::optional<ListView>>& raw =
         static_cast<const ColumnOptVector<ListView>*>(column)->getRaw();
     const std::optional<ListView>& list = raw[row];
@@ -3184,7 +3182,7 @@ void distinctKeyAppendOptListColumn(const Column* column, size_t row, std::strin
     distinctAppendListBytes(key, *list);
 }
 
-void distinctKeyAppendOptMapColumn(const Column* column, size_t row, std::string& key) {
+void distinctKeyAppendOptMapColumn(const Column* column, size_t row, NLSerializedKey& key) {
     const std::vector<std::optional<MapView>>& raw =
         static_cast<const ColumnOptVector<MapView>*>(column)->getRaw();
     const std::optional<MapView>& map = raw[row];
@@ -7016,7 +7014,7 @@ void throwIfNodesHaveEdges(const GraphView& view, const ColumnNodeIDs* nodes) {
 // arrive in a plain and a nullable column respectively: the two have to serialize alike,
 // which is why a plain row writes the tag byte the nullable one writes for a value.
 template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
-void mergeKeyAppendPlainColumn(const Column* column, size_t row, std::string& key) {
+void mergeKeyAppendPlainColumn(const Column* column, size_t row, NLSerializedKey& key) {
     const auto& raw = static_cast<const ColumnType*>(column)->getRaw();
 
     key.push_back('\1');
@@ -7024,7 +7022,7 @@ void mergeKeyAppendPlainColumn(const Column* column, size_t row, std::string& ke
 }
 
 template <typename ElementType>
-void mergeKeyAppendConstColumn(const Column* column, size_t row, std::string& key) {
+void mergeKeyAppendConstColumn(const Column* column, size_t row, NLSerializedKey& key) {
     key.push_back('\1');
     distinctAppendValueBytes(key, (*static_cast<const ColumnConst<ElementType>*>(column))[row]);
 }
@@ -7035,7 +7033,7 @@ void mergeKeyAppendConstColumn(const Column* column, size_t row, std::string& ke
 // the double it reads back, so the two only compare equal once the row's value is
 // converted to it.
 template <typename ElementType, typename KeyType>
-void mergeKeyAppendNumericPlainColumn(const Column* column, size_t row, std::string& key) {
+void mergeKeyAppendNumericPlainColumn(const Column* column, size_t row, NLSerializedKey& key) {
     const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
 
     key.push_back('\1');
@@ -7043,13 +7041,13 @@ void mergeKeyAppendNumericPlainColumn(const Column* column, size_t row, std::str
 }
 
 template <typename ElementType, typename KeyType>
-void mergeKeyAppendNumericConstColumn(const Column* column, size_t row, std::string& key) {
+void mergeKeyAppendNumericConstColumn(const Column* column, size_t row, NLSerializedKey& key) {
     key.push_back('\1');
     distinctAppendValueBytes(key, static_cast<KeyType>((*static_cast<const ColumnConst<ElementType>*>(column))[row]));
 }
 
 template <typename ElementType, typename KeyType>
-void mergeKeyAppendNumericOptColumn(const Column* column, size_t row, std::string& key) {
+void mergeKeyAppendNumericOptColumn(const Column* column, size_t row, NLSerializedKey& key) {
     const auto& raw = static_cast<const ColumnVector<std::optional<ElementType>>*>(column)->getRaw();
     const std::optional<ElementType>& value = raw[row];
 
@@ -7064,7 +7062,7 @@ void mergeKeyAppendNumericOptColumn(const Column* column, size_t row, std::strin
 
 // Keys the way a nullable column's null row does, so a merge on a null value binds the
 // nodes that lack the property
-void mergeKeyAppendConstNull(const Column* column, size_t row, std::string& key) {
+void mergeKeyAppendConstNull(const Column* column, size_t row, NLSerializedKey& key) {
     key.push_back('\0');
 }
 

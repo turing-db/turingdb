@@ -42,7 +42,7 @@ void packRowGroupColumn(const Column* column, size_t beginRow, size_t endRow, co
     }
 }
 
-void appendRowGroupKey(const Column* column, size_t row, std::string& key) {
+void appendRowGroupKey(const Column* column, size_t row, NLSerializedKey& key) {
     const std::vector<size_t>& raw = static_cast<const ColumnVector<size_t>*>(column)->getRaw();
     key.append(reinterpret_cast<const char*>(&raw[row]), sizeof(size_t));
 }
@@ -351,7 +351,7 @@ void NLSerializedGroupHashTable::assign(std::span<const Column* const> keyColumn
             _keyAppends[keyIndex](keyColumns[keyIndex], row, _rowKey);
         }
 
-        assignment.setGroup(row, _cells.findOrCreateGroup(_rowKey, row, assignment));
+        assignment.setGroup(row, _cells.findOrCreateGroup(_rowKey.getBytes(), row, assignment));
     }
 }
 
