@@ -98,6 +98,44 @@ TEST_F(LoweringDeterminismTest, laysOutACaseConstantOfAReduceWhoseAccumulatorWid
                      "total + CASE WHEN x > 2 THEN 0.5 ELSE 1 END)");
 }
 
+TEST_F(LoweringDeterminismTest, boundsTheMatchOfALimitedCountInAReduceWhoseAccumulatorWidens) {
+    expectOneProgram("MATCH (n:Person) "
+                     "RETURN n.name, reduce(acc = 0, x IN [1, 2] | acc + 0.5 * COUNT { MATCH (n)-->(m) RETURN m LIMIT 3 })");
+}
+
+TEST_F(LoweringDeterminismTest, boundsTheMatchOfALimitedCountInAnAllReduceWhoseAccumulatorWidens) {
+    expectOneProgram("MATCH (n:Person) "
+                     "RETURN n.name, allReduce(s = 0, x IN [1, 2] | s + 0.5 * COUNT { MATCH (n)-->(m) RETURN m LIMIT 3 }, s < 2.5)");
+}
+
+TEST_F(LoweringDeterminismTest, boundsACallRunPerRowInAReduceWhoseAccumulatorWidens) {
+    expectOneProgram("MATCH (n:Person) "
+                     "RETURN n.name, reduce(acc = 0, x IN [1, 2] | acc + 0.5 * COUNT { "
+                     "MATCH (n)-->(m) WITH count(m) AS c "
+                     "CALL (c) { UNWIND range(1, c) AS i RETURN i LIMIT 10 } "
+                     "RETURN i LIMIT 3 })");
+}
+
+TEST_F(LoweringDeterminismTest, boundsAnOptionalCallRunPerRowInAReduceWhoseAccumulatorWidens) {
+    expectOneProgram("MATCH (n:Person) "
+                     "RETURN n.name, reduce(acc = 0, x IN [1, 2] | acc + 0.5 * COUNT { "
+                     "MATCH (n)-->(m) WITH count(m) AS c "
+                     "OPTIONAL CALL (c) { UNWIND range(2, c) AS i RETURN i LIMIT 10 } "
+                     "RETURN i LIMIT 2 })");
+}
+
+TEST_F(LoweringDeterminismTest, boundsTheBodyOfACallInAReduceWhoseAccumulatorWidens) {
+    expectOneProgram("MATCH (n:Person) "
+                     "RETURN n.name, reduce(acc = 0, x IN [1, 2] | acc + 0.5 * COUNT { "
+                     "CALL (n) { MATCH (n)-->(m)-->(k) RETURN k LIMIT 2 } RETURN k })");
+}
+
+TEST_F(LoweringDeterminismTest, boundsAnOptionalMatchInAReduceWhoseAccumulatorWidens) {
+    expectOneProgram("MATCH (n:Person) "
+                     "RETURN n.name, reduce(acc = 0, x IN [1, 2] | acc + 0.5 * COUNT { "
+                     "OPTIONAL MATCH (n)-->(m)-->(k) RETURN k LIMIT 3 })");
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
