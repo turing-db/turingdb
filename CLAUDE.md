@@ -332,6 +332,45 @@ and left EXISTS, COLLECT, CALL, OPTIONAL MATCH, pattern comprehensions and cross
 Instead the layout moved onto the ops: 14 ops implement one or both methods, and the pass
 walks into and out of all of them with one generic step each way.
 
+## Maps keyed by IR objects forget what is erased
+
+**A map keyed by `mlir::Value` or `mlir::Operation*` drops an op's entries when the op is
+erased, and every erase goes through the one function that does it.** MLIR puts a new op
+in the memory an erased one freed. A key left behind then answers for whatever value is
+created next at that address. Which value that is depends on the heap, so the program
+changes between runs of one binary, and so does the bug.
+- In lowering, erase through `DBLowering::eraseOp`, never a bare `op->erase()`. It calls
+  `forgetErasedValues` (`query/ir/common/IRConstantColumn.h`), which drops the results and
+  block arguments of the op and of every op nested in it.
+- A new cache keyed by IR objects does the same at each erase, or is cleared after every
+  rewrite, as `ConeCache` in `DBPasses.cpp` is.
+- MLIR's own answer is a `RewriterBase::Listener` (`notifyOperationErased`). It works only
+  in `add_mlir_library` targets: MLIR is built without RTTI and only those targets get
+  `-fno-rtti`, so subclassing `RewriterBase` in lowering or common fails to link with
+  `undefined symbol: _ZTIN4mlir12RewriterBaseE`.
+- Iterating such a map is non-deterministic too. Use `InsertionOrderedMap` when the order
+  reaches the IR (#1316).
+
+Finding a bug of this class:
+- An intermittent crash in a test that runs fixed queries is non-determinism until shown
+  otherwise. Run `EXPLAIN (nl)` of the query in many processes and compare the dumps before
+  reading the crash. Two different dumps put the bug in codegen or lowering, however far
+  downstream it crashes.
+- ASAN did not reproduce it: its allocator lays the heap out differently.
+- Pin it with a test that moves the heap: lower the query many times, each behind padding
+  of a different size, and require one program (`LoweringDeterminismTest`). 64 lowerings
+  passed on the broken code; 256, each behind 24 more bytes, failed 10 runs of 10.
+
+Worked example: #1374. `main` failed `test_query_ir_doom` with a segfault about 1 run in
+30. When a `reduce` accumulator widens (`line = ''` becomes Any), `lowerFold` erases the
+`nl.reduce` it built and lowers it again. The erased values stayed in `_constantColumns`,
+lowering's cache of which values hold one value for every row. When the retry's
+`nl.constant "#"` landed at the address of an erased value cached as not constant,
+`rowAlignedChunk` did not broadcast it, and `NLTranslator` read the 1-row constant as a
+full column. The crash was in the translator, but making `to_any` accept a constant would
+have left lowering non-deterministic. The fix routed all 13 erases in lowering through
+`eraseOp`.
+
 ## C++ Coding Style
 
 Please read `CODING_STYLE.md` for guidelines before any new work.
