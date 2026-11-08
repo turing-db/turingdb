@@ -1464,6 +1464,11 @@ void DBLowering::moveAheadOfLoops(mlir::Operation* computation) {
     }
 }
 
+void DBLowering::eraseOp(mlir::Operation* operation) {
+    forgetErasedValues(operation, _constantColumns);
+    operation->erase();
+}
+
 void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
     if (mlir::db::ScanNodes scanNodes = mlir::dyn_cast<mlir::db::ScanNodes>(operation)) {
         lowerScanNodes(scanNodes);
@@ -2052,7 +2057,7 @@ void DBLowering::lowerUnwindComputed(mlir::db::UnwindComputed unwind) {
 
     _builder.setInsertionPointToEnd(nlSource);
     _builder.create<nl::UnwindYield>(loc, sourceChunk);
-    placeholderYield->erase();
+    eraseOp(placeholderYield);
 
     const mlir::Type sourceElement = mlir::cast<nl::ChunkType>(sourceChunk.getType()).getElementType();
 
@@ -2197,7 +2202,7 @@ void DBLowering::lowerListComprehension(mlir::db::ListComprehension comprehensio
 
     _builder.setInsertionPointToEnd(bodyBlock);
     _builder.create<nl::ComprehensionYield>(loc, rowTagChunk, valueChunk);
-    placeholderYield->erase();
+    eraseOp(placeholderYield);
 
     const mlir::Type listType = storage::ListType::get(context, listedElementType(context, valueChunk));
     const nl::ChunkType resultType = nl::ChunkType::get(context,
@@ -2235,7 +2240,7 @@ void DBLowering::lowerListPredicate(mlir::db::ListPredicate predicate) {
 
     _builder.setInsertionPointToEnd(bodyBlock);
     _builder.create<nl::ComprehensionYield>(loc, rowTagChunk, valueChunk);
-    placeholderYield->erase();
+    eraseOp(placeholderYield);
 
     _valueMap[predicate.getResult()] = truths.getResult();
 }
@@ -2316,7 +2321,7 @@ NLFoldOp DBLowering::lowerFold(DBFoldOp fold, FoldResultType resultTypeOf) {
 
         const mlir::Type widened = accumulatedElement(accumulated, valueChunk.getType());
         if (widened != accumulated) {
-            folded->erase();
+            eraseOp(folded);
             accumulated = widened;
             continue;
         }
@@ -2325,7 +2330,7 @@ NLFoldOp DBLowering::lowerFold(DBFoldOp fold, FoldResultType resultTypeOf) {
 
         _builder.setInsertionPointToEnd(bodyBlock);
         _builder.create<nl::ReduceYield>(loc, valueChunk);
-        placeholderYield->erase();
+        eraseOp(placeholderYield);
 
         return folded;
     }
@@ -2360,7 +2365,7 @@ void DBLowering::lowerAllReduce(mlir::db::AllReduce allReduce) {
 
     _builder.setInsertionPointToEnd(predicateBlock);
     _builder.create<nl::AllReduceYield>(loc, holdsChunk);
-    placeholderYield->erase();
+    eraseOp(placeholderYield);
 
     _valueMap[allReduce.getResult()] = decided.getResult();
 }
@@ -5762,8 +5767,8 @@ void DBLowering::foldTruncatesIntoOutputs(mlir::func::FuncOp nlFunction) {
                                     output.getCardinality(),
                                     output.getColumnNamesAttr());
 
-        output.erase();
-        truncate.erase();
+        eraseOp(output);
+        eraseOp(truncate);
     }
 }
 
@@ -5828,8 +5833,8 @@ void DBLowering::foldSkipTruncatesIntoOutputs(mlir::func::FuncOp nlFunction) {
                                     output.getCardinality(),
                                     output.getColumnNamesAttr());
 
-        output.erase();
-        truncate.erase();
+        eraseOp(output);
+        eraseOp(truncate);
     }
 }
 
@@ -5879,9 +5884,9 @@ void DBLowering::foldBroadcastsIntoOutputs(mlir::func::FuncOp nlFunction) {
                                     broadcasts.front().getCardinality(),
                                     output.getColumnNamesAttr());
 
-        output.erase();
+        eraseOp(output);
         for (nl::BroadcastConstant broadcast : broadcasts) {
-            broadcast.erase();
+            eraseOp(broadcast);
         }
     }
 }
@@ -7403,7 +7408,7 @@ void DBLowering::lowerHopRegion(mlir::Block& dbHop, mlir::Region& nlHop, size_t 
     _builder.setInsertionPoint(placeholder);
     const mlir::Value maskChunk = rowAlignedChunk(mask, edges);
     _builder.create<nl::Yield>(loc, mlir::ValueRange {maskChunk});
-    placeholder.erase();
+    eraseOp(placeholder);
 }
 
 void DBLowering::lowerExpandPath(mlir::db::ExpandPath expandPath) {
