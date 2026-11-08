@@ -8677,11 +8677,89 @@ private:
     }
 };
 
+void collectReads(Operation* root, llvm::function_ref<bool(Operation*)> isShared, llvm::SmallVectorImpl<Operation*>& reads) {
+    root->walk([isShared, &reads](Operation* op) {
+        if (isShared(op)) {
+            reads.push_back(op);
+        }
+    });
+}
+
+using RegionReaderKey = std::tuple<Block*, Value, TypeID, Attribute>;
+
+RegionReaderKey regionReaderKey(Block* block, Value rows, const EntityRead& entityRead) {
+    return RegionReaderKey {block, canonicalRows(rows), entityRead._op, entityRead._property};
+}
+
+// The first op of a block whose regions read what a read takes off rows of that block, found
+// along the steps the walk climbs from each read inside a region
+void collectRegionReaders(llvm::ArrayRef<Operation*> reads, llvm::DenseMap<RegionReaderKey, Operation*>& readers) {
+    llvm::DenseSet<std::tuple<Value, TypeID, Attribute>> climbed;
+    for (Operation* const read : reads) {
+        const EntityRead entityRead = entityReadOf(read);
+
+        Value rows = read->getOperand(0);
+        RowsStep step;
+        while (matchRowsStep(rows, step)) {
+            if (step._kind == RowsStepKind::IntoRegion) {
+                Operation* const reader = step._body->getParentOp();
+                const RegionReaderKey key = regionReaderKey(reader->getBlock(), step._outerRows, entityRead);
+
+                const auto [readerIt, isFirst] = readers.try_emplace(key, reader);
+                if (!isFirst && reader->isBeforeInBlock(readerIt->second)) {
+                    readerIt->second = reader;
+                }
+            }
+
+            rows = step._outerRows;
+            if (!climbed.insert({rows, entityRead._op, entityRead._property}).second) {
+                break;
+            }
+        }
+    }
+}
+
+// A read runs over every row of its rows wherever it stands in their block, so one behind an
+// op whose regions read the same moves in front of it, where the walk carries it in
+void hoistReadsAboveRegionReaders(llvm::ArrayRef<Operation*> reads, mlir::RewriterBase& rewriter) {
+    llvm::DenseMap<RegionReaderKey, Operation*> readers;
+    collectRegionReaders(reads, readers);
+
+    for (Operation* const read : reads) {
+        const auto readerIt = readers.find(regionReaderKey(read->getBlock(), read->getOperand(0), entityReadOf(read)));
+        if (readerIt != readers.end() && readerIt->second->isBeforeInBlock(read)) {
+            rewriter.moveOpBefore(read, readerIt->second);
+        }
+    }
+}
+
+// Hands each read @param isShared picks the column a read before it, or one of rows its own
+// come from, already holds, carried down to it
+void shareReads(Operation* root, llvm::function_ref<bool(Operation*)> isShared, mlir::RewriterBase& rewriter) {
+    llvm::SmallVector<Operation*> reads;
+    collectReads(root, isShared, reads);
+    hoistReadsAboveRegionReaders(reads, rewriter);
+
+    reads.clear();
+    collectReads(root, isShared, reads);
+
+    KnownReadColumns knownColumns;
+    ReadColumnWalk walk(knownColumns, rewriter);
+    for (Operation* const read : reads) {
+        const Value shared = walk.columnOf(read);
+        if (!shared) {
+            knownColumns.addRead(read);
+            continue;
+        }
+
+        rewriter.replaceOp(read, shared);
+    }
+}
+
 struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyReads> {
     void runOnOperation() override {
         Operation* const root = getOperation();
 
-        llvm::SmallVector<Operation*> reads;
         llvm::DenseSet<Attribute> writtenNodeProperties;
         llvm::DenseSet<Attribute> writtenEdgeProperties;
         bool writesEveryNodeProperty = false;
@@ -8690,9 +8768,7 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
             StringAttr writtenProperty;
             bool writesNodes = false;
 
-            if (isa<GetNodeProperties, GetEdgeProperties>(op)) {
-                reads.push_back(op);
-            } else if (matchPropertyWrite(op, writtenProperty, writesNodes)) {
+            if (matchPropertyWrite(op, writtenProperty, writesNodes)) {
                 if (writesNodes) {
                     writtenNodeProperties.insert(writtenProperty);
                 } else {
@@ -8707,40 +8783,28 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
             }
         });
 
-        mlir::IRRewriter rewriter(&getContext());
-        KnownReadColumns knownColumns;
-        ReadColumnWalk walk(knownColumns, rewriter);
-        for (Operation* const read : reads) {
+        const auto isShared = [&](Operation* op) {
             StringAttr property;
             bool nodeProperty = false;
-            const bool isPropertyRead = matchPropertyRead(read, property, nodeProperty);
-            bioassert(isPropertyRead, "A collected op is a property read");
+            if (!matchPropertyRead(op, property, nodeProperty)) {
+                return false;
+            }
 
             // A read standing before this one saw what the property held before the write,
             // and a projection behind a SET reads what the statement wrote
             const llvm::DenseSet<Attribute>& written = nodeProperty ? writtenNodeProperties : writtenEdgeProperties;
             const bool writesEveryProperty = nodeProperty ? writesEveryNodeProperty : writesEveryEdgeProperty;
-            if (writesEveryProperty || written.contains(property)) {
-                continue;
-            }
 
-            const Value reused = walk.columnOf(read);
-            if (!reused) {
-                knownColumns.addRead(read);
-                continue;
-            }
+            return !writesEveryProperty && !written.contains(property);
+        };
 
-            rewriter.replaceOp(read, reused);
-        }
+        mlir::IRRewriter rewriter(&getContext());
+        shareReads(root, isShared, rewriter);
     }
 };
 
-void collectLabelAndTypeReads(Operation* root, llvm::SmallVectorImpl<Operation*>& reads) {
-    root->walk([&reads](Operation* op) {
-        if (isa<GetNodeLabelSet, GetEdgeTypes>(op)) {
-            reads.push_back(op);
-        }
-    });
+bool isLabelOrTypeRead(Operation* op) {
+    return isa<GetNodeLabelSet, GetEdgeTypes>(op);
 }
 
 // Codegen reads the label sets of a node column, or the types of an edge column, once per
@@ -8748,7 +8812,7 @@ void collectLabelAndTypeReads(Operation* root, llvm::SmallVectorImpl<Operation*>
 struct ReuseLabelAndTypeReads : public impl::ReuseLabelAndTypeReadsBase<ReuseLabelAndTypeReads> {
     void runOnOperation() override {
         llvm::SmallVector<Operation*> reads;
-        collectLabelAndTypeReads(getOperation(), reads);
+        collectReads(getOperation(), isLabelOrTypeRead, reads);
 
         mlir::IRRewriter rewriter(&getContext());
         llvm::DenseMap<std::tuple<Block*, Value, OperationName>, Operation*> firstReads;
@@ -8770,21 +8834,8 @@ struct ReuseLabelAndTypeReads : public impl::ReuseLabelAndTypeReadsBase<ReuseLab
 
 struct CarryLabelAndTypeReads : public impl::CarryLabelAndTypeReadsBase<CarryLabelAndTypeReads> {
     void runOnOperation() override {
-        llvm::SmallVector<Operation*> reads;
-        collectLabelAndTypeReads(getOperation(), reads);
-
         mlir::IRRewriter rewriter(&getContext());
-        KnownReadColumns knownColumns;
-        ReadColumnWalk walk(knownColumns, rewriter);
-        for (Operation* const read : reads) {
-            const Value carried = walk.columnOf(read);
-            if (!carried) {
-                knownColumns.addRead(read);
-                continue;
-            }
-
-            rewriter.replaceOp(read, carried);
-        }
+        shareReads(getOperation(), isLabelOrTypeRead, rewriter);
     }
 };
 
