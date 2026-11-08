@@ -37,6 +37,11 @@ bool yieldsConstantColumn(mlir::Value value);
 // whole cone under each one.
 bool yieldsConstantColumn(mlir::Value value, llvm::DenseMap<mlir::Value, bool>& classified);
 
+// Drops from @param classified the values @param operation and the ops nested in it define,
+// as it is erased: a value created later at an erased one's address would otherwise read the
+// erased one's answer
+void forgetErasedValues(mlir::Operation* operation, llvm::DenseMap<mlir::Value, bool>& classified);
+
 // Whether @param operation, and every op nested in it, runs on any value it reads without
 // raising, so it can run where no row has asked for it
 bool runsWithoutRaising(mlir::Operation* operation);

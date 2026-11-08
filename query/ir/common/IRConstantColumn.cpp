@@ -110,6 +110,22 @@ bool db::yieldsConstantColumn(mlir::Value value, llvm::DenseMap<mlir::Value, boo
     return isConstantColumn(value, classified);
 }
 
+void db::forgetErasedValues(mlir::Operation* operation, llvm::DenseMap<mlir::Value, bool>& classified) {
+    operation->walk([&classified](mlir::Operation* nested) {
+        for (const mlir::Value result : nested->getResults()) {
+            classified.erase(result);
+        }
+
+        for (mlir::Region& region : nested->getRegions()) {
+            for (mlir::Block& block : region) {
+                for (const mlir::Value argument : block.getArguments()) {
+                    classified.erase(argument);
+                }
+            }
+        }
+    });
+}
+
 bool db::runsWithoutRaising(mlir::Operation* operation) {
     const mlir::WalkResult walked = operation->walk([](mlir::Operation* nested) {
         return mlir::isSpeculatable(nested) ? mlir::WalkResult::advance() : mlir::WalkResult::interrupt();

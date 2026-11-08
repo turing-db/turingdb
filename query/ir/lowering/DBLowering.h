@@ -275,6 +275,8 @@ private:
     // of its block, ahead of that loop, where every loop reading it can see it
     void moveAheadOfLoops(mlir::Operation* computation);
 
+    void eraseOp(mlir::Operation* operation);
+
     // Hoist one nl.limit handle per db.limit of @param region to the top of @param
     // hoistBlock and assign it to the loops producing the limited columns. A limit
     // inside a body run one row at a time belongs to that body, so only the limits

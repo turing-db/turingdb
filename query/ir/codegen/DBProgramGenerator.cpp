@@ -8754,10 +8754,7 @@ void DBProgramGenerator::dropUnreadFilteredColumns(mlir::db::FilterOp filter) {
         keptResults[keptIndex].replaceAllUsesWith(trimmed.getResult(keptIndex));
     }
 
-    for (const mlir::Value result : results) {
-        _constantColumns.erase(result);
-    }
-
+    forgetErasedValues(filter, _constantColumns);
     filter.erase();
 }
 

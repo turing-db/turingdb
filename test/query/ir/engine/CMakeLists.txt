@@ -26,6 +26,10 @@ target_include_directories(test_query_ir_exec_v3_error PRIVATE ${IR_TEST_DIR})
 add_turing_test(test_query_ir_equivalence EquivalenceTest.cpp)
 target_include_directories(test_query_ir_equivalence PRIVATE ${IR_TEST_DIR})
 
+add_turing_test(test_query_ir_lowering_determinism LoweringDeterminismTest.cpp)
+target_sources(test_query_ir_lowering_determinism PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_lowering_determinism PRIVATE ${IR_TEST_DIR})
+
 add_turing_test(test_query_ir_cypher_output CypherOutputTest.cpp)
 target_include_directories(test_query_ir_cypher_output PRIVATE ${IR_TEST_DIR})
 
