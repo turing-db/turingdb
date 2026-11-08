@@ -1,6 +1,7 @@
 #include "NLProgram.h"
 
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <numeric>
 
@@ -472,6 +473,44 @@ void NLAggregateState::emit(Column* output, NLStepBuffers* stepBuffers) {
     _stateType._emit(NLGroupStatePlaces(_place.data(), _stateType._size), 0, 1, output, stepBuffers);
 }
 
+NLGroupDistinctTally::NLGroupDistinctTally() {
+}
+
+NLGroupDistinctTally::~NLGroupDistinctTally() {
+}
+
+void NLGroupDistinctTally::setValueKey(const NLGroupHashKey& valueKey) {
+    _values.addKey(valueKey);
+    _values.chooseTable();
+
+    NLGroupHashKey rowGroupKey;
+    NLGroupHashTable::buildRowGroupKey(rowGroupKey);
+
+    _pairs.addKey(rowGroupKey);
+    _pairs.addKey(rowGroupKey);
+    _pairs.chooseTable();
+}
+
+void NLGroupDistinctTally::assign(const Column* rowGroups, const Column* values) {
+    const size_t rowCount = rowGroups->size();
+
+    const std::array<const Column*, 1> valueColumns {values};
+    _values.assign(valueColumns, rowCount);
+
+    const std::array<const Column*, 2> pairColumns {rowGroups, _values.getRowGroupColumn()};
+    _pairs.assign(pairColumns, rowCount);
+
+    _newRows.assign(rowCount, 0);
+    for (const size_t row : _pairs.getNewGroupRows()) {
+        _newRows[row] = 1;
+    }
+}
+
+void NLGroupDistinctTally::clear() {
+    _values.clear();
+    _pairs.clear();
+}
+
 NLGroupTable::NLGroupTable() {
 }
 
@@ -544,9 +583,16 @@ void NLGroupAggregates::grow(size_t groupCount) {
     }
 }
 
-void NLGroupAggregates::fold(const std::vector<size_t>& groups) {
+void NLGroupAggregates::fold(const ColumnVector<size_t>* rowGroups) {
     NLValueStore& values = _values.getActive();
+    const std::vector<size_t>& groups = rowGroups->getRaw();
     const size_t rowCount = groups.size();
+
+    for (const Aggregate& aggregate : _aggregates) {
+        if (aggregate._distinct) {
+            aggregate._distinct->assign(rowGroups, aggregate._input);
+        }
+    }
 
     for (size_t beginRow = 0; beginRow < rowCount; beginRow += FOLD_BATCH_ROWS) {
         const size_t endRow = std::min(rowCount, beginRow + FOLD_BATCH_ROWS);
@@ -598,7 +644,9 @@ void NLGroupAggregates::clear() {
     _values.clear();
 
     for (Aggregate& aggregate : _aggregates) {
-        aggregate._distinct.clear();
+        if (aggregate._distinct) {
+            aggregate._distinct->clear();
+        }
     }
 }
 
@@ -629,7 +677,9 @@ void NLCollectState::reset() {
             value._buffer->clear();
         }
 
-        value._distinct.clear();
+        if (value._distinct) {
+            value._distinct->clear();
+        }
         value._groupPositions.clear();
         value._groupPositions.resize(groupCount);
     }

@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "NLValueStore.h"
+#include "columns/ColumnVector.h"
 
 namespace db {
 
@@ -251,8 +252,12 @@ public:
     void assign(std::span<const Column* const> keyColumns, size_t rowCount);
 
     // The group of each row the last assign mapped, and the rows that created a group, in order
-    const std::vector<size_t>& getRowGroups() const { return _rowGroups; }
+    const ColumnVector<size_t>* getRowGroupColumn() const { return &_rowGroups; }
+    const std::vector<size_t>& getRowGroups() const { return _rowGroups.getRaw(); }
     const std::vector<size_t>& getNewGroupRows() const { return _newGroupRows; }
+
+    // Key a column of group indices, such as getRowGroupColumn's, in another table
+    static void buildRowGroupKey(NLGroupHashKey& key);
 
     size_t getGroupCount() const { return _groupCount; }
 
@@ -271,7 +276,7 @@ private:
     std::vector<NLGroupHashKey> _keys;
     Table _table;
     size_t _groupCount {0};
-    std::vector<size_t> _rowGroups;
+    ColumnVector<size_t> _rowGroups;
     std::vector<size_t> _newGroupRows;
 
     template <size_t Words>

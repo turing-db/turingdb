@@ -1,10 +1,10 @@
 #include "NLGroupHashTable.h"
 
+#include <string.h>
+
 #include <algorithm>
 #include <concepts>
 #include <functional>
-
-#include "columns/ColumnVector.h"
 
 #include "NLKeyHash.h"
 
@@ -30,6 +30,21 @@ uint64_t hashPackedKey(const NLPackedKey<Words>& key) {
     }
 
     return hash;
+}
+
+void packRowGroupColumn(const Column* column, size_t beginRow, size_t endRow, const NLKeyPackTarget& target) {
+    const std::vector<size_t>& raw = static_cast<const ColumnVector<size_t>*>(column)->getRaw();
+    std::byte* value = target._values;
+
+    for (size_t row = beginRow; row < endRow; row++) {
+        memcpy(value, &raw[row], sizeof(size_t));
+        value += target._valueStride;
+    }
+}
+
+void appendRowGroupKey(const Column* column, size_t row, std::string& key) {
+    const std::vector<size_t>& raw = static_cast<const ColumnVector<size_t>*>(column)->getRaw();
+    key.append(reinterpret_cast<const char*>(&raw[row]), sizeof(size_t));
 }
 
 // Re-place every filled cell of a table, which is kept at most half full, into one twice its size
@@ -404,11 +419,19 @@ NLGroupHashTableKind NLGroupHashTable::getKind() const {
 }
 
 void NLGroupHashTable::assign(std::span<const Column* const> keyColumns, size_t rowCount) {
-    _rowGroups.resize(rowCount);
+    std::vector<size_t>& rowGroups = _rowGroups.getRaw();
+    rowGroups.resize(rowCount);
     _newGroupRows.clear();
 
-    NLGroupAssignment assignment(_rowGroups, _newGroupRows, _groupCount);
+    NLGroupAssignment assignment(rowGroups, _newGroupRows, _groupCount);
     std::visit([&](auto& table) { table.assign(keyColumns, assignment); }, _table);
+}
+
+void NLGroupHashTable::buildRowGroupKey(NLGroupHashKey& key) {
+    key._shape = NLGroupKeyShape::Fixed;
+    key._nullable = false;
+    key._packing = NLKeyPacking {&packRowGroupColumn, sizeof(size_t)};
+    key._keyAppend = &appendRowGroupKey;
 }
 
 // Without a key every row has the empty key, so its one group is there whether or not a row

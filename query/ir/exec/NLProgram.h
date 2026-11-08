@@ -2429,37 +2429,29 @@ enum class GroupAggregateKind {
     First,
 };
 
-// The (group, value) pairs one DISTINCT aggregate has already charged. A single set
-// covers every group of the aggregate: the group index is prefixed onto the
-// serialized value, so two groups never share an entry. The distinct fold builds one
-// row's key in the scratch, then charges the group only when the pair is new - a
-// tally for count(DISTINCT x), a reduction for sum/avg(DISTINCT x). The grouped
-// sibling of NLDistinctState, which keys whole rows rather than one value per group.
+// The (group, value) pairs a DISTINCT aggregate has charged. One group hash table numbers the
+// values, keyed by their type, and a second keys the pairs of a row's group and its value's
+// number. A row whose pair is new is the first of its group to carry its value, so the fold
+// charges that row alone. The grouped sibling of NLDistinctState.
 class NLGroupDistinctTally {
 public:
-    // Start this row's key with the group it belongs to, so the value bytes the fold
-    // appends next are told apart per group.
-    void beginKey(size_t group) {
-        _key.assign(reinterpret_cast<const char*>(&group), sizeof(group));
-    }
+    NLGroupDistinctTally();
+    ~NLGroupDistinctTally();
 
-    std::string& getKey() { return _key; }
+    void setValueKey(const NLGroupHashKey& valueKey);
+    NLGroupHashTableKind getValueKind() const { return _values.getKind(); }
 
-    void setRowKey(NLKeyAppendFunction appendRowKey) { _appendRowKey = appendRowKey; }
-    void appendRowKey(const Column* input, size_t row) { _appendRowKey(input, row, _key); }
+    void assign(const Column* rowGroups, const Column* values);
 
-    // Record the key built for this row; true when the (group, value) pair is new,
-    // so the caller charges the group's tally.
-    bool insertIfNew() { return _seen.insert(_key).second; }
+    // Whether this row of the last step was the first to carry its pair
+    bool isNew(size_t row) const { return _newRows[row] != 0; }
 
-    // Drop every pair, so the aggregation starts fresh. Runs with the rest of the
-    // per-group state when nl.group_aggregate_buffer resets.
-    void clear() { _seen.clear(); }
+    void clear();
 
 private:
-    std::unordered_set<std::string> _seen;
-    std::string _key;
-    NLKeyAppendFunction _appendRowKey {nullptr};
+    NLGroupHashTable _values;
+    NLGroupHashTable _pairs;
+    std::vector<uint8_t> _newRows;
 };
 
 // Append the values of the given rows of an input chunk onto the tail of a
@@ -2499,13 +2491,13 @@ using NLGroupAggregateInitFunction = void (*)(NLGroupStatePlaces places, size_t 
 // Fold rows [beginRow, endRow) of this step's chunk into one aggregate's states: each row into
 // the state of the group groups[row] names, groups being the row -> group-index map
 // nl.group_aggregate_update built for this step. A DISTINCT kind charges a group only for a
-// value its tally has not seen, and min, max and first copy the value they keep into values.
+// row its tally marks new, and min, max and first copy the value they keep into values.
 using NLGroupAggregateFoldFunction = void (*)(NLGroupStatePlaces places,
                                               const Column* input,
                                               const std::vector<size_t>& groups,
                                               size_t beginRow,
                                               size_t endRow,
-                                              NLGroupDistinctTally& distinct,
+                                              const NLGroupDistinctTally* distinct,
                                               NLValueStore& values);
 
 // Copy every view a column holds - or only those of @param rows - into @param values, so
@@ -2546,14 +2538,14 @@ class NLGroupAggregates {
 public:
     // One aggregate. The update folds the incoming chunk _input into the state at _stateOffset
     // in each group's block, and the emit finalizes the states into the loop variable _output.
-    // _distinct is the tally of a DISTINCT aggregate, left empty by every other reduction.
+    // _distinct is the tally of a DISTINCT aggregate, null for every other reduction.
     struct Aggregate {
         const Column* _input {nullptr};
         Column* _output {nullptr};
         NLGroupAggregateStateType _stateType;
         size_t _stateOffset {0};
         NLGroupAggregateFoldFunction _fold {nullptr};
-        NLGroupDistinctTally _distinct;
+        NLGroupDistinctTally* _distinct {nullptr};
     };
 
     // Place the aggregate's state in the block of every group, after the states placed before
@@ -2566,8 +2558,8 @@ public:
     // Give every group up to groupCount a block, its states the identity of their aggregate
     void grow(size_t groupCount);
 
-    // Fold this step's chunk into the states: row r into the block of group groups[r]
-    void fold(const std::vector<size_t>& groups);
+    // Fold this step's chunk into the states: row r into the block of group rowGroups[r]
+    void fold(const ColumnVector<size_t>* rowGroups);
 
     // Finalize the states of groups [begin, begin + count) into each aggregate's output
     void emit(size_t begin, size_t count, NLStepBuffers* stepBuffers);
@@ -2715,6 +2707,7 @@ public:
     // groups it creates
     void assign(size_t rowCount);
 
+    const ColumnVector<size_t>* getRowGroupColumn() const { return _hashTable.getRowGroupColumn(); }
     const std::vector<size_t>& getRowGroups() const { return _hashTable.getRowGroups(); }
     size_t getGroupCount() const { return _hashTable.getGroupCount(); }
 
@@ -2971,7 +2964,7 @@ using NLCollectFoldFunction = void (*)(Column* values,
                                        const Column* input,
                                        const std::vector<size_t>& groups,
                                        std::vector<std::vector<size_t>>& groupPositions,
-                                       NLGroupDistinctTally& distinct,
+                                       const NLGroupDistinctTally* distinct,
                                        NLValueStore& store);
 
 // Emit a chunk of unwound values (the nl.unwind_collect drain): for each flat-buffer position
@@ -3006,9 +2999,9 @@ using NLCollectListEmitFunction = void (*)(const Column* values,
 class NLCollectState {
 public:
     // One collected column - Cypher's collect(x). _distinct holds the (group, value) pairs
-    // already charged, so collect(DISTINCT x) takes each value once and a plain collect
-    // leaves it empty; _output is filled either as the per-group list cell or as the
-    // unwound value, which is why the drain carries an emit handler for each.
+    // already charged, so collect(DISTINCT x) takes each value once, and is null for a plain
+    // collect; _output is filled either as the per-group list cell or as the unwound value,
+    // which is why the drain carries an emit handler for each.
     struct ValueColumn {
         const Column* _input {nullptr};
         Column* _buffer {nullptr};
@@ -3016,7 +3009,7 @@ public:
         NLCollectFoldFunction _fold {nullptr};
         NLCollectListEmitFunction _listEmit {nullptr};
         NLUnwindCollectValueEmitFunction _unwindCollectEmit {nullptr};
-        NLGroupDistinctTally _distinct;
+        NLGroupDistinctTally* _distinct {nullptr};
         std::vector<std::vector<size_t>> _groupPositions;
     };
 
@@ -5827,6 +5820,12 @@ public:
         return statePtr;
     }
 
+    // Allocate the tally of a DISTINCT aggregate or collect, owned by the program
+    NLGroupDistinctTally* allocGroupDistinctTally() {
+        _groupDistinctTallies.emplace_back(std::make_unique<NLGroupDistinctTally>());
+        return _groupDistinctTallies.back().get();
+    }
+
     NLNodeSetState* allocNodeSetState() {
         _nodeSetStates.emplace_back(std::make_unique<NLNodeSetState>());
 
@@ -5954,6 +5953,7 @@ private:
     std::vector<std::unique_ptr<NLAggregateState>> _aggregateStates;
     std::vector<std::unique_ptr<NLGroupAggregateState>> _groupAggregateStates;
     std::vector<std::unique_ptr<NLCollectState>> _collectStates;
+    std::vector<std::unique_ptr<NLGroupDistinctTally>> _groupDistinctTallies;
     std::vector<std::unique_ptr<NLNodeSetState>> _nodeSetStates;
     std::vector<std::unique_ptr<NLShortestPathState>> _shortestPathStates;
     std::vector<std::unique_ptr<NLOptionalState>> _optionalStates;

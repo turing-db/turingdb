@@ -2734,8 +2734,10 @@ int compareOptContainerColumn(const Column* column, size_t a, size_t b) {
 // is a std::string used purely as a growable byte buffer - not text - so the value
 // is appended verbatim: a trivially-copyable primitive copies its object bytes; a
 // string copies a length prefix then its characters, so two rows never collide by
-// concatenation (so "a"+"b" and "ab"+"" get distinct keys).
+// concatenation (so "a"+"b" and "ab"+"" get distinct keys). A view - a list, a map - would
+// key on its own bytes, a pointer into its buffer, so it keys through its own serializer.
 template <typename Primitive>
+    requires (!NLViewElement<Primitive>)
 void distinctAppendValueBytes(std::string& key, const Primitive& value) {
     key.append(reinterpret_cast<const char*>(&value), sizeof(Primitive));
 }
@@ -2916,13 +2918,6 @@ void distinctAppendListBytes(std::string& key, const ListView list) {
     }
 }
 
-// A list would otherwise pick the trivially-copyable template and key on the view's own
-// bytes - a pointer into its buffer - so two equal lists held in different buffers, as a
-// property's and a literal's are, would count as two.
-void distinctAppendValueBytes(std::string& key, const ListView value) {
-    distinctAppendListBytes(key, value);
-}
-
 // Serialize a number by its value rather than by the type it is tagged with: an integer
 // and a float holding the same value are one Cypher value, so a float with no fractional
 // part keys as that integer and only a fractional one keys as a double.
@@ -2999,11 +2994,6 @@ void distinctAppendMapBytes(std::string& key, const MapView map) {
 
         distinctAppendElementBytes(key, entry.getValue());
     }
-}
-
-// The map sibling of the ListView overload: a map keys by its entries, not by its span
-void distinctAppendValueBytes(std::string& key, const MapView value) {
-    distinctAppendMapBytes(key, value);
 }
 
 // Serialize one tagged scalar into the row key: its tag, then its value's bytes. Cells of
@@ -3707,7 +3697,7 @@ void groupFoldDeviation(NLGroupStatePlaces places,
                         const std::vector<size_t>& groups,
                         size_t beginRow,
                         size_t endRow,
-                        NLGroupDistinctTally& distinct,
+                        const NLGroupDistinctTally* distinct,
                         NLValueStore& values) {
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
@@ -3720,15 +3710,7 @@ void groupFoldDeviation(NLGroupStatePlaces places,
         const size_t group = groups[row];
 
         if constexpr (Distinct) {
-            distinct.beginKey(group);
-
-            if constexpr (std::is_same_v<Cell, CellView> || std::is_same_v<Cell, std::optional<CellView>>) {
-                distinctAppendElementBytes(distinct.getKey(), *value);
-            } else {
-                distinctAppendValueBytes(distinct.getKey(), *value);
-            }
-
-            if (!distinct.insertIfNew()) {
+            if (!distinct->isNew(row)) {
                 continue;
             }
         }
@@ -4356,7 +4338,7 @@ void groupFoldSum(NLGroupStatePlaces places,
                   const std::vector<size_t>& groups,
                   size_t beginRow,
                   size_t endRow,
-                  NLGroupDistinctTally& distinct,
+                  const NLGroupDistinctTally* distinct,
                   NLValueStore& values) {
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
@@ -4378,7 +4360,7 @@ void groupFoldSumDistinct(NLGroupStatePlaces places,
                           const std::vector<size_t>& groups,
                           size_t beginRow,
                           size_t endRow,
-                          NLGroupDistinctTally& distinct,
+                          const NLGroupDistinctTally* distinct,
                           NLValueStore& values) {
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
@@ -4390,10 +4372,7 @@ void groupFoldSumDistinct(NLGroupStatePlaces places,
 
         const size_t group = groups[row];
 
-        distinct.beginKey(group);
-        distinctAppendValueBytes(distinct.getKey(), *value);
-
-        if (!distinct.insertIfNew()) {
+        if (!distinct->isNew(row)) {
             continue;
         }
 
@@ -4410,7 +4389,7 @@ void groupFoldDurationTotal(NLGroupStatePlaces places,
                             const std::vector<size_t>& groups,
                             size_t beginRow,
                             size_t endRow,
-                            NLGroupDistinctTally& distinct,
+                            const NLGroupDistinctTally* distinct,
                             NLValueStore& values) {
     const auto& inputRaw = static_cast<const ColumnOptVector<types::Duration::Primitive>*>(input)->getRaw();
 
@@ -4423,10 +4402,7 @@ void groupFoldDurationTotal(NLGroupStatePlaces places,
         const size_t group = groups[row];
 
         if constexpr (Distinct) {
-            distinct.beginKey(group);
-            distinctAppendValueBytes(distinct.getKey(), *value);
-
-            if (!distinct.insertIfNew()) {
+            if (!distinct->isNew(row)) {
                 continue;
             }
         }
@@ -4451,7 +4427,7 @@ void groupFoldTaggedSum(NLGroupStatePlaces places,
                         const std::vector<size_t>& groups,
                         size_t beginRow,
                         size_t endRow,
-                        NLGroupDistinctTally& distinct,
+                        const NLGroupDistinctTally* distinct,
                         NLValueStore& values) {
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
@@ -4464,10 +4440,7 @@ void groupFoldTaggedSum(NLGroupStatePlaces places,
         const size_t group = groups[row];
 
         if constexpr (Distinct) {
-            distinct.beginKey(group);
-            distinctAppendElementBytes(distinct.getKey(), *value);
-
-            if (!distinct.insertIfNew()) {
+            if (!distinct->isNew(row)) {
                 continue;
             }
         }
@@ -4491,7 +4464,7 @@ void groupFoldMinMax(NLGroupStatePlaces places,
                      const std::vector<size_t>& groups,
                      size_t beginRow,
                      size_t endRow,
-                     NLGroupDistinctTally& distinct,
+                     const NLGroupDistinctTally* distinct,
                      NLValueStore& values) {
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
@@ -4516,7 +4489,7 @@ void groupFoldFirst(NLGroupStatePlaces places,
                     const std::vector<size_t>& groups,
                     size_t beginRow,
                     size_t endRow,
-                    NLGroupDistinctTally& distinct,
+                    const NLGroupDistinctTally* distinct,
                     NLValueStore& values) {
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
@@ -4594,7 +4567,7 @@ void groupFoldAvg(NLGroupStatePlaces places,
                   const std::vector<size_t>& groups,
                   size_t beginRow,
                   size_t endRow,
-                  NLGroupDistinctTally& distinct,
+                  const NLGroupDistinctTally* distinct,
                   NLValueStore& values) {
     using State = NLAverageState<AverageTotal<Primitive>>;
 
@@ -4619,7 +4592,7 @@ void groupFoldAvgDistinct(NLGroupStatePlaces places,
                           const std::vector<size_t>& groups,
                           size_t beginRow,
                           size_t endRow,
-                          NLGroupDistinctTally& distinct,
+                          const NLGroupDistinctTally* distinct,
                           NLValueStore& values) {
     using State = NLAverageState<AverageTotal<Primitive>>;
 
@@ -4633,10 +4606,7 @@ void groupFoldAvgDistinct(NLGroupStatePlaces places,
 
         const size_t group = groups[row];
 
-        distinct.beginKey(group);
-        distinctAppendValueBytes(distinct.getKey(), *value);
-
-        if (!distinct.insertIfNew()) {
+        if (!distinct->isNew(row)) {
             continue;
         }
 
@@ -4653,7 +4623,7 @@ void groupFoldCountAll(NLGroupStatePlaces places,
                        const std::vector<size_t>& groups,
                        size_t beginRow,
                        size_t endRow,
-                       NLGroupDistinctTally& distinct,
+                       const NLGroupDistinctTally* distinct,
                        NLValueStore& values) {
     for (size_t row = beginRow; row < endRow; row++) {
         places.getState<uint64_t>(groups[row])++;
@@ -4668,7 +4638,7 @@ void groupFoldCountPresent(NLGroupStatePlaces places,
                            const std::vector<size_t>& groups,
                            size_t beginRow,
                            size_t endRow,
-                           NLGroupDistinctTally& distinct,
+                           const NLGroupDistinctTally* distinct,
                            NLValueStore& values) {
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
@@ -4687,7 +4657,7 @@ void groupFoldCountValidID(NLGroupStatePlaces places,
                            const std::vector<size_t>& groups,
                            size_t beginRow,
                            size_t endRow,
-                           NLGroupDistinctTally& distinct,
+                           const NLGroupDistinctTally* distinct,
                            NLValueStore& values) {
     const std::vector<ID>& inputRaw = static_cast<const ColumnVector<ID>*>(input)->getRaw();
 
@@ -4703,7 +4673,7 @@ void groupFoldCountPresentPath(NLGroupStatePlaces places,
                                const std::vector<size_t>& groups,
                                size_t beginRow,
                                size_t endRow,
-                               NLGroupDistinctTally& distinct,
+                               const NLGroupDistinctTally* distinct,
                                NLValueStore& values) {
     const std::vector<GraphPath>& inputRaw = static_cast<const ColumnVector<GraphPath>*>(input)->getRaw();
 
@@ -4739,7 +4709,7 @@ void groupFoldCountDistinctChunk(NLGroupStatePlaces places,
                                  const std::vector<size_t>& groups,
                                  size_t beginRow,
                                  size_t endRow,
-                                 NLGroupDistinctTally& distinct,
+                                 const NLGroupDistinctTally* distinct,
                                  NLValueStore& values) {
     const std::vector<ElementType>& inputRaw = static_cast<const ColumnVector<ElementType>*>(input)->getRaw();
 
@@ -4750,10 +4720,7 @@ void groupFoldCountDistinctChunk(NLGroupStatePlaces places,
 
         const size_t group = groups[row];
 
-        distinct.beginKey(group);
-        distinct.appendRowKey(input, row);
-
-        if (distinct.insertIfNew()) {
+        if (distinct->isNew(row)) {
             places.getState<uint64_t>(group)++;
         }
     }
@@ -4769,7 +4736,7 @@ void groupFoldCountDistinctPresent(NLGroupStatePlaces places,
                                    const std::vector<size_t>& groups,
                                    size_t beginRow,
                                    size_t endRow,
-                                   NLGroupDistinctTally& distinct,
+                                   const NLGroupDistinctTally* distinct,
                                    NLValueStore& values) {
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
@@ -4781,10 +4748,7 @@ void groupFoldCountDistinctPresent(NLGroupStatePlaces places,
 
         const size_t group = groups[row];
 
-        distinct.beginKey(group);
-        distinctAppendValueBytes(distinct.getKey(), *value);
-
-        if (distinct.insertIfNew()) {
+        if (distinct->isNew(row)) {
             places.getState<uint64_t>(group)++;
         }
     }
@@ -4799,7 +4763,7 @@ void groupFoldCountPresentCell(NLGroupStatePlaces places,
                                const std::vector<size_t>& groups,
                                size_t beginRow,
                                size_t endRow,
-                               NLGroupDistinctTally& distinct,
+                               const NLGroupDistinctTally* distinct,
                                NLValueStore& values) {
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
@@ -4819,7 +4783,7 @@ void groupFoldCountDistinctCell(NLGroupStatePlaces places,
                                 const std::vector<size_t>& groups,
                                 size_t beginRow,
                                 size_t endRow,
-                                NLGroupDistinctTally& distinct,
+                                const NLGroupDistinctTally* distinct,
                                 NLValueStore& values) {
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
@@ -4831,10 +4795,7 @@ void groupFoldCountDistinctCell(NLGroupStatePlaces places,
 
         const size_t group = groups[row];
 
-        distinct.beginKey(group);
-        distinctAppendElementBytes(distinct.getKey(), *element);
-
-        if (distinct.insertIfNew()) {
+        if (distinct->isNew(row)) {
             places.getState<uint64_t>(group)++;
         }
     }
@@ -4847,7 +4808,7 @@ void groupFoldCountDistinctPresentList(NLGroupStatePlaces places,
                                        const std::vector<size_t>& groups,
                                        size_t beginRow,
                                        size_t endRow,
-                                       NLGroupDistinctTally& distinct,
+                                       const NLGroupDistinctTally* distinct,
                                        NLValueStore& values) {
     const auto& inputRaw = static_cast<const ColumnOptVector<ListView>*>(input)->getRaw();
 
@@ -4859,10 +4820,7 @@ void groupFoldCountDistinctPresentList(NLGroupStatePlaces places,
 
         const size_t group = groups[row];
 
-        distinct.beginKey(group);
-        distinctAppendListBytes(distinct.getKey(), *value);
-
-        if (distinct.insertIfNew()) {
+        if (distinct->isNew(row)) {
             places.getState<uint64_t>(group)++;
         }
     }
@@ -4873,7 +4831,7 @@ void groupFoldCountDistinctPresentMap(NLGroupStatePlaces places,
                                       const std::vector<size_t>& groups,
                                       size_t beginRow,
                                       size_t endRow,
-                                      NLGroupDistinctTally& distinct,
+                                      const NLGroupDistinctTally* distinct,
                                       NLValueStore& values) {
     const auto& inputRaw = static_cast<const ColumnOptVector<MapView>*>(input)->getRaw();
 
@@ -4885,10 +4843,7 @@ void groupFoldCountDistinctPresentMap(NLGroupStatePlaces places,
 
         const size_t group = groups[row];
 
-        distinct.beginKey(group);
-        distinctAppendMapBytes(distinct.getKey(), *value);
-
-        if (distinct.insertIfNew()) {
+        if (distinct->isNew(row)) {
             places.getState<uint64_t>(group)++;
         }
     }
@@ -4903,7 +4858,7 @@ void collectFold(Column* values,
                  const Column* input,
                  const std::vector<size_t>& groups,
                  std::vector<std::vector<size_t>>& groupPositions,
-                 NLGroupDistinctTally& distinct,
+                 const NLGroupDistinctTally* distinct,
                  NLValueStore& store) {
     auto& valuesRaw = static_cast<ColumnVector<Primitive>*>(values)->getRaw();
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
@@ -4926,7 +4881,7 @@ void collectFoldDistinct(Column* values,
                          const Column* input,
                          const std::vector<size_t>& groups,
                          std::vector<std::vector<size_t>>& groupPositions,
-                         NLGroupDistinctTally& distinct,
+                         const NLGroupDistinctTally* distinct,
                          NLValueStore& store) {
     auto& valuesRaw = static_cast<ColumnVector<Primitive>*>(values)->getRaw();
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
@@ -4939,10 +4894,7 @@ void collectFoldDistinct(Column* values,
 
         const size_t group = groups[row];
 
-        distinct.beginKey(group);
-        distinctAppendValueBytes(distinct.getKey(), *value);
-
-        if (!distinct.insertIfNew()) {
+        if (!distinct->isNew(row)) {
             continue;
         }
 
@@ -4959,7 +4911,7 @@ void collectCellFold(Column* values,
                      const Column* input,
                      const std::vector<size_t>& groups,
                      std::vector<std::vector<size_t>>& groupPositions,
-                     NLGroupDistinctTally& distinct,
+                     const NLGroupDistinctTally* distinct,
                      NLValueStore& store) {
     auto& valuesRaw = static_cast<ColumnVector<Cell>*>(values)->getRaw();
     const auto& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
@@ -4978,7 +4930,7 @@ void collectValidIDFold(Column* values,
                         const Column* input,
                         const std::vector<size_t>& groups,
                         std::vector<std::vector<size_t>>& groupPositions,
-                        NLGroupDistinctTally& distinct,
+                        const NLGroupDistinctTally* distinct,
                         NLValueStore& store) {
     auto& valuesRaw = static_cast<ColumnVector<IDType>*>(values)->getRaw();
     const auto& inputRaw = static_cast<const ColumnVector<IDType>*>(input)->getRaw();
@@ -5014,7 +4966,7 @@ void collectOptValidIDFold(Column* values,
                            const Column* input,
                            const std::vector<size_t>& groups,
                            std::vector<std::vector<size_t>>& groupPositions,
-                           NLGroupDistinctTally& distinct,
+                           const NLGroupDistinctTally* distinct,
                            NLValueStore& store) {
     auto& valuesRaw = static_cast<ColumnVector<IDType>*>(values)->getRaw();
     const auto& inputRaw = static_cast<const ColumnOptVector<IDType>*>(input)->getRaw();
@@ -5038,7 +4990,7 @@ void collectOptValidIDFoldDistinct(Column* values,
                                    const Column* input,
                                    const std::vector<size_t>& groups,
                                    std::vector<std::vector<size_t>>& groupPositions,
-                                   NLGroupDistinctTally& distinct,
+                                   const NLGroupDistinctTally* distinct,
                                    NLValueStore& store) {
     auto& valuesRaw = static_cast<ColumnVector<IDType>*>(values)->getRaw();
     const auto& inputRaw = static_cast<const ColumnOptVector<IDType>*>(input)->getRaw();
@@ -5051,10 +5003,7 @@ void collectOptValidIDFoldDistinct(Column* values,
 
         const size_t group = groups[row];
 
-        distinct.beginKey(group);
-        distinctAppendValueBytes(distinct.getKey(), id->getValue());
-
-        if (!distinct.insertIfNew()) {
+        if (!distinct->isNew(row)) {
             continue;
         }
 
@@ -5072,7 +5021,7 @@ void collectValidIDFoldDistinct(Column* values,
                                 const Column* input,
                                 const std::vector<size_t>& groups,
                                 std::vector<std::vector<size_t>>& groupPositions,
-                                NLGroupDistinctTally& distinct,
+                                const NLGroupDistinctTally* distinct,
                                 NLValueStore& store) {
     auto& valuesRaw = static_cast<ColumnVector<IDType>*>(values)->getRaw();
     const auto& inputRaw = static_cast<const ColumnVector<IDType>*>(input)->getRaw();
@@ -5084,10 +5033,7 @@ void collectValidIDFoldDistinct(Column* values,
 
         const size_t group = groups[row];
 
-        distinct.beginKey(group);
-        distinctAppendValueBytes(distinct.getKey(), inputRaw[row].getValue());
-
-        if (!distinct.insertIfNew()) {
+        if (!distinct->isNew(row)) {
             continue;
         }
 
@@ -5104,7 +5050,7 @@ void collectPathFold(Column* values,
                      const Column* input,
                      const std::vector<size_t>& groups,
                      std::vector<std::vector<size_t>>& groupPositions,
-                     NLGroupDistinctTally& distinct,
+                     const NLGroupDistinctTally* distinct,
                      NLValueStore& store) {
     auto& valuesRaw = static_cast<ColumnVector<CellView>*>(values)->getRaw();
     const std::vector<GraphPath>& inputRaw = static_cast<const ColumnVector<GraphPath>*>(input)->getRaw();
@@ -5127,7 +5073,7 @@ void collectPathFoldDistinct(Column* values,
                              const Column* input,
                              const std::vector<size_t>& groups,
                              std::vector<std::vector<size_t>>& groupPositions,
-                             NLGroupDistinctTally& distinct,
+                             const NLGroupDistinctTally* distinct,
                              NLValueStore& store) {
     auto& valuesRaw = static_cast<ColumnVector<CellView>*>(values)->getRaw();
     const std::vector<GraphPath>& inputRaw = static_cast<const ColumnVector<GraphPath>*>(input)->getRaw();
@@ -5140,10 +5086,7 @@ void collectPathFoldDistinct(Column* values,
 
         const size_t group = groups[row];
 
-        distinct.beginKey(group);
-        distinctAppendPathBytes(distinct.getKey(), path.getIDs());
-
-        if (!distinct.insertIfNew()) {
+        if (!distinct->isNew(row)) {
             continue;
         }
 
@@ -5237,7 +5180,7 @@ void collectTaggedFold(Column* values,
                        const Column* input,
                        const std::vector<size_t>& groups,
                        std::vector<std::vector<size_t>>& groupPositions,
-                       NLGroupDistinctTally& distinct,
+                       const NLGroupDistinctTally* distinct,
                        NLValueStore& store) {
     auto& valuesRaw = static_cast<ColumnVector<CellView>*>(values)->getRaw();
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
@@ -5261,7 +5204,7 @@ void collectTaggedFoldDistinct(Column* values,
                                const Column* input,
                                const std::vector<size_t>& groups,
                                std::vector<std::vector<size_t>>& groupPositions,
-                               NLGroupDistinctTally& distinct,
+                               const NLGroupDistinctTally* distinct,
                                NLValueStore& store) {
     auto& valuesRaw = static_cast<ColumnVector<CellView>*>(values)->getRaw();
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
@@ -5274,10 +5217,7 @@ void collectTaggedFoldDistinct(Column* values,
 
         const size_t group = groups[row];
 
-        distinct.beginKey(group);
-        distinctAppendElementBytes(distinct.getKey(), *element);
-
-        if (!distinct.insertIfNew()) {
+        if (!distinct->isNew(row)) {
             continue;
         }
 
@@ -5323,7 +5263,7 @@ void collectContainerFoldDistinct(Column* values,
                                   const Column* input,
                                   const std::vector<size_t>& groups,
                                   std::vector<std::vector<size_t>>& groupPositions,
-                                  NLGroupDistinctTally& distinct,
+                                  const NLGroupDistinctTally* distinct,
                                   NLValueStore& store) {
     auto& valuesRaw = static_cast<ColumnVector<Container>*>(values)->getRaw();
     const auto& inputRaw = static_cast<const ColumnVector<Container>*>(input)->getRaw();
@@ -5331,10 +5271,7 @@ void collectContainerFoldDistinct(Column* values,
     for (size_t row = 0; row < inputRaw.size(); row++) {
         const size_t group = groups[row];
 
-        distinct.beginKey(group);
-        distinctAppendValueBytes(distinct.getKey(), inputRaw[row]);
-
-        if (!distinct.insertIfNew()) {
+        if (!distinct->isNew(row)) {
             continue;
         }
 
@@ -5352,7 +5289,7 @@ void collectOptContainerFold(Column* values,
                              const Column* input,
                              const std::vector<size_t>& groups,
                              std::vector<std::vector<size_t>>& groupPositions,
-                             NLGroupDistinctTally& distinct,
+                             const NLGroupDistinctTally* distinct,
                              NLValueStore& store) {
     auto& valuesRaw = static_cast<ColumnVector<Container>*>(values)->getRaw();
     const std::vector<std::optional<Container>>& inputRaw =
@@ -5375,7 +5312,7 @@ void collectOptContainerFoldDistinct(Column* values,
                                      const Column* input,
                                      const std::vector<size_t>& groups,
                                      std::vector<std::vector<size_t>>& groupPositions,
-                                     NLGroupDistinctTally& distinct,
+                                     const NLGroupDistinctTally* distinct,
                                      NLValueStore& store) {
     auto& valuesRaw = static_cast<ColumnVector<Container>*>(values)->getRaw();
     const std::vector<std::optional<Container>>& inputRaw =
@@ -5389,10 +5326,7 @@ void collectOptContainerFoldDistinct(Column* values,
 
         const size_t group = groups[row];
 
-        distinct.beginKey(group);
-        distinctAppendValueBytes(distinct.getKey(), *container);
-
-        if (!distinct.insertIfNew()) {
+        if (!distinct->isNew(row)) {
             continue;
         }
 
@@ -12190,7 +12124,7 @@ void NLExecutor::runGroupAggregateUpdate(NLExecutionContext* context, NLFunction
     groupTable.assign(rowCount);
 
     aggregates.grow(groupTable.getGroupCount());
-    aggregates.fold(groupTable.getRowGroups());
+    aggregates.fold(groupTable.getRowGroupColumn());
     aggregates.compactValues();
 }
 
@@ -12282,12 +12216,17 @@ void NLExecutor::runCollectUpdate(NLExecutionContext* context, NLFunctionData* d
     groupTable.assign(rowCount);
 
     const size_t groupCount = groupTable.getGroupCount();
-    const std::vector<size_t>& groupIndices = groupTable.getRowGroups();
+    const ColumnVector<size_t>* rowGroups = groupTable.getRowGroupColumn();
+    const std::vector<size_t>& groupIndices = rowGroups->getRaw();
 
     // Grow the per-group position lists to the new group count, then append this step's
     // present values to their groups' lists.
     for (NLCollectState::ValueColumn& valueColumn : valueColumns) {
         valueColumn._groupPositions.resize(groupCount);
+
+        if (valueColumn._distinct) {
+            valueColumn._distinct->assign(rowGroups, valueColumn._input);
+        }
 
         valueColumn._fold(valueColumn._buffer,
                           valueColumn._input,
@@ -12300,7 +12239,7 @@ void NLExecutor::runCollectUpdate(NLExecutionContext* context, NLFunctionData* d
     // The reductions taken over the same groups fold beside the list, off the group
     // assignment computed once above, exactly as nl.group_aggregate_update folds them.
     aggregates.grow(groupCount);
-    aggregates.fold(groupIndices);
+    aggregates.fold(rowGroups);
     aggregates.compactValues();
 }
 

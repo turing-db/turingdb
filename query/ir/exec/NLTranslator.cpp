@@ -698,6 +698,33 @@ AggregateKind toRuntimeAggregateKind(storage::AggregateKind kind) {
     throw IRException("Unhandled aggregate kind");
 }
 
+// Whether the grouped reduction charges each of a group's values once, through a tally
+bool chargesDistinctValues(GroupAggregateKind kind) {
+    switch (kind) {
+        case GroupAggregateKind::CountDistinct:
+        case GroupAggregateKind::SumDistinct:
+        case GroupAggregateKind::AvgDistinct:
+        case GroupAggregateKind::StDevDistinct:
+        case GroupAggregateKind::StDevPDistinct:
+            return true;
+        break;
+
+        case GroupAggregateKind::Count:
+        case GroupAggregateKind::Sum:
+        case GroupAggregateKind::Min:
+        case GroupAggregateKind::Max:
+        case GroupAggregateKind::Avg:
+        case GroupAggregateKind::CountRows:
+        case GroupAggregateKind::StDev:
+        case GroupAggregateKind::StDevP:
+        case GroupAggregateKind::First:
+            return false;
+        break;
+    }
+
+    throw IRException("Unhandled group aggregate kind");
+}
+
 // The grouped reduction whose state a keyless aggregate of this kind keeps for its one group
 GroupAggregateKind groupAggregateKindOf(AggregateKind kind) {
     switch (kind) {
@@ -6221,6 +6248,10 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
 
     aggregate._input = getColumn(column);
 
+    if (chargesDistinctValues(kind)) {
+        aggregate._distinct = allocGroupDistinctTally(chunkType);
+    }
+
     // A switch (not an if/else) over every kind so a new one is a compile error
     // here rather than silently taking the value-reduction path.
     switch (kind) {
@@ -6290,9 +6321,7 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
             } else if (mlir::isa<storage::AnyType>(distinctElementType)) {
                 aggregate._fold = NLExecutor::selectGroupCountDistinctCellFold();
             } else {
-                const NLChunkKind distinctKind = getChunkKind(chunkType);
-                aggregate._distinct.setRowKey(NLExecutor::selectKeyAppendFunction(distinctKind));
-                aggregate._fold = NLExecutor::selectGroupCountDistinctChunkFold(distinctKind);
+                aggregate._fold = NLExecutor::selectGroupCountDistinctChunkFold(getChunkKind(chunkType));
             }
         }
         break;
@@ -6369,6 +6398,16 @@ void NLTranslator::addGroupKeyColumn(NLGroupTable& groupTable, mlir::Value colum
     key._gather = selectGatherForChunkType(chunkType);
 
     groupTable.addKeyColumn(hashKey, key);
+}
+
+NLGroupDistinctTally* NLTranslator::allocGroupDistinctTally(mlir::Type valueChunkType) {
+    NLGroupHashKey valueKey;
+    buildGroupHashKey(valueChunkType, valueKey);
+
+    NLGroupDistinctTally* tally = _program->allocGroupDistinctTally();
+    tally->setValueKey(valueKey);
+
+    return tally;
 }
 
 void NLTranslator::translateGroupAggregateUpdate(nl::GroupAggregateUpdate update, NLStmtContainer* body) {
@@ -6552,6 +6591,10 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
 
         NLCollectState::ValueColumn value;
         value._input = getColumn(column);
+
+        if (isDistinct) {
+            value._distinct = allocGroupDistinctTally(column.getType());
+        }
 
         if (isNullableList(element)) {
             NLCollectFoldFunction fold = nullptr;

@@ -733,6 +733,10 @@ private:
     // a fixed width, hashed where they live when they are strings, serialized otherwise
     static void buildGroupHashKey(mlir::Type chunkType, NLGroupHashKey& key);
 
+    // The tally of the (group, value) pairs a DISTINCT aggregate or collect has charged, keyed
+    // on values of this chunk type
+    NLGroupDistinctTally* allocGroupDistinctTally(mlir::Type valueChunkType);
+
     void translateGroupAggregateUpdate(mlir::nl::GroupAggregateUpdate update, NLStmtContainer* body);
 
     // Translate the nl.for over an nl.group_aggregate iterator: allocate one loop
