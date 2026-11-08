@@ -98,6 +98,117 @@ void NLKeylessGroupHashTable::assign(std::span<const Column* const> keyColumns, 
 void NLKeylessGroupHashTable::clear() {
 }
 
+template <typename Key, bool NullAside>
+NLPackedKeyBatch<Key, NullAside>::NLPackedKeyBatch() {
+}
+
+template <typename Key, bool NullAside>
+NLPackedKeyBatch<Key, NullAside>::~NLPackedKeyBatch() {
+}
+
+template <typename Key, bool NullAside>
+void NLPackedKeyBatch<Key, NullAside>::pack(std::span<const Column* const> keyColumns, size_t beginRow, size_t endRow) {
+    const size_t batchRows = endRow - beginRow;
+
+    _keys.assign(batchRows, Key {});
+
+    std::byte* keyBytes = reinterpret_cast<std::byte*>(_keys.data());
+
+    NLKeyPackTarget target;
+    target._valueStride = sizeof(Key);
+
+    if constexpr (NullAside) {
+        _nulls.assign(batchRows, std::byte {0});
+        target._nulls = _nulls.data();
+        target._nullStride = 1;
+    } else {
+        target._nulls = keyBytes;
+        target._nullStride = sizeof(Key);
+    }
+
+    for (size_t keyIndex = 0; keyIndex < _keyColumns.size(); keyIndex++) {
+        const NLPackedKeyColumn& column = _keyColumns[keyIndex];
+
+        target._values = keyBytes + column._valueOffset;
+        target._nullBit = column._nullBit;
+
+        column._pack(keyColumns[keyIndex], beginRow, endRow, target);
+    }
+}
+
+template <typename Key, bool NullAside>
+NLDirectGroupHashTable<Key, NullAside>::NLDirectGroupHashTable()
+    : _groups(std::numeric_limits<Key>::max() + size_t {1}, NLGroupAssignment::NO_GROUP)
+{
+}
+
+template <typename Key, bool NullAside>
+NLDirectGroupHashTable<Key, NullAside>::~NLDirectGroupHashTable() {
+}
+
+template <typename Key, bool NullAside>
+NLGroupHashTableKind NLDirectGroupHashTable<Key, NullAside>::getKind() const {
+    if constexpr (std::same_as<Key, uint8_t> && NullAside) {
+        return NLGroupHashTableKind::NullableDirect8;
+    } else if constexpr (std::same_as<Key, uint8_t>) {
+        return NLGroupHashTableKind::Direct8;
+    } else if constexpr (NullAside) {
+        return NLGroupHashTableKind::NullableDirect16;
+    } else {
+        return NLGroupHashTableKind::Direct16;
+    }
+}
+
+template <typename Key, bool NullAside>
+void NLDirectGroupHashTable<Key, NullAside>::assign(std::span<const Column* const> keyColumns,
+                                                    NLGroupAssignment& assignment) {
+    const size_t rowCount = assignment.getRowCount();
+
+    for (size_t beginRow = 0; beginRow < rowCount; beginRow += ASSIGN_BATCH_ROWS) {
+        const size_t endRow = std::min(rowCount, beginRow + ASSIGN_BATCH_ROWS);
+
+        _batch.pack(keyColumns, beginRow, endRow);
+        const std::vector<Key>& keys = _batch.getKeys();
+
+        for (size_t index = 0; index < keys.size(); index++) {
+            const size_t row = beginRow + index;
+
+            if constexpr (NullAside) {
+                if (_batch.isNull(index)) {
+                    if (_nullGroup == NLGroupAssignment::NO_GROUP) {
+                        _nullGroup = assignment.createGroup(row);
+                    }
+
+                    assignment.setGroup(row, _nullGroup);
+                    continue;
+                }
+            }
+
+            const Key key = keys[index];
+            size_t& group = _groups[key];
+
+            if (group == NLGroupAssignment::NO_GROUP) {
+                group = assignment.createGroup(row);
+                _groupKeys.push_back(key);
+            }
+
+            assignment.setGroup(row, group);
+        }
+    }
+}
+
+// A grouping in a subquery run once per row clears its table once per row, so only the slots
+// holding a group are reset, not the whole array
+template <typename Key, bool NullAside>
+void NLDirectGroupHashTable<Key, NullAside>::clear() {
+    for (const Key key : _groupKeys) {
+        _groups[key] = NLGroupAssignment::NO_GROUP;
+    }
+
+    _groupKeys.clear();
+    _nullGroup = NLGroupAssignment::NO_GROUP;
+}
+
 template <size_t Words, bool NullAside>
 NLPackedGroupHashTable<Words, NullAside>::NLPackedGroupHashTable()
     : _cells(INITIAL_CELL_COUNT)
@@ -130,9 +241,11 @@ void NLPackedGroupHashTable<Words, NullAside>::assign(std::span<const Column* co
         const size_t endRow = std::min(rowCount, beginRow + ASSIGN_BATCH_ROWS);
         const size_t batchRows = endRow - beginRow;
 
-        packBatch(keyColumns, beginRow, endRow);
+        _batch.pack(keyColumns, beginRow, endRow);
+        const std::vector<Key>& keys = _batch.getKeys();
 
-        std::transform(_batchKeys.begin(), _batchKeys.end(), _batchHashes.begin(), &hashPackedKey<Words>);
+        _batchHashes.resize(batchRows);
+        std::transform(keys.begin(), keys.end(), _batchHashes.begin(), &hashPackedKey<Words>);
 
         const bool prefetches = _cells.size() * sizeof(Cell) > PREFETCH_TABLE_BYTES;
 
@@ -145,7 +258,7 @@ void NLPackedGroupHashTable<Words, NullAside>::assign(std::span<const Column* co
             }
 
             if constexpr (NullAside) {
-                if (_batchNulls[index] != std::byte {0}) {
+                if (_batch.isNull(index)) {
                     if (_nullGroup == NLGroupAssignment::NO_GROUP) {
                         _nullGroup = assignment.createGroup(row);
                     }
@@ -155,7 +268,7 @@ void NLPackedGroupHashTable<Words, NullAside>::assign(std::span<const Column* co
                 }
             }
 
-            const Key& key = _batchKeys[index];
+            const Key& key = keys[index];
             const bool continuesTheRun = (_lastGroup != NLGroupAssignment::NO_GROUP) && (key == _lastKey);
 
             if (!continuesTheRun) {
@@ -174,39 +287,6 @@ void NLPackedGroupHashTable<Words, NullAside>::clear() {
     _filledCells = 0;
     _nullGroup = NLGroupAssignment::NO_GROUP;
     _lastGroup = NLGroupAssignment::NO_GROUP;
-}
-
-template <size_t Words, bool NullAside>
-void NLPackedGroupHashTable<Words, NullAside>::packBatch(std::span<const Column* const> keyColumns,
-                                                         size_t beginRow,
-                                                         size_t endRow) {
-    const size_t batchRows = endRow - beginRow;
-
-    _batchKeys.assign(batchRows, Key {});
-    _batchHashes.resize(batchRows);
-
-    std::byte* keyBytes = reinterpret_cast<std::byte*>(_batchKeys.data());
-
-    NLKeyPackTarget target;
-    target._valueStride = sizeof(Key);
-
-    if constexpr (NullAside) {
-        _batchNulls.assign(batchRows, std::byte {0});
-        target._nulls = _batchNulls.data();
-        target._nullStride = 1;
-    } else {
-        target._nulls = keyBytes;
-        target._nullStride = sizeof(Key);
-    }
-
-    for (size_t keyIndex = 0; keyIndex < _keyColumns.size(); keyIndex++) {
-        const KeyColumn& column = _keyColumns[keyIndex];
-
-        target._values = keyBytes + column._valueOffset;
-        target._nullBit = column._nullBit;
-
-        column._pack(keyColumns[keyIndex], beginRow, endRow, target);
-    }
 }
 
 template <size_t Words, bool NullAside>
@@ -384,7 +464,9 @@ void NLGroupHashTable::chooseTable() {
         valueBytes += key._packing._width;
     }
 
-    const size_t packedBytes = (nullableCount + 7) / 8 + valueBytes;
+    const size_t bitmapBytes = (nullableCount + 7) / 8;
+    const size_t packedBytes = bitmapBytes + valueBytes;
+    const bool nullAside = oneKey && allFixed && firstKey._nullable;
 
     if (oneKey && firstKey._shape == NLGroupKeyShape::String) {
         if (firstKey._nullable) {
@@ -392,19 +474,22 @@ void NLGroupHashTable::chooseTable() {
         } else {
             _table.emplace<NLStringGroupHashTable<std::string_view>>();
         }
-    } else if (oneKey && allFixed && firstKey._nullable && valueBytes <= sizeof(NLPackedKey<1>)) {
-        NLPackedGroupHashTable<1, true>& table = _table.emplace<NLPackedGroupHashTable<1, true>>();
-
-        NLPackedGroupHashTable<1, true>::KeyColumn packed;
-        packed._pack = firstKey._packing._pack;
-
-        table.addKeyColumn(packed);
+    } else if (nullAside && valueBytes <= sizeof(uint8_t)) {
+        choosePackedTable<NLDirectGroupHashTable<uint8_t, true>>(0);
+    } else if (nullAside && valueBytes <= sizeof(uint16_t)) {
+        choosePackedTable<NLDirectGroupHashTable<uint16_t, true>>(0);
+    } else if (nullAside && valueBytes <= sizeof(NLPackedKey<1>)) {
+        choosePackedTable<NLPackedGroupHashTable<1, true>>(0);
+    } else if (allFixed && packedBytes <= sizeof(uint8_t)) {
+        choosePackedTable<NLDirectGroupHashTable<uint8_t, false>>(bitmapBytes);
+    } else if (allFixed && packedBytes <= sizeof(uint16_t)) {
+        choosePackedTable<NLDirectGroupHashTable<uint16_t, false>>(bitmapBytes);
     } else if (allFixed && packedBytes <= sizeof(NLPackedKey<1>)) {
-        choosePackedTable<1>(nullableCount);
+        choosePackedTable<NLPackedGroupHashTable<1, false>>(bitmapBytes);
     } else if (allFixed && packedBytes <= sizeof(NLPackedKey<2>)) {
-        choosePackedTable<2>(nullableCount);
+        choosePackedTable<NLPackedGroupHashTable<2, false>>(bitmapBytes);
     } else if (allFixed && packedBytes <= sizeof(NLPackedKey<4>)) {
-        choosePackedTable<4>(nullableCount);
+        choosePackedTable<NLPackedGroupHashTable<4, false>>(bitmapBytes);
     } else {
         NLSerializedGroupHashTable& table = _table.emplace<NLSerializedGroupHashTable>();
 
@@ -442,17 +527,17 @@ void NLGroupHashTable::clear() {
     _groupCount = _keys.empty() ? 1 : 0;
 }
 
-template <size_t Words>
-void NLGroupHashTable::choosePackedTable(size_t nullableCount) {
-    using PackedTable = NLPackedGroupHashTable<Words, false>;
-
+// The values of each key start after a null bitmap of bitmapBytes, which is 0 for a table
+// holding its key's nulls aside
+template <typename PackedTable>
+void NLGroupHashTable::choosePackedTable(size_t bitmapBytes) {
     PackedTable& table = _table.emplace<PackedTable>();
 
-    size_t valueOffset = (nullableCount + 7) / 8;
+    size_t valueOffset = bitmapBytes;
     size_t nullBit = 0;
 
     for (const NLGroupHashKey& key : _keys) {
-        typename PackedTable::KeyColumn packed;
+        NLPackedKeyColumn packed;
         packed._pack = key._packing._pack;
         packed._valueOffset = valueOffset;
 
@@ -468,6 +553,10 @@ void NLGroupHashTable::choosePackedTable(size_t nullableCount) {
 
 namespace db {
 
+template class NLDirectGroupHashTable<uint8_t, false>;
+template class NLDirectGroupHashTable<uint8_t, true>;
+template class NLDirectGroupHashTable<uint16_t, false>;
+template class NLDirectGroupHashTable<uint16_t, true>;
 template class NLPackedGroupHashTable<1, false>;
 template class NLPackedGroupHashTable<1, true>;
 template class NLPackedGroupHashTable<2, false>;

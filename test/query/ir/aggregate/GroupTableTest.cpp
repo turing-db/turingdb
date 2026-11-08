@@ -19,6 +19,7 @@
 #include "NLExecutor.h"
 #include "NLProgram.h"
 #include "NLTranslator.h"
+#include "ProcedureContext.h"
 #include "QueryInterpreterV3.h"
 #include "StorageDialect.h"
 
@@ -97,8 +98,12 @@ protected:
 
         NLProgram program;
 
+        ProcedureContext procedureContext;
+        procedureContext.setProcedures(procedures);
+        procedureContext.setChunkSize(ChunkConfig::CHUNK_SIZE);
+
         LocalMemory memory;
-        NLTranslator translator(&program, &memory, &view);
+        NLTranslator translator(&program, &memory, &view, nullptr, &procedureContext);
         translator.translate(nlFunction);
 
         const NLStmtContainer* stmts = program.getStmts();
@@ -121,13 +126,21 @@ protected:
 TEST_F(GroupTableTest, choosesAHashTableForEachKeyShape) {
     expectHashTable("UNWIND range(1, 3) AS x RETURN collect(x)", NLGroupHashTableKind::Keyless);
 
+    expectHashTable("MATCH (n) RETURN n.age IS NULL AS g, count(*)", NLGroupHashTableKind::Direct8);
+    expectHashTable("CALL db.propertyTypes() YIELD valueType RETURN valueType, count(*)", NLGroupHashTableKind::Direct8);
+    expectHashTable("MATCH (n) RETURN n.isFrench, count(*)", NLGroupHashTableKind::NullableDirect8);
+    expectHashTable("UNWIND range(1, 3) AS x RETURN x % 2 = 0 AS g, count(*)", NLGroupHashTableKind::NullableDirect8);
+
+    expectHashTable("CALL db.propertyTypes() YIELD id RETURN id, count(*)", NLGroupHashTableKind::Direct16);
+    expectHashTable("UNWIND [[1, null], [null, 2]] AS p RETURN p[0] IS NULL AS a, p[1] IS NULL AS b, count(*)",
+                    NLGroupHashTableKind::Direct16);
+
     expectHashTable("MATCH (n)-->(m) RETURN n, count(m)", NLGroupHashTableKind::Fixed64);
     expectHashTable("MATCH (n) WITH count(n) AS c RETURN c, count(*)", NLGroupHashTableKind::Fixed64);
     expectHashTable("MATCH (n) RETURN n.isFrench, n.hasPhD, count(*)", NLGroupHashTableKind::Fixed64);
 
     expectHashTable("MATCH (n) RETURN n.age, count(*)", NLGroupHashTableKind::NullableFixed64);
     expectHashTable("UNWIND range(1, 3) AS x RETURN x % 2 AS g, count(*)", NLGroupHashTableKind::NullableFixed64);
-    expectHashTable("MATCH (n) RETURN n.isFrench, count(*)", NLGroupHashTableKind::NullableFixed64);
     expectHashTable("UNWIND range(1, 3) AS x RETURN duration({seconds: x}) AS d, count(*)",
                     NLGroupHashTableKind::NullableFixed64);
 
@@ -209,6 +222,30 @@ TEST_F(GroupTableTest, groupsEntities) {
                                {"Adam", "Adam", "1"}, {"Adam", "Ghosts", "1"}, {"Adam", "Computers", "1"},
                                {"Adam", "Eighties", "1"}, {"Ghosts", "Adam", "1"}, {"Ghosts", "Ghosts", "1"},
                                {"Ghosts", "Computers", "1"}, {"Ghosts", "Eighties", "1"}});
+}
+
+TEST_F(GroupTableTest, groupsKeysOfOneOrTwoBytes) {
+    expectRowsInOrderInEveryChunking("UNWIND [1, null, 2, null, 3] AS x RETURN x IS NULL AS g, count(*)",
+                                     {{"false", "3"}, {"true", "2"}});
+    expectRowsInEveryChunking("MATCH (n) RETURN n.age IS NULL AS g, count(*)", {{"true", "16"}, {"false", "2"}});
+    expectRowsInOrderInEveryChunking("UNWIND [2, null, 1, null, 4] AS x RETURN x % 2 = 0 AS g, count(*)",
+                                     {{"true", "2"}, {"null", "2"}, {"false", "1"}});
+    expectRowsInOrderInEveryChunking("UNWIND [[1, null], [null, 2], [1, 2], [null, null], [1, 2]] AS p "
+                                     "RETURN p[0] IS NULL AS a, p[1] IS NULL AS b, count(*)",
+                                     {{"false", "true", "1"}, {"true", "false", "1"}, {"false", "false", "2"},
+                                      {"true", "true", "1"}});
+    expectRowsInEveryChunking("CALL db.propertyTypes() YIELD id WITH id, count(*) AS n RETURN max(n)", {{"1"}});
+}
+
+TEST_F(GroupTableTest, clearsADirectTableBetweenRuns) {
+    expectRowsInEveryChunking("UNWIND [1, 2, 3] AS k CALL { WITH k UNWIND range(1, k) AS x RETURN x % 2 = 0 AS g, count(*) AS c } "
+                              "RETURN k, g, c",
+                              {{"1", "false", "1"}, {"2", "false", "1"}, {"2", "true", "1"}, {"3", "false", "2"}, {"3", "true", "1"}});
+    expectRowsInEveryChunking("UNWIND [1, 2, 3] AS k CALL { WITH k UNWIND range(1, k) AS x "
+                              "WITH [[1, null], [null, 2], [1, 2]][x - 1] AS p RETURN p[0] IS NULL AS a, p[1] IS NULL AS b, count(*) AS c } "
+                              "RETURN k, a, b, c",
+                              {{"1", "false", "true", "1"}, {"2", "false", "true", "1"}, {"2", "true", "false", "1"},
+                               {"3", "false", "true", "1"}, {"3", "true", "false", "1"}, {"3", "false", "false", "1"}});
 }
 
 TEST_F(GroupTableTest, groupsDurations) {

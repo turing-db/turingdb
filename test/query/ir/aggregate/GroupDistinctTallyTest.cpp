@@ -129,7 +129,7 @@ protected:
 TEST_F(GroupDistinctTallyTest, choosesAHashTableForEachValueShape) {
     expectTallyTables("MATCH (p:Person)-->(i) RETURN p.isFrench, count(DISTINCT i), collect(DISTINCT i)",
                       {NLGroupHashTableKind::Fixed64, NLGroupHashTableKind::Fixed64});
-    expectTallyTables("MATCH (n) RETURN n.isFrench, count(DISTINCT n.hasPhD)", {NLGroupHashTableKind::NullableFixed64});
+    expectTallyTables("MATCH (n) RETURN n.isFrench, count(DISTINCT n.hasPhD)", {NLGroupHashTableKind::NullableDirect8});
     expectTallyTables("MATCH (n) RETURN n.isFrench, count(DISTINCT n.age), sum(DISTINCT n.age)",
                       {NLGroupHashTableKind::NullableFixed64, NLGroupHashTableKind::NullableFixed64});
     expectTallyTables("MATCH (n) RETURN n.isFrench, count(DISTINCT n.name)", {NLGroupHashTableKind::NullableString});

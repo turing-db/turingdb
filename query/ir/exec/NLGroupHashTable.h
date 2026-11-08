@@ -81,6 +81,10 @@ struct NLGroupHashKey {
 // columns as ClickHouse's Aggregator chooses its AggregatedDataVariants
 enum class NLGroupHashTableKind {
     Keyless,
+    Direct8,
+    NullableDirect8,
+    Direct16,
+    NullableDirect16,
     Fixed64,
     NullableFixed64,
     Fixed128,
@@ -126,28 +130,73 @@ struct NLPackedKey {
     bool operator==(const NLPackedKey& other) const = default;
 };
 
+// A key column whose values have a fixed width, as a packed key holds it: the handle writing its
+// values, where they start in the key, and the bit of the key's null bitmap a null sets
+struct NLPackedKeyColumn {
+    NLKeyPackFunction _pack {nullptr};
+    size_t _valueOffset {0};
+    size_t _nullBit {0};
+};
+
+// The keys of a batch of rows, each packing the values of every key column into one Key. A
+// nullable column adds a bit to the null bitmap the key opens with. With NullAside there is one
+// key column and it is nullable: its value alone fills the key, and its nulls are flagged beside.
+template <typename Key, bool NullAside>
+class NLPackedKeyBatch {
+public:
+    NLPackedKeyBatch();
+    ~NLPackedKeyBatch();
+
+    void addKeyColumn(const NLPackedKeyColumn& column) { _keyColumns.push_back(column); }
+
+    void pack(std::span<const Column* const> keyColumns, size_t beginRow, size_t endRow);
+
+    const std::vector<Key>& getKeys() const { return _keys; }
+    bool isNull(size_t index) const { return _nulls[index] != std::byte {0}; }
+
+private:
+    std::vector<NLPackedKeyColumn> _keyColumns;
+    std::vector<Key> _keys;
+    std::vector<std::byte> _nulls;
+};
+
+// The table of keys that pack into one or two bytes, ClickHouse's key8 and key16: the packed key
+// indexes an array of 256 or 65,536 groups, so a row is neither hashed nor probed. With NullAside
+// the one key's nulls fall in a group held beside the array.
+template <typename Key, bool NullAside>
+class NLDirectGroupHashTable {
+public:
+    NLDirectGroupHashTable();
+    ~NLDirectGroupHashTable();
+
+    NLGroupHashTableKind getKind() const;
+
+    void addKeyColumn(const NLPackedKeyColumn& column) { _batch.addKeyColumn(column); }
+
+    void assign(std::span<const Column* const> keyColumns, NLGroupAssignment& assignment);
+    void clear();
+
+private:
+    NLPackedKeyBatch<Key, NullAside> _batch;
+    std::vector<size_t> _groups;
+    std::vector<Key> _groupKeys;
+    size_t _nullGroup {NLGroupAssignment::NO_GROUP};
+};
+
 // The table of keys whose values all have a fixed width, packed into one key of Words 64-bit
-// words: ClickHouse's keys64, keys128 and keys256. A nullable column adds a bit to the null
-// bitmap the packed key opens with. With NullAside there is one key and it is nullable: its value
-// alone fills the key, and its nulls fall in a group held beside the table, as ClickHouse's
-// nullable_key64 holds them.
+// words: ClickHouse's keys64, keys128 and keys256. With NullAside the one key's nulls fall in a
+// group held beside the table, as ClickHouse's nullable_key64 holds them.
 template <size_t Words, bool NullAside>
 class NLPackedGroupHashTable {
 public:
     using Key = NLPackedKey<Words>;
-
-    struct KeyColumn {
-        NLKeyPackFunction _pack {nullptr};
-        size_t _valueOffset {0};
-        size_t _nullBit {0};
-    };
 
     NLPackedGroupHashTable();
     ~NLPackedGroupHashTable();
 
     NLGroupHashTableKind getKind() const;
 
-    void addKeyColumn(const KeyColumn& column) { _keyColumns.push_back(column); }
+    void addKeyColumn(const NLPackedKeyColumn& column) { _batch.addKeyColumn(column); }
 
     void assign(std::span<const Column* const> keyColumns, NLGroupAssignment& assignment);
     void clear();
@@ -158,7 +207,8 @@ private:
         size_t _group {NLGroupAssignment::NO_GROUP};
     };
 
-    std::vector<KeyColumn> _keyColumns;
+    NLPackedKeyBatch<Key, NullAside> _batch;
+    std::vector<uint64_t> _batchHashes;
     std::vector<Cell> _cells;
     size_t _filledCells {0};
     size_t _nullGroup {NLGroupAssignment::NO_GROUP};
@@ -166,11 +216,6 @@ private:
     Key _lastKey;
     size_t _lastGroup {NLGroupAssignment::NO_GROUP};
 
-    std::vector<Key> _batchKeys;
-    std::vector<uint64_t> _batchHashes;
-    std::vector<std::byte> _batchNulls;
-
-    void packBatch(std::span<const Column* const> keyColumns, size_t beginRow, size_t endRow);
     size_t findOrCreateGroup(const Key& key, uint64_t hash, size_t row, NLGroupAssignment& assignment);
 };
 
@@ -265,6 +310,10 @@ public:
 
 private:
     using Table = std::variant<NLKeylessGroupHashTable,
+                               NLDirectGroupHashTable<uint8_t, false>,
+                               NLDirectGroupHashTable<uint8_t, true>,
+                               NLDirectGroupHashTable<uint16_t, false>,
+                               NLDirectGroupHashTable<uint16_t, true>,
                                NLPackedGroupHashTable<1, false>,
                                NLPackedGroupHashTable<1, true>,
                                NLPackedGroupHashTable<2, false>,
@@ -279,8 +328,8 @@ private:
     ColumnVector<size_t> _rowGroups;
     std::vector<size_t> _newGroupRows;
 
-    template <size_t Words>
-    void choosePackedTable(size_t nullableCount);
+    template <typename PackedTable>
+    void choosePackedTable(size_t bitmapBytes);
 };
 
 }
