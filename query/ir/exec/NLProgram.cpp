@@ -452,19 +452,47 @@ void NLHashJoinState::reset() {
     _index.clear();
 }
 
-NLGroupTable::Assignment NLGroupTable::assign(const std::string& key) {
-    const size_t nextGroup = _groups.size();
-    const auto [slot, inserted] = _groups.try_emplace(key, nextGroup);
+NLGroupTable::NLGroupTable() {
+}
 
-    Assignment assignment;
-    assignment._index = slot->second;
-    assignment._created = inserted;
+NLGroupTable::~NLGroupTable() {
+}
 
-    return assignment;
+void NLGroupTable::addKeyColumn(const NLGroupHashKey& hashKey, const KeyColumn& key) {
+    _hashTable.addKey(hashKey);
+    _keyColumns.push_back(key);
+    _keyInputs.push_back(key._input);
+}
+
+void NLGroupTable::assign(size_t rowCount) {
+    _hashTable.assign(_keyInputs, rowCount);
+
+    const std::vector<size_t>& newGroupRows = _hashTable.getNewGroupRows();
+
+    for (const KeyColumn& key : _keyColumns) {
+        key._gatherAppend(key._input, newGroupRows, key._buffer, _keyValues);
+    }
+}
+
+void NLGroupTable::emitKeys(size_t begin, size_t count) {
+    for (const KeyColumn& key : _keyColumns) {
+        key._emitCopy(key._buffer, begin, count, key._output);
+    }
+}
+
+void NLGroupTable::gatherKeys(const ColumnVector<size_t>* groups) {
+    for (const KeyColumn& key : _keyColumns) {
+        key._gather(key._buffer, groups, key._output);
+    }
 }
 
 void NLGroupTable::clear() {
-    _groups.clear();
+    _hashTable.clear();
+    _keyValues.clear();
+
+    for (const KeyColumn& key : _keyColumns) {
+        key._buffer->clear();
+    }
 }
 
 void NLGroupAggregates::add(const Aggregate& aggregate) {
@@ -560,12 +588,7 @@ NLGroupStatePlaces NLGroupAggregates::getPlaces(const Aggregate& aggregate) {
 
 void NLGroupAggregateState::reset() {
     _groupTable.clear();
-    _keyValues.clear();
     _aggregates.clear();
-
-    for (KeyColumn& key : _keyColumns) {
-        key._buffer->clear();
-    }
 }
 
 NLCollectState::ValueColumn& NLCollectState::unwoundColumn() {
@@ -579,9 +602,7 @@ NLCollectState::ValueColumn& NLCollectState::unwoundColumn() {
 void NLCollectState::reset() {
     _groupTable.clear();
 
-    for (KeyColumn& key : _keyColumns) {
-        key._buffer->clear();
-    }
+    const size_t groupCount = _groupTable.getGroupCount();
 
     for (ValueColumn& value : _valueColumns) {
         if (value._buffer) {
@@ -590,28 +611,13 @@ void NLCollectState::reset() {
 
         value._distinct.clear();
         value._groupPositions.clear();
+        value._groupPositions.resize(groupCount);
     }
 
     _listBuffer.clear();
-    _keyValues.clear();
     _collectedValues.clear();
     _aggregates.clear();
-
-    // An ungrouped collect has exactly one group - the empty key tuple - and that group
-    // exists whether or not a row ever arrives: collect() over no row is the empty list,
-    // not the absence of a row. Creating it here rather than on the first update keeps
-    // the group count right for a producer that yields nothing, so the drain still emits
-    // that one row.
-    if (_keyColumns.empty()) {
-        _key.clear();
-        _groupTable.assign(_key);
-
-        for (ValueColumn& value : _valueColumns) {
-            value._groupPositions.resize(1);
-        }
-
-        _aggregates.grow(1);
-    }
+    _aggregates.grow(groupCount);
 }
 
 bool NLSortState::rowLess(size_t leftRow, size_t rightRow) const {

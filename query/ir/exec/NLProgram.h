@@ -21,6 +21,7 @@
 #include "PathView.h"
 #include "ID.h"
 #include "LocalMemory.h"
+#include "NLGroupHashTable.h"
 #include "NLHashJoinIndex.h"
 #include "NLStepBuffers.h"
 #include "NLValueStore.h"
@@ -1931,16 +1932,6 @@ private:
     NLStmtContainer _stmts;
 };
 
-// Type of handle that appends the raw bytes of one row of a column to a growing
-// row-key buffer. One per column kind / value type, selected during translation,
-// the same way the gather and append families are. The concatenated key of a row
-// (all its columns in order) is what nl.distinct_filter looks up in the seen-set:
-// bytewise key equality is row equality. A null serializes to a fixed tag byte, so
-// all nulls share a key and DISTINCT dedups them together, matching Cypher; a
-// string serializes as a length prefix then its characters, so two rows never
-// collide by concatenation (e.g. "a"+"b" versus "ab"+"").
-using NLKeyAppendFunction = void (*)(const Column* column, size_t row, std::string& key);
-
 // Type of handle that answers whether one row of a join key column can match at all: whether
 // `=` holds the key equal to itself, which a null, a NaN and a list or map holding a null
 // at any depth do not.
@@ -2725,88 +2716,68 @@ private:
     NLGroupStatePlaces getPlaces(const Aggregate& aggregate);
 };
 
-// The group table of one grouped aggregation: it maps a serialized grouping-key
-// tuple to a dense group index (0, 1, 2, ... in first-seen order). Each distinct
-// key tuple takes the next index the first time it is seen through assign(); that
-// index is the row the group occupies in every key buffer and accumulator.
-// nl.group_aggregate_update drives it one row at a time and nl.group_aggregate_buffer
-// clears it.
-//
-// This is the single global open-addressing table conceptually; it is a
-// std::unordered_map here (the "simplest correct thing" first cut), reified behind
-// assign() / getGroupCount() so callers never poke the map and a separate group
-// counter in lockstep - and so a future open-addressing rewrite stays local to
-// this class.
+// The grouping keys of a grouped aggregation or collect: the hash table mapping the keys of a row
+// to its group, and the key values of every group, kept in the order the groups appeared
 class NLGroupTable {
 public:
-    // The outcome of assigning one row's grouping-key tuple to a group: the dense
-    // group index, and whether this call created the group (the tuple was seen for
-    // the first time). The update gathers a new group's key values from the row
-    // that created it, so it keys off _created.
-    struct Assignment {
-        size_t _index {0};
-        bool _created {false};
+    // The values of one grouping key the groups keep. They accumulate in _buffer as groups appear,
+    // copied from the chunk _input by _gatherAppend, and a drain fills the loop variable _output,
+    // sliced by _emitCopy or repeated per row by _gather.
+    struct KeyColumn {
+        const Column* _input {nullptr};
+        Column* _buffer {nullptr};
+        Column* _output {nullptr};
+        NLGroupKeyGatherFunction _gatherAppend {nullptr};
+        NLCopyFunction _emitCopy {nullptr};
+        NLGatherFunction _gather {nullptr};
     };
 
-    // Map a serialized grouping-key tuple to its dense group index, creating the
-    // group with the next index the first time the tuple is seen.
-    Assignment assign(const std::string& key);
+    NLGroupTable();
+    ~NLGroupTable();
 
-    // The number of distinct groups seen so far - the dense index the next new
-    // group would take.
-    size_t getGroupCount() const { return _groups.size(); }
+    void addKeyColumn(const NLGroupHashKey& hashKey, const KeyColumn& key);
 
-    // Drop every group, so the next assign() numbers groups from zero again.
+    // Mutable so the drain translation can fill in each column's _output after the update
+    // translation set up the rest
+    std::vector<KeyColumn>& keyColumns() { return _keyColumns; }
+
+    NLGroupHashTable& hashTable() { return _hashTable; }
+
+    // Map each of the rowCount rows of the key chunks to its group, keeping the key values of the
+    // groups it creates
+    void assign(size_t rowCount);
+
+    const std::vector<size_t>& getRowGroups() const { return _hashTable.getRowGroups(); }
+    size_t getGroupCount() const { return _hashTable.getGroupCount(); }
+
+    // Slice the key values of groups [begin, begin + count) into the outputs
+    void emitKeys(size_t begin, size_t count);
+
+    // Fill the outputs with the key values of the group each row of groups names
+    void gatherKeys(const ColumnVector<size_t>* groups);
+
     void clear();
 
 private:
-    std::unordered_map<std::string, size_t> _groups;
+    NLGroupHashTable _hashTable;
+    std::vector<KeyColumn> _keyColumns;
+    std::vector<const Column*> _keyInputs;
+    NLValueStore _keyValues;
 };
 
-// Runtime state of one grouped aggregation: an NLGroupTable from the serialized
-// grouping-key tuple to a dense group index, the distinct key values per group,
-// and the aggregates with their state per group. nl.group_aggregate_buffer resets it,
-// nl.group_aggregate_update assigns each row to its group and folds the aggregate
-// inputs, and the nl.for over nl.group_aggregate emits one row per group. The
-// grouped sibling of NLSortState: it keys rows by the grouping tuple and reduces
-// within each group rather than buffering every row for a global reorder.
+// Runtime state of one grouped aggregation: the group table mapping each row's grouping keys to
+// its group, and the aggregates with their state per group. nl.group_aggregate_buffer resets it,
+// nl.group_aggregate_update assigns each row to its group and folds the aggregate inputs, and the
+// nl.for over nl.group_aggregate emits one row per group. The grouped sibling of NLSortState: it
+// keys rows by the grouping tuple and reduces within each group rather than buffering every row
+// for a global reorder.
 //
 // The states are kept one block per group so a future two-phase merge can
 // combine two tables group by group.
 class NLGroupAggregateState {
 public:
-    // One grouping-key column. The distinct key value per group accumulates in
-    // _buffer (grown as groups appear, in creation order); the update reads the
-    // incoming chunk _input and the emit fills the loop variable _output.
-    // _keyAppend serializes a row into the group key (the DISTINCT serializer),
-    // _gatherAppend copies the new-group rows into _buffer, and _emitCopy copies a
-    // buffer slice into _output at emit.
-    struct KeyColumn {
-        const Column* _input {nullptr};
-        Column* _buffer {nullptr};
-        Column* _output {nullptr};
-        NLKeyAppendFunction _keyAppend {nullptr};
-        NLGroupKeyGatherFunction _gatherAppend {nullptr};
-        NLCopyFunction _emitCopy {nullptr};
-    };
-
-    void addKeyColumn(const KeyColumn& key) { _keyColumns.push_back(key); }
-
-    // Mutable so the emit-loop translation can fill in each column's _output after
-    // the update translation set up the rest.
-    std::vector<KeyColumn>& keyColumns() { return _keyColumns; }
-    NLGroupAggregates& aggregates() { return _aggregates; }
-
     NLGroupTable& groupTable() { return _groupTable; }
-
-    // The group keys the key buffers hold, copied in as NLSortState::values' are
-    NLValueStore& keyValues() { return _keyValues; }
-
-    // Scratch reused per update step: the row key being built, the per-row group
-    // index map, and the incoming rows that created a new group this step.
-    std::string& keyScratch() { return _key; }
-    std::vector<size_t>& groupIndicesScratch() { return _groupIndices; }
-    std::vector<size_t>& newGroupRowsScratch() { return _newGroupRows; }
+    NLGroupAggregates& aggregates() { return _aggregates; }
 
     // Empty the group table, key buffers, states and tallies, so the
     // aggregation starts fresh. Runs each time nl.group_aggregate_buffer's block
@@ -2814,15 +2785,8 @@ public:
     void reset();
 
 private:
-    std::vector<KeyColumn> _keyColumns;
-    NLGroupAggregates _aggregates;
-
     NLGroupTable _groupTable;
-    NLValueStore _keyValues;
-
-    std::string _key;
-    std::vector<size_t> _groupIndices;
-    std::vector<size_t> _newGroupRows;
+    NLGroupAggregates _aggregates;
 };
 
 // nl.group_aggregate_buffer data: resets a grouped accumulator to empty each time
@@ -3060,10 +3024,9 @@ using NLCollectListEmitFunction = void (*)(const Column* values,
                                            ListBuffer<>& listBuffer,
                                            Column* output);
 
-// Runtime state of one collect: an NLGroupTable from the serialized grouping-key tuple
-// to a dense group index, the distinct key values per group, and - the accumulator - a
-// single flat buffer of collected values plus, per group, the positions of its
-// elements in that buffer. nl.collect_buffer resets it, nl.collect_update assigns each
+// Runtime state of one collect: the group table mapping each row's grouping keys to its
+// group, and - the accumulator - a single flat buffer of collected values plus, per group,
+// the positions of its elements in that buffer. nl.collect_buffer resets it, nl.collect_update assigns each
 // row to its group and appends its value, and the drain (nl.unwind_collect per element, or
 // nl.collect per group) reads it. The list-valued sibling of NLGroupAggregateState: it
 // keeps every value per group rather than reducing them to one.
@@ -3074,23 +3037,6 @@ using NLCollectListEmitFunction = void (*)(const Column* values,
 // ListBuffer - the stage-then-insert path of docs/UNWIND.md.
 class NLCollectState {
 public:
-    // One grouping-key column - identical to NLGroupAggregateState's: the distinct key
-    // value per group accumulates in _buffer (grown as groups appear), the update reads
-    // the incoming chunk _input, _keyAppend serializes a row into the group key,
-    // _gatherAppend copies new-group rows into _buffer, and the drain fills _output
-    // through _emitCopy.
-    struct KeyColumn {
-        const Column* _input {nullptr};
-        Column* _buffer {nullptr};
-        Column* _output {nullptr};
-        NLKeyAppendFunction _keyAppend {nullptr};
-        NLGroupKeyGatherFunction _gatherAppend {nullptr};
-        NLCopyFunction _emitCopy {nullptr};
-        // Used only by the nl.unwind_collect drain: gather the key buffer by a per-emitted-row
-        // group index, so a group's key value repeats once per collected element.
-        NLGatherFunction _gather {nullptr};
-    };
-
     // One collected column - Cypher's collect(x). _distinct holds the (group, value) pairs
     // already charged, so collect(DISTINCT x) takes each value once and a plain collect
     // leaves it empty; _output is filled either as the per-group list cell or as the
@@ -3105,9 +3051,6 @@ public:
         NLGroupDistinctTally _distinct;
         std::vector<std::vector<size_t>> _groupPositions;
     };
-
-    void addKeyColumn(const KeyColumn& key) { _keyColumns.push_back(key); }
-    std::vector<KeyColumn>& keyColumns() { return _keyColumns; }
 
     NLGroupTable& groupTable() { return _groupTable; }
 
@@ -3129,39 +3072,23 @@ public:
     // collected column shares it, since each run is contiguous per insert.
     ListBuffer<>& listBuffer() { return _listBuffer; }
 
-    // The group keys and collected values the buffers hold, copied in as
-    // NLSortState::values' are
-    NLValueStore& keyValues() { return _keyValues; }
+    // The collected values the buffers hold, copied in as NLSortState::values' are
     NLValueStore& collectedValues() { return _collectedValues; }
 
-    // Scratch reused per update step: the row key being built, the per-row group index
-    // map, and the incoming rows that created a new group this step.
-    std::string& keyScratch() { return _key; }
-    std::vector<size_t>& groupIndicesScratch() { return _groupIndices; }
-    std::vector<size_t>& newGroupRowsScratch() { return _newGroupRows; }
-
-    // Empty the group table, key buffers, value buffers and per-group positions, so the
-    // collect starts fresh. Runs each time nl.collect_buffer's block runs. An ungrouped
-    // collect comes back with its single empty group already created, since that group
-    // does not depend on any row arriving.
+    // Empty the group table, value buffers and per-group positions, so the collect starts
+    // fresh. Runs each time nl.collect_buffer's block runs. An ungrouped collect comes back
+    // with its single group, which the group table holds before any row arrives.
     void reset();
 
 private:
-    std::vector<KeyColumn> _keyColumns;
+    NLGroupTable _groupTable;
 
     std::vector<ValueColumn> _valueColumns;
 
     ListBuffer<> _listBuffer;
-    NLValueStore _keyValues;
     NLValueStore _collectedValues;
 
     NLGroupAggregates _aggregates;
-
-    NLGroupTable _groupTable;
-
-    std::string _key;
-    std::vector<size_t> _groupIndices;
-    std::vector<size_t> _newGroupRows;
 };
 
 // nl.collect_buffer data: resets a collect accumulator to empty each time the block it

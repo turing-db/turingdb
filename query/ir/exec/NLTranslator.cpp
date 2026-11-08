@@ -5011,7 +5011,7 @@ bool NLTranslator::stepKeepsASingleRow(mlir::Block* block) const {
     const IteratorConfig& config = configIt->second;
     const bool drainsACollect = config._kind == IteratorKind::Collect;
 
-    return drainsACollect && config._collectState->keyColumns().empty();
+    return drainsACollect && config._collectState->groupTable().keyColumns().empty();
 }
 
 void NLTranslator::translateLimit(nl::Limit limit, NLStmtContainer* body) {
@@ -6322,6 +6322,22 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
     }
 }
 
+void NLTranslator::addGroupKeyColumn(NLGroupTable& groupTable, mlir::Value column) {
+    const mlir::Type chunkType = column.getType();
+
+    NLGroupHashKey hashKey;
+    buildGroupHashKey(chunkType, hashKey);
+
+    NLGroupTable::KeyColumn key;
+    key._input = getColumn(column);
+    key._buffer = allocColumnForChunkType(chunkType);
+    key._gatherAppend = selectGroupKeyGatherForChunkType(chunkType);
+    key._emitCopy = selectCopyForChunkType(chunkType);
+    key._gather = selectGatherForChunkType(chunkType);
+
+    groupTable.addKeyColumn(hashKey, key);
+}
+
 void NLTranslator::translateGroupAggregateUpdate(nl::GroupAggregateUpdate update, NLStmtContainer* body) {
     const mlir::Value updateState = update.getState();
     NLGroupAggregateState* state = groupAggregateStateFor(updateState);
@@ -6336,8 +6352,9 @@ void NLTranslator::translateGroupAggregateUpdate(nl::GroupAggregateUpdate update
     // The key buffers and aggregates are set up once, by the single update
     // feeding an accumulator. Generated IR has exactly one update per accumulator; a
     // second would fold the same rows twice, so it is rejected here.
+    NLGroupTable& groupTable = state->groupTable();
     NLGroupAggregates& aggregates = state->aggregates();
-    if (!state->keyColumns().empty() || !aggregates.getAggregates().empty()) {
+    if (!groupTable.keyColumns().empty() || !aggregates.getAggregates().empty()) {
         throw IRException("an nl.group_aggregate_buffer must be fed by a single nl.group_aggregate_update");
     }
 
@@ -6353,22 +6370,11 @@ void NLTranslator::translateGroupAggregateUpdate(nl::GroupAggregateUpdate update
 
     NLGroupAggregateUpdateData* data = _program->allocFunctionData<NLGroupAggregateUpdateData>(state);
 
-    // One growing key buffer per grouping key, holding its distinct value per group.
-    // The buffer keeps the key column's element type; the key-append serializes a row
-    // into the group key (the DISTINCT serializer), the gather-append grows the
-    // buffer with each new group's key values, and the range copy slices it at emit.
     for (size_t keyIndex = 0; keyIndex < keyCount; keyIndex++) {
-        const mlir::Value column = columns[keyIndex];
-
-        NLGroupAggregateState::KeyColumn key;
-        key._input = getColumn(column);
-        key._buffer = allocColumnForChunkType(column.getType());
-        key._keyAppend = selectKeyAppendForChunkType(column.getType());
-        key._gatherAppend = selectGroupKeyGatherForChunkType(column.getType());
-        key._emitCopy = selectCopyForChunkType(column.getType());
-
-        state->addKeyColumn(key);
+        addGroupKeyColumn(groupTable, columns[keyIndex]);
     }
+
+    groupTable.hashTable().chooseTable();
 
     // One state per group per aggregate, with the state type and the fold baked
     // from the kind and the input value type.
@@ -6396,7 +6402,8 @@ void NLTranslator::translateGroupAggregateLoop(const IteratorConfig& config,
     // For::verify binds one loop variable per iterator chunk, and the group
     // iterator's chunks are the grouping-key columns followed by the aggregate
     // results, so the loop must take exactly one variable per output column.
-    const size_t keyCount = state->keyColumns().size();
+    std::vector<NLGroupTable::KeyColumn>& keyColumns = state->groupTable().keyColumns();
+    const size_t keyCount = keyColumns.size();
     const std::span<NLGroupAggregates::Aggregate> aggregates = state->aggregates().getAggregates();
     const size_t aggregateCount = aggregates.size();
     if (loopBody.getNumArguments() != keyCount + aggregateCount) {
@@ -6416,7 +6423,7 @@ void NLTranslator::translateGroupAggregateLoop(const IteratorConfig& config,
 
         Column* output = allocColumnForResultChunkType(loopVariable.getType());
         _valueSlots[loopVariable] = output;
-        state->keyColumns()[keyIndex]._output = output;
+        keyColumns[keyIndex]._output = output;
     }
 
     for (size_t aggregateIndex = 0; aggregateIndex < aggregateCount; aggregateIndex++) {
@@ -6469,7 +6476,8 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
     // The key buffers and the value buffers are allocated once, by the single update
     // feeding an accumulator. Generated IR has exactly one update per accumulator; a
     // second would append the same rows twice, so it is rejected here.
-    if (!state->keyColumns().empty() || !state->valueColumns().empty()) {
+    NLGroupTable& groupTable = state->groupTable();
+    if (!groupTable.keyColumns().empty() || !state->valueColumns().empty()) {
         throw IRException("an nl.collect_buffer must be fed by a single nl.collect_update");
     }
 
@@ -6492,21 +6500,11 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
 
     NLCollectUpdateData* data = _program->allocFunctionData<NLCollectUpdateData>(state);
 
-    // One growing key buffer per grouping key, holding its distinct value per group -
-    // the same setup as translateGroupAggregateUpdate's keys.
     for (size_t keyIndex = 0; keyIndex < keyCount; keyIndex++) {
-        const mlir::Value column = columns[keyIndex];
-
-        NLCollectState::KeyColumn key;
-        key._input = getColumn(column);
-        key._buffer = allocColumnForChunkType(column.getType());
-        key._keyAppend = selectKeyAppendForChunkType(column.getType());
-        key._gatherAppend = selectGroupKeyGatherForChunkType(column.getType());
-        key._emitCopy = selectCopyForChunkType(column.getType());
-        key._gather = selectGatherForChunkType(column.getType());
-
-        state->addKeyColumn(key);
+        addGroupKeyColumn(groupTable, columns[keyIndex]);
     }
+
+    groupTable.hashTable().chooseTable();
 
     // Each collected column is either a nullable value chunk (a property fetch), whose
     // present values accumulate in a flat buffer of the same primitive with nulls
@@ -6793,7 +6791,8 @@ void NLTranslator::translateUnwindCollectLoop(const IteratorConfig& config,
     // For::verify binds one loop variable per iterator chunk; the unwind iterator's
     // chunks are the grouping keys then the element value, so the loop takes one
     // variable per grouping key plus one for the value.
-    const size_t keyCount = state->keyColumns().size();
+    std::vector<NLGroupTable::KeyColumn>& keyColumns = state->groupTable().keyColumns();
+    const size_t keyCount = keyColumns.size();
     if (loopBody.getNumArguments() != keyCount + 1) {
         throw IRException("nl.unwind_collect loop must bind one variable per grouping key plus the element");
     }
@@ -6810,7 +6809,7 @@ void NLTranslator::translateUnwindCollectLoop(const IteratorConfig& config,
 
         Column* output = allocColumnForResultChunkType(loopVariable.getType());
         _valueSlots[loopVariable] = output;
-        state->keyColumns()[keyIndex]._output = output;
+        keyColumns[keyIndex]._output = output;
     }
 
     // The last loop variable is the unwound element value (a nullable value chunk).
@@ -6836,7 +6835,8 @@ void NLTranslator::translateCollectLoop(const IteratorConfig& config,
 
     // The collect iterator's chunks are the grouping keys, one list cell per collected
     // column, then one per aggregate reduced over the same groups.
-    const size_t keyCount = state->keyColumns().size();
+    std::vector<NLGroupTable::KeyColumn>& keyColumns = state->groupTable().keyColumns();
+    const size_t keyCount = keyColumns.size();
     std::vector<NLCollectState::ValueColumn>& valueColumns = state->valueColumns();
     const std::span<NLGroupAggregates::Aggregate> aggregates = state->aggregates().getAggregates();
     if (loopBody.getNumArguments() != keyCount + valueColumns.size() + aggregates.size()) {
@@ -6852,7 +6852,7 @@ void NLTranslator::translateCollectLoop(const IteratorConfig& config,
 
         Column* output = allocColumnForResultChunkType(loopVariable.getType());
         _valueSlots[loopVariable] = output;
-        state->keyColumns()[keyIndex]._output = output;
+        keyColumns[keyIndex]._output = output;
     }
 
     // Then one per-group list cell per collected column (a ColumnVector<ListView>).
@@ -7471,6 +7471,35 @@ NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkTy
     }
 
     return NLExecutor::selectKeyAppendFunction(chunkKindFromElementType(elementType));
+}
+
+void NLTranslator::buildGroupHashKey(mlir::Type chunkType, NLGroupHashKey& key) {
+    const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
+    const auto nullable = mlir::dyn_cast<storage::NullableType>(elementType);
+    const mlir::Type valueType = nullable ? nullable.getValueType() : elementType;
+
+    key._keyAppend = selectKeyAppendForChunkType(chunkType);
+    key._nullable = static_cast<bool>(nullable);
+
+    if (mlir::isa<storage::StringType>(valueType)) {
+        key._shape = NLGroupKeyShape::String;
+        return;
+    } else if (mlir::isa<storage::AnyType>(valueType)) {
+        key._shape = NLGroupKeyShape::Other;
+        return;
+    }
+
+    if (nullable && isNullableIDValue(valueType)) {
+        key._packing = NLExecutor::selectOptKeyPacking(chunkKindFromElementType(valueType));
+    } else if (nullable) {
+        key._packing = NLExecutor::selectOptKeyPacking(valueTypeFromElementType(valueType));
+    } else if (isMaskElementType(elementType)) {
+        key._packing = NLExecutor::selectMaskKeyPacking();
+    } else {
+        key._packing = NLExecutor::selectKeyPacking(chunkKindFromElementType(elementType));
+    }
+
+    key._shape = key._packing._pack ? NLGroupKeyShape::Fixed : NLGroupKeyShape::Other;
 }
 
 // The join's sibling of selectKeyAppendForChunkType: a key is hashed and compared where it

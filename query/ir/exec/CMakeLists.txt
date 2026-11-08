@@ -1,5 +1,6 @@
 set(exec_sources
     NLProgram.cpp
+    NLGroupHashTable.cpp
     NLHashJoinIndex.cpp
     NLOutputSink.cpp
     NLExecutionContext.cpp

@@ -725,6 +725,14 @@ private:
                              mlir::Value column,
                              NLGroupAggregates::Aggregate& aggregate);
 
+    // A grouping key of a grouped aggregation or a collect: how its values reach the hash table,
+    // its buffer of one value per group, and the handlers copying them in and out
+    void addGroupKeyColumn(NLGroupTable& groupTable, mlir::Value column);
+
+    // How the values of a key chunk of this type reach a group hash table: packed when they have
+    // a fixed width, hashed where they live when they are strings, serialized otherwise
+    static void buildGroupHashKey(mlir::Type chunkType, NLGroupHashKey& key);
+
     void translateGroupAggregateUpdate(mlir::nl::GroupAggregateUpdate update, NLStmtContainer* body);
 
     // Translate the nl.for over an nl.group_aggregate iterator: allocate one loop

@@ -799,6 +799,14 @@ public:
     static NLKeyAppendFunction selectOptKeyAppendFunction(ValueType valueType);
     static NLKeyAppendFunction selectOptKeyAppendFunction(NLChunkKind kind);
 
+    // The packing of a grouping key's values into a fixed-width key: an ID or value chunk of
+    // this kind, a nullable value chunk of this value type, a nullable ID chunk of this kind, a
+    // mask. A chunk whose values have no fixed width - a string, a list - packs with no handle.
+    static NLKeyPacking selectKeyPacking(NLChunkKind kind);
+    static NLKeyPacking selectOptKeyPacking(ValueType valueType);
+    static NLKeyPacking selectOptKeyPacking(NLChunkKind kind);
+    static NLKeyPacking selectMaskKeyPacking();
+
     // Hash, equality and match test for a join key: an ID chunk of this kind, a nullable value chunk
     // of this value type, a plain numeric chunk, a type-erased cell, a mask.
     // Used by nl.hash_join_collect to chain a build row under its hash and by

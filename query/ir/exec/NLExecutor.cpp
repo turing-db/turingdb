@@ -87,6 +87,7 @@
 
 #include "NLSystemContext.h"
 
+#include "NLKeyHash.h"
 #include "NLProgram.h"
 #include "NLRuntimeProperty.h"
 #include "NLMergeExecutor.h"
@@ -2739,20 +2740,21 @@ void distinctAppendValueBytes(std::string& key, const Primitive& value) {
     key.append(reinterpret_cast<const char*>(&value), sizeof(Primitive));
 }
 
-// A double is normalized before its bytes are appended so keys compare by Cypher
-// value equality, not bit pattern: -0.0 collapses to +0.0 (0.0 == -0.0 in Cypher)
-// and every NaN payload maps to one canonical NaN, so two distinct bit patterns of
+// A double keys by its Cypher value, not its bit pattern: -0.0 is +0.0 (0.0 == -0.0 in
+// Cypher) and every NaN payload maps to one canonical NaN, so two distinct bit patterns of
 // the same value never split into separate groups (or survive DISTINCT as two rows).
-void distinctAppendValueBytes(std::string& key, double value) {
-    double normalized = value;
-
-    if (normalized == 0.0) {
-        // -0.0 == +0.0, so assigning +0.0 canonicalizes the sign of zero.
-        normalized = 0.0;
-    } else if (std::isnan(normalized)) {
-        normalized = std::numeric_limits<double>::quiet_NaN();
+double normalizedKeyDouble(double value) {
+    if (value == 0.0) {
+        return 0.0;
+    } else if (std::isnan(value)) {
+        return std::numeric_limits<double>::quiet_NaN();
     }
 
+    return value;
+}
+
+void distinctAppendValueBytes(std::string& key, double value) {
+    const double normalized = normalizedKeyDouble(value);
     key.append(reinterpret_cast<const char*>(&normalized), sizeof(normalized));
 }
 
@@ -2798,6 +2800,100 @@ void distinctKeyAppendOptColumn(const Column* column, size_t row, std::string& k
 
     key.push_back('\1');
     distinctAppendValueBytes(key, *value);
+}
+
+// What a key value packs as, holding the value as its serialized key does: an ID's integer, a
+// number's own bits, a double's once normalized, a boolean's byte, the microseconds of a
+// datetime or a duration, and a point's own bytes
+template <IntegralType T, int I>
+T packedKeyValue(ID<T, I> id) {
+    return id.getValue();
+}
+
+types::Int64::Primitive packedKeyValue(types::Int64::Primitive value) {
+    return value;
+}
+
+types::UInt64::Primitive packedKeyValue(types::UInt64::Primitive value) {
+    return value;
+}
+
+uint64_t packedKeyValue(types::Double::Primitive value) {
+    return std::bit_cast<uint64_t>(normalizedKeyDouble(value));
+}
+
+uint8_t packedKeyValue(types::Bool::Primitive value) {
+    return value._boolean;
+}
+
+uint8_t packedKeyValue(ColumnMask::Bool_t value) {
+    return value._value;
+}
+
+uint8_t packedKeyValue(ValueType value) {
+    return static_cast<uint8_t>(value);
+}
+
+int64_t packedKeyValue(types::DateTime::Primitive value) {
+    return value.getMicroseconds();
+}
+
+int64_t packedKeyValue(types::Duration::Primitive value) {
+    return value.getMicroseconds();
+}
+
+types::Point::Primitive packedKeyValue(types::Point::Primitive value) {
+    return value;
+}
+
+template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
+void packKeyColumn(const Column* column, size_t beginRow, size_t endRow, const NLKeyPackTarget& target) {
+    const auto& raw = static_cast<const ColumnType*>(column)->getRaw();
+    std::byte* value = target._values;
+
+    for (size_t row = beginRow; row < endRow; row++) {
+        const auto packed = packedKeyValue(raw[row]);
+        std::memcpy(value, &packed, sizeof(packed));
+
+        value += target._valueStride;
+    }
+}
+
+template <typename Primitive>
+void packOptKeyColumn(const Column* column, size_t beginRow, size_t endRow, const NLKeyPackTarget& target) {
+    const auto& raw = static_cast<const ColumnVector<std::optional<Primitive>>*>(column)->getRaw();
+    const std::byte nullMask {static_cast<uint8_t>(1u << (target._nullBit % 8))};
+
+    std::byte* value = target._values;
+    std::byte* nulls = target._nulls + target._nullBit / 8;
+
+    for (size_t row = beginRow; row < endRow; row++) {
+        const std::optional<Primitive>& element = raw[row];
+
+        if (element.has_value()) {
+            const auto packed = packedKeyValue(*element);
+            std::memcpy(value, &packed, sizeof(packed));
+        } else {
+            *nulls |= nullMask;
+        }
+
+        value += target._valueStride;
+        nulls += target._nullStride;
+    }
+}
+
+template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
+NLKeyPacking keyPacking() {
+    using Packed = decltype(packedKeyValue(std::declval<ElementType>()));
+
+    return {&packKeyColumn<ElementType, ColumnType>, sizeof(Packed)};
+}
+
+template <typename Primitive>
+NLKeyPacking optKeyPacking() {
+    using Packed = decltype(packedKeyValue(std::declval<Primitive>()));
+
+    return {&packOptKeyColumn<Primitive>, sizeof(Packed)};
 }
 
 void distinctAppendElementBytes(std::string& key, CellView element);
@@ -3109,17 +3205,6 @@ void distinctKeyAppendOptMapColumn(const Column* column, size_t row, std::string
     }
 
     distinctAppendMapBytes(key, *map);
-}
-
-// The 64-bit finalizer of MurmurHash3, so a key's bits spread over every bucket
-uint64_t mixKeyBits(uint64_t bits) {
-    bits ^= bits >> 33;
-    bits *= 0xff51afd7ed558ccdULL;
-    bits ^= bits >> 33;
-    bits *= 0xc4ceb9fe1a85ec53ULL;
-    bits ^= bits >> 33;
-
-    return bits;
 }
 
 template <typename Integral>
@@ -12159,7 +12244,8 @@ void NLExecutor::runGroupAggregateUpdate(NLExecutionContext* context, NLFunction
     NLGroupAggregateUpdateData* update = static_cast<NLGroupAggregateUpdateData*>(data);
     NLGroupAggregateState* state = update->getState();
 
-    std::vector<NLGroupAggregateState::KeyColumn>& keyColumns = state->keyColumns();
+    NLGroupTable& groupTable = state->groupTable();
+    const std::vector<NLGroupTable::KeyColumn>& keyColumns = groupTable.keyColumns();
     NLGroupAggregates& aggregates = state->aggregates();
     bioassert(!keyColumns.empty(), "nl.group_aggregate_update needs at least one grouping key");
 
@@ -12172,7 +12258,7 @@ void NLExecutor::runGroupAggregateUpdate(NLExecutionContext* context, NLFunction
     // group - or, when it is the longer one, reads past the assignments entirely.
     // Generated IR places the update where every column is bound together, so a
     // mismatch here means malformed IR.
-    for (const NLGroupAggregateState::KeyColumn& keyColumn : keyColumns) {
+    for (const NLGroupTable::KeyColumn& keyColumn : keyColumns) {
         bioassert(keyColumn._input->size() == rowCount,
                   "nl.group_aggregate_update grouping keys must be row-aligned");
     }
@@ -12186,42 +12272,10 @@ void NLExecutor::runGroupAggregateUpdate(NLExecutionContext* context, NLFunction
         return;
     }
 
-    // Assign each row to its group: serialize the grouping-key tuple, look it up,
-    // and on first sight create a new group (its index is the next group count) and
-    // record the row that created it, so the key buffers can take that row's values.
-    NLGroupTable& groupTable = state->groupTable();
-    std::vector<size_t>& groupIndices = state->groupIndicesScratch();
-    std::vector<size_t>& newGroupRows = state->newGroupRowsScratch();
-    std::string& key = state->keyScratch();
+    groupTable.assign(rowCount);
 
-    groupIndices.resize(rowCount);
-    newGroupRows.clear();
-
-    for (size_t row = 0; row < rowCount; row++) {
-        key.clear();
-        for (const NLGroupAggregateState::KeyColumn& keyColumn : keyColumns) {
-            keyColumn._keyAppend(keyColumn._input, row, key);
-        }
-
-        const NLGroupTable::Assignment assignment = groupTable.assign(key);
-        if (assignment._created) {
-            newGroupRows.push_back(row);
-        }
-
-        groupIndices[row] = assignment._index;
-    }
-
-    const size_t groupCount = groupTable.getGroupCount();
-
-    // Grow the key buffers with the new groups' key values, then give the new groups
-    // their states - each the identity of its reduction - before folding this step's
-    // rows into their groups.
-    for (NLGroupAggregateState::KeyColumn& keyColumn : keyColumns) {
-        keyColumn._gatherAppend(keyColumn._input, newGroupRows, keyColumn._buffer, state->keyValues());
-    }
-
-    aggregates.grow(groupCount);
-    aggregates.fold(groupIndices);
+    aggregates.grow(groupTable.getGroupCount());
+    aggregates.fold(groupTable.getRowGroups());
     aggregates.compactValues();
 }
 
@@ -12229,11 +12283,11 @@ void NLExecutor::runGroupAggregateLoop(NLExecutionContext* context, NLFunctionDa
     NLGroupAggregateLoopData* loopData = static_cast<NLGroupAggregateLoopData*>(data);
     NLGroupAggregateState* state = loopData->getState();
 
-    const size_t totalGroups = state->groupTable().getGroupCount();
+    NLGroupTable& groupTable = state->groupTable();
+    const size_t totalGroups = groupTable.getGroupCount();
     const size_t chunkSize = context->getChunkSize();
     const NLStmtContainer* loopBody = loopData->getStmts();
 
-    std::vector<NLGroupAggregateState::KeyColumn>& keyColumns = state->keyColumns();
     NLGroupAggregates& aggregates = state->aggregates();
 
     const NLLimitState* limit = loopData->getLimit();
@@ -12247,9 +12301,7 @@ void NLExecutor::runGroupAggregateLoop(NLExecutionContext* context, NLFunctionDa
     const auto runIteration = [&](size_t offset) {
         const size_t stepGroups = std::min(chunkSize, totalGroups - offset);
 
-        for (const NLGroupAggregateState::KeyColumn& keyColumn : keyColumns) {
-            keyColumn._emitCopy(keyColumn._buffer, offset, stepGroups, keyColumn._output);
-        }
+        groupTable.emitKeys(offset, stepGroups);
 
         stepBuffers->clear();
         aggregates.emit(offset, stepGroups, stepBuffers);
@@ -12277,7 +12329,8 @@ void NLExecutor::runCollectUpdate(NLExecutionContext* context, NLFunctionData* d
     NLCollectUpdateData* update = static_cast<NLCollectUpdateData*>(data);
     NLCollectState* state = update->getState();
 
-    std::vector<NLCollectState::KeyColumn>& keyColumns = state->keyColumns();
+    NLGroupTable& groupTable = state->groupTable();
+    const std::vector<NLGroupTable::KeyColumn>& keyColumns = groupTable.keyColumns();
     std::vector<NLCollectState::ValueColumn>& valueColumns = state->valueColumns();
 
     // Every column is row-aligned. With grouping keys the first key sizes this step's
@@ -12291,7 +12344,7 @@ void NLExecutor::runCollectUpdate(NLExecutionContext* context, NLFunctionData* d
     // group - or, when the value column is the longer one, reads past the assignments
     // entirely. Generated IR places the update where every column is bound together, so
     // a mismatch here means malformed IR.
-    for (const NLCollectState::KeyColumn& keyColumn : keyColumns) {
+    for (const NLGroupTable::KeyColumn& keyColumn : keyColumns) {
         bioassert(keyColumn._input->size() == rowCount,
                   "nl.collect_update grouping keys must be row-aligned");
     }
@@ -12311,41 +12364,13 @@ void NLExecutor::runCollectUpdate(NLExecutionContext* context, NLFunctionData* d
         return;
     }
 
-    // Assign each row to its group: serialize the grouping-key tuple, look it up, and
-    // on first sight create a new group (its index is the next group count) and record
-    // the row that created it, so the key buffers can take that row's values. With no
-    // grouping key the tuple is empty, so every row falls into the single group 0.
-    NLGroupTable& groupTable = state->groupTable();
-    std::vector<size_t>& groupIndices = state->groupIndicesScratch();
-    std::vector<size_t>& newGroupRows = state->newGroupRowsScratch();
-    std::string& key = state->keyScratch();
-
-    groupIndices.resize(rowCount);
-    newGroupRows.clear();
-
-    for (size_t row = 0; row < rowCount; row++) {
-        key.clear();
-        for (const NLCollectState::KeyColumn& keyColumn : keyColumns) {
-            keyColumn._keyAppend(keyColumn._input, row, key);
-        }
-
-        const NLGroupTable::Assignment assignment = groupTable.assign(key);
-        if (assignment._created) {
-            newGroupRows.push_back(row);
-        }
-
-        groupIndices[row] = assignment._index;
-    }
+    groupTable.assign(rowCount);
 
     const size_t groupCount = groupTable.getGroupCount();
+    const std::vector<size_t>& groupIndices = groupTable.getRowGroups();
 
-    // Grow the key buffers with the new groups' key values, and the per-group position
-    // lists to the new group count, then append this step's present values to their
-    // groups' lists.
-    for (NLCollectState::KeyColumn& keyColumn : keyColumns) {
-        keyColumn._gatherAppend(keyColumn._input, newGroupRows, keyColumn._buffer, state->keyValues());
-    }
-
+    // Grow the per-group position lists to the new group count, then append this step's
+    // present values to their groups' lists.
     for (NLCollectState::ValueColumn& valueColumn : valueColumns) {
         valueColumn._groupPositions.resize(groupCount);
 
@@ -12723,7 +12748,7 @@ void NLExecutor::runUnwindCollectLoop(NLExecutionContext* context, NLFunctionDat
     const size_t chunkSize = context->getChunkSize();
     const NLStmtContainer* loopBody = loopData->getStmts();
 
-    std::vector<NLCollectState::KeyColumn>& keyColumns = state->keyColumns();
+    NLGroupTable& groupTable = state->groupTable();
     NLCollectState::ValueColumn& unwound = state->unwoundColumn();
     const std::vector<std::vector<size_t>>& groupPositions = unwound._groupPositions;
     const size_t totalGroups = groupPositions.size();
@@ -12765,9 +12790,7 @@ void NLExecutor::runUnwindCollectLoop(NLExecutionContext* context, NLFunctionDat
 
         // The key values repeat once per element (gather by the per-row group index);
         // the element values come from the flat buffer at this chunk's positions.
-        for (const NLCollectState::KeyColumn& keyColumn : keyColumns) {
-            keyColumn._gather(keyColumn._buffer, groupIndices, keyColumn._output);
-        }
+        groupTable.gatherKeys(groupIndices);
 
         unwound._unwindCollectEmit(unwound._buffer, positions, unwound._output);
 
@@ -12779,11 +12802,11 @@ void NLExecutor::runCollectLoop(NLExecutionContext* context, NLFunctionData* dat
     NLCollectLoopData* loopData = static_cast<NLCollectLoopData*>(data);
     NLCollectState* state = loopData->getState();
 
-    const size_t totalGroups = state->groupTable().getGroupCount();
+    NLGroupTable& groupTable = state->groupTable();
+    const size_t totalGroups = groupTable.getGroupCount();
     const size_t chunkSize = context->getChunkSize();
     const NLStmtContainer* loopBody = loopData->getStmts();
 
-    std::vector<NLCollectState::KeyColumn>& keyColumns = state->keyColumns();
     NLGroupAggregates& aggregates = state->aggregates();
     NLStepBuffers* const stepBuffers = loopData->getStepBuffers();
 
@@ -12796,9 +12819,7 @@ void NLExecutor::runCollectLoop(NLExecutionContext* context, NLFunctionData* dat
     for (size_t offset = 0; offset < totalGroups; offset += chunkSize) {
         const size_t stepGroups = std::min(chunkSize, totalGroups - offset);
 
-        for (const NLCollectState::KeyColumn& keyColumn : keyColumns) {
-            keyColumn._emitCopy(keyColumn._buffer, offset, stepGroups, keyColumn._output);
-        }
+        groupTable.emitKeys(offset, stepGroups);
 
         for (NLCollectState::ValueColumn& valueColumn : state->valueColumns()) {
             valueColumn._listEmit(valueColumn._buffer,
@@ -13616,6 +13637,135 @@ NLKeyAppendFunction NLExecutor::selectOptKeyAppendFunction(ValueType valueType) 
 
     bioassert(false, "Unhandled value type");
     return nullptr;
+}
+
+NLKeyPacking NLExecutor::selectKeyPacking(NLChunkKind kind) {
+    switch (kind) {
+        case NLChunkKind::NodeID:
+            return keyPacking<NodeID>();
+        break;
+
+        case NLChunkKind::EdgeID:
+            return keyPacking<EdgeID>();
+        break;
+
+        case NLChunkKind::EdgeTypeID:
+            return keyPacking<EdgeTypeID>();
+        break;
+
+        case NLChunkKind::LabelSetID:
+            return keyPacking<LabelSetID>();
+        break;
+
+        case NLChunkKind::LabelID:
+            return keyPacking<LabelID>();
+        break;
+
+        case NLChunkKind::PropertyTypeID:
+            return keyPacking<PropertyTypeID>();
+        break;
+
+        case NLChunkKind::ValueTypeCode:
+            return keyPacking<ValueType>();
+        break;
+
+        case NLChunkKind::UInt64:
+            return keyPacking<types::UInt64::Primitive>();
+        break;
+
+        case NLChunkKind::Int64:
+            return keyPacking<types::Int64::Primitive>();
+        break;
+
+        case NLChunkKind::Double:
+            return keyPacking<types::Double::Primitive>();
+        break;
+
+        case NLChunkKind::Bool:
+            return keyPacking<types::Bool::Primitive>();
+        break;
+
+        case NLChunkKind::DateTime:
+            return keyPacking<types::DateTime::Primitive>();
+        break;
+
+        case NLChunkKind::Duration:
+            return keyPacking<types::Duration::Primitive>();
+        break;
+
+        case NLChunkKind::Point:
+            return keyPacking<types::Point::Primitive>();
+        break;
+
+        case NLChunkKind::String:
+        case NLChunkKind::List:
+        case NLChunkKind::Map:
+        case NLChunkKind::Path:
+        case NLChunkKind::PathRef:
+            return NLKeyPacking {};
+        break;
+    }
+
+    bioassert(false, "Unknown NLChunkKind");
+    return NLKeyPacking {};
+}
+
+NLKeyPacking NLExecutor::selectOptKeyPacking(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return optKeyPacking<types::Int64::Primitive>();
+        break;
+
+        case ValueType::UInt64:
+            return optKeyPacking<types::UInt64::Primitive>();
+        break;
+
+        case ValueType::Double:
+            return optKeyPacking<types::Double::Primitive>();
+        break;
+
+        case ValueType::Bool:
+            return optKeyPacking<types::Bool::Primitive>();
+        break;
+
+        case ValueType::DateTime:
+            return optKeyPacking<types::DateTime::Primitive>();
+        break;
+
+        case ValueType::Duration:
+            return optKeyPacking<types::Duration::Primitive>();
+        break;
+
+        case ValueType::Point:
+            return optKeyPacking<types::Point::Primitive>();
+        break;
+
+        case ValueType::String:
+        case ValueType::Embedding:
+        case ValueType::List:
+        case ValueType::Map:
+            return NLKeyPacking {};
+        break;
+
+        case ValueType::Invalid:
+        case ValueType::_SIZE:
+            throw IRException("invalid grouping key value type");
+        break;
+    }
+
+    bioassert(false, "Unhandled value type");
+    return NLKeyPacking {};
+}
+
+NLKeyPacking NLExecutor::selectOptKeyPacking(NLChunkKind kind) {
+    NLKeyPacking packing;
+    dispatchIDChunkKind(kind, [&]<typename ID>() { packing = optKeyPacking<ID>(); });
+
+    return packing;
+}
+
+NLKeyPacking NLExecutor::selectMaskKeyPacking() {
+    return keyPacking<ColumnMask::Bool_t, ColumnMask>();
 }
 
 NLJoinKeyFunctions NLExecutor::selectJoinKeyFunctions(NLChunkKind kind) {
