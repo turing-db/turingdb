@@ -207,3 +207,4 @@ add_turing_test(test_query_ir_percentile_held_in_a_cell PercentileHeldInACellTes
 add_turing_test(test_query_ir_group_aggregate_state GroupAggregateStateTest.cpp)
 
 add_turing_test(test_query_ir_group_table GroupTableTest.cpp)
+add_turing_test(test_query_ir_keyless_aggregate_state KeylessAggregateStateTest.cpp)

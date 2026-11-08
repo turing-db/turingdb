@@ -3520,35 +3520,6 @@ size_t countPresentColumn(const Column* column) {
     });
 }
 
-// Reset a sum/avg accumulator to a present zero (its identity): a running sum
-// starts at zero and stays present regardless of nulls, so an empty input sums
-// to zero, matching Cypher.
-template <typename Primitive>
-void aggregateResetZero(NLAggregateState* state) {
-    auto* accumulator = static_cast<ColumnOptVector<Primitive>*>(state->getAccumulator());
-    accumulator->getRaw().assign(1, std::optional<Primitive>(Primitive {}));
-    state->setCount(0);
-}
-
-// Reset a min/max or tagged accumulator to null: with no non-null row seen yet there is
-// no extreme, and an all-null (or empty) input reduces to null, matching Cypher.
-template <typename Primitive>
-void aggregateResetNull(NLAggregateState* state) {
-    auto* accumulator = static_cast<ColumnOptVector<Primitive>*>(state->getAccumulator());
-    accumulator->getRaw().assign(1, std::nullopt);
-    state->setCount(0);
-    state->setDurationTotal(0);
-    state->accumulatorValues().clear();
-}
-
-// A sum or an average of durations keeps its total in the state, not in the accumulator,
-// which holds no slot
-void aggregateResetDurationTotal(NLAggregateState* state) {
-    state->getAccumulator()->clear();
-    state->setCount(0);
-    state->setDurationTotal(0);
-}
-
 // Add two aggregate values with defined overflow. A signed integer sum wraps in
 // two's complement (matching Cypher's Java-long integer sum) rather than invoking
 // C++ signed-overflow undefined behavior; unsigned integers already wrap by the
@@ -3629,41 +3600,6 @@ void dispatchAverageTotal(ValueType totalType, Select&& select) {
     }
 }
 
-// Fold a chunk's present values into a sum accumulator (same primitive as the
-// input). The accumulator is always present, so read-modify-write its one row.
-template <typename Primitive>
-void aggregateUpdateSum(NLAggregateState* state, const Column* input) {
-    auto* accumulator = static_cast<ColumnOptVector<Primitive>*>(state->getAccumulator());
-    std::optional<Primitive>& current = accumulator->getRaw().front();
-    const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
-
-    Primitive running = current.value();
-    for (const std::optional<Primitive>& value : inputRaw) {
-        if (value.has_value()) {
-            running = numericAdd(running, *value);
-        }
-    }
-
-    current = running;
-}
-
-// Fold a chunk's present durations into the state's 128-bit total, counting them for avg
-void aggregateUpdateDurationTotal(NLAggregateState* state, const Column* input) {
-    const auto& inputRaw = static_cast<const ColumnOptVector<types::Duration::Primitive>*>(input)->getRaw();
-
-    __int128 total = state->getDurationTotal();
-    size_t seen = 0;
-    for (const std::optional<types::Duration::Primitive>& value : inputRaw) {
-        if (value.has_value()) {
-            total += value->getMicroseconds();
-            seen++;
-        }
-    }
-
-    state->setDurationTotal(total);
-    state->addCount(seen);
-}
-
 std::optional<CellView> presentCell(const CellView element) {
     if (element.getTag() == CellTag::Null) {
         return std::nullopt;
@@ -3694,36 +3630,6 @@ bool replacesExtremum(const Primitive& current, const Primitive& value) {
     }
 }
 
-// Fold a chunk's present values into a min (IsMax false) or max (IsMax true)
-// accumulator. The first present value seeds the accumulator; later values
-// replace it when more extreme. Nulls are skipped, so an all-null input leaves
-// the accumulator null.
-template <typename Primitive, bool IsMax, typename Cell = std::optional<Primitive>>
-void aggregateUpdateMinMax(NLAggregateState* state, const Column* input) {
-    auto* accumulator = static_cast<ColumnOptVector<Primitive>*>(state->getAccumulator());
-    std::optional<Primitive>& current = accumulator->getRaw().front();
-    const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
-
-    bool replaced = false;
-    for (const Cell& cell : inputRaw) {
-        const std::optional<Primitive> value = presentCell(cell);
-        if (!value.has_value()) {
-            continue;
-        }
-
-        if (!current.has_value() || replacesExtremum<Primitive, IsMax>(*current, *value)) {
-            current = *value;
-            replaced = true;
-        }
-    }
-
-    if (replaced) {
-        NLCompactingValueStore& extremes = state->accumulatorValues();
-        current = extremes.getSpare().ownElement(*current);
-        extremes.flip();
-    }
-}
-
 // The number a tagged cell holds, whatever numeric type its tag names. A deviation over
 // a type-erased column is defined over numbers only, so any other tag is a query error -
 // the check the static column types make for a typed column, made per row here.
@@ -3751,13 +3657,11 @@ double taggedNumericValue(const CellView element) {
 
 // A standard deviation keeps the mean of the values folded so far and the sum of their
 // squared deviations from it. Welford's update keeps both accurate for values far from 0,
-// where a sum of squares minus a squared sum cancels to noise. An ungrouped accumulator
-// holds the two side by side.
-constexpr size_t DEVIATION_SLOT_COUNT = 2;
-
+// where a sum of squares minus a squared sum cancels to noise. The count keeps the two
+// doubles apart: side by side, GCC packs them in one register and serializes the update.
 struct NLDeviationState {
-    uint64_t _count {0};
     double _mean {0.0};
+    uint64_t _count {0};
     double _squaredDeviations {0.0};
 };
 
@@ -3794,41 +3698,6 @@ double deviation(double squaredDeviations, uint64_t count) {
             return std::sqrt(squaredDeviations / static_cast<double>(count - 1));
         }
     }
-}
-
-void aggregateResetDeviation(NLAggregateState* state) {
-    auto* accumulator = static_cast<ColumnOptVector<double>*>(state->getAccumulator());
-    accumulator->getRaw().assign(DEVIATION_SLOT_COUNT, std::optional<double>(0.0));
-    state->setCount(0);
-}
-
-template <typename Cell>
-void aggregateUpdateDeviation(NLAggregateState* state, const Column* input) {
-    auto& slots = static_cast<ColumnOptVector<double>*>(state->getAccumulator())->getRaw();
-    const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
-
-    double mean = slots[0].value();
-    double squaredDeviations = slots[1].value();
-    uint64_t count = state->getCount();
-
-    for (const Cell& cell : inputRaw) {
-        const auto value = presentCell(cell);
-        if (value.has_value()) {
-            foldDeviation(numberOf(*value), mean, squaredDeviations, count);
-        }
-    }
-
-    slots[0] = mean;
-    slots[1] = squaredDeviations;
-    state->setCount(count);
-}
-
-template <bool Population>
-void aggregateResultDeviation(const NLAggregateState* state, Column* output, NLStepBuffers* stepBuffers) {
-    const auto& slots = static_cast<const ColumnOptVector<double>*>(state->getAccumulator())->getRaw();
-    auto& outputRaw = static_cast<ColumnOptVector<double>*>(output)->getRaw();
-
-    outputRaw.assign(1, deviation<Population>(slots[1].value(), state->getCount()));
 }
 
 // stDev(DISTINCT x) moves a group's state once per distinct value it sees
@@ -3894,61 +3763,16 @@ NLGroupAggregateFoldFunction selectGroupDeviationFold(ValueType inputType) {
     return nullptr;
 }
 
-NLAggregateUpdateFunction selectDeviationUpdate(ValueType inputType) {
-    switch (inputType) {
-        case ValueType::Int64:
-            return &aggregateUpdateDeviation<std::optional<types::Int64::Primitive>>;
-        break;
-
-        case ValueType::UInt64:
-            return &aggregateUpdateDeviation<std::optional<types::UInt64::Primitive>>;
-        break;
-
-        case ValueType::Double:
-            return &aggregateUpdateDeviation<std::optional<types::Double::Primitive>>;
-        break;
-
-        default:
-            throw IRException("stdev requires a numeric column");
-        break;
-    }
-
-    return nullptr;
-}
-
 constexpr std::byte INTEGER_ZERO_CELL[sizeof(CellTag) + sizeof(types::Int64::Primitive)] {
     static_cast<std::byte>(CellTag::Int),
 };
 
-constexpr std::byte DURATION_ZERO_CELL[sizeof(CellTag) + sizeof(types::Duration::Primitive)] {
-    static_cast<std::byte>(CellTag::Duration),
-};
-
 // The running sum of tagged cells, as Cypher adds them: an integer while every number
-// summed is one, a float from the first float on, a duration over durations, and the
-// running mean of the points an average reads. A null sum has summed nothing yet. Integers
-// wrap as a typed column's sum does. The sum is its cell plus a 128-bit total of
-// microseconds: durations add into the total, and the cell of a duration sum is PT0S, so
-// its tag still names what the sum holds.
+// summed is one, a float from the first float on, a duration over durations, added into a
+// 128-bit total of microseconds, and the running mean of the points an average reads. A null
+// sum has summed nothing yet. Integers wrap as a typed column's sum does.
 class NLTaggedSum {
 public:
-    NLTaggedSum() = default;
-
-    NLTaggedSum(const std::optional<CellView>& sum, __int128 durationTotal)
-        : _durationTotal(durationTotal)
-    {
-        if (!sum.has_value()) {
-            return;
-        }
-
-        if (sum->getTag() == CellTag::Point) {
-            _tag = CellTag::Point;
-            _point = sum->getAs<types::Point::Primitive>();
-        } else {
-            add(*sum);
-        }
-    }
-
     void add(CellView value) {
         const CellTag tag = value.getTag();
 
@@ -3989,24 +3813,6 @@ public:
             add(value);
         }
     }
-
-    std::optional<CellView> own(NLValueStore& values) const {
-        ListBuffer<>::ListItemVariant item {_integer};
-
-        if (_tag == CellTag::Null) {
-            return std::nullopt;
-        } else if (_tag == CellTag::Duration) {
-            return CellView {DURATION_ZERO_CELL};
-        } else if (_tag == CellTag::Double) {
-            item = _real;
-        } else if (_tag == CellTag::Point) {
-            item = _point;
-        }
-
-        return values.ownCell(item);
-    }
-
-    __int128 getDurationTotal() const { return _durationTotal; }
 
     CellView sum(QueryListBuffer& cells) const {
         if (_tag == CellTag::Null) {
@@ -4094,273 +3900,6 @@ private:
         _point = Point::addToMean(_point, count, value);
     }
 };
-
-// Fold a chunk of tagged cells into the running sum of a sum or an average, which is
-// copied into the spare store once per chunk, as a min/max extreme is, and count the
-// cells folded. A cell tagged null is skipped, as a null value column row is.
-template <typename Cell, bool Averages>
-void aggregateUpdateTaggedSum(NLAggregateState* state, const Column* input) {
-    auto* accumulator = static_cast<ColumnOptVector<CellView>*>(state->getAccumulator());
-    std::optional<CellView>& current = accumulator->getRaw().front();
-    const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
-
-    NLTaggedSum sum(current, state->getDurationTotal());
-    size_t added = 0;
-
-    for (const Cell& cell : inputRaw) {
-        const std::optional<CellView> value = presentCell(cell);
-        if (!value) {
-            continue;
-        }
-
-        if constexpr (Averages) {
-            sum.addToAverage(*value, state->getCount() + added);
-        } else {
-            sum.add(*value);
-        }
-
-        added++;
-    }
-
-    if (added > 0) {
-        NLCompactingValueStore& values = state->accumulatorValues();
-        current = sum.own(values.getSpare());
-        values.flip();
-
-        state->setDurationTotal(sum.getDurationTotal());
-        state->addCount(added);
-    }
-}
-
-void aggregateResultTaggedSum(const NLAggregateState* state, Column* output, NLStepBuffers* stepBuffers) {
-    const auto* accumulator = static_cast<const ColumnOptVector<CellView>*>(state->getAccumulator());
-    const NLTaggedSum sum(accumulator->getRaw().front(), state->getDurationTotal());
-    auto& outputRaw = static_cast<ColumnOptVector<CellView>*>(output)->getRaw();
-
-    outputRaw.assign(1, sum.sum(stepBuffers->listBuffer()));
-}
-
-void aggregateResultTaggedAvg(const NLAggregateState* state, Column* output, NLStepBuffers* stepBuffers) {
-    const auto* accumulator = static_cast<const ColumnOptVector<CellView>*>(state->getAccumulator());
-    const NLTaggedSum sum(accumulator->getRaw().front(), state->getDurationTotal());
-    auto& outputRaw = static_cast<ColumnOptVector<CellView>*>(output)->getRaw();
-
-    outputRaw.assign(1, sum.average(state->getCount(), stepBuffers->listBuffer()));
-}
-
-template <typename Cell>
-NLAggregateUpdateFunction taggedAggregateUpdateFor(AggregateKind kind) {
-    switch (kind) {
-        case AggregateKind::Sum:
-            return &aggregateUpdateTaggedSum<Cell, /*Averages=*/false>;
-        break;
-
-        case AggregateKind::Avg:
-            return &aggregateUpdateTaggedSum<Cell, /*Averages=*/true>;
-        break;
-
-        case AggregateKind::StDev:
-        case AggregateKind::StDevP:
-            return &aggregateUpdateDeviation<Cell>;
-        break;
-
-        case AggregateKind::Min:
-            return &aggregateUpdateMinMax<CellView, /*IsMax=*/false, Cell>;
-        break;
-
-        case AggregateKind::Max:
-            return &aggregateUpdateMinMax<CellView, /*IsMax=*/true, Cell>;
-        break;
-    }
-
-    bioassert(false, "Unhandled aggregate kind");
-    return nullptr;
-}
-
-// Fold a chunk's present values into an avg accumulator: a running total plus a
-// count of the non-null rows (each number widened to f64). avg divides the two at the
-// emit step, so both are accumulated here.
-template <typename Primitive>
-void aggregateUpdateAvg(NLAggregateState* state, const Column* input) {
-    using Total = AverageTotal<Primitive>;
-
-    auto* accumulator = static_cast<ColumnOptVector<Total>*>(state->getAccumulator());
-    std::optional<Total>& current = accumulator->getRaw().front();
-    const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
-
-    Total running = current.value();
-    size_t seen = 0;
-    for (const std::optional<Primitive>& value : inputRaw) {
-        if (value.has_value()) {
-            running = addToAverageTotal(running, *value, state->getCount() + seen);
-            seen++;
-        }
-    }
-
-    current = running;
-    state->addCount(seen);
-}
-
-// Emit a sum/min/max result: the accumulator already holds the reduced value in
-// the result's own type, so copy its single row into the output (a present sum,
-// or the extreme / null for min/max).
-template <typename Primitive>
-void aggregateResultCopy(const NLAggregateState* state, Column* output, NLStepBuffers* stepBuffers) {
-    const auto* accumulator = static_cast<const ColumnOptVector<Primitive>*>(state->getAccumulator());
-    auto* typedOutput = static_cast<ColumnOptVector<Primitive>*>(output);
-    typedOutput->getRaw().assign(1, accumulator->getRaw().front());
-}
-
-// Emit an avg result: divide the running total by the non-null count. With no
-// non-null row the average is null (division is undefined), matching Cypher.
-template <typename Total>
-void aggregateResultAvg(const NLAggregateState* state, Column* output, NLStepBuffers* stepBuffers) {
-    const auto* accumulator = static_cast<const ColumnOptVector<Total>*>(state->getAccumulator());
-    auto* typedOutput = static_cast<ColumnOptVector<Total>*>(output);
-    std::vector<std::optional<Total>>& outputRaw = typedOutput->getRaw();
-    const size_t count = state->getCount();
-
-    if (count == 0) {
-        outputRaw.assign(1, std::nullopt);
-    } else {
-        outputRaw.assign(1, std::optional<Total>(averageOf(accumulator->getRaw().front().value(), count)));
-    }
-}
-
-void aggregateResultDurationSum(const NLAggregateState* state, Column* output, NLStepBuffers* stepBuffers) {
-    auto& outputRaw = static_cast<ColumnOptVector<types::Duration::Primitive>*>(output)->getRaw();
-
-    outputRaw.assign(1, durationOfTotal(state->getDurationTotal()));
-}
-
-void aggregateResultDurationAverage(const NLAggregateState* state, Column* output, NLStepBuffers* stepBuffers) {
-    auto& outputRaw = static_cast<ColumnOptVector<types::Duration::Primitive>*>(output)->getRaw();
-    const size_t count = state->getCount();
-
-    if (count == 0) {
-        outputRaw.assign(1, std::nullopt);
-    } else {
-        outputRaw.assign(1, averageOf(state->getDurationTotal(), count));
-    }
-}
-
-// The fold handler for a sum over a column of this value type. sum adds the
-// values, so only a numeric or a duration column is valid - a string or bool sum is
-// rejected (which also keeps aggregateUpdateSum from being instantiated for a type
-// whose operator+= would not compile).
-NLAggregateUpdateFunction selectSumUpdate(ValueType inputType) {
-    switch (inputType) {
-        case ValueType::Int64:
-            return &aggregateUpdateSum<types::Int64::Primitive>;
-        break;
-
-        case ValueType::UInt64:
-            return &aggregateUpdateSum<types::UInt64::Primitive>;
-        break;
-
-        case ValueType::Double:
-            return &aggregateUpdateSum<types::Double::Primitive>;
-        break;
-
-        case ValueType::Duration:
-            return &aggregateUpdateDurationTotal;
-        break;
-
-        default:
-            throw IRException("sum requires a numeric or a duration column");
-        break;
-    }
-
-    return nullptr;
-}
-
-// The fold handler for an avg over a column of this value type. avg widens each
-// number to f64 and sums durations as durations, so - like sum - only a numeric or a
-// duration column is valid.
-NLAggregateUpdateFunction selectAvgUpdate(ValueType inputType) {
-    switch (inputType) {
-        case ValueType::Int64:
-            return &aggregateUpdateAvg<types::Int64::Primitive>;
-        break;
-
-        case ValueType::UInt64:
-            return &aggregateUpdateAvg<types::UInt64::Primitive>;
-        break;
-
-        case ValueType::Double:
-            return &aggregateUpdateAvg<types::Double::Primitive>;
-        break;
-
-        case ValueType::Duration:
-            return &aggregateUpdateDurationTotal;
-        break;
-
-        case ValueType::Point:
-            return &aggregateUpdateAvg<types::Point::Primitive>;
-        break;
-
-        default:
-            throw IRException("avg requires a numeric, a duration or a point column");
-        break;
-    }
-
-    return nullptr;
-}
-
-// The fold handler for a min (IsMax false) or max (IsMax true) over a column of
-// this value type. min/max order the values, so any orderable type is valid -
-// numbers, bools, strings, lists and maps - but an embedding has no order (its <
-// would not compile), so it is rejected.
-template <bool IsMax>
-NLAggregateUpdateFunction selectMinMaxUpdate(ValueType inputType) {
-    switch (inputType) {
-        case ValueType::Int64:
-            return &aggregateUpdateMinMax<types::Int64::Primitive, IsMax>;
-        break;
-
-        case ValueType::UInt64:
-            return &aggregateUpdateMinMax<types::UInt64::Primitive, IsMax>;
-        break;
-
-        case ValueType::Double:
-            return &aggregateUpdateMinMax<types::Double::Primitive, IsMax>;
-        break;
-
-        case ValueType::Bool:
-            return &aggregateUpdateMinMax<types::Bool::Primitive, IsMax>;
-        break;
-
-        case ValueType::String:
-            return &aggregateUpdateMinMax<types::String::Primitive, IsMax>;
-        break;
-
-        case ValueType::DateTime:
-            return &aggregateUpdateMinMax<types::DateTime::Primitive, IsMax>;
-        break;
-
-        case ValueType::Duration:
-            return &aggregateUpdateMinMax<types::Duration::Primitive, IsMax>;
-        break;
-
-        case ValueType::Point:
-            return &aggregateUpdateMinMax<types::Point::Primitive, IsMax>;
-        break;
-
-        case ValueType::List:
-            return &aggregateUpdateMinMax<types::List::Primitive, IsMax>;
-        break;
-
-        case ValueType::Map:
-            return &aggregateUpdateMinMax<types::Map::Primitive, IsMax>;
-        break;
-
-        default:
-            throw IRException("min/max requires an orderable column");
-        break;
-    }
-
-    return nullptr;
-}
 
 // Append the values of the given rows of an input chunk onto the tail of a key
 // buffer of the same element type. nl.group_aggregate_update passes the rows that
@@ -4500,6 +4039,314 @@ struct NLAverageState {
     Total _total {};
     uint64_t _count {0};
 };
+
+template <typename State>
+State& placedState(std::byte* place) {
+    return *std::launder(reinterpret_cast<State*>(place));
+}
+
+// Fold a chunk's present values into a keyless sum
+template <typename Primitive>
+void aggregateFoldSum(std::byte* place, const Column* input, NLCompactingValueStore& values) {
+    Primitive& sum = placedState<Primitive>(place);
+    const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
+
+    Primitive running = sum;
+    for (const std::optional<Primitive>& value : inputRaw) {
+        if (value.has_value()) {
+            running = numericAdd(running, *value);
+        }
+    }
+
+    sum = running;
+}
+
+// Fold a chunk's present values into a keyless average: a total widened to f64, or the running
+// mean of points, and the count
+template <typename Primitive>
+void aggregateFoldAvg(std::byte* place, const Column* input, NLCompactingValueStore& values) {
+    using State = NLAverageState<AverageTotal<Primitive>>;
+
+    State& average = placedState<State>(place);
+    const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
+
+    AverageTotal<Primitive> total = average._total;
+    uint64_t count = average._count;
+
+    for (const std::optional<Primitive>& value : inputRaw) {
+        if (value.has_value()) {
+            total = addToAverageTotal(total, *value, count);
+            count++;
+        }
+    }
+
+    average._total = total;
+    average._count = count;
+}
+
+// Fold a chunk's present durations into the 128-bit total of a keyless sum, or of an average
+// beside its count
+template <bool Averages>
+void aggregateFoldDurationTotal(std::byte* place, const Column* input, NLCompactingValueStore& values) {
+    const auto& inputRaw = static_cast<const ColumnOptVector<types::Duration::Primitive>*>(input)->getRaw();
+
+    __int128 total = 0;
+    uint64_t count = 0;
+    for (const std::optional<types::Duration::Primitive>& value : inputRaw) {
+        if (value.has_value()) {
+            total += value->getMicroseconds();
+            count++;
+        }
+    }
+
+    if constexpr (Averages) {
+        NLAverageState<__int128>& average = placedState<NLAverageState<__int128>>(place);
+        average._total += total;
+        average._count += count;
+    } else {
+        placedState<__int128>(place) += total;
+    }
+}
+
+template <typename Cell>
+void aggregateFoldDeviation(std::byte* place, const Column* input, NLCompactingValueStore& values) {
+    NLDeviationState& state = placedState<NLDeviationState>(place);
+    const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
+
+    uint64_t count = state._count;
+    double mean = state._mean;
+    double squaredDeviations = state._squaredDeviations;
+
+    for (const Cell& cell : inputRaw) {
+        const auto value = presentCell(cell);
+        if (value.has_value()) {
+            foldDeviation(numberOf(*value), mean, squaredDeviations, count);
+        }
+    }
+
+    state._count = count;
+    state._mean = mean;
+    state._squaredDeviations = squaredDeviations;
+}
+
+// Fold a chunk's present values into a keyless min (IsMax false) or max (IsMax true). The
+// chunk's extreme is found first, then kept once if it replaces the one kept before, so the
+// store holds one copy of a view rather than one per row.
+template <typename Primitive, bool IsMax, typename Cell = std::optional<Primitive>>
+void aggregateFoldMinMax(std::byte* place, const Column* input, NLCompactingValueStore& values) {
+    NLKeptValue<Primitive>& kept = placedState<NLKeptValue<Primitive>>(place);
+    const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
+
+    std::optional<Primitive> extreme;
+    if (kept.isKept()) {
+        extreme = kept.getValue();
+    }
+
+    bool replaced = false;
+    for (const Cell& cell : inputRaw) {
+        const std::optional<Primitive> value = presentCell(cell);
+        if (!value.has_value()) {
+            continue;
+        }
+
+        if (!extreme.has_value() || replacesExtremum<Primitive, IsMax>(*extreme, *value)) {
+            extreme = *value;
+            replaced = true;
+        }
+    }
+
+    if (replaced) {
+        kept.keep(*extreme, values.getSpare());
+        values.flip();
+    }
+}
+
+// Fold a chunk of tagged cells into a keyless sum, or an average beside its count. A cell tagged
+// null is skipped, as a null value column row is.
+template <typename Cell, bool Averages>
+void aggregateFoldTaggedSum(std::byte* place, const Column* input, NLCompactingValueStore& values) {
+    using State = std::conditional_t<Averages, NLAverageState<NLTaggedSum>, NLTaggedSum>;
+
+    State& state = placedState<State>(place);
+    const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
+
+    State running = state;
+    for (const Cell& cell : inputRaw) {
+        const std::optional<CellView> value = presentCell(cell);
+        if (!value) {
+            continue;
+        }
+
+        if constexpr (Averages) {
+            running._total.addToAverage(*value, running._count);
+            running._count++;
+        } else {
+            running.add(*value);
+        }
+    }
+
+    state = running;
+}
+
+// The fold of a keyless sum over a column of this value type. sum adds the values, so only a
+// numeric or a duration column is valid.
+NLAggregateFoldFunction selectSumFold(ValueType inputType) {
+    switch (inputType) {
+        case ValueType::Int64:
+            return &aggregateFoldSum<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &aggregateFoldSum<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &aggregateFoldSum<types::Double::Primitive>;
+        break;
+
+        case ValueType::Duration:
+            return &aggregateFoldDurationTotal</*Averages=*/false>;
+        break;
+
+        default:
+            throw IRException("sum requires a numeric or a duration column");
+        break;
+    }
+
+    return nullptr;
+}
+
+NLAggregateFoldFunction selectAvgFold(ValueType inputType) {
+    switch (inputType) {
+        case ValueType::Int64:
+            return &aggregateFoldAvg<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &aggregateFoldAvg<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &aggregateFoldAvg<types::Double::Primitive>;
+        break;
+
+        case ValueType::Duration:
+            return &aggregateFoldDurationTotal</*Averages=*/true>;
+        break;
+
+        case ValueType::Point:
+            return &aggregateFoldAvg<types::Point::Primitive>;
+        break;
+
+        default:
+            throw IRException("avg requires a numeric, a duration or a point column");
+        break;
+    }
+
+    return nullptr;
+}
+
+NLAggregateFoldFunction selectDeviationFold(ValueType inputType) {
+    switch (inputType) {
+        case ValueType::Int64:
+            return &aggregateFoldDeviation<std::optional<types::Int64::Primitive>>;
+        break;
+
+        case ValueType::UInt64:
+            return &aggregateFoldDeviation<std::optional<types::UInt64::Primitive>>;
+        break;
+
+        case ValueType::Double:
+            return &aggregateFoldDeviation<std::optional<types::Double::Primitive>>;
+        break;
+
+        default:
+            throw IRException("stdev requires a numeric column");
+        break;
+    }
+
+    return nullptr;
+}
+
+template <bool IsMax>
+NLAggregateFoldFunction selectMinMaxFold(ValueType inputType) {
+    switch (inputType) {
+        case ValueType::Int64:
+            return &aggregateFoldMinMax<types::Int64::Primitive, IsMax>;
+        break;
+
+        case ValueType::UInt64:
+            return &aggregateFoldMinMax<types::UInt64::Primitive, IsMax>;
+        break;
+
+        case ValueType::Double:
+            return &aggregateFoldMinMax<types::Double::Primitive, IsMax>;
+        break;
+
+        case ValueType::Bool:
+            return &aggregateFoldMinMax<types::Bool::Primitive, IsMax>;
+        break;
+
+        case ValueType::String:
+            return &aggregateFoldMinMax<types::String::Primitive, IsMax>;
+        break;
+
+        case ValueType::DateTime:
+            return &aggregateFoldMinMax<types::DateTime::Primitive, IsMax>;
+        break;
+
+        case ValueType::Duration:
+            return &aggregateFoldMinMax<types::Duration::Primitive, IsMax>;
+        break;
+
+        case ValueType::Point:
+            return &aggregateFoldMinMax<types::Point::Primitive, IsMax>;
+        break;
+
+        case ValueType::List:
+            return &aggregateFoldMinMax<types::List::Primitive, IsMax>;
+        break;
+
+        case ValueType::Map:
+            return &aggregateFoldMinMax<types::Map::Primitive, IsMax>;
+        break;
+
+        default:
+            throw IRException("min/max requires an orderable column");
+        break;
+    }
+
+    return nullptr;
+}
+
+template <typename Cell>
+NLAggregateFoldFunction taggedAggregateFoldFor(AggregateKind kind) {
+    switch (kind) {
+        case AggregateKind::Sum:
+            return &aggregateFoldTaggedSum<Cell, /*Averages=*/false>;
+        break;
+
+        case AggregateKind::Avg:
+            return &aggregateFoldTaggedSum<Cell, /*Averages=*/true>;
+        break;
+
+        case AggregateKind::StDev:
+        case AggregateKind::StDevP:
+            return &aggregateFoldDeviation<Cell>;
+        break;
+
+        case AggregateKind::Min:
+            return &aggregateFoldMinMax<CellView, /*IsMax=*/false, Cell>;
+        break;
+
+        case AggregateKind::Max:
+            return &aggregateFoldMinMax<CellView, /*IsMax=*/true, Cell>;
+        break;
+    }
+
+    bioassert(false, "Unhandled aggregate kind");
+    return nullptr;
+}
 
 // Fold a chunk's present values into per-group sums. Each new group starts at zero, so the
 // value is added into its running sum.
@@ -12278,15 +12125,16 @@ void NLExecutor::runCountScanRows(NLExecutionContext* context, NLFunctionData* d
 
 void NLExecutor::runAggregateReset(NLExecutionContext* context, NLFunctionData* data) {
     const NLAggregateResetData* reset = static_cast<NLAggregateResetData*>(data);
-    reset->getReset()(reset->getState());
+    reset->getState()->reset();
 }
 
 void NLExecutor::runAggregateUpdate(NLExecutionContext* context, NLFunctionData* data) {
     const NLAggregateUpdateData* update = static_cast<NLAggregateUpdateData*>(data);
+    NLAggregateState* state = update->getState();
 
-    // Fold this step's non-null values into the accumulator the way its kind and
-    // value type demand (add for sum/avg, keep the extreme for min/max).
-    update->getUpdate()(update->getState(), update->getInput());
+    // Fold this step's non-null values into the state the way its kind and value type
+    // demand (add for sum/avg, keep the extreme for min/max).
+    update->getFold()(state->getPlace(), update->getInput(), state->getValues());
 }
 
 void NLExecutor::runAggregateResult(NLExecutionContext* context, NLFunctionData* data) {
@@ -12294,12 +12142,12 @@ void NLExecutor::runAggregateResult(NLExecutionContext* context, NLFunctionData*
 
     // The aggregate collapses every folded row to a single result row: write the
     // reduced value into the output chunk's one nullable row. Runs after the
-    // producing loop, so the accumulator holds the whole dataflow's reduction;
+    // producing loop, so the state holds the whole dataflow's reduction;
     // nl.output emits this chunk at function scope.
     NLStepBuffers* const stepBuffers = result->getStepBuffers();
     stepBuffers->clear();
 
-    result->getResult()(result->getState(), result->getOutput(), stepBuffers);
+    result->getState()->emit(result->getOutput(), stepBuffers);
 }
 
 void NLExecutor::runGroupAggregateReset(NLExecutionContext* context, NLFunctionData* data) {
@@ -14047,51 +13895,27 @@ NLCountFunction NLExecutor::selectOptCountFunction(ValueType valueType) {
     return count;
 }
 
-NLAggregateResetFunction NLExecutor::selectAggregateReset(AggregateKind kind, ValueType accumulatorType) {
-    const bool resetsToZero = (kind == AggregateKind::Sum || kind == AggregateKind::Avg);
-    const bool totalsDurations = resetsToZero && accumulatorType == ValueType::Duration;
-
-    if (kind == AggregateKind::StDev || kind == AggregateKind::StDevP) {
-        return &aggregateResetDeviation;
-    } else if (totalsDurations) {
-        return &aggregateResetDurationTotal;
-    }
-
-    // sum/avg reset to a present zero (their identity); min/max reset to null. Both
-    // resets compile for any value type and lowering has already validated the
-    // kind / type pairing (and the update selector re-checks it), so a single
-    // dispatch over the accumulator type suffices here.
-    NLAggregateResetFunction reset = nullptr;
-    const auto select = [&]<SupportedType T>() {
-        reset = resetsToZero ? &aggregateResetZero<typename T::Primitive>
-                             : &aggregateResetNull<typename T::Primitive>;
-    };
-    ValueTypeDispatcher(accumulatorType).execute(select);
-
-    return reset;
-}
-
-NLAggregateUpdateFunction NLExecutor::selectAggregateUpdate(AggregateKind kind, ValueType inputType) {
+NLAggregateFoldFunction NLExecutor::selectAggregateFold(AggregateKind kind, ValueType inputType) {
     switch (kind) {
         case AggregateKind::Sum:
-            return selectSumUpdate(inputType);
+            return selectSumFold(inputType);
         break;
 
         case AggregateKind::Avg:
-            return selectAvgUpdate(inputType);
+            return selectAvgFold(inputType);
         break;
 
         case AggregateKind::StDev:
         case AggregateKind::StDevP:
-            return selectDeviationUpdate(inputType);
+            return selectDeviationFold(inputType);
         break;
 
         case AggregateKind::Min:
-            return selectMinMaxUpdate</*IsMax=*/false>(inputType);
+            return selectMinMaxFold</*IsMax=*/false>(inputType);
         break;
 
         case AggregateKind::Max:
-            return selectMinMaxUpdate</*IsMax=*/true>(inputType);
+            return selectMinMaxFold</*IsMax=*/true>(inputType);
         break;
     }
 
@@ -14099,61 +13923,12 @@ NLAggregateUpdateFunction NLExecutor::selectAggregateUpdate(AggregateKind kind, 
     return nullptr;
 }
 
-NLAggregateUpdateFunction NLExecutor::selectTaggedAggregateUpdate(AggregateKind kind) {
-    return taggedAggregateUpdateFor<CellView>(kind);
+NLAggregateFoldFunction NLExecutor::selectTaggedAggregateFold(AggregateKind kind) {
+    return taggedAggregateFoldFor<CellView>(kind);
 }
 
-NLAggregateUpdateFunction NLExecutor::selectOptTaggedAggregateUpdate(AggregateKind kind) {
-    return taggedAggregateUpdateFor<std::optional<CellView>>(kind);
-}
-
-// A tagged accumulator holds no value until a cell is folded, so a duration can start a
-// sum that a number then cannot join
-NLAggregateResetFunction NLExecutor::selectTaggedAggregateReset() {
-    return &aggregateResetNull<CellView>;
-}
-
-NLAggregateResultFunction NLExecutor::selectTaggedAggregateResult(AggregateKind kind) {
-    if (kind == AggregateKind::Sum) {
-        return &aggregateResultTaggedSum;
-    } else if (kind == AggregateKind::Avg) {
-        return &aggregateResultTaggedAvg;
-    }
-
-    return &aggregateResultCopy<CellView>;
-}
-
-NLAggregateResultFunction NLExecutor::selectAggregateResult(AggregateKind kind, ValueType resultType) {
-    if (kind == AggregateKind::Avg) {
-        // avg emits the running total divided by the count: a double over numbers and a
-        // duration over durations
-        NLAggregateResultFunction average = nullptr;
-        dispatchAverageTotal(resultType, [&]<typename Total>() {
-            if constexpr (std::is_same_v<Total, types::Duration::Primitive>) {
-                average = &aggregateResultDurationAverage;
-            } else {
-                average = &aggregateResultAvg<Total>;
-            }
-        });
-
-        return average;
-    } else if (kind == AggregateKind::Sum && resultType == ValueType::Duration) {
-        return &aggregateResultDurationSum;
-    } else if (kind == AggregateKind::StDev) {
-        return &aggregateResultDeviation</*Population=*/false>;
-    } else if (kind == AggregateKind::StDevP) {
-        return &aggregateResultDeviation</*Population=*/true>;
-    }
-
-    // sum/min/max hold the reduced value in the result's own type, so the emit is a
-    // copy of the accumulator's single row - valid for any value type.
-    NLAggregateResultFunction result = nullptr;
-    const auto select = [&]<SupportedType T>() {
-        result = &aggregateResultCopy<typename T::Primitive>;
-    };
-    ValueTypeDispatcher(resultType).execute(select);
-
-    return result;
+NLAggregateFoldFunction NLExecutor::selectOptTaggedAggregateFold(AggregateKind kind) {
+    return taggedAggregateFoldFor<std::optional<CellView>>(kind);
 }
 
 void NLExecutor::selectGroupAggregateState(GroupAggregateKind kind,

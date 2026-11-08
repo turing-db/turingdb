@@ -971,8 +971,7 @@ private:
 
     // The fold handler for a value reduction over a chunk type. Used by
     // nl.aggregate_update.
-    static NLAggregateUpdateFunction selectAggregateUpdateForChunkType(AggregateKind kind,
-                                                                      mlir::Type chunkType);
+    static NLAggregateFoldFunction selectAggregateFoldForChunkType(AggregateKind kind, mlir::Type chunkType);
 
     // The reset a selection's result column needs, and the write one of its branches
     // needs. Both turn on what the result chunk holds: an entity column carries its null
@@ -1245,10 +1244,8 @@ private:
 
     // Allocate a nullable value column for the value type's primitive. The
     // per-step variant reserves a full chunk so the loop body stays
-    // allocation-free; the single-row variant reserves one element for an
-    // accumulator that never grows past its one row.
+    // allocation-free.
     Column* allocOptColumnForValueType(ValueType valueType);
-    Column* allocSingleRowOptColumnForValueType(ValueType valueType);
     Column* allocOptColumn(ValueType valueType, size_t reserveSize);
 
     // A count result is a ui64 tally, the pipeline's one non-nullable value chunk, so

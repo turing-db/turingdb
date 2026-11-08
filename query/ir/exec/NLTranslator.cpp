@@ -698,6 +698,37 @@ AggregateKind toRuntimeAggregateKind(storage::AggregateKind kind) {
     throw IRException("Unhandled aggregate kind");
 }
 
+// The grouped reduction whose state a keyless aggregate of this kind keeps for its one group
+GroupAggregateKind groupAggregateKindOf(AggregateKind kind) {
+    switch (kind) {
+        case AggregateKind::Sum:
+            return GroupAggregateKind::Sum;
+        break;
+
+        case AggregateKind::Min:
+            return GroupAggregateKind::Min;
+        break;
+
+        case AggregateKind::Max:
+            return GroupAggregateKind::Max;
+        break;
+
+        case AggregateKind::Avg:
+            return GroupAggregateKind::Avg;
+        break;
+
+        case AggregateKind::StDev:
+            return GroupAggregateKind::StDev;
+        break;
+
+        case AggregateKind::StDevP:
+            return GroupAggregateKind::StDevP;
+        break;
+    }
+
+    throw IRException("Unhandled aggregate kind");
+}
+
 // The runtime grouped reduction the interpreter dispatches on, from the MLIR one
 // the op carries. Like toRuntimeAggregateKind, this is the one place the two enums
 // meet, keeping the runtime free of the MLIR dialect headers.
@@ -6088,85 +6119,72 @@ NLCountState* NLTranslator::countStateFor(mlir::Value handle) const {
 }
 
 void NLTranslator::translateAggregateState(nl::Aggregate aggregate, NLStmtContainer* body) {
-    // Allocate the runtime accumulator and map the handle to it, so the update and
-    // the emit that name the handle share the same accumulator.
+    // Allocate the runtime state and map the handle to it, so the update and the emit that
+    // name the handle share the same state.
     NLAggregateState* state = _program->allocAggregateState();
     _aggregateStates[aggregate.getState()] = state;
 
-    // The state handle's element type is the accumulator's value type (f64 for an
-    // avg of numbers, the input type otherwise), baked during lowering. Allocate the
-    // single-row nullable value column the reduction folds into, and the reset that
-    // re-initializes it each time the block holding this nl.aggregate runs (once at
-    // function scope for a top-level aggregate): a present zero for a typed sum/avg, null
-    // for min/max and for a tagged cell.
+    // The state handle's element type is the accumulator's value type (f64 for an avg of
+    // numbers, the input type otherwise), baked during lowering. The aggregate keeps the state
+    // its grouped counterpart keeps per group: over type-erased cells, which name no value
+    // type, a sum, an avg, a min or a max keeps a tagged sum or a cell.
     const auto stateType = mlir::cast<nl::AggregateStateType>(aggregate.getState().getType());
     const mlir::Type accumulatorElement = stateType.getElementType();
-    const AggregateKind kind = toRuntimeAggregateKind(aggregate.getKind());
+    const GroupAggregateKind kind = groupAggregateKindOf(toRuntimeAggregateKind(aggregate.getKind()));
 
-    // A sum, an avg or a min/max over type-erased cells keeps a cell, which names no value
-    // type
-    Column* accumulator = nullptr;
-    NLAggregateResetFunction reset = nullptr;
+    NLGroupAggregateStateType placedStateType;
     if (mlir::isa<storage::AnyType>(accumulatorElement)) {
-        accumulator = allocOptCellColumn();
-        reset = NLExecutor::selectTaggedAggregateReset();
+        NLExecutor::selectTaggedGroupAggregateState(kind, placedStateType);
     } else {
-        const ValueType accumulatorType = valueTypeFromElementType(accumulatorElement);
-        accumulator = allocSingleRowOptColumnForValueType(accumulatorType);
-        reset = NLExecutor::selectAggregateReset(kind, accumulatorType);
+        NLExecutor::selectGroupAggregateState(kind, valueTypeFromElementType(accumulatorElement), placedStateType);
     }
 
-    state->setAccumulator(accumulator);
+    state->setStateType(placedStateType);
 
-    NLAggregateResetData* resetData = _program->allocFunctionData<NLAggregateResetData>(state, reset);
+    // The reset re-initializes the state each time the block holding this nl.aggregate runs:
+    // once at function scope for a top-level aggregate.
+    NLAggregateResetData* resetData = _program->allocFunctionData<NLAggregateResetData>(state);
     body->emplaceStmt(&NLExecutor::runAggregateReset, resetData);
 }
 
 void NLTranslator::translateAggregateUpdate(nl::AggregateUpdate update, NLStmtContainer* body) {
-    // The handle is a required operand, so aggregateStateFor returns its accumulator
-    // or throws if it was not produced by an nl.aggregate.
+    // The handle is a required operand, so aggregateStateFor returns its state or throws if
+    // it was not produced by an nl.aggregate.
     NLAggregateState* state = aggregateStateFor(update.getState());
 
-    // Fold the chunk's non-null values the way its kind and chunk type demand. The
-    // input value type may differ from the accumulator's (an avg of i64 folds into
-    // an f64 accumulator), so the handler is selected from the input here.
+    // Fold the chunk's non-null values the way its kind and chunk type demand. The input
+    // value type may differ from the accumulator's (an avg of i64 folds into an f64 total),
+    // so the fold is selected from the input here.
     const mlir::Value rows = update.getRows();
     const Column* input = getColumn(rows);
     const AggregateKind kind = toRuntimeAggregateKind(update.getKind());
-    const NLAggregateUpdateFunction fold = selectAggregateUpdateForChunkType(kind, rows.getType());
+    const NLAggregateFoldFunction fold = selectAggregateFoldForChunkType(kind, rows.getType());
 
     NLAggregateUpdateData* data = _program->allocFunctionData<NLAggregateUpdateData>(state, input, fold);
     body->emplaceStmt(&NLExecutor::runAggregateUpdate, data);
 }
 
 void NLTranslator::translateAggregateResult(nl::AggregateResult result, NLStmtContainer* body) {
-    // The handle is a required operand, so aggregateStateFor returns its accumulator
-    // or throws if it was not produced by an nl.aggregate.
+    // The handle is a required operand, so aggregateStateFor returns its state or throws if
+    // it was not produced by an nl.aggregate.
     NLAggregateState* state = aggregateStateFor(result.getState());
 
-    // The result is a single-row nullable value chunk runAggregateResult fills with
-    // the reduced value. Allocate its ColumnOptVector on the result value type and
-    // map the op result to it.
+    // The result is a single-row nullable chunk runAggregateResult fills with the reduced
+    // value. Allocate its column on the result type and map the op result to it.
     const mlir::Value resultChunk = result.getResult();
-    const AggregateKind kind = toRuntimeAggregateKind(result.getKind());
     const mlir::Type resultElement = mlir::cast<nl::ChunkType>(resultChunk.getType()).getElementType();
 
     Column* output = nullptr;
-    NLAggregateResultFunction emit = nullptr;
     if (isNullableAny(resultElement)) {
         output = allocOptCellColumn();
-        emit = NLExecutor::selectTaggedAggregateResult(kind);
     } else {
-        const ValueType resultType = nullableChunkValueType(resultChunk.getType());
-        output = allocOptColumnForValueType(resultType);
-        emit = NLExecutor::selectAggregateResult(kind, resultType);
+        output = allocOptColumnForValueType(nullableChunkValueType(resultChunk.getType()));
     }
 
     _valueSlots[resultChunk] = output;
 
     NLAggregateResultData* data = _program->allocFunctionData<NLAggregateResultData>(state,
                                                                                     output,
-                                                                                    emit,
                                                                                     _program->allocStepBuffers());
     body->emplaceStmt(&NLExecutor::runAggregateResult, data);
 }
@@ -7541,18 +7559,17 @@ NLJoinKeyFunctions NLTranslator::selectJoinKeyFunctionsForChunkType(mlir::Type c
 
 // The value-reduction sibling of selectCountForChunkType: a type-erased column of tagged
 // cells is folded cell by cell, every other one through the value type it shares.
-NLAggregateUpdateFunction NLTranslator::selectAggregateUpdateForChunkType(AggregateKind kind,
-                                                                         mlir::Type chunkType) {
+NLAggregateFoldFunction NLTranslator::selectAggregateFoldForChunkType(AggregateKind kind, mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
 
     if (isNullableAny(elementType)) {
-        return NLExecutor::selectOptTaggedAggregateUpdate(kind);
+        return NLExecutor::selectOptTaggedAggregateFold(kind);
     } else if (mlir::isa<storage::AnyType>(elementType)) {
-        return NLExecutor::selectTaggedAggregateUpdate(kind);
+        return NLExecutor::selectTaggedAggregateFold(kind);
     }
 
-    return NLExecutor::selectAggregateUpdate(kind, nullableChunkValueType(chunkType));
+    return NLExecutor::selectAggregateFold(kind, nullableChunkValueType(chunkType));
 }
 
 NLCountFunction NLTranslator::selectCountForChunkType(mlir::Type chunkType) {
@@ -7901,13 +7918,6 @@ Column* NLTranslator::allocOptColumnForValueType(ValueType valueType) {
     // Per-step loop columns reserve a full chunk so execution stays
     // allocation-free.
     return allocOptColumn(valueType, _program->getChunkSize());
-}
-
-Column* NLTranslator::allocSingleRowOptColumnForValueType(ValueType valueType) {
-    // The aggregate accumulator only ever holds one row (reset assign(1, ...),
-    // update rewrites .front()), so reserve a single element rather than a chunk
-    // it would never fill.
-    return allocOptColumn(valueType, 1);
 }
 
 // A plain value element type: a 64-bit number carried without a nullable wrapper. A

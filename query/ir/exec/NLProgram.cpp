@@ -452,6 +452,26 @@ void NLHashJoinState::reset() {
     _index.clear();
 }
 
+NLAggregateState::NLAggregateState() {
+}
+
+NLAggregateState::~NLAggregateState() {
+}
+
+void NLAggregateState::setStateType(const NLGroupAggregateStateType& stateType) {
+    _stateType = stateType;
+    _place.resize(stateType._size);
+}
+
+void NLAggregateState::reset() {
+    _stateType._init(NLGroupStatePlaces(_place.data(), _stateType._size), 0, 1);
+    _values.clear();
+}
+
+void NLAggregateState::emit(Column* output, NLStepBuffers* stepBuffers) {
+    _stateType._emit(NLGroupStatePlaces(_place.data(), _stateType._size), 0, 1, output, stepBuffers);
+}
+
 NLGroupTable::NLGroupTable() {
 }
 

@@ -2396,7 +2396,7 @@ private:
 
 // The reduction one nl.aggregate applies. The runtime counterpart of the MLIR
 // storage::AggregateKind: the translator maps the op's kind onto this, and it -
-// with the column value type - selects the reset/update/result handlers below.
+// with the column value type - selects the state and the fold of the aggregate.
 enum class AggregateKind {
     Sum,
     Min,
@@ -2404,124 +2404,6 @@ enum class AggregateKind {
     Avg,
     StDev,
     StDevP,
-};
-
-// Runtime state of one SUM/MIN/MAX/AVG: the running accumulator. The value
-// sibling of NLCountState - where a count holds a tally, this holds the reduced
-// value in a single-row nullable value column (owned elsewhere; a borrowed
-// pointer here), plus a count of the non-null rows folded in (only avg divides by
-// it). nl.aggregate resets it, nl.aggregate_update is the sole folder, and
-// nl.aggregate_result reads it to emit the single result row. The accumulator's
-// element type is fixed by the handlers, so the state itself is type-erased.
-class NLAggregateState {
-public:
-    // The single-row accumulator column (a ColumnOptVector of the accumulator's
-    // primitive), reset by the reset handler and folded into by the update handler.
-    Column* getAccumulator() const { return _accumulator; }
-    void setAccumulator(Column* accumulator) { _accumulator = accumulator; }
-
-    // The number of non-null rows folded in so far, used only by avg and stdev.
-    size_t getCount() const { return _count; }
-    void setCount(size_t count) { _count = count; }
-    void addCount(size_t count) { _count += count; }
-
-    // The exact total of a sum or an average of durations, in microseconds
-    __int128 getDurationTotal() const { return _durationTotal; }
-    void setDurationTotal(__int128 total) { _durationTotal = total; }
-
-    // A min/max or tagged sum accumulator holds one value, so a new one is copied into the
-    // spare store and the stores flip at once
-    NLCompactingValueStore& accumulatorValues() { return _accumulatorValues; }
-
-private:
-    Column* _accumulator {nullptr};
-    size_t _count {0};
-    __int128 _durationTotal {0};
-    NLCompactingValueStore _accumulatorValues;
-};
-
-// Handlers of one aggregate, selected during translation from the reduction and
-// the column value type (as the count / gather / append families are), so the
-// per-type fan-out lives in one place. Reset re-initializes the accumulator (a
-// present zero for a typed sum/avg of numbers, null for min/max and a tagged cell) and
-// zeroes the count and the duration total; update folds
-// a chunk's non-null values into the accumulator; result writes the single
-// reduced row into the output column, building a value it computes - the average of
-// tagged cells - in the step buffers.
-using NLAggregateResetFunction = void (*)(NLAggregateState* state);
-using NLAggregateUpdateFunction = void (*)(NLAggregateState* state, const Column* input);
-using NLAggregateResultFunction = void (*)(const NLAggregateState* state, Column* output, NLStepBuffers* stepBuffers);
-
-// nl.aggregate data: re-initializes an accumulator each time the block it lives in
-// runs - once at function scope for a top-level aggregate. The value sibling of
-// NLCountResetData; the reset handler knows the accumulator's type and kind.
-class NLAggregateResetData : public NLFunctionData {
-public:
-    NLAggregateResetData(NLAggregateState* state, NLAggregateResetFunction reset)
-        : _state(state),
-        _reset(reset)
-    {
-    }
-
-    NLAggregateState* getState() const { return _state; }
-    NLAggregateResetFunction getReset() const { return _reset; }
-
-private:
-    NLAggregateState* _state {nullptr};
-    NLAggregateResetFunction _reset {nullptr};
-};
-
-// nl.aggregate_update data: the accumulator to fold into, the input chunk to
-// reduce, and the fold handler that reduces it (selected from the kind and the
-// input value type). Runs once per producing-loop step. The value sibling of
-// NLCountUpdateData.
-class NLAggregateUpdateData : public NLFunctionData {
-public:
-    NLAggregateUpdateData(NLAggregateState* state, const Column* input, NLAggregateUpdateFunction update)
-        : _state(state),
-        _input(input),
-        _update(update)
-    {
-    }
-
-    NLAggregateState* getState() const { return _state; }
-    const Column* getInput() const { return _input; }
-    NLAggregateUpdateFunction getUpdate() const { return _update; }
-
-private:
-    NLAggregateState* _state {nullptr};
-    const Column* _input {nullptr};
-    NLAggregateUpdateFunction _update {nullptr};
-};
-
-// nl.aggregate_result data: the emit step of an aggregate. Holds the accumulator,
-// the output column to fill with the single result row (a nullable value column),
-// and the emit handler (a copy for sum/min/max, a divide-by-count for avg). Runs
-// once, after the producing loop, so the accumulator is final. The value sibling
-// of NLCountResultData.
-class NLAggregateResultData : public NLFunctionData {
-public:
-    NLAggregateResultData(NLAggregateState* state,
-                          Column* output,
-                          NLAggregateResultFunction result,
-                          NLStepBuffers* stepBuffers)
-        : _state(state),
-        _output(output),
-        _result(result),
-        _stepBuffers(stepBuffers)
-    {
-    }
-
-    NLAggregateState* getState() const { return _state; }
-    Column* getOutput() const { return _output; }
-    NLAggregateResultFunction getResult() const { return _result; }
-    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
-
-private:
-    NLAggregateState* _state {nullptr};
-    Column* _output {nullptr};
-    NLAggregateResultFunction _result {nullptr};
-    NLStepBuffers* _stepBuffers {nullptr};
 };
 
 // The reduction one function of a grouped aggregation applies. The runtime
@@ -2707,6 +2589,99 @@ private:
     NLCompactingValueStore _values;
 
     NLGroupStatePlaces getPlaces(const Aggregate& aggregate);
+};
+
+// Fold the present values of an input chunk into the state of a keyless aggregate: the state its
+// kind keeps for a group of a grouped aggregation, folded through locals as ClickHouse's
+// addBatchSinglePlace folds one. A min or a max copies the value it ends the chunk on into the
+// spare store of values, then flips the stores.
+using NLAggregateFoldFunction = void (*)(std::byte* place, const Column* input, NLCompactingValueStore& values);
+
+// Runtime state of one keyless SUM/MIN/MAX/AVG/STDEV: the state its kind keeps for a group of a
+// grouped aggregation, kept for the one group every row falls in - ClickHouse's aggregation
+// without a key. nl.aggregate resets it, nl.aggregate_update is the sole folder, and
+// nl.aggregate_result finalizes it into the single result row. The value sibling of
+// NLCountState.
+class NLAggregateState {
+public:
+    NLAggregateState();
+    ~NLAggregateState();
+
+    void setStateType(const NLGroupAggregateStateType& stateType);
+
+    std::byte* getPlace() { return _place.data(); }
+    NLCompactingValueStore& getValues() { return _values; }
+
+    void reset();
+
+    // Finalize the state into the single row of output
+    void emit(Column* output, NLStepBuffers* stepBuffers);
+
+private:
+    NLGroupAggregateStateType _stateType;
+    std::vector<std::byte> _place;
+    NLCompactingValueStore _values;
+};
+
+// nl.aggregate data: re-initializes the state of a keyless aggregate each time the block it
+// lives in runs - once at function scope for a top-level aggregate. The value sibling of
+// NLCountResetData.
+class NLAggregateResetData : public NLFunctionData {
+public:
+    NLAggregateResetData(NLAggregateState* state)
+        : _state(state)
+    {
+    }
+
+    NLAggregateState* getState() const { return _state; }
+
+private:
+    NLAggregateState* _state {nullptr};
+};
+
+// nl.aggregate_update data: the state to fold into, the input chunk to reduce, and the fold
+// (selected from the kind and the input value type). Runs once per producing-loop step. The
+// value sibling of NLCountUpdateData.
+class NLAggregateUpdateData : public NLFunctionData {
+public:
+    NLAggregateUpdateData(NLAggregateState* state, const Column* input, NLAggregateFoldFunction fold)
+        : _state(state),
+        _input(input),
+        _fold(fold)
+    {
+    }
+
+    NLAggregateState* getState() const { return _state; }
+    const Column* getInput() const { return _input; }
+    NLAggregateFoldFunction getFold() const { return _fold; }
+
+private:
+    NLAggregateState* _state {nullptr};
+    const Column* _input {nullptr};
+    NLAggregateFoldFunction _fold {nullptr};
+};
+
+// nl.aggregate_result data: the emit step of a keyless aggregate. Holds the state, the output
+// column to fill with the single result row, and the step buffers a value it computes - the sum
+// of tagged cells - is built in. Runs once, after the producing loop, so the state is final. The
+// value sibling of NLCountResultData.
+class NLAggregateResultData : public NLFunctionData {
+public:
+    NLAggregateResultData(NLAggregateState* state, Column* output, NLStepBuffers* stepBuffers)
+        : _state(state),
+        _output(output),
+        _stepBuffers(stepBuffers)
+    {
+    }
+
+    NLAggregateState* getState() const { return _state; }
+    Column* getOutput() const { return _output; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
+
+private:
+    NLAggregateState* _state {nullptr};
+    Column* _output {nullptr};
+    NLStepBuffers* _stepBuffers {nullptr};
 };
 
 // The grouping keys of a grouped aggregation or collect: the hash table mapping the keys of a row

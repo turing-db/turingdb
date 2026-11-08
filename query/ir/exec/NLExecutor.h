@@ -839,28 +839,23 @@ public:
     static NLCountFunction selectPathCountFunction();
     static NLGroupAggregateFoldFunction selectGroupCountPresentPathFold();
 
-    // The reset / fold / emit handlers for one aggregate, selected from the
-    // reduction and a value type (the accumulator's for reset/result, the input's
-    // for update). Throw for a value type the reduction cannot handle: sum/avg need
-    // a numeric or a duration type, min/max an orderable one. Used by the nl.aggregate
-    // ops.
-    static NLAggregateResetFunction selectAggregateReset(AggregateKind kind, ValueType accumulatorType);
-    static NLAggregateUpdateFunction selectAggregateUpdate(AggregateKind kind, ValueType inputType);
+    // The fold of a keyless aggregate, selected from the reduction and the input's value
+    // type, into the state its grouped counterpart keeps per group. Throws for a value type
+    // the reduction cannot handle: sum/avg need a numeric or a duration type, min/max an
+    // orderable one. Used by nl.aggregate_update.
+    static NLAggregateFoldFunction selectAggregateFold(AggregateKind kind, ValueType inputType);
 
-    // The siblings reading a type-erased input column. stdev reduces its numeric cells into
-    // the f64 accumulator. sum, avg and min/max keep a tagged cell accumulator, which the
-    // reset and result below handle.
-    static NLAggregateUpdateFunction selectTaggedAggregateUpdate(AggregateKind kind);
-    static NLAggregateUpdateFunction selectOptTaggedAggregateUpdate(AggregateKind kind);
-    static NLAggregateResetFunction selectTaggedAggregateReset();
-    static NLAggregateResultFunction selectTaggedAggregateResult(AggregateKind kind);
-    static NLAggregateResultFunction selectAggregateResult(AggregateKind kind, ValueType resultType);
+    // The siblings reading a type-erased input column: stdev reduces its numeric cells, sum
+    // and avg keep a tagged sum, min and max a cell
+    static NLAggregateFoldFunction selectTaggedAggregateFold(AggregateKind kind);
+    static NLAggregateFoldFunction selectOptTaggedAggregateFold(AggregateKind kind);
 
     // The grouped counterparts, selected for one aggregate of a grouped
     // aggregation. The state type is what a group keeps for the aggregate, constructed
     // when the group appears and finalized into a slice of groups at emit; fold
-    // reduces a chunk's rows into the states of their groups.
-    // They throw for a value type the reduction cannot handle, exactly as the scalar
+    // reduces a chunk's rows into the states of their groups. A keyless aggregate keeps the
+    // same state for its one group.
+    // They throw for a value type the reduction cannot handle, exactly as the keyless
     // selectors do (sum/avg need numeric or duration, min/max orderable). count and
     // count_distinct keep only a tally per group, so their state ignores the
     // value type. count's fold has an all-rows form (count(*) over an ID chunk) and a
@@ -872,7 +867,7 @@ public:
                                           NLGroupAggregateStateType& stateType);
     static NLGroupAggregateFoldFunction selectGroupAggregateFold(GroupAggregateKind kind, ValueType inputType);
 
-    // The siblings reading a type-erased input column, as selectTaggedAggregateUpdate's are.
+    // The siblings reading a type-erased input column, as selectTaggedAggregateFold's are.
     // sum and avg keep a tagged sum per group, min, max and first a cell.
     static NLGroupAggregateFoldFunction selectTaggedGroupAggregateFold(GroupAggregateKind kind);
     static NLGroupAggregateFoldFunction selectOptTaggedGroupAggregateFold(GroupAggregateKind kind);
