@@ -14,7 +14,8 @@ public:
 
     static void normalizeOutput(std::string& normalized, std::string_view output);
 
-private:
+    static void splitStatements(std::vector<std::string>& statements, std::string_view script);
+
     static void readFile(std::string& content, const fs::Path& path);
 };
 

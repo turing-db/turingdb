@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "setup": [
+    "CREATE (:Person {name: 'Zoe'})"
+  ],
+  "query": "MATCH (n:Person) WHERE n.name IN ['Remy', 'Zoe'] RETURN n, n.name ORDER BY n",
+  "expect": {
+    "result": "n,n.name\n0,Remy\n18,Zoe",
+    "resultJson": "{\"header\":{\"column_names\":[\"n\",\"n.name\"],\"column_types\":[\"UInt64\",\"String\"]},\"data\":[[[0,18],[\"Remy\",\"Zoe\"]]]}"
+  },
+  "tags": [
+    "setup",
+    "match"
+  ],
+  "write-required": false
+}

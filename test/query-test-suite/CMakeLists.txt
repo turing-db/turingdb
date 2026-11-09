@@ -20,10 +20,15 @@ gtest_discover_tests(test_query_v3_test_suite
 
 set(QUERY_TEST_SUITE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tests)
 set(QUERY_TEST_SUITE_DATA_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data)
+set(QUERY_TEST_SUITE_GRAPHS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/graphs)
 
 target_compile_definitions(test_query_v3_test_suite
     PRIVATE QUERY_TEST_SUITE_DIR="${QUERY_TEST_SUITE_DIR}"
-            QUERY_TEST_SUITE_DATA_DIR="${QUERY_TEST_SUITE_DATA_DIR}")
+            QUERY_TEST_SUITE_DATA_DIR="${QUERY_TEST_SUITE_DATA_DIR}"
+            QUERY_TEST_SUITE_GRAPHS_DIR="${QUERY_TEST_SUITE_GRAPHS_DIR}")
+
+add_turing_test(test_query_test_suite_split_statements SplitStatementsTest.cpp)
+target_sources(test_query_test_suite_split_statements PRIVATE QueryTestRunner.cpp)
 
 add_executable(query_test_suite_cli
     QueryTestSuiteCLI.cpp
@@ -35,4 +40,5 @@ target_link_libraries(query_test_suite_cli
 
 target_compile_definitions(query_test_suite_cli
     PRIVATE QUERY_TEST_SUITE_DIR="${QUERY_TEST_SUITE_DIR}"
-            QUERY_TEST_SUITE_DATA_DIR="${QUERY_TEST_SUITE_DATA_DIR}")
+            QUERY_TEST_SUITE_DATA_DIR="${QUERY_TEST_SUITE_DATA_DIR}"
+            QUERY_TEST_SUITE_GRAPHS_DIR="${QUERY_TEST_SUITE_GRAPHS_DIR}")

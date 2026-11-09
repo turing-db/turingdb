@@ -20,6 +20,8 @@ export type ExpectedOutput = {
 export type UpdateTestOptions = {
 	result?: string;
 	mlir?: string;
+	graph?: string;
+	setup?: string[];
 	query?: string;
 	newName?: string;
 	tags?: string[];
@@ -266,6 +268,16 @@ export async function updateTestFile(
 		}
 		if (typeof options.mlir === "string") {
 			expect.mlir = options.mlir;
+		}
+		if (typeof options.graph === "string") {
+			data.graph = options.graph;
+		}
+		if (Array.isArray(options.setup)) {
+			if (options.setup.length > 0) {
+				data.setup = options.setup;
+			} else {
+				delete data.setup;
+			}
 		}
 		if (typeof options.query === "string") {
 			data.query = options.query;

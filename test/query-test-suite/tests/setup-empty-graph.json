@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "graph": "empty",
+  "setup": [
+    "CREATE (:Person {name: 'Ada'}), (:Person {name: 'Alan'})",
+    "MATCH (a:Person {name: 'Ada'}), (b:Person {name: 'Alan'}) CREATE (a)-[:KNOWS {since: 1936}]->(b)"
+  ],
+  "query": "MATCH (a)-[k:KNOWS]->(b) RETURN a, a.name, k.since, b, b.name",
+  "expect": {
+    "result": "a,a.name,k.since,b,b.name\n0,Ada,1936,1,Alan",
+    "resultJson": "{\"header\":{\"column_names\":[\"a\",\"a.name\",\"k.since\",\"b\",\"b.name\"],\"column_types\":[\"UInt64\",\"String\",\"Int64\",\"UInt64\",\"String\"]},\"data\":[[[0],[\"Ada\"],[1936],[1],[\"Alan\"]]]}"
+  },
+  "tags": [
+    "setup",
+    "match"
+  ],
+  "write-required": false
+}

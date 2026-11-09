@@ -5,7 +5,8 @@ import sys
 import pandas as pd
 from turingdb import TuringDB, TuringDBException
 
-GRAPH_NAME = "simpledb"
+SIMPLEDB_GRAPH = "simpledb"
+EMPTY_GRAPH = "empty"
 
 DTYPE_MAP = {
     "String": "string",
@@ -45,6 +46,71 @@ def parse_result_json(json_str: str) -> pd.DataFrame:
     return df
 
 
+def split_statements(script: str) -> list[str]:
+    """Split a Cypher script into statements exactly as QueryTestRunner::splitStatements does."""
+    statements = []
+    begin = None
+    end = 0
+    position = 0
+
+    while position < len(script):
+        character = script[position]
+        following = script[position + 1 : position + 2]
+
+        if character in " \t\r\n":
+            position += 1
+        elif character == "/" and following == "/":
+            line_end = script.find("\n", position)
+            position = len(script) if line_end == -1 else line_end
+        elif character == "/" and following == "*":
+            close = script.find("*/", position + 2)
+            if close == -1:
+                raise ValueError("A comment that opens with /* must close with */")
+            position = close + 2
+        elif character == ";":
+            if begin is not None:
+                statements.append(script[begin:end])
+                begin = None
+            position += 1
+        else:
+            token_end = position + 1
+            if character in "'\"":
+                scan = position + 1
+                while scan < len(script):
+                    if script[scan] == character:
+                        token_end = scan + 1
+                        break
+                    elif script[scan] != "\\":
+                        scan += 1
+                    elif scan + 1 < len(script) and script[scan + 1] != "\n":
+                        scan += 2
+                    else:
+                        break
+            elif character == "`":
+                close = script.find("`", position + 1)
+                if close != -1:
+                    token_end = close + 1
+
+            if begin is None:
+                begin = position
+            end = token_end
+            position = token_end
+
+    if begin is not None:
+        statements.append(script[begin:end])
+
+    return statements
+
+
+def load_graph_statements(graphs_dir: str, graph: str) -> list[str]:
+    """The statements that build a named graph on an empty graph."""
+    if graph in (SIMPLEDB_GRAPH, EMPTY_GRAPH):
+        return []
+
+    with open(os.path.join(graphs_dir, f"{graph}.cypher")) as f:
+        return split_statements(f.read())
+
+
 def load_test_files(tests_dir: str) -> list[dict]:
     """Load all test JSON files sorted by name."""
     tests = []
@@ -66,6 +132,7 @@ def main() -> None:
         sys.exit(1)
 
     tests_dir = os.path.join(src_dir, "test", "query-test-suite", "tests")
+    graphs_dir = os.path.join(src_dir, "test", "query-test-suite", "graphs")
 
     if not os.path.isdir(tests_dir):
         print(f"ERROR: Tests directory not found: {tests_dir}")
@@ -75,9 +142,11 @@ def main() -> None:
     client.try_reach()
     print("Connected to DB")
 
-    client.query(f"LOAD GRAPH {GRAPH_NAME}")
-    client.set_graph(GRAPH_NAME)
-    print(f"Loaded graph {GRAPH_NAME}")
+    client.query(f"LOAD GRAPH {SIMPLEDB_GRAPH}")
+    print(f"Loaded graph {SIMPLEDB_GRAPH}")
+
+    client.create_graph(EMPTY_GRAPH)
+    print(f"Created graph {EMPTY_GRAPH}")
 
     tests = load_test_files(tests_dir)
     print(f"Loaded {len(tests)} tests")
@@ -114,12 +183,25 @@ def main() -> None:
         write_required = test.get("write-required", False)
         expected_json = json.loads(expected_json_str)
         is_error = "error" in expected_json
+        graph = test.get("graph", SIMPLEDB_GRAPH)
+
+        # The setup runs in the test's change, which is never submitted, so the shared
+        # graphs stay as they were for the next test
+        in_change = False
 
         try:
+            statements = load_graph_statements(graphs_dir, graph) + test.get("setup", [])
+            in_change = write_required or len(statements) > 0
+
+            client.set_graph(SIMPLEDB_GRAPH if graph == SIMPLEDB_GRAPH else EMPTY_GRAPH)
             client.checkout()
 
-            if write_required:
+            if in_change:
                 client.new_change()
+
+            for statement in statements:
+                client.query(statement)
+                client.query("COMMIT")
 
             if is_error:
                 expected_error = expected_json["error"]
@@ -160,13 +242,13 @@ def main() -> None:
                     print(f"    actual:\n{actual_df}")
                     failed += 1
 
-            if write_required:
+            if in_change:
                 client.checkout()
 
         except Exception as e:
             print(f"  FAIL {name}: {type(e).__name__}: {e}")
             failed += 1
-            if write_required:
+            if in_change:
                 try:
                     client.checkout()
                 except Exception:
