@@ -395,9 +395,32 @@ RuleResult ruleType(BinaryOperator op, EvaluatedType a, EvaluatedType b) {
     return result;
 }
 
-void writeError(TypingReason reason, EvaluatedType a, EvaluatedType b, BinaryTyping& out) {
-    const std::string_view left = EvaluatedTypeName::value(a);
-    const std::string_view right = EvaluatedTypeName::value(b);
+// The reason no pair of the types the two sides hold takes the operator, Valid as soon as
+// one pair does
+TypingReason heldTypesReason(BinaryOperator op, const EvaluatedTypeSet& lhs, const EvaluatedTypeSet& rhs) {
+    TypingReason reason = TypingReason::Valid;
+
+    const bool takesTheOperator = lhs.holdsATypeThat([op, &rhs, &reason](EvaluatedType a) {
+        return rhs.holdsATypeThat([op, a, &reason](EvaluatedType b) {
+            const RuleResult result = ruleType(op, a, b);
+            reason = result._reason;
+
+            return result._type != EvaluatedType::Invalid;
+        });
+    });
+
+    return takesTheOperator ? TypingReason::Valid : reason;
+}
+
+void writeError(TypingReason reason, const ExprType& lhs, const ExprType& rhs, BinaryTyping& out) {
+    const EvaluatedTypeSet lhsHeldTypes = lhs.getHeldTypes();
+    const EvaluatedTypeSet rhsHeldTypes = rhs.getHeldTypes();
+
+    std::string left;
+    lhsHeldTypes.writeName(left);
+
+    std::string right;
+    rhsHeldTypes.writeName(right);
 
     switch (reason) {
         case TypingReason::Valid:
@@ -458,7 +481,14 @@ void BinaryOperatorTyping::type(BinaryOperator op, const ExprType& lhs, const Ex
     const RuleResult rule = ruleType(op, a, b);
 
     if (rule._type == EvaluatedType::Invalid) {
-        writeError(rule._reason, a, b, out);
+        writeError(rule._reason, lhs, rhs, out);
+        return;
+    }
+
+    const TypingReason heldReason = heldTypesReason(op, lhs.getHeldTypes(), rhs.getHeldTypes());
+
+    if (heldReason != TypingReason::Valid) {
+        writeError(heldReason, lhs, rhs, out);
         return;
     }
 

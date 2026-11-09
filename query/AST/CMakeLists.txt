@@ -10,6 +10,7 @@ set(ast_sources
     ProcedureLookup.cpp
 
     decl/DeclContext.cpp
+    decl/EvaluatedTypeSet.cpp
     decl/ListShape.cpp
     decl/ParameterDecl.cpp
     decl/PatternData.cpp

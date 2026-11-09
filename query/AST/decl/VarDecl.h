@@ -56,6 +56,8 @@ public:
     // the selection it was published from shares, Any if none
     EvaluatedType getCommonType() const { return _exprType._type == EvaluatedType::Any ? _exprType._commonType : _exprType._type; }
 
+    EvaluatedTypeSet getHeldTypes() const { return _exprType.getHeldTypes(); }
+
     const std::string_view& getName() const { return _name; }
     bool isUnnamed() const { return _isUnnamed; }
     bool isUnwound() const { return _isUnwound; }
