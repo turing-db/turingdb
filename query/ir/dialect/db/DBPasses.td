@@ -217,6 +217,11 @@ def CanonicalizeCoalesce : Pass<"canonicalize_coalesce"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def FoldConstantMapKeys : Pass<"fold_constant_map_keys"> {
+    let summary = "Fold a dynamic_map_key whose key column holds one string in every row into the static_map_key of that string, where every row of its map holds a map, a node, an edge or null";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def HoistUnconditionalRegions : Pass<"hoist_unconditional_regions"> {
     let summary = "Compute the region of a CASE or a coalesce that every row reaches before the op, as a column it carries: the first condition of a CASE and the first argument of a coalesce";
     let dependentDialects = ["mlir::db::DB"];

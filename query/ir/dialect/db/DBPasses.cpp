@@ -37,6 +37,7 @@
 #include "IRConstantColumn.h"
 #include "IRRaiseEffect.h"
 #include "DBColumnElement.h"
+#include "DBHeldTags.h"
 #include "StorageAttributes.h"
 #include "PropertyScanLiteral.h"
 #include "PathHopArguments.h"
@@ -91,6 +92,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
 #define GEN_PASS_DEF_COUNTFROMMETADATA
 #define GEN_PASS_DEF_CANONICALIZECOALESCE
+#define GEN_PASS_DEF_FOLDCONSTANTMAPKEYS
 #define GEN_PASS_DEF_HOISTUNCONDITIONALREGIONS
 #include "DBPasses.h.inc"
 
@@ -7561,6 +7563,94 @@ struct CanonicalizeCoalesce : public impl::CanonicalizeCoalesceBase<Canonicalize
 
         if (failed(mlir::applyOpPatternsGreedily(coalesces, frozenPatterns, config))) {
             signalPassFailure();
+        }
+    }
+};
+
+// The column whose value each row of @param column holds: null where an op makes the value,
+// or may pad it with null as a CASE with no ELSE does
+Value sameValueSource(Value column) {
+    if (BroadcastConstant laidOut = column.getDefiningOp<BroadcastConstant>()) {
+        return laidOut.getValue();
+    } else if (const BlockArgument argument = dyn_cast<BlockArgument>(column)) {
+        return carriedColumnOf(argument);
+    }
+
+    const OpResult result = cast<OpResult>(column);
+    ColumnCarrierOpInterface carrier = dyn_cast<ColumnCarrierOpInterface>(result.getOwner());
+
+    return carrier ? carrier.getRowSource(result) : Value();
+}
+
+StringAttr stringLiteralOf(Value column) {
+    Value source = column;
+    while (source) {
+        if (ConstantOp constant = source.getDefiningOp<ConstantOp>()) {
+            const StringAttr literal = dyn_cast<StringAttr>(constant.getValue());
+            const bool holdsAString = literal && isa<storage::StringType>(literal.getType());
+
+            return holdsAString ? literal : StringAttr();
+        }
+
+        source = sameValueSource(source);
+    }
+
+    return {};
+}
+
+// On a datetime or a duration m.year reads a component m['year'] raises on, and on any other
+// value with no keys the two raise with different messages
+struct FoldConstantMapKey : public mlir::OpRewritePattern<DynamicMapKey> {
+    using OpRewritePattern::OpRewritePattern;
+
+    LogicalResult matchAndRewrite(DynamicMapKey mapKey, mlir::PatternRewriter& rewriter) const override {
+        const Value keyColumn = mapKey.getKey();
+        const Value map = mapKey.getMap();
+
+        const StringAttr key = stringLiteralOf(keyColumn);
+        if (!key || !::db::holdsOnlyKeyedValues(map)) {
+            return failure();
+        }
+
+        ConstantOp keyConstant = keyColumn.getDefiningOp<ConstantOp>();
+        const StringAttr keyName = rewriter.getStringAttr(key.getValue());
+        rewriter.replaceOpWithNewOp<StaticMapKey>(mapKey, mapKey.getResult().getType(), map, keyName);
+
+        if (keyConstant) {
+            eraseIfUnused(keyConstant.getOperation(), rewriter);
+        }
+
+        return success();
+    }
+};
+
+struct FoldConstantMapKeys : public impl::FoldConstantMapKeysBase<FoldConstantMapKeys> {
+    void runOnOperation() override {
+        MLIRContext* const context = &getContext();
+
+        mlir::RewritePatternSet patterns(context);
+        patterns.add<FoldConstantMapKey>(context);
+        const mlir::FrozenRewritePatternSet frozenPatterns(std::move(patterns));
+
+        mlir::GreedyRewriteConfig config;
+        config.setStrictness(mlir::GreedyRewriteStrictness::ExistingOps);
+        config.enableFolding(false);
+        config.enableConstantCSE(false);
+        config.setRegionSimplificationLevel(mlir::GreedySimplifyRegionLevel::Disabled);
+
+        // The walk over a map stops at a dynamic read, and a fold requeues only the reads using
+        // its result directly: a read carried from a folded one is tried in the next round
+        bool folded = true;
+        while (folded) {
+            llvm::SmallVector<Operation*> mapKeys;
+            getOperation()->walk([&mapKeys](DynamicMapKey mapKey) {
+                mapKeys.push_back(mapKey.getOperation());
+            });
+
+            if (failed(mlir::applyOpPatternsGreedily(mapKeys, frozenPatterns, config, &folded))) {
+                signalPassFailure();
+                return;
+            }
         }
     }
 };

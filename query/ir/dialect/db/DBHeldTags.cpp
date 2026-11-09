@@ -378,3 +378,7 @@ bool db::holdsOnlyNullOr(mlir::Value column, std::initializer_list<CellTag> tags
 
     return walk.holdsOnlyTags(column);
 }
+
+bool db::holdsOnlyKeyedValues(mlir::Value column) {
+    return holdsOnlyNullOr(column, {CellTag::MapView, CellTag::NodeID, CellTag::EdgeID});
+}

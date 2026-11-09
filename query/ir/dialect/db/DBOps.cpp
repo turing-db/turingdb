@@ -237,10 +237,6 @@ void collectBranchYields(Value value, MutableArrayRef<Region> branches, llvm::Sm
     }
 }
 
-bool holdsOnlyKeyedValues(Value column) {
-    return ::db::holdsOnlyNullOr(column, {::db::CellTag::MapView, ::db::CellTag::NodeID, ::db::CellTag::EdgeID});
-}
-
 bool holdsOnlyLists(Value column) {
     return ::db::holdsOnlyNullOr(column, {::db::CellTag::ListView});
 }
@@ -3292,11 +3288,11 @@ Speculation::Speculatability ListIndex::getSpeculatability() {
 }
 
 Speculation::Speculatability StaticMapKey::getSpeculatability() {
-    return speculatableWhen(holdsOnlyKeyedValues(getMap()));
+    return speculatableWhen(::db::holdsOnlyKeyedValues(getMap()));
 }
 
 Speculation::Speculatability DynamicMapKey::getSpeculatability() {
-    return speculatableWhen(holdsOnlyKeyedValues(getMap()));
+    return speculatableWhen(::db::holdsOnlyKeyedValues(getMap()));
 }
 
 // The window raises as the slice it was folded from does, on a type-erased bound holding no
