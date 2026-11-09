@@ -3295,6 +3295,16 @@ Speculation::Speculatability DynamicMapKey::getSpeculatability() {
     return speculatableWhen(::db::holdsOnlyKeyedValues(getMap()));
 }
 
+Speculation::Speculatability ContainerIndex::getSpeculatability() {
+    const Value base = getBase();
+    const Value index = getIndex();
+
+    const bool readsAnElement = holdsOnlyLists(base) && holdsOnlyIntegers(index);
+    const bool readsAKey = ::db::holdsOnlyKeyedValues(base) && ::db::holdsOnlyNullOr(index, {::db::CellTag::String});
+
+    return speculatableWhen(readsAnElement || readsAKey);
+}
+
 // The window raises as the slice it was folded from does, on a type-erased bound holding no
 // integer
 Speculation::Speculatability UnwindRange::getSpeculatability() {

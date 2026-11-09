@@ -4,6 +4,7 @@
 #include <utility>
 #include <vector>
 
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "llvm/ADT/DenseMap.h"
@@ -107,9 +108,19 @@ void collectCarriedColumns(mlir::Value value, llvm::SmallVectorImpl<mlir::Value>
     }
 }
 
-// One read off a value: the key of a map, or an element of a list where the key is null
+mlir::IntegerAttr literalPosition(mlir::Value index) {
+    mlir::db::ConstantOp constant = index.getDefiningOp<mlir::db::ConstantOp>();
+    const mlir::Attribute literal = constant ? constant.getValue() : mlir::Attribute();
+    const bool holdsAPosition = literal && literalTag(literal) == CellTag::Int;
+
+    return holdsAPosition ? mlir::cast<mlir::IntegerAttr>(literal) : mlir::IntegerAttr();
+}
+
+// One read off a value: the key of a map, or an element of a list where the key is null, the
+// one at the position where it is known
 struct ReadStep {
     mlir::StringAttr _key;
+    mlir::IntegerAttr _position;
     size_t _rest {NO_READ};
 };
 
@@ -158,17 +169,46 @@ private:
         return tag == CellTag::Null || (_tags & tagBit(tag)) != 0;
     }
 
-    size_t prepend(mlir::StringAttr key, size_t rest) {
-        const auto [entry, inserted] = _paths.try_emplace(ReachKey {key.getAsOpaquePointer(), rest}, _steps.size());
+    size_t prepend(const ReadStep& step) {
+        const mlir::Attribute read = step._key ? mlir::Attribute(step._key) : mlir::Attribute(step._position);
+        const auto [entry, inserted] = _paths.try_emplace(ReachKey {read.getAsOpaquePointer(), step._rest}, _steps.size());
         if (inserted) {
-            _steps.push_back(ReadStep {key, rest});
+            _steps.push_back(step);
         }
 
         return entry->second;
     }
 
+    size_t prepend(mlir::StringAttr key, size_t rest) {
+        return prepend(ReadStep {._key = key, ._rest = rest});
+    }
+
     size_t prependElement(size_t rest) {
-        return prepend(mlir::StringAttr {}, rest);
+        return prepend(ReadStep {._rest = rest});
+    }
+
+    size_t prependElementAt(mlir::IntegerAttr position, size_t rest) {
+        return prepend(ReadStep {._position = position, ._rest = rest});
+    }
+
+    // A position counts from the end where it is negative, and reads null past either end
+    template <typename Elements>
+    void reachElements(Elements elements, const ReadStep& step) {
+        if (!step._position) {
+            for (const auto element : elements) {
+                reach(element, step._rest);
+            }
+
+            return;
+        }
+
+        const int64_t count = static_cast<int64_t>(elements.size());
+        const int64_t position = step._position.getValue().getSExtValue();
+        const int64_t fromStart = position < 0 ? count + position : position;
+
+        if (fromStart >= 0 && fromStart < count) {
+            reach(elements[static_cast<size_t>(fromStart)], step._rest);
+        }
     }
 
     void reach(mlir::Value value, size_t path) {
@@ -223,9 +263,12 @@ private:
         } else if (mlir::db::StaticMapKey keyRead = mlir::dyn_cast_or_null<mlir::db::StaticMapKey>(made)) {
             reach(keyRead.getMap(), prepend(keyRead.getKeyAttr(), path));
         } else if (mlir::db::ListIndex index = mlir::dyn_cast_or_null<mlir::db::ListIndex>(made)) {
-            reach(index.getLhs(), prependElement(path));
+            reach(index.getLhs(), prependElementAt(literalPosition(index.getRhs()), path));
         } else if (mlir::isa_and_nonnull<mlir::db::Head, mlir::db::Last>(made)) {
-            reach(made->getOperand(0), prependElement(path));
+            const int64_t position = mlir::isa<mlir::db::Head>(made) ? 0 : -1;
+            const mlir::IntegerAttr positionLiteral = mlir::Builder(made->getContext()).getI64IntegerAttr(position);
+
+            reach(made->getOperand(0), prependElementAt(positionLiteral, path));
         } else if (mlir::db::Unwind unwind = mlir::dyn_cast_or_null<mlir::db::Unwind>(made)) {
             reach(unwind.getSource(), prependElement(path));
         } else if (mlir::db::UnwindComputed unwind = mlir::dyn_cast_or_null<mlir::db::UnwindComputed>(made)) {
@@ -255,9 +298,7 @@ private:
             return false;
         }
 
-        for (const mlir::Value listElement : list.getElements()) {
-            reach(listElement, step._rest);
-        }
+        reachElements(list.getElements(), step);
 
         return true;
     }
@@ -358,9 +399,7 @@ private:
             return true;
         }
 
-        for (const mlir::Attribute listElement : list) {
-            reach(listElement, step._rest);
-        }
+        reachElements(list, step);
 
         return true;
     }
