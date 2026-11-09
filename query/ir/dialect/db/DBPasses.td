@@ -227,6 +227,11 @@ def HoistUnconditionalRegions : Pass<"hoist_unconditional_regions"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def HoistElementInvariantOps : Pass<"hoist_element_invariant_ops"> {
+    let summary = "Compute an op of the body of a list comprehension, a list predicate, a reduce or an allReduce that reads no element, accumulator or row tag, and raises on no value, once per row in front of the op, as a column it carries in";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def TrimUnreadColumns : Pass<"trim_unread_columns"> {
     let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products, grouping ops, calls, CASEs, optional matches and the ops over the elements of a list, and the values computed per row that nothing reads";
     let dependentDialects = ["mlir::db::DB"];

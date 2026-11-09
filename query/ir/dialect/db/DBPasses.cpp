@@ -94,6 +94,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_CANONICALIZECOALESCE
 #define GEN_PASS_DEF_FOLDCONSTANTMAPKEYS
 #define GEN_PASS_DEF_HOISTUNCONDITIONALREGIONS
+#define GEN_PASS_DEF_HOISTELEMENTINVARIANTOPS
 #include "DBPasses.h.inc"
 
 namespace {
@@ -9126,6 +9127,185 @@ struct CarryLabelAndTypeReads : public impl::CarryLabelAndTypeReadsBase<CarryLab
     void runOnOperation() override {
         mlir::IRRewriter rewriter(&getContext());
         shareReads(getOperation(), isLabelOrTypeRead, rewriter);
+    }
+};
+
+bool runsItsRegionsPerElement(Operation* op) {
+    return isa<ListComprehension, ListPredicate, Reduce, AllReduce>(op);
+}
+
+// The column in front of the op holding @param body that @param rows holds row for row, and
+// the ops of @param body mapping its rows down to @param rows, nearest them first. False for
+// an element, an accumulator, a row tag and what is computed from them.
+bool matchOuterColumn(Value rows, Block& body, Value& outer, llvm::SmallVectorImpl<Operation*>& steps) {
+    Value column = rows;
+    while (true) {
+        if (const BlockArgument argument = dyn_cast<BlockArgument>(column)) {
+            outer = argument.getOwner() == &body ? carriedColumnOf(argument) : Value();
+            return static_cast<bool>(outer);
+        }
+
+        const OpResult result = cast<OpResult>(column);
+        Operation* const op = result.getOwner();
+        if (op->getBlock() != &body || !mapsRowsThrough(op)) {
+            return false;
+        }
+
+        column = cast<ColumnCarrierOpInterface>(op).getRowSource(result);
+        if (!column) {
+            return false;
+        }
+
+        steps.push_back(op);
+    }
+}
+
+// The ops of @param body computing @param constants, in block order
+void collectConstantCone(llvm::ArrayRef<Value> constants, Block& body, llvm::SmallVectorImpl<Operation*>& cone) {
+    llvm::SmallPtrSet<Operation*, 8> inCone;
+    llvm::SmallVector<Value> pending(constants.begin(), constants.end());
+
+    while (!pending.empty()) {
+        Operation* const op = pending.pop_back_val().getDefiningOp();
+        if (!op || op->getBlock() != &body || !inCone.insert(op).second) {
+            continue;
+        }
+
+        cone.push_back(op);
+        llvm::append_range(pending, op->getOperands());
+
+        llvm::SetVector<Value> readAbove;
+        mlir::getUsedValuesDefinedAbove(op->getRegions(), readAbove);
+        llvm::append_range(pending, readAbove);
+    }
+
+    llvm::sort(cone, [](Operation* lhs, Operation* rhs) {
+        return lhs->isBeforeInBlock(rhs);
+    });
+}
+
+// An op of a body over the elements of a list computing one value per row out of the columns
+// carried in and constants alone. _operands are its operands in front of the op holding the
+// body, _steps the ops of the body mapping its rows down to it, nearest it first, and
+// _constants the ops of the body computing the constants it reads.
+struct ElementInvariantOp {
+    Operation* _op {nullptr};
+    llvm::SmallVector<Value> _operands;
+    llvm::SmallVector<Operation*> _steps;
+    llvm::SmallVector<Operation*> _constants;
+};
+
+// Computed once per row, an op runs on rows whose list holds no element reaching it, so one
+// that may raise stays in the body
+bool matchElementInvariantOp(Operation* op, Block& body, ElementInvariantOp& invariant) {
+    const bool computesOneValuePerRow = computesAValuePerRow(op) && op->getNumResults() == 1;
+    if (!computesOneValuePerRow || op->use_empty() || !::db::runsWithoutRaising(op)) {
+        return false;
+    }
+
+    Region& region = *body.getParent();
+    llvm::SmallVector<Value> constants;
+    bool readsACarriedColumn = false;
+
+    for (Value operand : op->getOperands()) {
+        const bool definedAboveTheBody = !region.isAncestor(operand.getParentRegion());
+        if (definedAboveTheBody || ::db::yieldsConstantColumn(operand)) {
+            invariant._operands.push_back(operand);
+            constants.push_back(operand);
+            continue;
+        }
+
+        Value outer;
+        llvm::SmallVector<Operation*> steps;
+        if (!matchOuterColumn(operand, body, outer, steps)) {
+            return false;
+        }
+
+        if (readsACarriedColumn && steps != invariant._steps) {
+            return false;
+        }
+
+        invariant._operands.push_back(outer);
+        invariant._steps = steps;
+        readsACarriedColumn = true;
+    }
+
+    if (!readsACarriedColumn) {
+        return false;
+    }
+
+    llvm::SetVector<Value> readAbove;
+    mlir::getUsedValuesDefinedAbove(op->getRegions(), readAbove);
+    for (Value value : readAbove) {
+        if (region.isAncestor(value.getParentRegion()) && !::db::yieldsConstantColumn(value)) {
+            return false;
+        }
+
+        constants.push_back(value);
+    }
+
+    invariant._op = op;
+    collectConstantCone(constants, body, invariant._constants);
+
+    return true;
+}
+
+void hoistElementInvariantOp(const ElementInvariantOp& invariant, Region& region, mlir::RewriterBase& rewriter) {
+    Operation* const holder = region.getParentOp();
+    Operation* const op = invariant._op;
+
+    for (Operation* const constant : invariant._constants) {
+        rewriter.moveOpBefore(constant, holder);
+    }
+
+    rewriter.moveOpBefore(op, holder);
+    rewriter.modifyOpInPlace(op, [op, &invariant] {
+        op->setOperands(invariant._operands);
+    });
+
+    const Value result = op->getResult(0);
+
+    Value column = carryIntoRegion(region, result, rewriter);
+    for (Operation* const step : llvm::reverse(invariant._steps)) {
+        column = carryThrough(step, column, rewriter);
+    }
+
+    rewriter.replaceUsesWithIf(result, column, [&region](OpOperand& use) {
+        return region.isAncestor(use.getOwner()->getParentRegion());
+    });
+}
+
+void hoistElementInvariantOps(Operation* holder, mlir::RewriterBase& rewriter) {
+    for (Region& region : holder->getRegions()) {
+        Block& body = region.front();
+
+        Operation* op = &body.front();
+        while (op) {
+            Operation* const next = op->getNextNode();
+
+            ElementInvariantOp invariant;
+            if (matchElementInvariantOp(op, body, invariant)) {
+                hoistElementInvariantOp(invariant, region, rewriter);
+            }
+
+            op = next;
+        }
+    }
+}
+
+struct HoistElementInvariantOps : public impl::HoistElementInvariantOpsBase<HoistElementInvariantOps> {
+    void runOnOperation() override {
+        llvm::SmallVector<Operation*> holders;
+        getOperation()->walk([&holders](Operation* op) {
+            if (runsItsRegionsPerElement(op)) {
+                holders.push_back(op);
+            }
+        });
+
+        mlir::IRRewriter rewriter(&getContext());
+        for (Operation* const holder : holders) {
+            hoistElementInvariantOps(holder, rewriter);
+        }
     }
 };
 
