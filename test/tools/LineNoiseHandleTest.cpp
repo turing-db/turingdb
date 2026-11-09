@@ -63,3 +63,12 @@ TEST(LineNoiseHandleTest, LogsWhileEditingFromAPipe) {
 
     handle.stopEditing();
 }
+
+// The server goes on logging after the shell that owned the handle has returned
+TEST(LineNoiseHandleTest, LogsAfterTheHandleIsDestroyed) {
+    auto handle = std::make_unique<LineNoiseHandle>();
+    handle->initProtectedLogger(std::make_shared<LogSetup::ConsoleSink>());
+    handle.reset();
+
+    spdlog::info("logged after the shell returned");
+}

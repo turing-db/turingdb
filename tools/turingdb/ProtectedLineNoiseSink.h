@@ -23,13 +23,17 @@ public:
                            const std::atomic<bool>& active,
                            const std::shared_ptr<spdlog::sinks::sink>& inner);
 
+    /// Stops reading the line editor's state, which its owner is about to destroy
+    void detach();
+
 private:
-    struct linenoiseState& _ls;
-    const std::atomic<bool>& _active;
+    struct linenoiseState* _ls {nullptr};
+    const std::atomic<bool>* _active {nullptr};
     std::shared_ptr<spdlog::sinks::sink> _inner;
 
     void sink_it_(const spdlog::details::log_msg& msg) override;
     void flush_() override;
+    bool isEditing() const;
 };
 
 }

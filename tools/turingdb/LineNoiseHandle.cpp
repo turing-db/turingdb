@@ -10,7 +10,10 @@ LineNoiseHandle::LineNoiseHandle()
 {
 }
 
-LineNoiseHandle::~LineNoiseHandle(){
+LineNoiseHandle::~LineNoiseHandle() {
+    if (_guardSink) {
+        _guardSink->detach();
+    }
 }
 
 void LineNoiseHandle::startEditing(const char* prompt) {
@@ -32,6 +35,7 @@ void LineNoiseHandle::initProtectedLogger(const std::shared_ptr<LogSetup::Consol
     auto guardSink = std::make_shared<ProtectedLineNoiseSink>(_lineNoiseState,
                                                               _lineNoiseActive,
                                                               consoleSink);
+    _guardSink = guardSink.get();
 
     std::vector<spdlog::sink_ptr> sinkList;
     sinkList.emplace_back(guardSink);

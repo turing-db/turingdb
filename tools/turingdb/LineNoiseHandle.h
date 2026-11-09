@@ -9,6 +9,8 @@
 
 namespace db {
 
+class ProtectedLineNoiseSink;
+
 class LineNoiseHandle {
 public:
     static constexpr uint32_t BUFSIZE = 4096;
@@ -28,6 +30,7 @@ private:
     struct linenoiseState _lineNoiseState {};
     char _lineNoiseBuffer[BUFSIZE] {};
     std::atomic<bool> _lineNoiseActive {false};
+    ProtectedLineNoiseSink* _guardSink {nullptr};
 };
 
 }
