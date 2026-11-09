@@ -12,6 +12,8 @@ add_turing_test(test_net_turing_proto_framing TuringProtoFramingTest.cpp)
 
 add_turing_test(test_net_turing_proto_roundtrip TuringProtoRoundTripTest.cpp)
 
+add_turing_test(test_net_turing_proto_empty_copy TuringProtoEmptyCopyTest.cpp)
+
 add_turing_test(test_net_turing_proto_parameter_writer TuringProtoParameterWriterTest.cpp)
 
 add_turing_test(test_net_turing_proto_parameter_reader TuringProtoParameterReaderTest.cpp)

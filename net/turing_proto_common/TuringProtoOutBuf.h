@@ -62,7 +62,7 @@ private:
     size_t _offset {0};
 
     void copy(const void* data, const size_t len) {
-        memcpy(end(), data, len);
+        std::copy_n(static_cast<const char*>(data), len, end());
         _offset += len;
     }
 

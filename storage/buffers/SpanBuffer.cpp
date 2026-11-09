@@ -1,7 +1,6 @@
 #include "SpanBuffer.h"
 
-#include <cstring>
-
+#include <algorithm>
 #include <span>
 #include <string_view>
 
@@ -17,7 +16,7 @@ V SpanBuffer<E, V, N>::insert(std::span<const E> items) {
 
     E* spanStart = _buf.nextPtr();
 
-    std::memcpy(spanStart, items.data(), size * sizeof(E));
+    std::ranges::copy(items, spanStart);
 
     _buf.commit(size);
 

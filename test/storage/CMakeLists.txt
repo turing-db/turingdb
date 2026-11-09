@@ -1,4 +1,5 @@
 add_turing_test(test_storage_stringcontainer StringContainerTest.cpp)
+add_turing_test(test_storage_empty_span_buffer_copy EmptySpanBufferCopyTest.cpp)
 add_turing_test(test_storage_embeddingbucket EmbeddingBucketTest.cpp)
 add_turing_test(test_storage_embeddingcontainer EmbeddingContainerTest.cpp)
 add_turing_test(test_storage_embeddingpropertycontainer EmbeddingPropertyContainerTest.cpp)

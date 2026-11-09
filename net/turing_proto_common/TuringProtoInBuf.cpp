@@ -56,6 +56,6 @@ void TuringProtoInBuf::readHeader(ColumnWireHeader* header) {
 void TuringProtoInBuf::readData(void* dest, size_t len) {
     ensureReadable(len);
 
-    memcpy(dest, readPtr(), len);
+    std::copy_n(readPtr(), len, static_cast<char*>(dest));
     _readOffset += len;
 }

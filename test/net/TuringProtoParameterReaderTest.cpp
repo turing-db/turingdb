@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <algorithm>
 #include <limits>
 #include <string>
 #include <vector>
@@ -36,7 +37,7 @@ protected:
 
     void read(size_t byteCount, ParameterMap& parameters) {
         TuringProtoInBuf inBuf(byteCount);
-        memcpy(inBuf.data(), _outBuf.data(), byteCount);
+        std::copy_n(_outBuf.data(), byteCount, inBuf.data());
         inBuf.increaseWriteOffset(byteCount);
 
         readParameters(&inBuf, parameters);

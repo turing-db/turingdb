@@ -1,6 +1,6 @@
 #include "StringBuffer.h"
 
-#include <string.h>
+#include <algorithm>
 
 using namespace db;
 
@@ -11,8 +11,8 @@ std::string_view StringBuffer::concatenate(std::string_view a, std::string_view 
 
     char* start = _buf.nextPtr();
 
-    memcpy(start, a.data(), a.size());
-    memcpy(start + a.size(), b.data(), b.size());
+    std::ranges::copy(a, start);
+    std::ranges::copy(b, start + a.size());
 
     _buf.commit(totalSize);
 
