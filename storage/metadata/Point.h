@@ -102,7 +102,7 @@ private:
     double _y;
     double _z;
     PointCRS _crs;
-    [[maybe_unused]] uint8_t _padding[7];
+    uint8_t _padding[7];
 
     static std::string_view requiredKeys(PointCRS crs);
 

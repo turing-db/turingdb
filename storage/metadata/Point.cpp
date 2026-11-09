@@ -200,9 +200,10 @@ Point::Point(PointCRS crs, double x, double y, double z)
     : _x(finiteCoordinate(x)),
     _y(finiteCoordinate(y)),
     _z(getDimension(crs) == 3 ? finiteCoordinate(z) : 0.0),
-    _crs(crs),
-    _padding {}
+    _crs(crs)
 {
+    std::ranges::fill(_padding, 0);
+
     if (!isGeographic(crs)) {
         return;
     }
