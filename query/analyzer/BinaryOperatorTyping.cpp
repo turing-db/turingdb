@@ -57,6 +57,7 @@ enum class TypingReason : uint8_t {
     IncompatibleConcatenationTypes,
     IncompatibleNumericTypes,
     NotACollection,
+    IncompatibleMemberTypes,
     InvalidOperator,
 };
 
@@ -264,23 +265,36 @@ RuleResult powerType(EvaluatedType a, EvaluatedType b) {
     return invalid(TypingReason::IncompatibleNumericTypes);
 }
 
-RuleResult membershipType(EvaluatedType b) {
+EvaluatedType memberType(const ExprType& collection) {
+    return collection._shape.unwoundType();
+}
+
+// x IN c asks x = e of each element e, so it turns away the operand types equality does
+RuleResult membershipType(EvaluatedType a, const ExprType& rhs) {
+    const EvaluatedType b = rhs._type;
+
     // A type-erased cell holds whatever its row put there, so the test reads the list
     // it holds, or a list of one where it holds something else
     const bool searchesACollection = b == EvaluatedType::List || b == EvaluatedType::Map;
     const bool searchesACell = b == EvaluatedType::Any;
     const bool searchesNull = b == EvaluatedType::Null;
+    const bool noElementCanEqual = equalityType(a, memberType(rhs))._reason == TypingReason::IncompatibleTypes;
 
     if (!searchesACollection && !searchesACell && !searchesNull) {
         return invalid(TypingReason::NotACollection);
     } else if (searchesNull) {
         return valid(EvaluatedType::Null);
+    } else if (noElementCanEqual) {
+        return invalid(TypingReason::IncompatibleMemberTypes);
     }
 
     return valid(EvaluatedType::Bool);
 }
 
-RuleResult operatorType(BinaryOperator op, EvaluatedType a, EvaluatedType b) {
+RuleResult operatorType(BinaryOperator op, const ExprType& lhs, const ExprType& rhs) {
+    const EvaluatedType a = lhs._type;
+    const EvaluatedType b = rhs._type;
+
     switch (op) {
         case BinaryOperator::NotEqual:
         case BinaryOperator::Equal:
@@ -318,7 +332,7 @@ RuleResult operatorType(BinaryOperator op, EvaluatedType a, EvaluatedType b) {
             return powerType(a, b);
         break;
         case BinaryOperator::In:
-            return membershipType(b);
+            return membershipType(a, rhs);
         break;
         case BinaryOperator::_SIZE:
             return invalid(TypingReason::InvalidOperator);
@@ -362,10 +376,11 @@ constexpr std::array<EvaluatedType, 9> VALUE_TYPES {
     EvaluatedType::Duration,
 };
 
-bool takesAValueBeside(BinaryOperator op, EvaluatedType known, bool knownIsLeft) {
+bool takesAValueBeside(BinaryOperator op, const ExprType& known, bool knownIsLeft) {
     for (const EvaluatedType value : VALUE_TYPES) {
-        const EvaluatedType left = knownIsLeft ? known : value;
-        const EvaluatedType right = knownIsLeft ? value : known;
+        const ExprType valueOperand {value};
+        const ExprType& left = knownIsLeft ? known : valueOperand;
+        const ExprType& right = knownIsLeft ? valueOperand : known;
 
         if (operatorType(op, left, right)._type != EvaluatedType::Invalid) {
             return true;
@@ -377,24 +392,24 @@ bool takesAValueBeside(BinaryOperator op, EvaluatedType known, bool knownIsLeft)
 
 // A null stands for a value of any type, so it answers null only beside an operand some
 // value combines with: null / duration(1) is a type error, as 5 / duration(1) is
-RuleResult ruleType(BinaryOperator op, EvaluatedType a, EvaluatedType b) {
-    const RuleResult result = operatorType(op, a, b);
+RuleResult ruleType(BinaryOperator op, const ExprType& lhs, const ExprType& rhs) {
+    const RuleResult result = operatorType(op, lhs, rhs);
     const std::optional<TypingReason> valueReason = valueOperatorReason(op);
 
-    const bool leftIsNull = a == EvaluatedType::Null;
-    const bool pairsOneNull = leftIsNull != (b == EvaluatedType::Null);
+    const bool leftIsNull = lhs._type == EvaluatedType::Null;
+    const bool pairsOneNull = leftIsNull != (rhs._type == EvaluatedType::Null);
     const bool checksTheNull = result._type != EvaluatedType::Invalid && pairsOneNull && valueReason.has_value();
 
-    if (checksTheNull && !takesAValueBeside(op, leftIsNull ? b : a, !leftIsNull)) {
+    if (checksTheNull && !takesAValueBeside(op, leftIsNull ? rhs : lhs, !leftIsNull)) {
         return invalid(*valueReason);
     }
 
     return result;
 }
 
-void writeError(TypingReason reason, EvaluatedType a, EvaluatedType b, BinaryTyping& out) {
-    const std::string_view left = EvaluatedTypeName::value(a);
-    const std::string_view right = EvaluatedTypeName::value(b);
+void writeError(TypingReason reason, const ExprType& lhs, const ExprType& rhs, BinaryTyping& out) {
+    const std::string_view left = EvaluatedTypeName::value(lhs._type);
+    const std::string_view right = EvaluatedTypeName::value(rhs._type);
 
     switch (reason) {
         case TypingReason::Valid:
@@ -424,6 +439,11 @@ void writeError(TypingReason reason, EvaluatedType a, EvaluatedType b, BinaryTyp
         case TypingReason::NotACollection:
             out._error = fmt::format("IN operand must be a list or map, not '{}'", right);
         break;
+        case TypingReason::IncompatibleMemberTypes:
+            out._error = fmt::format("IN cannot compare '{}' with an element of type '{}'",
+                                     left,
+                                     EvaluatedTypeName::value(memberType(rhs)));
+        break;
         case TypingReason::InvalidOperator:
             out._error = "Invalid operand in binary expression.";
         break;
@@ -450,12 +470,10 @@ void writeListShape(const ExprType& lhs, const ExprType& rhs, BinaryTyping& out)
 }
 
 void BinaryOperatorTyping::type(BinaryOperator op, const ExprType& lhs, const ExprType& rhs, BinaryTyping& out) {
-    const EvaluatedType a = lhs._type;
-    const EvaluatedType b = rhs._type;
-    const RuleResult rule = ruleType(op, a, b);
+    const RuleResult rule = ruleType(op, lhs, rhs);
 
     if (rule._type == EvaluatedType::Invalid) {
-        writeError(rule._reason, a, b, out);
+        writeError(rule._reason, lhs, rhs, out);
         return;
     }
 

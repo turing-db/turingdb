@@ -173,3 +173,5 @@ add_ir_tests(test_query_ir_element_id_function ElementIdFunctionTest.cpp)
 add_turing_test(test_query_ir_conversion_over_no_rows ConversionOverNoRowsTest.cpp)
 
 add_turing_test(test_query_ir_schema_id_equality SchemaIDEqualityTest.cpp)
+
+add_turing_test(test_query_ir_schema_id_membership SchemaIDMembershipTest.cpp)
