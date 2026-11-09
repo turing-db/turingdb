@@ -207,18 +207,21 @@ private:
     // A pre-scan in lower() finds every db.limit before any loop is built, so the
     // handles exist first to be threaded into the loops as they are created. The
     // count is unsigned end to end (UI64Attr accessor -> NLLimitState's size_t),
-    // so there is no signed round-trip and no cast.
-    llvm::DenseMap<mlir::Operation*, mlir::Value> _limitHandles;     // db.limit -> nl.limit handle
+    // so there is no signed round-trip and no cast. An optional match whose pattern a
+    // cut bounds holds the nl.limit_remaining handle of what that cut still admits.
+    llvm::DenseMap<mlir::Operation*, mlir::Value> _limitHandles;  // db.limit or db.optional_match -> handle
 
-    // The handle a loop-opening or cross-product op carries, if it lies in some
+    // The op whose handle a loop-opening or cross-product op carries, if it lies in some
     // limit's producing nest. Built by the pre-scan; the first (outermost,
     // program-order) limit to claim a shared producer wins, so a loop never needs
     // two handles. Absent (null on lookup) for a consumer loop, which fans out.
-    llvm::DenseMap<mlir::Operation*, mlir::Value> _loopLimitHandle;  // db producer -> handle
+    // It names the db op rather than the handle: a fold whose accumulator widens lowers its
+    // body again, which makes new handles.
+    llvm::DenseMap<mlir::Operation*, mlir::Operation*> _loopLimits;  // db producer -> db.limit or db.optional_match
 
-    // The handle of the cut every row of an optional match reaches. Its pattern's loops
-    // are bounded by what that cut still admits at each step.
-    llvm::DenseMap<mlir::Operation*, mlir::Value> _optionalMatchLimits;  // db.optional_match -> handle
+    // The cut every row of an optional match reaches. Its pattern's loops are bounded by
+    // what that cut still admits at each step.
+    llvm::DenseMap<mlir::Operation*, mlir::Operation*> _optionalMatchLimits;  // db.optional_match -> db.limit
 
     // The columns one limit's walk has reached, so a column reached along many paths of
     // the dataflow is walked once rather than once per path
@@ -810,8 +813,8 @@ private:
     void buildLoopForSource(mlir::Value iterator, mlir::Operation* dbOp);
 
     // Walk the db dataflow backward from a limited column, recording in
-    // _loopLimitHandle that each loop-opening op (scan / get_out_edges) and cross
-    // product it depends on carries this limit's handle.
+    // _loopLimits that each loop-opening op (scan / get_out_edges) and cross
+    // product it depends on carries the handle of @param limitOwner.
     // A cross product's factors are regions, so the walk goes through their
     // db.yield operands; a property fetch opens no loop but is traversed to reach
     // its input chunk's loop. The first limit to claim a producer keeps it.
@@ -820,14 +823,14 @@ private:
     // @param rowsDroppedBeforeTheCut is set once the walk has passed an op that
     // drops rows, which bars the handle from a cross product below it.
     bool assignProducerLoops(mlir::Value column,
-                             mlir::Value handle,
+                             mlir::Operation* limitOwner,
                              bool rowsDroppedBeforeTheCut,
                              mlir::Operation* holder);
 
-    // Claims @param column's producer for @param handle and lists in @param frame the
+    // Claims @param column's producer for @param limitOwner and lists in @param frame the
     // columns the walk goes on to, without walking them
     void visitProducer(mlir::Value column,
-                       mlir::Value handle,
+                       mlir::Operation* limitOwner,
                        bool rowsDroppedBeforeTheCut,
                        mlir::Operation* holder,
                        ProducerWalkFrame& frame);
@@ -837,11 +840,14 @@ private:
     // Records that the loops producing the relation which drives @param limit's projection
     // carry its handle, so a cut charged to constants alone stops its nest as any other
     // cut does rather than letting it run to the end.
-    void assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Value handle, mlir::Operation* holder);
+    void assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Operation* holder);
 
     // Records in _optionalMatchLimits the optional matches ahead of @param limit that
     // only ops keeping every row separate from it.
-    void assignOptionalMatchLimits(mlir::db::Limit limit, mlir::Value handle);
+    void assignOptionalMatchLimits(mlir::db::Limit limit);
+
+    // The handle of the limit @param dbOp's loop carries, or null for a loop no limit bounds
+    mlir::Value loopLimitHandle(mlir::Operation* dbOp) const;
 
     // Peephole over the lowered nl function: where an nl.limit_truncate's results
     // are consumed exactly by one adjacent nl.output (the terminal-LIMIT shape),

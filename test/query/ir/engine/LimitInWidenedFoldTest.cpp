@@ -49,23 +49,28 @@ TEST_F(LimitInWidenedFoldTest, collectsALimitedMatch) {
 }
 
 TEST_F(LimitInWidenedFoldTest, checksALimitedMatchExists) {
-    const Rows expected = {{"Remy", "1.000000"},
-                           {"Adam", "1.000000"},
-                           {"Maxime", "0.000000"},
-                           {"Luc", "0.000000"},
-                           {"Martina", "0.000000"},
-                           {"Suhas", "0.000000"},
-                           {"Cyrus", "0.000000"},
-                           {"Doruk", "0.000000"}};
-
     expectRows("MATCH (n:Person) "
                "RETURN n.name, reduce(acc = 0.0, x IN [1, 2] | "
                "CASE WHEN EXISTS { MATCH (n)-->(m)-->(k) RETURN k LIMIT 1 } THEN acc + 0.5 ELSE acc END)",
-               expected);
+               {{"Remy", "1.000000"},
+                {"Adam", "1.000000"},
+                {"Maxime", "0.000000"},
+                {"Luc", "0.000000"},
+                {"Martina", "0.000000"},
+                {"Suhas", "0.000000"},
+                {"Cyrus", "0.000000"},
+                {"Doruk", "0.000000"}});
     expectRows("MATCH (n:Person) "
                "RETURN n.name, reduce(acc = 0, x IN [1, 2] | "
                "CASE WHEN EXISTS { MATCH (n)-->(m)-->(k) RETURN k LIMIT 1 } THEN acc + 0.5 ELSE acc END)",
-               expected);
+               {{"Remy", "1.000000"},
+                {"Adam", "1.000000"},
+                {"Maxime", "0"},
+                {"Luc", "0"},
+                {"Martina", "0"},
+                {"Suhas", "0"},
+                {"Cyrus", "0"},
+                {"Doruk", "0"}});
 }
 
 TEST_F(LimitInWidenedFoldTest, countsALimitedTwoHopMatch) {

@@ -50,6 +50,20 @@ namespace storage = mlir::storage;
 
 namespace {
 
+bool isDefinedWithin(mlir::Value value, mlir::Operation* operation) {
+    mlir::Operation* const definingOp = value.getDefiningOp();
+    mlir::Operation* const definer = definingOp ? definingOp : value.getParentBlock()->getParentOp();
+
+    return operation->isAncestor(definer);
+}
+
+template <typename Key>
+void forgetValuesDefinedWithin(mlir::Operation* operation, llvm::DenseMap<Key, mlir::Value>& map) {
+    map.remove_if([operation](const auto& entry) {
+        return isDefinedWithin(entry.second, operation);
+    });
+}
+
 void collectLastReaders(mlir::MutableArrayRef<mlir::Region> regions, llvm::SmallVectorImpl<size_t>& lastReaders) {
     lastReaders.assign(regions.front().getNumArguments(), 0);
 
@@ -1180,7 +1194,7 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     _innermostRegionBody = nullptr;
     _innermostCardinality = mlir::Value();
     _limitHandles.clear();
-    _loopLimitHandle.clear();
+    _loopLimits.clear();
     _optionalMatchLimits.clear();
     _sortTopK.clear();
     _fusedLimits.clear();
@@ -1265,12 +1279,12 @@ void DBLowering::hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock
     // the truncate fan out freely). The first limit, in program order, to claim a
     // shared producer wins, so a loop never needs to carry two handles.
     for (mlir::db::Limit limit : limits) {
-        const mlir::Value handle = _limitHandles[limit.getOperation()];
+        mlir::Operation* const limitOp = limit.getOperation();
         _producerWalkVisits.clear();
 
         bool producedByALoop = false;
         for (const mlir::Value column : limit.getColumns()) {
-            producedByALoop |= assignProducerLoops(column, handle, /*rowsDroppedBeforeTheCut=*/false, holder);
+            producedByALoop |= assignProducerLoops(column, limitOp, /*rowsDroppedBeforeTheCut=*/false, holder);
         }
 
         // A cut over constants alone walks back to no loop at all - the constants are
@@ -1278,10 +1292,10 @@ void DBLowering::hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock
         // projection instead. Without it the nest runs to its end and the budget only
         // stops the output, producing every row to throw all but k away.
         if (!producedByALoop) {
-            assignCardinalityDriverLoop(limit, handle, holder);
+            assignCardinalityDriverLoop(limit, holder);
         }
 
-        assignOptionalMatchLimits(limit, handle);
+        assignOptionalMatchLimits(limit);
     }
 }
 
@@ -1466,6 +1480,9 @@ void DBLowering::moveAheadOfLoops(mlir::Operation* computation) {
 
 void DBLowering::eraseOp(mlir::Operation* operation) {
     forgetErasedValues(operation, _constantColumns);
+    forgetValuesDefinedWithin(operation, _valueMap);
+    forgetValuesDefinedWithin(operation, _limitHandles);
+
     operation->erase();
 }
 
@@ -3352,9 +3369,11 @@ void DBLowering::lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch) {
 
     // Every row drained reaches the cut, so once the pattern has matched as many rows as
     // the cut still admits, the drain spends the budget before it reaches a missed row.
+    mlir::Operation* const optionalMatchOp = optionalMatch.getOperation();
     mlir::Value patternLimit;
-    if (const mlir::Value cutLimit = _optionalMatchLimits.lookup(optionalMatch.getOperation())) {
-        patternLimit = _builder.create<nl::LimitRemaining>(loc, cutLimit).getState();
+    if (mlir::Operation* const cut = _optionalMatchLimits.lookup(optionalMatchOp)) {
+        patternLimit = _builder.create<nl::LimitRemaining>(loc, _limitHandles.lookup(cut)).getState();
+        _limitHandles[optionalMatchOp] = patternLimit;
     }
 
     // The pattern reads this step's rows through its block arguments, and the row tag
@@ -3382,7 +3401,7 @@ void DBLowering::lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch) {
 
         _producerWalkVisits.clear();
         for (const mlir::Value column : patternYield.getColumns()) {
-            assignProducerLoops(column, patternLimit, /*rowsDroppedBeforeTheCut=*/false, optionalMatch.getOperation());
+            assignProducerLoops(column, optionalMatchOp, /*rowsDroppedBeforeTheCut=*/false, optionalMatchOp);
         }
     }
 
@@ -3445,7 +3464,7 @@ void DBLowering::lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch) {
     setInsertionInto(stepBlock);
     nl::OptionalDrain drain = _builder.create<nl::OptionalDrain>(loc, iteratorType, state);
 
-    buildLoopForSource(drain.getResult(), optionalMatch.getOperation());
+    buildLoopForSource(drain.getResult(), optionalMatchOp);
 }
 
 void DBLowering::lowerCallSubquery(mlir::db::CallSubquery call) {
@@ -3574,7 +3593,7 @@ void DBLowering::lowerSubqueryPerRow(mlir::db::CallSubquery call,
 
     // The loop over the step's rows carries the handle of a limit downstream of the op,
     // as the loops feeding that limit do, so a spent budget stops the walk over the rows
-    const mlir::Value limitHandle = _loopLimitHandle.lookup(call.getOperation());
+    const mlir::Value limitHandle = loopLimitHandle(call.getOperation());
 
     setInsertionInto(stepBlock);
     nl::EachRow eachRow = _builder.create<nl::EachRow>(loc, inputChunks);
@@ -3630,7 +3649,7 @@ void DBLowering::lowerOptionalSubquery(mlir::db::CallSubquery call,
     llvm::SmallVector<mlir::Value, 4> stepChunks(inputChunks.begin(), inputChunks.end());
 
     if (perRow) {
-        const mlir::Value limitHandle = _loopLimitHandle.lookup(call.getOperation());
+        const mlir::Value limitHandle = loopLimitHandle(call.getOperation());
 
         setInsertionInto(stepBlock);
         nl::EachRow eachRow = _builder.create<nl::EachRow>(loc, inputChunks);
@@ -5490,7 +5509,7 @@ const Procedure* DBLowering::procedureFor(llvm::StringRef name) const {
 }
 
 bool DBLowering::assignProducerLoops(mlir::Value column,
-                                     mlir::Value handle,
+                                     mlir::Operation* limitOwner,
                                      bool rowsDroppedBeforeTheCut,
                                      mlir::Operation* holder) {
     bool reachedALoop = false;
@@ -5500,7 +5519,7 @@ bool DBLowering::assignProducerLoops(mlir::Value column,
 
     llvm::SmallVector<ProducerWalkFrame> frames;
     frames.emplace_back();
-    visitProducer(column, handle, rowsDroppedBeforeTheCut, holder, frames.back());
+    visitProducer(column, limitOwner, rowsDroppedBeforeTheCut, holder, frames.back());
 
     for (;;) {
         ProducerWalkFrame& frame = frames.back();
@@ -5517,7 +5536,7 @@ bool DBLowering::assignProducerLoops(mlir::Value column,
             }
 
             frames.emplace_back();
-            visitProducer(operand, handle, operandRowsDropped, holder, frames.back());
+            visitProducer(operand, limitOwner, operandRowsDropped, holder, frames.back());
             continue;
         }
 
@@ -5548,7 +5567,7 @@ bool DBLowering::findCoveringProducerVisit(mlir::Value column, bool rowsDroppedB
 }
 
 void DBLowering::visitProducer(mlir::Value column,
-                               mlir::Value handle,
+                               mlir::Operation* limitOwner,
                                bool rowsDroppedBeforeTheCut,
                                mlir::Operation* holder,
                                ProducerWalkFrame& frame) {
@@ -5613,8 +5632,8 @@ void DBLowering::visitProducer(mlir::Value column,
 
     // The first limit, in program order, to claim a producer wins, so a loop
     // shared by two limits' nests carries the outer one and never two handles.
-    if (takesTheHandle && !_loopLimitHandle.count(definingOp)) {
-        _loopLimitHandle[definingOp] = handle;
+    if (takesTheHandle) {
+        _loopLimits.try_emplace(definingOp, limitOwner);
     }
 
     if (breaksPipeline) {
@@ -5670,7 +5689,7 @@ void DBLowering::visitProducer(mlir::Value column,
     }
 }
 
-void DBLowering::assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Value handle, mlir::Operation* holder) {
+void DBLowering::assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Operation* holder) {
     mlir::Operation* const limitOp = limit.getOperation();
 
     // The relation driving the projection is the loop opened last before the cut: its rows
@@ -5700,16 +5719,18 @@ void DBLowering::assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Value 
         return;
     }
 
-    assignProducerLoops(driver->getResult(0), handle, rowsDropped, holder);
+    assignProducerLoops(driver->getResult(0), limitOp, rowsDropped, holder);
 }
 
-void DBLowering::assignOptionalMatchLimits(mlir::db::Limit limit, mlir::Value handle) {
-    for (mlir::Operation* operation = limit->getPrevNode(); operation; operation = operation->getPrevNode()) {
+void DBLowering::assignOptionalMatchLimits(mlir::db::Limit limit) {
+    mlir::Operation* const limitOp = limit.getOperation();
+
+    for (mlir::Operation* operation = limitOp->getPrevNode(); operation; operation = operation->getPrevNode()) {
         const bool isOptionalMatch = mlir::isa<mlir::db::OptionalMatch>(operation);
-        const bool drainedUnderThisCut = isOptionalMatch && _loopLimitHandle.lookup(operation) == handle;
+        const bool drainedUnderThisCut = isOptionalMatch && _loopLimits.lookup(operation) == limitOp;
 
         if (drainedUnderThisCut) {
-            _optionalMatchLimits[operation] = handle;
+            _optionalMatchLimits[operation] = limitOp;
         } else if (!keepsEveryRow(operation)) {
             return;
         }
@@ -7480,12 +7501,21 @@ void DBLowering::lowerMakePath(mlir::db::MakePath makePath) {
     _valueMap[makePath.getResult()] = path.getResult();
 }
 
+mlir::Value DBLowering::loopLimitHandle(mlir::Operation* dbOp) const {
+    mlir::Operation* const limitOwner = _loopLimits.lookup(dbOp);
+    if (!limitOwner) {
+        return mlir::Value();
+    }
+
+    return _limitHandles.lookup(limitOwner);
+}
+
 void DBLowering::buildLoopForSource(mlir::Value iterator, mlir::Operation* dbOp) {
     // The handle this loop carries, or null when it produces no limited column -
     // giving the iterator-only builder's unbounded loop. A producing loop carries
     // its limit's handle so the break unwinds the producing nest; a consumer loop
     // (lowered after the limit) is never in the map and stays unbounded.
-    const mlir::Value limitHandle = _loopLimitHandle.lookup(dbOp);
+    const mlir::Value limitHandle = loopLimitHandle(dbOp);
     nl::For forLoop = _builder.create<nl::For>(_builder.getUnknownLoc(), iterator, limitHandle);
 
     // The loop binds one variable per chunk the iterator produces, in the same
