@@ -110,6 +110,10 @@ struct SearchedValueKindPairs {
         typename SearchPairs<types::Embedding::Primitive>::Pairs,
         typename SearchPairs<NodeID>::Pairs,
         typename SearchPairs<EdgeID>::Pairs,
+        typename SearchPairs<LabelID>::Pairs,
+        typename SearchPairs<EdgeTypeID>::Pairs,
+        typename SearchPairs<PropertyTypeID>::Pairs,
+        typename SearchPairs<ValueType>::Pairs,
         typename SearchPairs<CellView>::Pairs,
         typename SearchPairs<ListView>::Pairs,
         typename SearchPairs<MapView>::Pairs>::Type;

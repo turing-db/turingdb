@@ -175,3 +175,5 @@ add_turing_test(test_query_ir_conversion_over_no_rows ConversionOverNoRowsTest.c
 add_turing_test(test_query_ir_schema_id_equality SchemaIDEqualityTest.cpp)
 
 add_turing_test(test_query_ir_schema_id_membership SchemaIDMembershipTest.cpp)
+
+add_turing_test(test_query_ir_schema_id_empty_or_null_list SchemaIDEmptyOrNullListTest.cpp)

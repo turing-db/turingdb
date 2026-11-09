@@ -136,6 +136,23 @@ inline bool operator==(const CellView element, const EdgeID value) {
         && element.getAs<EdgeID>() == value;
 }
 
+// No cell holds a schema ID or a value type, so no element equals one
+inline bool operator==(const CellView element, const LabelID value) {
+    return false;
+}
+
+inline bool operator==(const CellView element, const EdgeTypeID value) {
+    return false;
+}
+
+inline bool operator==(const CellView element, const PropertyTypeID value) {
+    return false;
+}
+
+inline bool operator==(const CellView element, const ValueType value) {
+    return false;
+}
+
 inline bool operator==(const CellView element, const ListView value) {
     return element.getTag() == CellTag::ListView
         && element.getAs<ListView>() == value;
