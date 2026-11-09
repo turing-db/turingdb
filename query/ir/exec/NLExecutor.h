@@ -395,8 +395,7 @@ public:
     // selectToNullable, which reads a scalar value column.
     static NLUnaryFn selectEntityToNullable(NLChunkKind kind, LocalMemory* memory, Column*& result);
 
-    static NLUnaryFn selectToNullable(ValueType valueType, const Column* operand, LocalMemory* memory, Column*& result);
-    static NLUnaryFn selectToNullable(NLChunkKind kind, LocalMemory* memory, Column*& result);
+    static NLUnaryFn selectToNullable(NLChunkKind kind, const Column* operand, LocalMemory* memory, Column*& result);
 
     // Read the entity of @param kind each tagged cell holds (nl.checked_cast), a null cell
     // reading as the invalid ID; a cell holding another value raises
@@ -505,7 +504,6 @@ public:
     static NLTruthReadFunction selectTruthRead(bool nullable, bool untypedNull, bool taggedCells);
 
     // Size the CASE result to the step's rows, all absent
-    static NLCaseResetFn selectCaseReset(ValueType valueType);
     static NLCaseResetFn selectCaseReset(NLChunkKind kind);
 
     // Read one branch's condition column: a mask, a nullable mask - where a null row is
@@ -513,13 +511,12 @@ public:
     static NLCaseTestFn selectCaseTest(const Column* condition, bool nullable, bool untypedNull);
 
     // Copy one branch's value column into the result, which lowering resolved to the one
-    // nullable value or ID column every branch promotes into. A branch of null writes
-    // nothing: the reset already left the row absent.
-    static NLCaseWriteFn selectCaseWrite(ValueType valueType,
+    // nullable column every branch promotes into. A branch of null writes nothing: the
+    // reset already left the row absent.
+    static NLCaseWriteFn selectCaseWrite(NLChunkKind kind,
                                          const Column* value,
                                          bool nullable,
                                          bool untypedNull);
-    static NLCaseWriteFn selectCaseWrite(NLChunkKind kind, bool nullable, bool untypedNull);
 
     // The siblings of the two above for a selection whose branches are nodes, edges or
     // paths: such a column carries its null in a value of its own rather than in an
@@ -530,7 +527,6 @@ public:
 
     // Fill the null rows of a nullable value or ID column, of a node, an edge or a path
     // column, which holds its null in a value of its own, and of a column of tagged cells
-    static NLFillNullRowsFn selectFillNullRows(ValueType valueType);
     static NLFillNullRowsFn selectFillNullRows(NLChunkKind kind);
     static NLFillNullRowsFn selectOwnNullFillNullRows(NLChunkKind kind);
     static NLFillNullRowsFn selectTaggedCellFillNullRows();
@@ -604,17 +600,14 @@ public:
     static NLFillNullFunction selectFillNullFunction(NLChunkKind kind);
 
     // The null pad of every other chunk shape, the siblings of the gather selectors: an
-    // absent value in a nullable column, a default value in a plain one, a cleared mask
-    static NLFillNullFunction selectOptFillNullFunction(ValueType valueType);
+    // absent value in a nullable column, a cleared mask
     static NLFillNullFunction selectOptFillNullFunction(NLChunkKind kind);
-    static NLFillNullFunction selectPlainFillNullFunction(ValueType valueType);
     static NLFillNullFunction selectMaskFillNull();
     static NLFillNullFunction selectOptListFillNull();
     static NLFillNullFunction selectOptCellFillNull();
     static NLFillNullFunction selectCellFillNull();
 
-    // Gather for a nullable value chunk of this value type (sort emit re-chunk).
-    static NLGatherFunction selectOptGatherFunction(ValueType valueType);
+    // Gather for a nullable chunk of this kind (sort emit re-chunk).
     static NLGatherFunction selectOptGatherFunction(NLChunkKind kind);
 
     // Gather for the count result chunk: one non-nullable uint64 tally per row.
@@ -627,38 +620,23 @@ public:
 
     // The fetch for an nl.fetch_nodes reading its IDs out of nodes, integers or tagged cells
     static NLFetchNodesFunction selectNodeFetchFunction();
-    static NLFetchNodesFunction selectIntegerFetchFunction(ValueType valueType, bool nullable);
+    static NLFetchNodesFunction selectIntegerFetchFunction(NLChunkKind kind, bool nullable);
     static NLFetchNodesFunction selectTaggedFetchFunction(bool nullable);
 
-    // Append (onto a buffer tail) for an ID chunk of this kind / a nullable value
-    // chunk of this value type. Used by nl.sort_collect.
+    // Append (onto a buffer tail) for a chunk / a nullable chunk of this kind. Used by
+    // nl.sort_collect.
     static NLAppendFunction selectAppendFunction(NLChunkKind kind);
-    static NLAppendFunction selectOptAppendFunction(ValueType valueType);
     static NLAppendFunction selectOptAppendFunction(NLChunkKind kind);
     static NLAppendFunction selectCountAppendFunction();
 
-    // The 3-way row comparator for an ID key column of this kind / a nullable
-    // value key column of this value type. The value-type selector throws for a
-    // value type with no order (an embedding), which cannot be a sort key.
+    // The 3-way row comparator for a key column / a nullable key column of this kind.
+    // Both throw for a kind with no order (an embedding), which cannot be a sort key.
     static NLCompareFunction selectCompareFunction(NLChunkKind kind);
-    static NLCompareFunction selectOptCompareFunction(ValueType valueType);
     static NLCompareFunction selectOptCompareFunction(NLChunkKind kind);
 
     // The 3-way row comparator for a collected list chunk, ordering two lists
     // lexicographically over their elements.
     static NLCompareFunction selectListCompareFunction();
-
-    // The handlers of a plain value column - a ColumnVector<Primitive> rather than the
-    // nullable ColumnOptVector a property fetch yields. A tally comes out this way, and so
-    // does an expression over one: both are present in every row. Numeric only, since
-    // these are the shapes an aggregate and the arithmetic over it produce.
-    static NLAppendFunction selectPlainAppendFunction(ValueType valueType);
-    static NLGatherFunction selectPlainGatherFunction(ValueType valueType);
-    static NLCompareFunction selectPlainCompareFunction(ValueType valueType);
-    static NLCopyFunction selectPlainCopyFunction(ValueType valueType);
-    static NLBroadcastFunction selectPlainBlockRepeatFunction(ValueType valueType);
-    static NLBroadcastFunction selectPlainTileFunction(ValueType valueType);
-    static NLKeyAppendFunction selectPlainKeyAppendFunction(ValueType valueType);
 
     // The appenders that key one row of a merge's property value column. A merge keys
     // the value a row asks for against the value the graph holds, and those arrive in a
@@ -670,9 +648,8 @@ public:
     // and the graph side keys the double it reads back.
     static NLKeyAppendFunction selectPlainMergeKeyAppendFunction(NLChunkKind kind, ValueType keyType);
     static NLKeyAppendFunction selectConstMergeKeyAppendFunction(ValueType valueType, ValueType keyType);
-    static NLKeyAppendFunction selectOptMergeKeyAppendFunction(ValueType valueType, ValueType keyType);
+    static NLKeyAppendFunction selectOptMergeKeyAppendFunction(NLChunkKind kind, ValueType keyType);
     static NLKeyAppendFunction selectNullMergeKeyAppendFunction();
-    static NLGroupKeyGatherFunction selectPlainGroupKeyGather(ValueType valueType);
 
     // Block-repeat for an ID chunk of this kind (outer column).
     static NLBroadcastFunction selectBlockRepeatFunction(NLChunkKind kind);
@@ -687,12 +664,10 @@ public:
     // Tile for an ID chunk of this kind (inner column).
     static NLBroadcastFunction selectTileFunction(NLChunkKind kind);
 
-    // Block-repeat for a nullable value chunk of this value type (outer column).
-    static NLBroadcastFunction selectOptBlockRepeatFunction(ValueType valueType);
+    // Block-repeat for a nullable chunk of this kind (outer column).
     static NLBroadcastFunction selectOptBlockRepeatFunction(NLChunkKind kind);
 
-    // Tile for a nullable value chunk of this value type (inner column).
-    static NLBroadcastFunction selectOptTileFunction(ValueType valueType);
+    // Tile for a nullable chunk of this kind (inner column).
     static NLBroadcastFunction selectOptTileFunction(NLChunkKind kind);
 
     // The fill that lays a constant column's single value out over a step's rows,
@@ -791,44 +766,38 @@ public:
     // Gather for a constant chunk, whose one value stands for every row gathered
     static NLGatherFunction selectConstGatherFunction();
 
-    // Range copy for a nullable value chunk of this value type (skip suffix copy).
-    static NLCopyFunction selectOptCopyFunction(ValueType valueType);
+    // Range copy for a nullable chunk of this kind (skip suffix copy).
     static NLCopyFunction selectOptCopyFunction(NLChunkKind kind);
 
-    // Row-key serialization for an ID chunk of this kind / a nullable value chunk
-    // of this value type. Used by a serialized group hash table to build each row's
-    // key.
+    // Row-key serialization for a chunk / a nullable chunk of this kind. Used by a
+    // serialized group hash table to build each row's key.
     static NLKeyAppendFunction selectKeyAppendFunction(NLChunkKind kind);
-    static NLKeyAppendFunction selectOptKeyAppendFunction(ValueType valueType);
     static NLKeyAppendFunction selectOptKeyAppendFunction(NLChunkKind kind);
 
-    // The packing of a grouping key's values into a fixed-width key: an ID or value chunk of
-    // this kind, a nullable value chunk of this value type, a nullable ID chunk of this kind, a
-    // mask. A chunk whose values have no fixed width - a string, a list - packs with no handle.
+    // The packing of a grouping key's values into a fixed-width key: a chunk or a nullable
+    // chunk of this kind, a mask. A chunk whose values have no fixed width - a string, a
+    // list - packs with no handle.
     static NLKeyPacking selectKeyPacking(NLChunkKind kind);
-    static NLKeyPacking selectOptKeyPacking(ValueType valueType);
     static NLKeyPacking selectOptKeyPacking(NLChunkKind kind);
     static NLKeyPacking selectMaskKeyPacking();
 
-    // Hash, equality and match test for a join key: an ID chunk of this kind, a nullable value chunk
-    // of this value type, a plain numeric chunk, a type-erased cell, a mask.
+    // Hash, equality and match test for a join key: a chunk or a nullable chunk of this
+    // kind, a type-erased cell, a mask.
     // Used by nl.hash_join_collect to chain a build row under its hash and by
     // nl.hash_join_probe to find and confirm the build rows a probe row matches. Two values
     // `=` holds equal hash alike whatever chunk holds them, so a probe key of another type
     // than the build key is confirmed by selectCrossTypeKeyEqualFunction.
     static NLJoinKeyFunctions selectJoinKeyFunctions(NLChunkKind kind);
-    static NLJoinKeyFunctions selectOptJoinKeyFunctions(ValueType valueType);
-    static NLJoinKeyFunctions selectPlainJoinKeyFunctions(ValueType valueType);
+    static NLJoinKeyFunctions selectOptJoinKeyFunctions(NLChunkKind kind);
     static NLJoinKeyFunctions selectCellJoinKeyFunctions();
     static NLJoinKeyFunctions selectOptCellJoinKeyFunctions();
     static NLJoinKeyFunctions selectMaskJoinKeyFunctions();
     static NLKeyEqualFunction selectCrossTypeKeyEqualFunction(const Column* probe, const Column* build);
 
     // Non-null row count for a COUNT. An ID chunk has no null rows, so countAllRows
-    // is its handle (the row count); a nullable value chunk of this value type
-    // counts only its present values. Used by nl.count_update.
+    // is its handle (the row count); a nullable chunk of this kind counts only its
+    // present values. Used by nl.count_update.
     static size_t countAllRows(const Column* column);
-    static NLCountFunction selectOptCountFunction(ValueType valueType);
     static NLCountFunction selectOptCountFunction(NLChunkKind kind);
 
     // Non-null row count for a COUNT over a node, edge or edge-type ID chunk, whose null
@@ -876,8 +845,11 @@ public:
     static NLGroupAggregateFoldFunction selectOptTaggedGroupAggregateFold(GroupAggregateKind kind);
     static void selectTaggedGroupAggregateState(GroupAggregateKind kind, NLGroupAggregateStateType& stateType);
     static NLGroupAggregateFoldFunction selectGroupCountAllFold();
-    static NLGroupAggregateFoldFunction selectGroupCountDistinctFold(ValueType inputType);
     static NLGroupAggregateFoldFunction selectGroupCountDistinctChunkFold(NLChunkKind kind);
+
+    // The grouped count / count(DISTINCT) folds of a nullable chunk of this kind
+    static NLGroupAggregateFoldFunction selectGroupCountOptFold(NLChunkKind kind);
+    static NLGroupAggregateFoldFunction selectGroupCountDistinctOptFold(NLChunkKind kind);
 
     // The grouped count / count(DISTINCT) folds of a type-erased column of tagged
     // scalars, the column a heterogeneous UNWIND produces
@@ -887,14 +859,11 @@ public:
     static NLGroupAggregateFoldFunction selectGroupCountDistinctOptCellFold();
     static NLGroupAggregateFoldFunction selectGroupCountOptListFold();
     static NLGroupAggregateFoldFunction selectGroupCountDistinctOptListFold();
-    static NLGroupAggregateFoldFunction selectGroupCountOptIDFold(NLChunkKind kind);
-    static NLGroupAggregateFoldFunction selectGroupCountDistinctOptIDFold(NLChunkKind kind);
 
-    // The append (onto a key buffer's tail) for an ID chunk of this kind / a
-    // nullable value chunk of this value type. Used by nl.group_aggregate_update to
-    // grow the key buffers with each new group's key values.
+    // The append (onto a key buffer's tail) for a chunk / a nullable chunk of this kind.
+    // Used by nl.group_aggregate_update to grow the key buffers with each new group's key
+    // values.
     static NLGroupKeyGatherFunction selectGroupKeyGather(NLChunkKind kind);
-    static NLGroupKeyGatherFunction selectOptGroupKeyGather(ValueType valueType);
     static NLGroupKeyGatherFunction selectOptGroupKeyGather(NLChunkKind kind);
 
     // The collect fold for a column of this value type: appends each present value to
@@ -913,7 +882,7 @@ public:
     static NLUnwindElementCountFunction selectListUnwindElementCount(bool sourceIsNullable);
     static NLUnwindElementCountFunction selectTaggedUnwindElementCount();
     static NLUnwindElementCountFunction selectOptTaggedUnwindElementCount();
-    static NLUnwindElementCountFunction selectOptUnwindElementCount(ValueType valueType);
+    static NLUnwindElementCountFunction selectOptUnwindElementCount(NLChunkKind kind);
     static NLUnwindElementCountFunction selectValueUnwindElementCount();
 
     // The drains filling an nl.unwind's element chunk from a column whose cells hold more
@@ -975,7 +944,7 @@ public:
     static NLCellAbsentFunction selectPresentCell();
     static NLCellAbsentFunction selectListCellAbsent();
     static NLCellAbsentFunction selectTaggedCellAbsent(bool nullable);
-    static NLCellAbsentFunction selectValueCellAbsent(ValueType valueType);
+    static NLCellAbsentFunction selectValueCellAbsent(NLChunkKind kind);
 
     // The fold and list-emit for an entity chunk of this kind, whose elements carry a
     // node or edge ID. An edge-type ID is no entity, so the kind is rejected.
@@ -983,13 +952,6 @@ public:
                                             bool distinctValues,
                                             NLCollectFoldFunction& fold,
                                             NLCollectListEmitFunction& listEmit);
-
-    // The nullable-entity sibling, for a chunk whose absent rows collect drops as it
-    // drops an invalid ID
-    static void selectCollectOptEntityHandlers(NLChunkKind kind,
-                                               bool distinctValues,
-                                               NLCollectFoldFunction& fold,
-                                               NLCollectListEmitFunction& listEmit);
 
     // The handlers a collect of a list or a map column reads, @tparam Container being a
     // ListView or a MapView: the cells nest into a list of lists or a list of maps.

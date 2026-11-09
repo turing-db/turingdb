@@ -318,7 +318,7 @@ void NLMergeExecutor::typeCellProperty(NLMergeProperty& property, NLMergeScanPro
     if (!written._propertyType.isValid()) {
         written._propertyType = type;
         written._values = allocOptValueColumn(_data->getMemory(), type._valueType, 1);
-        written._keyAppend = NLExecutor::selectOptKeyAppendFunction(type._valueType);
+        written._keyAppend = NLExecutor::selectOptKeyAppendFunction(chunkKindFromValueType(type._valueType));
     }
 }
 

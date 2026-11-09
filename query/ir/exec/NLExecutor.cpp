@@ -118,31 +118,6 @@ uint64_t untaggedRow(const ColumnVector<uint64_t>* row) {
     return row ? row->getRaw().front() : 0;
 }
 
-template <typename Handler>
-void dispatchIDChunkKind(NLChunkKind kind, Handler&& handler) {
-    switch (kind) {
-        case NLChunkKind::EdgeTypeID:
-            return handler.template operator()<EdgeTypeID>();
-        break;
-
-        case NLChunkKind::LabelID:
-            return handler.template operator()<LabelID>();
-        break;
-
-        case NLChunkKind::PropertyTypeID:
-            return handler.template operator()<PropertyTypeID>();
-        break;
-
-        case NLChunkKind::ValueTypeCode:
-            return handler.template operator()<ValueType>();
-        break;
-
-        default:
-            throw IRException("A nullable chunk of this element type is not an ID column");
-        break;
-    }
-}
-
 // The cursor an unwind loop and a list comprehension both walk: every (row, element) pair
 // of a source column in row order. A cell contributing nothing - a null, an empty list -
 // is skipped, so it emits no row. The cursor is local to the walk, so one nested in an
@@ -2055,11 +2030,20 @@ void toNullableConst(Column* result, const Column* operand) {
     *nullable = std::optional<Primitive>((*constant)[0]);
 }
 
+// No literal spells a schema ID or a value-type code, so no constant column holds one
+template <typename Element>
+concept SchemaIDElement = std::same_as<Element, EdgeTypeID>
+                       || std::same_as<Element, LabelID>
+                       || std::same_as<Element, PropertyTypeID>
+                       || std::same_as<Element, ValueType>;
+
 template <typename Primitive>
 NLUnaryFn selectToNullableOf(const Column* operand, LocalMemory* memory, Column*& result) {
-    if (operand->getContainerKind() == ContainerKind::code<ColumnConst>()) {
-        result = memory->alloc<ColumnConst<std::optional<Primitive>>>();
-        return &toNullableConst<Primitive>;
+    if constexpr (!SchemaIDElement<Primitive>) {
+        if (operand->getContainerKind() == ContainerKind::code<ColumnConst>()) {
+            result = memory->alloc<ColumnConst<std::optional<Primitive>>>();
+            return &toNullableConst<Primitive>;
+        }
     }
 
     result = memory->alloc<ColumnOptVector<Primitive>>();
@@ -5000,58 +4984,6 @@ void collectValidIDFold(Column* values,
     }
 }
 
-template <typename IDType>
-void collectOptValidIDFold(Column* values,
-                           const Column* input,
-                           const std::vector<size_t>& groups,
-                           std::vector<std::vector<size_t>>& groupPositions,
-                           const NLGroupDistinctTally* distinct,
-                           NLValueStore& store) {
-    auto& valuesRaw = static_cast<ColumnVector<IDType>*>(values)->getRaw();
-    const auto& inputRaw = static_cast<const ColumnOptVector<IDType>*>(input)->getRaw();
-
-    valuesRaw.reserve(valuesRaw.size() + inputRaw.size());
-
-    for (size_t row = 0; row < inputRaw.size(); row++) {
-        const std::optional<IDType>& id = inputRaw[row];
-        if (!id.has_value() || !id->isValid()) {
-            continue;
-        }
-
-        const size_t position = valuesRaw.size();
-        valuesRaw.push_back(*id);
-        groupPositions[groups[row]].push_back(position);
-    }
-}
-
-template <typename IDType>
-void collectOptValidIDFoldDistinct(Column* values,
-                                   const Column* input,
-                                   const std::vector<size_t>& groups,
-                                   std::vector<std::vector<size_t>>& groupPositions,
-                                   const NLGroupDistinctTally* distinct,
-                                   NLValueStore& store) {
-    auto& valuesRaw = static_cast<ColumnVector<IDType>*>(values)->getRaw();
-    const auto& inputRaw = static_cast<const ColumnOptVector<IDType>*>(input)->getRaw();
-
-    for (size_t row = 0; row < inputRaw.size(); row++) {
-        const std::optional<IDType>& id = inputRaw[row];
-        if (!id.has_value() || !id->isValid()) {
-            continue;
-        }
-
-        const size_t group = groups[row];
-
-        if (!distinct->isNew(row)) {
-            continue;
-        }
-
-        const size_t position = valuesRaw.size();
-        valuesRaw.push_back(*id);
-        groupPositions[group].push_back(position);
-    }
-}
-
 // The ID sibling of collectFoldDistinct: an entity repeated within its group joins the
 // list once, keyed by the ID's underlying integer, and the null an unmatched pattern left
 // is no key of its own.
@@ -6230,14 +6162,6 @@ void selectCollectIDHandlers(bool distinctValues,
                              NLCollectFoldFunction& fold,
                              NLCollectListEmitFunction& listEmit) {
     fold = distinctValues ? &collectValidIDFoldDistinct<IDType> : &collectValidIDFold<IDType>;
-    listEmit = &collectListEmit<IDType>;
-}
-
-template <typename IDType>
-void selectCollectOptIDHandlers(bool distinctValues,
-                                NLCollectFoldFunction& fold,
-                                NLCollectListEmitFunction& listEmit) {
-    fold = distinctValues ? &collectOptValidIDFoldDistinct<IDType> : &collectOptValidIDFold<IDType>;
     listEmit = &collectListEmit<IDType>;
 }
 
@@ -10831,30 +10755,16 @@ NLCellAbsentFunction NLExecutor::selectTaggedCellAbsent(bool nullable) {
     return nullable ? &absentOptTaggedCell : &absentTaggedCell;
 }
 
-NLCellAbsentFunction NLExecutor::selectValueCellAbsent(ValueType valueType) {
+NLCellAbsentFunction NLExecutor::selectValueCellAbsent(NLChunkKind kind) {
     NLCellAbsentFunction selected = nullptr;
-
-    const auto select = [&]<SupportedType T>() {
-        selected = &absentValueCell<typename T::Primitive>;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
+    dispatchOptChunkKind(kind, [&]<typename Element>() { selected = &absentValueCell<Element>; });
 
     return selected;
 }
 
-NLCaseResetFn NLExecutor::selectCaseReset(ValueType valueType) {
-    NLCaseResetFn reset = nullptr;
-    const auto select = [&]<SupportedType T>() {
-        reset = &caseResetColumn<typename T::Primitive>;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
-
-    return reset;
-}
-
 NLCaseResetFn NLExecutor::selectCaseReset(NLChunkKind kind) {
     NLCaseResetFn reset = nullptr;
-    dispatchIDChunkKind(kind, [&]<typename ID>() { reset = &caseResetColumn<ID>; });
+    dispatchOptChunkKind(kind, [&]<typename Element>() { reset = &caseResetColumn<Element>; });
 
     return reset;
 }
@@ -10940,19 +10850,9 @@ NLCaseWriteFn NLExecutor::selectOwnNullCaseWrite(NLChunkKind kind, bool untypedN
     throw IRException("Only a node, an edge or a path column holds its own null");
 }
 
-NLFillNullRowsFn NLExecutor::selectFillNullRows(ValueType valueType) {
-    NLFillNullRowsFn selected = nullptr;
-    const auto select = [&]<SupportedType T>() {
-        selected = &fillNullRows<std::optional<typename T::Primitive>>;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
-
-    return selected;
-}
-
 NLFillNullRowsFn NLExecutor::selectFillNullRows(NLChunkKind kind) {
     NLFillNullRowsFn selected = nullptr;
-    dispatchIDChunkKind(kind, [&]<typename ID>() { selected = &fillNullRows<std::optional<ID>>; });
+    dispatchOptChunkKind(kind, [&]<typename Element>() { selected = &fillNullRows<std::optional<Element>>; });
 
     return selected;
 }
@@ -10973,7 +10873,7 @@ NLFillNullRowsFn NLExecutor::selectTaggedCellFillNullRows() {
     return &fillNullRows<CellView>;
 }
 
-NLCaseWriteFn NLExecutor::selectCaseWrite(ValueType valueType,
+NLCaseWriteFn NLExecutor::selectCaseWrite(NLChunkKind kind,
                                           const Column* value,
                                           bool nullable,
                                           bool untypedNull) {
@@ -10982,29 +10882,13 @@ NLCaseWriteFn NLExecutor::selectCaseWrite(ValueType valueType,
     }
 
     NLCaseWriteFn write = nullptr;
-    const auto select = [&]<SupportedType T>() {
+    dispatchOptChunkKind(kind, [&]<typename Element>() {
         if (untypedNull) {
-            write = &caseWriteNull<typename T::Primitive>;
+            write = &caseWriteNull<Element>;
         } else if (nullable) {
-            write = &caseWriteOptCell<typename T::Primitive>;
+            write = &caseWriteOptCell<Element>;
         } else {
-            write = &caseWritePlainCell<typename T::Primitive>;
-        }
-    };
-    ValueTypeDispatcher(valueType).execute(select);
-
-    return write;
-}
-
-NLCaseWriteFn NLExecutor::selectCaseWrite(NLChunkKind kind, bool nullable, bool untypedNull) {
-    NLCaseWriteFn write = nullptr;
-    dispatchIDChunkKind(kind, [&]<typename ID>() {
-        if (untypedNull) {
-            write = &caseWriteNull<ID>;
-        } else if (nullable) {
-            write = &caseWriteOptCell<ID>;
-        } else {
-            write = &caseWritePlainCell<ID>;
+            write = &caseWritePlainCell<Element>;
         }
     });
 
@@ -11069,67 +10953,10 @@ NLUnaryFn NLExecutor::selectCheckedCast(NLChunkKind kind, const Column* operand,
     throw IRException("A tagged cell is checked to hold a node or an edge only");
 }
 
-NLUnaryFn NLExecutor::selectToNullable(ValueType valueType, const Column* operand, LocalMemory* memory, Column*& result) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return selectToNullableOf<types::Int64::Primitive>(operand, memory, result);
-        break;
-
-        case ValueType::UInt64:
-            return selectToNullableOf<types::UInt64::Primitive>(operand, memory, result);
-        break;
-
-        case ValueType::Double:
-            return selectToNullableOf<types::Double::Primitive>(operand, memory, result);
-        break;
-
-        case ValueType::Bool:
-            return selectToNullableOf<types::Bool::Primitive>(operand, memory, result);
-        break;
-
-        case ValueType::String:
-            return selectToNullableOf<types::String::Primitive>(operand, memory, result);
-        break;
-
-        case ValueType::Embedding:
-            return selectToNullableOf<types::Embedding::Primitive>(operand, memory, result);
-        break;
-
-        case ValueType::DateTime:
-            return selectToNullableOf<types::DateTime::Primitive>(operand, memory, result);
-        break;
-
-        case ValueType::Duration:
-            return selectToNullableOf<types::Duration::Primitive>(operand, memory, result);
-        break;
-
-        case ValueType::Point:
-            return selectToNullableOf<types::Point::Primitive>(operand, memory, result);
-        break;
-
-        // A cell is a view into the query's list buffer, so the nullable column holds the
-        // views the plain one held and an empty optional where a row has no list at all
-        case ValueType::List:
-            return selectToNullableOf<types::List::Primitive>(operand, memory, result);
-        break;
-
-        case ValueType::Map:
-            return selectToNullableOf<types::Map::Primitive>(operand, memory, result);
-        break;
-
-        default:
-            throw IRException("Only a scalar, a list or a map column can be read as a nullable value column");
-        break;
-    }
-
-    return nullptr;
-}
-
-NLUnaryFn NLExecutor::selectToNullable(NLChunkKind kind, LocalMemory* memory, Column*& result) {
+NLUnaryFn NLExecutor::selectToNullable(NLChunkKind kind, const Column* operand, LocalMemory* memory, Column*& result) {
     NLUnaryFn toNullable = nullptr;
-    dispatchIDChunkKind(kind, [&]<typename ID>() {
-        result = memory->alloc<ColumnOptVector<ID>>();
-        toNullable = &toNullableColumn<ID>;
+    dispatchOptChunkKind(kind, [&]<typename Element>() {
+        toNullable = selectToNullableOf<Element>(operand, memory, result);
     });
 
     return toNullable;
@@ -12342,13 +12169,9 @@ NLUnwindElementCountFunction NLExecutor::selectListUnwindElementCount(bool sourc
     return sourceIsNullable ? &unwindOptListElementCount : &unwindListElementCount;
 }
 
-NLUnwindElementCountFunction NLExecutor::selectOptUnwindElementCount(ValueType valueType) {
+NLUnwindElementCountFunction NLExecutor::selectOptUnwindElementCount(NLChunkKind kind) {
     NLUnwindElementCountFunction selected = nullptr;
-
-    const auto select = [&]<SupportedType T>() {
-        selected = &unwindOptElementCount<typename T::Primitive>;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
+    dispatchOptChunkKind(kind, [&]<typename Element>() { selected = &unwindOptElementCount<Element>; });
 
     return selected;
 }
@@ -12439,25 +12262,6 @@ void NLExecutor::selectCollectEntityHandlers(NLChunkKind kind,
 
         case NLChunkKind::EdgeID:
             return selectCollectIDHandlers<EdgeID>(distinctValues, fold, listEmit);
-        break;
-
-        default:
-            throw IRException("collect does not support this chunk kind");
-        break;
-    }
-}
-
-void NLExecutor::selectCollectOptEntityHandlers(NLChunkKind kind,
-                                                bool distinctValues,
-                                                NLCollectFoldFunction& fold,
-                                                NLCollectListEmitFunction& listEmit) {
-    switch (kind) {
-        case NLChunkKind::NodeID:
-            return selectCollectOptIDHandlers<NodeID>(distinctValues, fold, listEmit);
-        break;
-
-        case NLChunkKind::EdgeID:
-            return selectCollectOptIDHandlers<EdgeID>(distinctValues, fold, listEmit);
         break;
 
         default:
@@ -12681,41 +12485,11 @@ NLFillNullFunction NLExecutor::selectFillNullFunction(NLChunkKind kind) {
     return selected;
 }
 
-NLFillNullFunction NLExecutor::selectOptFillNullFunction(ValueType valueType) {
-    NLFillNullFunction fill = nullptr;
-    const auto select = [&]<SupportedType T>() {
-        fill = &fillNullColumn<std::optional<typename T::Primitive>>;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
-
-    return fill;
-}
-
 NLFillNullFunction NLExecutor::selectOptFillNullFunction(NLChunkKind kind) {
     NLFillNullFunction fill = nullptr;
-    dispatchIDChunkKind(kind, [&]<typename ID>() { fill = &fillNullColumn<std::optional<ID>>; });
+    dispatchOptChunkKind(kind, [&]<typename Element>() { fill = &fillNullColumn<std::optional<Element>>; });
 
     return fill;
-}
-
-NLFillNullFunction NLExecutor::selectPlainFillNullFunction(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return &fillNullColumn<types::Int64::Primitive>;
-        break;
-
-        case ValueType::UInt64:
-            return &fillNullColumn<types::UInt64::Primitive>;
-        break;
-
-        case ValueType::Double:
-            return &fillNullColumn<types::Double::Primitive>;
-        break;
-
-        default:
-            throw IRException("a plain value column must be numeric");
-        break;
-    }
 }
 
 NLFillNullFunction NLExecutor::selectMaskFillNull() {
@@ -12761,13 +12535,13 @@ NLFetchNodesFunction NLExecutor::selectNodeFetchFunction() {
     return &fetchNamedNodes<NodeID>;
 }
 
-NLFetchNodesFunction NLExecutor::selectIntegerFetchFunction(ValueType valueType, bool nullable) {
-    switch (valueType) {
-        case ValueType::Int64:
+NLFetchNodesFunction NLExecutor::selectIntegerFetchFunction(NLChunkKind kind, bool nullable) {
+    switch (kind) {
+        case NLChunkKind::Int64:
             return nullable ? &fetchNamedNodes<std::optional<types::Int64::Primitive>> : &fetchNamedNodes<types::Int64::Primitive>;
         break;
 
-        case ValueType::UInt64:
+        case NLChunkKind::UInt64:
             return nullable ? &fetchNamedNodes<std::optional<types::UInt64::Primitive>> : &fetchNamedNodes<types::UInt64::Primitive>;
         break;
 
@@ -12801,29 +12575,6 @@ NLBroadcastFunction NLExecutor::selectTileFunction(NLChunkKind kind) {
     dispatchChunkKind(kind, [&]<typename ElementType>() { selected = &tileColumn<ElementType>; });
 
     return selected;
-}
-
-// A nullable value chunk is a ColumnOptVector<Primitive> - that is,
-// ColumnVector<std::optional<Primitive>> - so the same broadcast templates,
-// instantiated on std::optional<Primitive>, carry value and null together.
-NLBroadcastFunction NLExecutor::selectOptBlockRepeatFunction(ValueType valueType) {
-    NLBroadcastFunction broadcast = nullptr;
-    const auto select = [&]<SupportedType T>() {
-        broadcast = &blockRepeatColumn<std::optional<typename T::Primitive>>;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
-
-    return broadcast;
-}
-
-NLBroadcastFunction NLExecutor::selectOptTileFunction(ValueType valueType) {
-    NLBroadcastFunction broadcast = nullptr;
-    const auto select = [&]<SupportedType T>() {
-        broadcast = &tileColumn<std::optional<typename T::Primitive>>;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
-
-    return broadcast;
 }
 
 NLBroadcastConstantFunction NLExecutor::selectNullConstantBroadcast() {
@@ -13165,93 +12916,63 @@ NLUnaryFn NLExecutor::selectMaskToNullable(LocalMemory* memory, Column*& result)
     return &toNullableColumn<types::Bool::Primitive, ColumnMask>;
 }
 
-NLGatherFunction NLExecutor::selectOptGatherFunction(ValueType valueType) {
-    NLGatherFunction gather = nullptr;
-    const auto select = [&]<SupportedType T>() {
-        gather = &gatherColumn<std::optional<typename T::Primitive>>;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
-
-    return gather;
-}
-
-// The ID family of the optional selectors. A nullable ID chunk is a
-// ColumnOptVector<ID> - ColumnVector<std::optional<ID>> - so the same templates their
-// value-typed siblings name, instantiated on std::optional<ID>, carry value and null
-// together.
+// A nullable chunk is a ColumnOptVector<Element> - that is,
+// ColumnVector<std::optional<Element>> - so the templates its plain siblings name,
+// instantiated on std::optional<Element>, carry value and null together.
 NLGatherFunction NLExecutor::selectOptGatherFunction(NLChunkKind kind) {
     NLGatherFunction gather = nullptr;
-    dispatchIDChunkKind(kind, [&]<typename ID>() { gather = &gatherColumn<std::optional<ID>>; });
+    dispatchOptChunkKind(kind, [&]<typename Element>() { gather = &gatherColumn<std::optional<Element>>; });
 
     return gather;
 }
 
 NLAppendFunction NLExecutor::selectOptAppendFunction(NLChunkKind kind) {
     NLAppendFunction append = nullptr;
-    dispatchIDChunkKind(kind, [&]<typename ID>() { append = &appendColumn<std::optional<ID>>; });
+    dispatchOptChunkKind(kind, [&]<typename Element>() { append = &appendColumn<std::optional<Element>>; });
 
     return append;
 }
 
 NLCopyFunction NLExecutor::selectOptCopyFunction(NLChunkKind kind) {
     NLCopyFunction copy = nullptr;
-    dispatchIDChunkKind(kind, [&]<typename ID>() { copy = &copyRangeColumn<std::optional<ID>>; });
+    dispatchOptChunkKind(kind, [&]<typename Element>() { copy = &copyRangeColumn<std::optional<Element>>; });
 
     return copy;
 }
 
-NLCompareFunction NLExecutor::selectOptCompareFunction(NLChunkKind kind) {
-    NLCompareFunction compare = nullptr;
-    dispatchIDChunkKind(kind, [&]<typename ID>() { compare = &compareOptColumn<ID>; });
-
-    return compare;
-}
-
-NLKeyAppendFunction NLExecutor::selectOptKeyAppendFunction(NLChunkKind kind) {
-    NLKeyAppendFunction keyAppend = nullptr;
-    dispatchIDChunkKind(kind, [&]<typename ID>() { keyAppend = &distinctKeyAppendOptColumn<ID>; });
-
-    return keyAppend;
-}
-
 NLGroupKeyGatherFunction NLExecutor::selectOptGroupKeyGather(NLChunkKind kind) {
     NLGroupKeyGatherFunction gather = nullptr;
-    dispatchIDChunkKind(kind, [&]<typename ID>() { gather = &groupGatherAppendColumn<std::optional<ID>>; });
+    dispatchOptChunkKind(kind, [&]<typename Element>() { gather = &groupGatherAppendColumn<std::optional<Element>>; });
 
     return gather;
 }
 
+// count(x) reads has_value(), never the value's bytes, so unlike
+// selectOptKeyAppendFunction it counts an embedding
 NLCountFunction NLExecutor::selectOptCountFunction(NLChunkKind kind) {
     NLCountFunction count = nullptr;
-    dispatchIDChunkKind(kind, [&]<typename ID>() { count = &countPresentColumn<std::optional<ID>>; });
+    dispatchOptChunkKind(kind, [&]<typename Element>() { count = &countPresentColumn<std::optional<Element>>; });
 
     return count;
 }
 
-NLGroupAggregateFoldFunction NLExecutor::selectGroupCountOptIDFold(NLChunkKind kind) {
+NLGroupAggregateFoldFunction NLExecutor::selectGroupCountOptFold(NLChunkKind kind) {
     NLGroupAggregateFoldFunction fold = nullptr;
-    dispatchIDChunkKind(kind, [&]<typename ID>() { fold = &groupFoldCountPresent<ID>; });
-
-    return fold;
-}
-
-NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctOptIDFold(NLChunkKind kind) {
-    NLGroupAggregateFoldFunction fold = nullptr;
-    dispatchIDChunkKind(kind, [&]<typename ID>() { fold = &groupFoldCountDistinctPresent<ID>; });
+    dispatchOptChunkKind(kind, [&]<typename Element>() { fold = &groupFoldCountPresent<Element>; });
 
     return fold;
 }
 
 NLBroadcastFunction NLExecutor::selectOptBlockRepeatFunction(NLChunkKind kind) {
     NLBroadcastFunction broadcast = nullptr;
-    dispatchIDChunkKind(kind, [&]<typename ID>() { broadcast = &blockRepeatColumn<std::optional<ID>>; });
+    dispatchOptChunkKind(kind, [&]<typename Element>() { broadcast = &blockRepeatColumn<std::optional<Element>>; });
 
     return broadcast;
 }
 
 NLBroadcastFunction NLExecutor::selectOptTileFunction(NLChunkKind kind) {
     NLBroadcastFunction broadcast = nullptr;
-    dispatchIDChunkKind(kind, [&]<typename ID>() { broadcast = &tileColumn<std::optional<ID>>; });
+    dispatchOptChunkKind(kind, [&]<typename Element>() { broadcast = &tileColumn<std::optional<Element>>; });
 
     return broadcast;
 }
@@ -13265,29 +12986,6 @@ NLAppendFunction NLExecutor::selectAppendFunction(NLChunkKind kind) {
 
 NLAppendFunction NLExecutor::selectCountAppendFunction() {
     return &appendColumn<uint64_t>;
-}
-
-// A nullable value chunk is a ColumnOptVector<Primitive> - that is,
-// ColumnVector<std::optional<Primitive>> - so the range copy template,
-// instantiated on std::optional<Primitive>, carries value and null together.
-NLCopyFunction NLExecutor::selectOptCopyFunction(ValueType valueType) {
-    NLCopyFunction copy = nullptr;
-    const auto select = [&]<SupportedType T>() {
-        copy = &copyRangeColumn<std::optional<typename T::Primitive>>;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
-
-    return copy;
-}
-
-NLAppendFunction NLExecutor::selectOptAppendFunction(ValueType valueType) {
-    NLAppendFunction append = nullptr;
-    const auto select = [&]<SupportedType T>() {
-        append = &appendColumn<std::optional<typename T::Primitive>>;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
-
-    return append;
 }
 
 NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
@@ -13340,6 +13038,10 @@ NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
             return &distinctKeyAppendPlainColumn<types::String::Primitive>;
         break;
 
+        case NLChunkKind::Embedding:
+            return &distinctKeyAppendPlainColumn<types::Embedding::Primitive>;
+        break;
+
         case NLChunkKind::List:
             return &distinctKeyAppendListColumn;
         break;
@@ -13373,59 +13075,81 @@ NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
     return nullptr;
 }
 
-NLKeyAppendFunction NLExecutor::selectOptKeyAppendFunction(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
+NLKeyAppendFunction NLExecutor::selectOptKeyAppendFunction(NLChunkKind kind) {
+    switch (kind) {
+        case NLChunkKind::EdgeTypeID:
+            return &distinctKeyAppendOptColumn<EdgeTypeID>;
+        break;
+
+        case NLChunkKind::LabelID:
+            return &distinctKeyAppendOptColumn<LabelID>;
+        break;
+
+        case NLChunkKind::PropertyTypeID:
+            return &distinctKeyAppendOptColumn<PropertyTypeID>;
+        break;
+
+        case NLChunkKind::ValueTypeCode:
+            return &distinctKeyAppendOptColumn<ValueType>;
+        break;
+
+        case NLChunkKind::Int64:
             return &distinctKeyAppendOptColumn<types::Int64::Primitive>;
         break;
 
-        case ValueType::UInt64:
+        case NLChunkKind::UInt64:
             return &distinctKeyAppendOptColumn<types::UInt64::Primitive>;
         break;
 
-        case ValueType::Double:
+        case NLChunkKind::Double:
             return &distinctKeyAppendOptColumn<types::Double::Primitive>;
         break;
 
-        case ValueType::Bool:
+        case NLChunkKind::Bool:
             return &distinctKeyAppendOptColumn<types::Bool::Primitive>;
         break;
 
-        case ValueType::String:
+        case NLChunkKind::String:
             return &distinctKeyAppendOptColumn<types::String::Primitive>;
         break;
 
-        case ValueType::Embedding:
+        case NLChunkKind::Embedding:
             return &distinctKeyAppendOptColumn<types::Embedding::Primitive>;
         break;
 
-        case ValueType::List:
+        case NLChunkKind::List:
             return &distinctKeyAppendOptListColumn;
         break;
 
-        case ValueType::DateTime:
-            return &distinctKeyAppendOptColumn<types::DateTime::Primitive>;
-        break;
-
-        case ValueType::Duration:
-            return &distinctKeyAppendOptColumn<types::Duration::Primitive>;
-        break;
-
-        case ValueType::Point:
-            return &distinctKeyAppendOptColumn<types::Point::Primitive>;
-        break;
-
-        case ValueType::Map:
+        case NLChunkKind::Map:
             return &distinctKeyAppendOptMapColumn;
         break;
 
-        case ValueType::Invalid:
-        case ValueType::_SIZE:
-            throw IRException("invalid distinct key value type");
+        case NLChunkKind::DateTime:
+            return &distinctKeyAppendOptColumn<types::DateTime::Primitive>;
+        break;
+
+        case NLChunkKind::Duration:
+            return &distinctKeyAppendOptColumn<types::Duration::Primitive>;
+        break;
+
+        case NLChunkKind::Point:
+            return &distinctKeyAppendOptColumn<types::Point::Primitive>;
+        break;
+
+        case NLChunkKind::NodeID:
+        case NLChunkKind::EdgeID:
+        case NLChunkKind::Path:
+        case NLChunkKind::PathRef:
+            throw IRException("A node, an edge or a path column holds its own null, so no nullable chunk wraps one");
+        break;
+
+        case NLChunkKind::LabelSetID:
+            throw IRException("A label set column is read as rows, so no nullable chunk wraps one");
         break;
     }
 
-    bioassert(false, "Unhandled value type");
+    bioassert(false, "Unknown NLChunkKind");
     return nullptr;
 }
 
@@ -13488,6 +13212,7 @@ NLKeyPacking NLExecutor::selectKeyPacking(NLChunkKind kind) {
         break;
 
         case NLChunkKind::String:
+        case NLChunkKind::Embedding:
         case NLChunkKind::List:
         case NLChunkKind::Map:
         case NLChunkKind::Path:
@@ -13500,58 +13225,73 @@ NLKeyPacking NLExecutor::selectKeyPacking(NLChunkKind kind) {
     return NLKeyPacking {};
 }
 
-NLKeyPacking NLExecutor::selectOptKeyPacking(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
+NLKeyPacking NLExecutor::selectOptKeyPacking(NLChunkKind kind) {
+    switch (kind) {
+        case NLChunkKind::EdgeTypeID:
+            return optKeyPacking<EdgeTypeID>();
+        break;
+
+        case NLChunkKind::LabelID:
+            return optKeyPacking<LabelID>();
+        break;
+
+        case NLChunkKind::PropertyTypeID:
+            return optKeyPacking<PropertyTypeID>();
+        break;
+
+        case NLChunkKind::ValueTypeCode:
+            return optKeyPacking<ValueType>();
+        break;
+
+        case NLChunkKind::Int64:
             return optKeyPacking<types::Int64::Primitive>();
         break;
 
-        case ValueType::UInt64:
+        case NLChunkKind::UInt64:
             return optKeyPacking<types::UInt64::Primitive>();
         break;
 
-        case ValueType::Double:
+        case NLChunkKind::Double:
             return optKeyPacking<types::Double::Primitive>();
         break;
 
-        case ValueType::Bool:
+        case NLChunkKind::Bool:
             return optKeyPacking<types::Bool::Primitive>();
         break;
 
-        case ValueType::DateTime:
+        case NLChunkKind::DateTime:
             return optKeyPacking<types::DateTime::Primitive>();
         break;
 
-        case ValueType::Duration:
+        case NLChunkKind::Duration:
             return optKeyPacking<types::Duration::Primitive>();
         break;
 
-        case ValueType::Point:
+        case NLChunkKind::Point:
             return optKeyPacking<types::Point::Primitive>();
         break;
 
-        case ValueType::String:
-        case ValueType::Embedding:
-        case ValueType::List:
-        case ValueType::Map:
+        case NLChunkKind::String:
+        case NLChunkKind::Embedding:
+        case NLChunkKind::List:
+        case NLChunkKind::Map:
             return NLKeyPacking {};
         break;
 
-        case ValueType::Invalid:
-        case ValueType::_SIZE:
-            throw IRException("invalid grouping key value type");
+        case NLChunkKind::NodeID:
+        case NLChunkKind::EdgeID:
+        case NLChunkKind::Path:
+        case NLChunkKind::PathRef:
+            throw IRException("A node, an edge or a path column holds its own null, so no nullable chunk wraps one");
+        break;
+
+        case NLChunkKind::LabelSetID:
+            throw IRException("A label set column is read as rows, so no nullable chunk wraps one");
         break;
     }
 
-    bioassert(false, "Unhandled value type");
+    bioassert(false, "Unknown NLChunkKind");
     return NLKeyPacking {};
-}
-
-NLKeyPacking NLExecutor::selectOptKeyPacking(NLChunkKind kind) {
-    NLKeyPacking packing;
-    dispatchIDChunkKind(kind, [&]<typename ID>() { packing = optKeyPacking<ID>(); });
-
-    return packing;
 }
 
 NLKeyPacking NLExecutor::selectMaskKeyPacking() {
@@ -13608,6 +13348,10 @@ NLJoinKeyFunctions NLExecutor::selectJoinKeyFunctions(NLChunkKind kind) {
             return joinKeyFunctions<types::String::Primitive>();
         break;
 
+        case NLChunkKind::Embedding:
+            return joinKeyFunctions<types::Embedding::Primitive>();
+        break;
+
         case NLChunkKind::List:
             return joinKeyFunctions<ListView>();
         break;
@@ -13641,34 +13385,11 @@ NLJoinKeyFunctions NLExecutor::selectJoinKeyFunctions(NLChunkKind kind) {
     return {};
 }
 
-NLJoinKeyFunctions NLExecutor::selectOptJoinKeyFunctions(ValueType valueType) {
+NLJoinKeyFunctions NLExecutor::selectOptJoinKeyFunctions(NLChunkKind kind) {
     NLJoinKeyFunctions functions;
-    const auto select = [&]<SupportedType T>() {
-        functions = optJoinKeyFunctions<typename T::Primitive>();
-    };
-    ValueTypeDispatcher(valueType).execute(select);
+    dispatchOptChunkKind(kind, [&]<typename Element>() { functions = optJoinKeyFunctions<Element>(); });
 
     return functions;
-}
-
-NLJoinKeyFunctions NLExecutor::selectPlainJoinKeyFunctions(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return joinKeyFunctions<types::Int64::Primitive>();
-        break;
-
-        case ValueType::UInt64:
-            return joinKeyFunctions<types::UInt64::Primitive>();
-        break;
-
-        case ValueType::Double:
-            return joinKeyFunctions<types::Double::Primitive>();
-        break;
-
-        default:
-            throw IRException("a plain value column must be numeric");
-        break;
-    }
 }
 
 NLJoinKeyFunctions NLExecutor::selectCellJoinKeyFunctions() {
@@ -13754,18 +13475,6 @@ NLCountFunction NLExecutor::selectPathCountFunction() {
 
 NLGroupAggregateFoldFunction NLExecutor::selectGroupCountPresentPathFold() {
     return &groupFoldCountPresentPath;
-}
-
-// Selected per column from its value type, so count(x) tallies only the rows in
-// which x is not null.
-NLCountFunction NLExecutor::selectOptCountFunction(ValueType valueType) {
-    NLCountFunction count = nullptr;
-    const auto select = [&]<SupportedType T>() {
-        count = &countPresentColumn<std::optional<typename T::Primitive>>;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
-
-    return count;
 }
 
 NLAggregateFoldFunction NLExecutor::selectAggregateFold(AggregateKind kind, ValueType inputType) {
@@ -13905,21 +13614,11 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupAggregateFold(GroupAggregate
         break;
 
         case GroupAggregateKind::CountDistinct:
-            return selectGroupCountDistinctFold(inputType);
+            return selectGroupCountDistinctOptFold(chunkKindFromValueType(inputType));
         break;
 
-        case GroupAggregateKind::Count: {
-            // count(x) over a nullable value chunk: tally the present values. count(*)
-            // over an ID chunk goes through selectGroupCountAllFold instead. Every
-            // value type has a present flag, so - like selectOptCountFunction - an
-            // embedding is fine (the fold reads has_value(), never the bytes).
-            NLGroupAggregateFoldFunction fold = nullptr;
-            const auto select = [&]<SupportedType T>() {
-                fold = &groupFoldCountPresent<typename T::Primitive>;
-            };
-            ValueTypeDispatcher(inputType).execute(select);
-            return fold;
-        }
+        case GroupAggregateKind::Count:
+            return selectGroupCountOptFold(chunkKindFromValueType(inputType));
         break;
 
         case GroupAggregateKind::Sum:
@@ -13986,59 +13685,81 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountAllFold() {
     return &groupFoldCountAll;
 }
 
-NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctFold(ValueType inputType) {
-    switch (inputType) {
-        case ValueType::Int64:
+NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctOptFold(NLChunkKind kind) {
+    switch (kind) {
+        case NLChunkKind::EdgeTypeID:
+            return &groupFoldCountDistinctPresent<EdgeTypeID>;
+        break;
+
+        case NLChunkKind::LabelID:
+            return &groupFoldCountDistinctPresent<LabelID>;
+        break;
+
+        case NLChunkKind::PropertyTypeID:
+            return &groupFoldCountDistinctPresent<PropertyTypeID>;
+        break;
+
+        case NLChunkKind::ValueTypeCode:
+            return &groupFoldCountDistinctPresent<ValueType>;
+        break;
+
+        case NLChunkKind::Int64:
             return &groupFoldCountDistinctPresent<types::Int64::Primitive>;
         break;
 
-        case ValueType::UInt64:
+        case NLChunkKind::UInt64:
             return &groupFoldCountDistinctPresent<types::UInt64::Primitive>;
         break;
 
-        case ValueType::Double:
+        case NLChunkKind::Double:
             return &groupFoldCountDistinctPresent<types::Double::Primitive>;
         break;
 
-        case ValueType::Bool:
+        case NLChunkKind::Bool:
             return &groupFoldCountDistinctPresent<types::Bool::Primitive>;
         break;
 
-        case ValueType::String:
+        case NLChunkKind::String:
             return &groupFoldCountDistinctPresent<types::String::Primitive>;
         break;
 
-        case ValueType::Embedding:
+        case NLChunkKind::Embedding:
             return &groupFoldCountDistinctPresent<types::Embedding::Primitive>;
         break;
 
-        case ValueType::List:
+        case NLChunkKind::List:
             return &groupFoldCountDistinctPresentList;
         break;
 
-        case ValueType::DateTime:
-            return &groupFoldCountDistinctPresent<types::DateTime::Primitive>;
-        break;
-
-        case ValueType::Duration:
-            return &groupFoldCountDistinctPresent<types::Duration::Primitive>;
-        break;
-
-        case ValueType::Point:
-            return &groupFoldCountDistinctPresent<types::Point::Primitive>;
-        break;
-
-        case ValueType::Map:
+        case NLChunkKind::Map:
             return &groupFoldCountDistinctPresentMap;
         break;
 
-        case ValueType::Invalid:
-        case ValueType::_SIZE:
-            throw IRException("invalid count(DISTINCT) value type");
+        case NLChunkKind::DateTime:
+            return &groupFoldCountDistinctPresent<types::DateTime::Primitive>;
+        break;
+
+        case NLChunkKind::Duration:
+            return &groupFoldCountDistinctPresent<types::Duration::Primitive>;
+        break;
+
+        case NLChunkKind::Point:
+            return &groupFoldCountDistinctPresent<types::Point::Primitive>;
+        break;
+
+        case NLChunkKind::NodeID:
+        case NLChunkKind::EdgeID:
+        case NLChunkKind::Path:
+        case NLChunkKind::PathRef:
+            throw IRException("A node, an edge or a path column holds its own null, so no nullable chunk wraps one");
+        break;
+
+        case NLChunkKind::LabelSetID:
+            throw IRException("A label set column is read as rows, so no nullable chunk wraps one");
         break;
     }
 
-    bioassert(false, "Unhandled value type");
+    bioassert(false, "Unknown NLChunkKind");
     return nullptr;
 }
 
@@ -14054,98 +13775,6 @@ NLGroupKeyGatherFunction NLExecutor::selectGroupKeyGather(NLChunkKind kind) {
     dispatchChunkKind(kind, [&]<typename ElementType>() { selected = &groupGatherAppendColumn<ElementType>; });
 
     return selected;
-}
-
-// A nullable key column appends the same way an ID key does - copy the chosen rows -
-// on the ColumnOptVector<Primitive> instantiation of the gather-append template.
-NLGroupKeyGatherFunction NLExecutor::selectOptGroupKeyGather(ValueType valueType) {
-    NLGroupKeyGatherFunction gather = nullptr;
-    const auto select = [&]<SupportedType T>() {
-        gather = &groupGatherAppendColumn<std::optional<typename T::Primitive>>;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
-
-    return gather;
-}
-
-NLAppendFunction NLExecutor::selectPlainAppendFunction(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return &appendColumn<types::Int64::Primitive>;
-        break;
-
-        case ValueType::UInt64:
-            return &appendColumn<types::UInt64::Primitive>;
-        break;
-
-        case ValueType::Double:
-            return &appendColumn<types::Double::Primitive>;
-        break;
-
-        default:
-            throw IRException("a plain value column must be numeric");
-        break;
-    }
-}
-
-NLGatherFunction NLExecutor::selectPlainGatherFunction(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return &gatherColumn<types::Int64::Primitive>;
-        break;
-
-        case ValueType::UInt64:
-            return &gatherColumn<types::UInt64::Primitive>;
-        break;
-
-        case ValueType::Double:
-            return &gatherColumn<types::Double::Primitive>;
-        break;
-
-        default:
-            throw IRException("a plain value column must be numeric");
-        break;
-    }
-}
-
-NLCompareFunction NLExecutor::selectPlainCompareFunction(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return &compareColumn<types::Int64::Primitive>;
-        break;
-
-        case ValueType::UInt64:
-            return &compareColumn<types::UInt64::Primitive>;
-        break;
-
-        case ValueType::Double:
-            return &compareColumn<types::Double::Primitive>;
-        break;
-
-        default:
-            throw IRException("a plain value column must be numeric");
-        break;
-    }
-}
-
-NLCopyFunction NLExecutor::selectPlainCopyFunction(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return &copyRangeColumn<types::Int64::Primitive>;
-        break;
-
-        case ValueType::UInt64:
-            return &copyRangeColumn<types::UInt64::Primitive>;
-        break;
-
-        case ValueType::Double:
-            return &copyRangeColumn<types::Double::Primitive>;
-        break;
-
-        default:
-            throw IRException("a plain value column must be numeric");
-        break;
-    }
 }
 
 NLKeyAppendFunction NLExecutor::selectPlainMergeKeyAppendFunction(NLChunkKind kind, ValueType keyType) {
@@ -14179,6 +13808,7 @@ NLKeyAppendFunction NLExecutor::selectPlainMergeKeyAppendFunction(NLChunkKind ki
         case NLChunkKind::LabelID:
         case NLChunkKind::PropertyTypeID:
         case NLChunkKind::ValueTypeCode:
+        case NLChunkKind::Embedding:
         case NLChunkKind::Path:
         case NLChunkKind::PathRef:
             throw IRException("a MERGE pattern cannot constrain a property to this value");
@@ -14278,109 +13908,79 @@ NLKeyAppendFunction NLExecutor::selectConstMergeKeyAppendFunction(ValueType valu
     return nullptr;
 }
 
-NLKeyAppendFunction NLExecutor::selectOptMergeKeyAppendFunction(ValueType valueType, ValueType keyType) {
-    switch (valueType) {
-        case ValueType::Int64:
+NLKeyAppendFunction NLExecutor::selectOptMergeKeyAppendFunction(NLChunkKind kind, ValueType keyType) {
+    switch (kind) {
+        case NLChunkKind::Int64:
             return selectNumericMergeKeyAppend<types::Int64::Primitive, MergeColumnShape::Opt>(keyType);
         break;
 
-        case ValueType::UInt64:
+        case NLChunkKind::UInt64:
             return selectNumericMergeKeyAppend<types::UInt64::Primitive, MergeColumnShape::Opt>(keyType);
         break;
 
-        case ValueType::Double:
+        case NLChunkKind::Double:
             return selectNumericMergeKeyAppend<types::Double::Primitive, MergeColumnShape::Opt>(keyType);
         break;
 
-        default:
-            throwUnlessKeyedAsItsOwnType(valueType, keyType);
-            return selectOptKeyAppendFunction(valueType);
+        case NLChunkKind::Bool:
+            throwUnlessKeyedAsItsOwnType(ValueType::Bool, keyType);
+            return selectOptKeyAppendFunction(kind);
+        break;
+
+        case NLChunkKind::String:
+            throwUnlessKeyedAsItsOwnType(ValueType::String, keyType);
+            return selectOptKeyAppendFunction(kind);
+        break;
+
+        case NLChunkKind::Embedding:
+            throwUnlessKeyedAsItsOwnType(ValueType::Embedding, keyType);
+            return selectOptKeyAppendFunction(kind);
+        break;
+
+        case NLChunkKind::List:
+            throwUnlessKeyedAsItsOwnType(ValueType::List, keyType);
+            return selectOptKeyAppendFunction(kind);
+        break;
+
+        case NLChunkKind::Map:
+            throwUnlessKeyedAsItsOwnType(ValueType::Map, keyType);
+            return selectOptKeyAppendFunction(kind);
+        break;
+
+        case NLChunkKind::DateTime:
+            throwUnlessKeyedAsItsOwnType(ValueType::DateTime, keyType);
+            return selectOptKeyAppendFunction(kind);
+        break;
+
+        case NLChunkKind::Duration:
+            throwUnlessKeyedAsItsOwnType(ValueType::Duration, keyType);
+            return selectOptKeyAppendFunction(kind);
+        break;
+
+        case NLChunkKind::Point:
+            throwUnlessKeyedAsItsOwnType(ValueType::Point, keyType);
+            return selectOptKeyAppendFunction(kind);
+        break;
+
+        case NLChunkKind::NodeID:
+        case NLChunkKind::EdgeID:
+        case NLChunkKind::EdgeTypeID:
+        case NLChunkKind::LabelSetID:
+        case NLChunkKind::LabelID:
+        case NLChunkKind::PropertyTypeID:
+        case NLChunkKind::ValueTypeCode:
+        case NLChunkKind::Path:
+        case NLChunkKind::PathRef:
+            throw IRException("a MERGE pattern cannot constrain a property to this value");
         break;
     }
+
+    bioassert(false, "Unknown NLChunkKind");
+    return nullptr;
 }
 
 NLKeyAppendFunction NLExecutor::selectNullMergeKeyAppendFunction() {
     return &mergeKeyAppendConstNull;
-}
-
-NLKeyAppendFunction NLExecutor::selectPlainKeyAppendFunction(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return &distinctKeyAppendPlainColumn<types::Int64::Primitive>;
-        break;
-
-        case ValueType::UInt64:
-            return &distinctKeyAppendPlainColumn<types::UInt64::Primitive>;
-        break;
-
-        case ValueType::Double:
-            return &distinctKeyAppendPlainColumn<types::Double::Primitive>;
-        break;
-
-        default:
-            throw IRException("a plain value column must be numeric");
-        break;
-    }
-}
-
-NLGroupKeyGatherFunction NLExecutor::selectPlainGroupKeyGather(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return &groupGatherAppendColumn<types::Int64::Primitive>;
-        break;
-
-        case ValueType::UInt64:
-            return &groupGatherAppendColumn<types::UInt64::Primitive>;
-        break;
-
-        case ValueType::Double:
-            return &groupGatherAppendColumn<types::Double::Primitive>;
-        break;
-
-        default:
-            throw IRException("a plain value column must be numeric");
-        break;
-    }
-}
-
-NLBroadcastFunction NLExecutor::selectPlainBlockRepeatFunction(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return &blockRepeatColumn<types::Int64::Primitive>;
-        break;
-
-        case ValueType::UInt64:
-            return &blockRepeatColumn<types::UInt64::Primitive>;
-        break;
-
-        case ValueType::Double:
-            return &blockRepeatColumn<types::Double::Primitive>;
-        break;
-
-        default:
-            throw IRException("a plain value column must be numeric");
-        break;
-    }
-}
-
-NLBroadcastFunction NLExecutor::selectPlainTileFunction(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return &tileColumn<types::Int64::Primitive>;
-        break;
-
-        case ValueType::UInt64:
-            return &tileColumn<types::UInt64::Primitive>;
-        break;
-
-        case ValueType::Double:
-            return &tileColumn<types::Double::Primitive>;
-        break;
-
-        default:
-            throw IRException("a plain value column must be numeric");
-        break;
-    }
 }
 
 NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
@@ -14433,6 +14033,10 @@ NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
             return &compareColumn<types::String::Primitive>;
         break;
 
+        case NLChunkKind::Embedding:
+            throw IRException("cannot sort by an embedding column");
+        break;
+
         case NLChunkKind::List:
             return &compareContainerColumn<ListView>;
         break;
@@ -14466,63 +14070,84 @@ NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
     return nullptr;
 }
 
-// Selected per key from its value type. A manual switch, not ValueTypeDispatcher,
-// because an embedding has no order: dispatching would instantiate the comparator
-// for std::span<const float>, which does not compile. The embedding case throws
-// instead, so that instantiation is never named.
-NLCompareFunction NLExecutor::selectOptCompareFunction(ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
+// A manual switch, not dispatchOptChunkKind, because an embedding has no order:
+// dispatching would instantiate the comparator for std::span<const float>, which does not
+// compile. The embedding case throws instead, so that instantiation is never named.
+NLCompareFunction NLExecutor::selectOptCompareFunction(NLChunkKind kind) {
+    switch (kind) {
+        case NLChunkKind::EdgeTypeID:
+            return &compareOptColumn<EdgeTypeID>;
+        break;
+
+        case NLChunkKind::LabelID:
+            return &compareOptColumn<LabelID>;
+        break;
+
+        case NLChunkKind::PropertyTypeID:
+            return &compareOptColumn<PropertyTypeID>;
+        break;
+
+        case NLChunkKind::ValueTypeCode:
+            return &compareOptColumn<ValueType>;
+        break;
+
+        case NLChunkKind::Int64:
             return &compareOptColumn<types::Int64::Primitive>;
         break;
 
-        case ValueType::UInt64:
+        case NLChunkKind::UInt64:
             return &compareOptColumn<types::UInt64::Primitive>;
         break;
 
-        case ValueType::Double:
+        case NLChunkKind::Double:
             return &compareOptColumn<types::Double::Primitive>;
         break;
 
-        case ValueType::Bool:
+        case NLChunkKind::Bool:
             return &compareOptColumn<types::Bool::Primitive>;
         break;
 
-        case ValueType::String:
+        case NLChunkKind::String:
             return &compareOptColumn<types::String::Primitive>;
         break;
 
-        case ValueType::Embedding:
+        case NLChunkKind::Embedding:
             throw IRException("cannot sort by an embedding column");
         break;
 
-        case ValueType::List:
+        case NLChunkKind::List:
             return &compareOptContainerColumn<ListView>;
         break;
 
-        case ValueType::DateTime:
-            return &compareOptColumn<types::DateTime::Primitive>;
-        break;
-
-        case ValueType::Duration:
-            return &compareOptColumn<types::Duration::Primitive>;
-        break;
-
-        case ValueType::Point:
-            return &compareOptColumn<types::Point::Primitive>;
-        break;
-
-        case ValueType::Map:
+        case NLChunkKind::Map:
             return &compareOptContainerColumn<MapView>;
         break;
 
-        case ValueType::Invalid:
-        case ValueType::_SIZE:
-            throw IRException("invalid sort key value type");
+        case NLChunkKind::DateTime:
+            return &compareOptColumn<types::DateTime::Primitive>;
+        break;
+
+        case NLChunkKind::Duration:
+            return &compareOptColumn<types::Duration::Primitive>;
+        break;
+
+        case NLChunkKind::Point:
+            return &compareOptColumn<types::Point::Primitive>;
+        break;
+
+        case NLChunkKind::NodeID:
+        case NLChunkKind::EdgeID:
+        case NLChunkKind::Path:
+        case NLChunkKind::PathRef:
+            throw IRException("A node, an edge or a path column holds its own null, so no nullable chunk wraps one");
+        break;
+
+        case NLChunkKind::LabelSetID:
+            throw IRException("A label set column is read as rows, so no nullable chunk wraps one");
         break;
     }
 
-    bioassert(false, "Unhandled value type");
+    bioassert(false, "Unknown NLChunkKind");
     return nullptr;
 }
 

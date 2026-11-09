@@ -50,6 +50,7 @@
 
 #include "NLWriteProperties.h"
 
+#include "IRException.h"
 #include "StringHashMap.h"
 
 namespace db {
@@ -72,7 +73,8 @@ Column* allocOptValueColumn(LocalMemory* memory, ValueType valueType, size_t res
 // The first three are the ID columns a scan or a hop binds, and the fourth the label sets
 // read off a node column. The rest are what a CALL yields: a procedure's declared return
 // types map onto these, so a yielded column can be crossed and carried like any other.
-// Every one of them is a plain (never-null) ColumnVector of the element type its name says.
+// Each names the element type of a plain (never-null) ColumnVector, and of the
+// ColumnOptVector a nullable chunk of that element is.
 enum class NLChunkKind {
     NodeID,
     EdgeID,
@@ -86,6 +88,7 @@ enum class NLChunkKind {
     Double,
     Bool,
     String,
+    Embedding,
     List,
     Map,
     Path,
@@ -153,6 +156,10 @@ void dispatchChunkKind(NLChunkKind kind, Handler&& handler) {
             return handler.template operator()<types::String::Primitive>();
         break;
 
+        case NLChunkKind::Embedding:
+            return handler.template operator()<types::Embedding::Primitive>();
+        break;
+
         case NLChunkKind::List:
             return handler.template operator()<ListView>();
         break;
@@ -184,6 +191,90 @@ void dispatchChunkKind(NLChunkKind kind, Handler&& handler) {
 
     bioassert(false, "Unknown NLChunkKind");
 }
+
+// The sibling of dispatchChunkKind for a nullable chunk, whose column is a ColumnOptVector
+// of the element handler is invoked with. A node, an edge or a path holds its own null, so
+// no nullable chunk wraps one.
+template <typename Handler>
+void dispatchOptChunkKind(NLChunkKind kind, Handler&& handler) {
+    switch (kind) {
+        case NLChunkKind::EdgeTypeID:
+            return handler.template operator()<EdgeTypeID>();
+        break;
+
+        case NLChunkKind::LabelID:
+            return handler.template operator()<LabelID>();
+        break;
+
+        case NLChunkKind::PropertyTypeID:
+            return handler.template operator()<PropertyTypeID>();
+        break;
+
+        case NLChunkKind::ValueTypeCode:
+            return handler.template operator()<ValueType>();
+        break;
+
+        case NLChunkKind::UInt64:
+            return handler.template operator()<types::UInt64::Primitive>();
+        break;
+
+        case NLChunkKind::Int64:
+            return handler.template operator()<types::Int64::Primitive>();
+        break;
+
+        case NLChunkKind::Double:
+            return handler.template operator()<types::Double::Primitive>();
+        break;
+
+        case NLChunkKind::Bool:
+            return handler.template operator()<types::Bool::Primitive>();
+        break;
+
+        case NLChunkKind::String:
+            return handler.template operator()<types::String::Primitive>();
+        break;
+
+        case NLChunkKind::Embedding:
+            return handler.template operator()<types::Embedding::Primitive>();
+        break;
+
+        case NLChunkKind::List:
+            return handler.template operator()<ListView>();
+        break;
+
+        case NLChunkKind::Map:
+            return handler.template operator()<MapView>();
+        break;
+
+        case NLChunkKind::DateTime:
+            return handler.template operator()<types::DateTime::Primitive>();
+        break;
+
+        case NLChunkKind::Duration:
+            return handler.template operator()<types::Duration::Primitive>();
+        break;
+
+        case NLChunkKind::Point:
+            return handler.template operator()<types::Point::Primitive>();
+        break;
+
+        case NLChunkKind::NodeID:
+        case NLChunkKind::EdgeID:
+        case NLChunkKind::Path:
+        case NLChunkKind::PathRef:
+            throw IRException("A node, an edge or a path column holds its own null, so no nullable chunk wraps one");
+        break;
+
+        case NLChunkKind::LabelSetID:
+            throw IRException("A label set column is read as rows, so no nullable chunk wraps one");
+        break;
+    }
+
+    bioassert(false, "Unknown NLChunkKind");
+}
+
+// The kind of the column a property of @param valueType is laid out in
+NLChunkKind chunkKindFromValueType(ValueType valueType);
 
 // Type of function pointers implementing operations
 using NLHandlerFunction = void (*)(NLExecutionContext* context, NLFunctionData* data);

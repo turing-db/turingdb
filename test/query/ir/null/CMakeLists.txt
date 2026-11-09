@@ -71,3 +71,7 @@ add_ir_tests(test_query_ir_coalesce_argument_kinds CoalesceArgumentKindsTest.cpp
 add_ir_tests(test_query_ir_coalesce_unsigned_argument CoalesceUnsignedArgumentTest.cpp)
 
 add_ir_tests(test_query_ir_coalesce_non_nullable_scalar CoalesceNonNullableScalarTest.cpp)
+
+add_turing_test(test_query_ir_nullable_column_kind NullableColumnKindTest.cpp)
+target_sources(test_query_ir_nullable_column_kind PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_nullable_column_kind PRIVATE ${IR_TEST_DIR})

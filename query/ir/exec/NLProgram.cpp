@@ -94,6 +94,62 @@ Column* db::allocOptValueColumn(LocalMemory* memory, ValueType valueType, size_t
     return column;
 }
 
+NLChunkKind db::chunkKindFromValueType(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return NLChunkKind::Int64;
+        break;
+
+        case ValueType::UInt64:
+            return NLChunkKind::UInt64;
+        break;
+
+        case ValueType::Double:
+            return NLChunkKind::Double;
+        break;
+
+        case ValueType::String:
+            return NLChunkKind::String;
+        break;
+
+        case ValueType::Bool:
+            return NLChunkKind::Bool;
+        break;
+
+        case ValueType::Embedding:
+            return NLChunkKind::Embedding;
+        break;
+
+        case ValueType::List:
+            return NLChunkKind::List;
+        break;
+
+        case ValueType::DateTime:
+            return NLChunkKind::DateTime;
+        break;
+
+        case ValueType::Map:
+            return NLChunkKind::Map;
+        break;
+
+        case ValueType::Duration:
+            return NLChunkKind::Duration;
+        break;
+
+        case ValueType::Point:
+            return NLChunkKind::Point;
+        break;
+
+        case ValueType::Invalid:
+        case ValueType::_SIZE:
+            throw IRException("No column is laid out for an invalid value type");
+        break;
+    }
+
+    bioassert(false, "Unknown ValueType");
+    return NLChunkKind::Int64;
+}
+
 NLRuntimeProperty* NLProgram::getRuntimeProperty(std::string_view name) {
     std::unique_ptr<NLRuntimeProperty>& property = _runtimeProperties[std::string(name)];
     if (!property) {

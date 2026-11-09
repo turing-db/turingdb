@@ -1245,6 +1245,7 @@ private:
     void bindKernelResult(mlir::Value resultValue, Column* result);
 
     Column* allocColumnForKind(NLChunkKind kind);
+    Column* allocOptColumnForKind(NLChunkKind kind);
 
     // Allocate a nullable value column for the value type's primitive. The
     // per-step variant reserves a full chunk so the loop body stays
@@ -1261,11 +1262,6 @@ private:
 
     static bool isEntityIDElement(mlir::Type elementType);
 
-    static bool isNullableIDValue(mlir::Type valueType);
-    Column* allocOptIDColumn(NLChunkKind kind);
-
-    static bool isPlainValueElementType(mlir::Type elementType);
-    Column* allocPlainColumn(ValueType valueType);
     ColumnVector<uint64_t>* allocCountColumn();
 
     // Allocate a type-erased column of tagged scalars - the shape a heterogeneous
@@ -1284,6 +1280,10 @@ private:
     const ColumnMask* getMaskColumn(mlir::Value chunkValue) const;
     static NLChunkKind getChunkKind(mlir::Type chunkType);
     static NLChunkKind chunkKindFromElementType(mlir::Type elementType);
+
+    // The kind of the value a nullable chunk (!nl.chunk<!storage.nullable<T>>) wraps
+    static NLChunkKind getNullableChunkKind(mlir::Type chunkType);
+    static NLChunkKind chunkKindFromNullableValue(mlir::Type valueType);
 };
 
 }
