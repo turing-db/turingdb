@@ -609,12 +609,9 @@ note. All three skills are vendored under `.claude/skills/`, so this needs nothi
 installed. It does need node 20.11 or later for the diagram; the skill finds one or says so
 and carries on without it.
 
-The diagram posts as a GitHub attachment. PR Lens can also publish an explorable canvas on
-`prlens.dev`, which is a third party, so the skill asks before every push and never pushes
-on its own. Say no and the comment keeps the attached diagrams.
-
-Two things it never does: it does not touch the PR body or title, and it posts nothing
-without a yes.
+The skill posts the comment without asking, with its diagrams attached as SVGs. It never
+pushes a canvas to `prlens.dev`, which is a third party, and it never touches the PR body
+or title.
 
 For a stack of PRs, explain the ones a reviewer has to understand on their own. A stack
 of near-identical mechanical changes does not need one comment each.
