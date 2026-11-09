@@ -2929,6 +2929,14 @@ bool Collect::getCarrySet(CarrySet& carrySet) {
     return true;
 }
 
+OperandRange GroupAggregate::getGroupingKeys() {
+    return getColumns().take_front(getKeyCount());
+}
+
+OperandRange Collect::getGroupingKeys() {
+    return getColumns().take_front(getKeyCount());
+}
+
 bool FetchNodes::getCarrySet(CarrySet& carrySet) {
     carrySet = CarrySet {._operandOffset = 1, ._resultOffset = 1, ._count = getColumnsToFilter().size()};
     return true;

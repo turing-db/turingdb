@@ -9967,9 +9967,9 @@ double estimateRegionRows(const RegionRows& region) {
 // The rows a factor makes: the product of what its sources seed it with, a factor crossing
 // two of them holding a row per pair, grown or shrunk by every hop and unwind reading from
 // one and cut by every filter. A join makes as many as its smaller side, each key taken as
-// distinct on its side: the db level counts no distinct values. A factor seeded from
-// somewhere the db level cannot count - a procedure, a load - counts as an uncountable
-// source's rows.
+// distinct on its side: the db level counts no distinct values. An aggregate with no
+// grouping key makes one row, whatever it reads. A factor seeded from somewhere the db
+// level cannot count - a procedure, a load - counts as an uncountable source's rows.
 double estimateFactorRows(Region& factor, const RowEstimator& estimator) {
     llvm::DenseMap<Region*, RegionRows> regionRows;
     WalkKnowledge knowledge;
@@ -9998,6 +9998,12 @@ double estimateFactorRows(Region& factor, const RowEstimator& estimator) {
 
         if (FilterOp filter = dyn_cast<FilterOp>(op)) {
             rows._rows *= estimator.getSelectivity(filter.getMask(), columnItself, knowledge);
+            return;
+        }
+
+        AggregateOpInterface aggregate = dyn_cast<AggregateOpInterface>(op);
+        if (aggregate && aggregate.getGroupingKeys().empty()) {
+            rows = RegionRows {1, true};
             return;
         }
 

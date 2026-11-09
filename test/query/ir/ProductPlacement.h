@@ -12,4 +12,8 @@ size_t countFiltersOverOneFactor(mlir::ModuleOp module);
 // Unwinds carrying a column a cross product made, which repeat every row of the product
 size_t countUnwindsOverAProduct(mlir::ModuleOp module);
 
+// Hops, walks and edge scans that run before the pattern's rows meet the others: ahead of
+// the product, join or unwind bringing those in, or inside one of its factors
+size_t countEdgeReadsBeforeTheJoin(mlir::ModuleOp module);
+
 }
