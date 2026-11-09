@@ -608,47 +608,6 @@ struct PairRestrictions<Op> {
     >;
 };
 
-struct MaskedPairs {
-    using Allowed = GenerateKindPairList<>;
-
-    using AllowedMixed = AllowedMixedList<
-        MixedKind<ColumnMask, types::Int64::Primitive>,
-        MixedKind<ColumnMask, types::Int64::Primitive>,
-        MixedKind<ColumnMask, types::UInt64::Primitive>,
-        MixedKind<ColumnMask, types::Double::Primitive>,
-        MixedKind<ColumnMask, types::String::Primitive>,
-        MixedKind<ColumnMask, types::Bool::Primitive>,
-        MixedKind<ColumnMask, types::Embedding::Primitive>,
-        MixedKind<ColumnMask, std::optional<types::Int64::Primitive>>,
-        MixedKind<ColumnMask, std::optional<types::Int64::Primitive>>,
-        MixedKind<ColumnMask, std::optional<types::UInt64::Primitive>>,
-        MixedKind<ColumnMask, std::optional<types::Double::Primitive>>,
-        MixedKind<ColumnMask, std::optional<types::String::Primitive>>,
-        MixedKind<ColumnMask, std::optional<types::Bool::Primitive>>,
-        MixedKind<ColumnMask, std::optional<types::Embedding::Primitive>>,
-        MixedKind<ColumnMask, PropertyNull>,
-
-        MixedKind<ColumnMask, EntityID>,
-        MixedKind<ColumnMask, NodeID>,
-        MixedKind<ColumnMask, EdgeID>,
-        MixedKind<ColumnMask, LabelID>,
-        MixedKind<ColumnMask, GraphPath>,
-        MixedKind<ColumnMask, LabelSetID>,
-        MixedKind<ColumnMask, EdgeTypeID>,
-        MixedKind<ColumnMask, ValueType>,
-        MixedKind<ColumnMask, PropertyTypeID>,
-        MixedKind<ColumnMask, CommitHash>,
-        MixedKind<ColumnMask, ChangeID>,
-        MixedKind<ColumnMask, std::string>,
-        MixedKind<ColumnMask, size_t>
-    >;
-
-    using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnConst>()
-    >;
-};
-
 // Restriction for Unary operators
 template <ColumnOperator Op>
 struct TypeRestrictions;
@@ -795,40 +754,6 @@ struct OutputtedTypes {
     >>;
 
     using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>()>;
-};
-
-/// Totally ordered types, e.g. sorted in ORDER BY
-struct OrderedTypes {
-    using Allowed = GenerateKindList<std::tuple<
-        // All property types and their optional variants
-        types::Int64::Primitive,
-        types::UInt64::Primitive,
-        types::Double::Primitive,
-        types::String::Primitive,
-        types::Bool::Primitive,
-
-        std::optional<types::Int64::Primitive>,
-        std::optional<types::UInt64::Primitive>,
-        std::optional<types::Double::Primitive>,
-        std::optional<types::String::Primitive>,
-        std::optional<types::Bool::Primitive>,
-
-        // Entities
-        NodeID,
-        EdgeID,
-        EdgeTypeID,
-        PropertyTypeID,
-        LabelID,
-        LabelSetID,
-
-        // Tagged scalars
-        CellView
-    >>;
-
-    using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
-    >;
 };
 
 struct WriteProcessorPropertyTypes {
