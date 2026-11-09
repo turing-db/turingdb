@@ -804,6 +804,8 @@ std::optional<types::Int64::Primitive> cellInteger(const CellView cell, std::str
 
 std::optional<types::Embedding::Primitive> cellEmbedding(const CellView cell, std::string_view functionName);
 
+[[noreturn]] void throwEmbeddingDimensionError(std::string_view functionName, size_t lhsDimension, size_t rhsDimension);
+
 types::Int64::Primitive unsignedCharacterArgument(types::UInt64::Primitive value, std::string_view functionName);
 
 [[noreturn]] void throwUnconvertibleCell(std::string_view functionName, CellTag held);
@@ -1758,6 +1760,10 @@ public:
     using ResultType = typename F::ResultType;
 
     ResultType operator()(const Embedding& a, const Embedding& b) const {
+        if (a.size() != b.size()) {
+            throwEmbeddingDimensionError(F::NAME, a.size(), b.size());
+        }
+
         return F {}(a, b);
     }
 
@@ -1770,7 +1776,7 @@ public:
             return std::nullopt;
         }
 
-        return F {}(*lhs, *rhs);
+        return (*this)(*lhs, *rhs);
     }
 
 private:

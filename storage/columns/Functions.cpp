@@ -472,6 +472,13 @@ std::optional<types::Embedding::Primitive> db::cellEmbedding(const CellView cell
     throwCellTypeError(functionName, "an embedding", tag);
 }
 
+void db::throwEmbeddingDimensionError(std::string_view functionName, size_t lhsDimension, size_t rhsDimension) {
+    throw TuringException(fmt::format("{}() reads two embeddings of the same dimension, not of dimensions {} and {}",
+                                      functionName,
+                                      lhsDimension,
+                                      rhsDimension));
+}
+
 types::Int64::Primitive db::unsignedCharacterArgument(types::UInt64::Primitive value, std::string_view functionName) {
     const types::UInt64::Primitive largest = static_cast<types::UInt64::Primitive>(MAX_CHARACTER_ARGUMENT);
     if (value > largest) {

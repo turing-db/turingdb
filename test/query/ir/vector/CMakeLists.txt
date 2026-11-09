@@ -56,3 +56,5 @@ target_include_directories(test_query_ir_embedding_merge_key PRIVATE ${IR_TEST_D
 
 add_turing_test(test_query_ir_embedding_collect EmbeddingCollectTest.cpp)
 target_include_directories(test_query_ir_embedding_collect PRIVATE ${IR_TEST_DIR})
+
+add_call_v3_test(test_query_ir_embedding_dimension_mismatch EmbeddingDimensionMismatchTest.cpp)
