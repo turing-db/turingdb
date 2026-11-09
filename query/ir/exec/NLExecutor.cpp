@@ -11096,6 +11096,16 @@ NLUnaryFn NLExecutor::selectToNullable(ValueType valueType, const Column* operan
     return nullptr;
 }
 
+NLUnaryFn NLExecutor::selectToNullable(NLChunkKind kind, LocalMemory* memory, Column*& result) {
+    NLUnaryFn toNullable = nullptr;
+    dispatchIDChunkKind(kind, [&]<typename ID>() {
+        result = memory->alloc<ColumnOptVector<ID>>();
+        toNullable = &toNullableColumn<ID>;
+    });
+
+    return toNullable;
+}
+
 template <ColumnOperator Op>
 NLBinaryFn NLExecutor::selectBinary(const Column* lhs,
                                     const Column* rhs,
@@ -13139,7 +13149,7 @@ NLGatherFunction NLExecutor::selectOptGatherFunction(ValueType valueType) {
 // The ID family of the optional selectors. A nullable ID chunk is a
 // ColumnOptVector<ID> - ColumnVector<std::optional<ID>> - so the same templates their
 // value-typed siblings name, instantiated on std::optional<ID>, carry value and null
-// together. A procedure return value declared nullable is the one producer of these.
+// together.
 NLGatherFunction NLExecutor::selectOptGatherFunction(NLChunkKind kind) {
     NLGatherFunction gather = nullptr;
     dispatchIDChunkKind(kind, [&]<typename ID>() { gather = &gatherColumn<std::optional<ID>>; });

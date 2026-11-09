@@ -150,6 +150,11 @@ add_call_v3_test(test_query_ir_optional_subquery_list_padding OptionalSubqueryLi
 # OPTIONAL CALL over a body returning a value of type any or a value read out of a map.
 add_call_v3_test(test_query_ir_optional_subquery_any_padding OptionalSubqueryAnyPaddingTest.cpp)
 
+# OPTIONAL CALL over a body returning a label, edge type or property type ID, or a value type.
+add_turing_test(test_query_ir_optional_subquery_id_padding OptionalSubqueryIDPaddingTest.cpp)
+target_sources(test_query_ir_optional_subquery_id_padding PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_optional_subquery_id_padding PRIVATE ${IR_TEST_DIR})
+
 add_turing_test(test_query_ir_pattern_comprehension PatternComprehensionTest.cpp)
 target_include_directories(test_query_ir_pattern_comprehension PRIVATE ${IR_TEST_DIR})
 

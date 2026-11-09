@@ -396,6 +396,7 @@ public:
     static NLUnaryFn selectEntityToNullable(NLChunkKind kind, LocalMemory* memory, Column*& result);
 
     static NLUnaryFn selectToNullable(ValueType valueType, const Column* operand, LocalMemory* memory, Column*& result);
+    static NLUnaryFn selectToNullable(NLChunkKind kind, LocalMemory* memory, Column*& result);
 
     // Read the entity of @param kind each tagged cell holds (nl.checked_cast), a null cell
     // reading as the invalid ID; a cell holding another value raises

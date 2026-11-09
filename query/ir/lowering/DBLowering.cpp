@@ -7886,13 +7886,12 @@ mlir::Value DBLowering::unionColumnChunk(mlir::Value chunk) {
     return _builder.create<nl::ToInteger>(_builder.getUnknownLoc(), signedChunk, nullableChunk).getResult();
 }
 
-// The chunk shape a drain can pad a missed row of. A mask holds a bit and a number a zero,
-// which the query cannot tell from a value it was given, so those are read as nullable
-// value chunks. An ID
-// column needs none of it: it spells its null as the invalid ID.
+// The chunk shape a drain can pad a missed row of. A node, an edge, a path and a tagged cell
+// spell their own null. Any other column is read as a nullable one: a mask holds a bit, a
+// number a zero and a label ID the invalid ID, which the query cannot tell from a value.
 mlir::Value DBLowering::paddedColumnChunk(mlir::Value chunk) {
     const nl::ChunkType chunkType = mlir::dyn_cast<nl::ChunkType>(chunk.getType());
-    if (!chunkType) {
+    if (!chunkType || holdsItsNull(chunkType)) {
         return chunk;
     }
 
@@ -7900,11 +7899,11 @@ mlir::Value DBLowering::paddedColumnChunk(mlir::Value chunk) {
 
     if (mlir::isa<storage::ListType, storage::MapType>(element)) {
         return nullableContainerChunk(chunk);
-    } else if (mlir::isa<storage::BoolType, storage::StringType, mlir::Float64Type, mlir::IntegerType>(element)) {
+    } else if (mlir::isa<storage::BoolType>(element)) {
         return nullableValueChunk(chunk);
     }
 
-    return chunk;
+    return toNullableChunk(chunk, element);
 }
 
 mlir::Value DBLowering::cardinalityDriver(llvm::ArrayRef<mlir::Value> chunks) {

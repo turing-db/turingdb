@@ -3973,7 +3973,7 @@ void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContaine
     }
 
     const auto nullableType = mlir::cast<storage::NullableType>(resultChunk.getElementType());
-    const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+    const mlir::Type valueElement = nullableType.getValueType();
 
     // An entity column carries its null in the ID rather than in an optional, so it is
     // read row by row for validity instead of copied straight across
@@ -3988,8 +3988,10 @@ void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContaine
         fn = NLExecutor::selectEntityToNullable(chunkKindFromElementType(operandElement), _memory, result);
     } else if (readsAMask) {
         fn = NLExecutor::selectMaskToNullable(_memory, result);
+    } else if (isNullableIDValue(valueElement)) {
+        fn = NLExecutor::selectToNullable(chunkKindFromElementType(valueElement), _memory, result);
     } else {
-        fn = NLExecutor::selectToNullable(valueType, operand, _memory, result);
+        fn = NLExecutor::selectToNullable(valueTypeFromElementType(valueElement), operand, _memory, result);
     }
     bindKernelResult(toNullable.getResult(), result);
 
