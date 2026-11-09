@@ -88,6 +88,8 @@ private:
     // S3 Client
     std::unique_ptr<S3::TuringS3Client<S3::MinioS3ClientWrapper>> _s3Client {nullptr};
 
+    bool _ownsSystemEvents {false};
+
     // System API - accessed through the friend SystemAccessor
 
     // Graph access

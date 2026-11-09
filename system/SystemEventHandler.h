@@ -46,6 +46,7 @@ private:
     explicit SystemEventHandler(const fs::Path& socketPath);
 
     bool initializeImpl();
+    void stop();
 };
 
 }

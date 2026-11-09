@@ -31,7 +31,9 @@ SystemManager::SystemManager(const TuringConfig* config)
 }
 
 SystemManager::~SystemManager() {
-    SystemEventHandler::terminate();
+    if (_ownsSystemEvents) {
+        SystemEventHandler::terminate();
+    }
 }
 
 SystemAccessor SystemManager::accessShared() {
@@ -152,12 +154,14 @@ void SystemManager::initSystemEvents() {
         if (!SystemEventHandler::initialize(_config->getSocketPath())) {
             panic("Could not initialize system event handler");
         }
-    }
 
-    // Set on stop callback
-    SystemEventHandler::setOnStop([this] {
-        _config->getOnStopRequest()();
-    });
+        _ownsSystemEvents = true;
+
+        // Set on stop callback
+        SystemEventHandler::setOnStop([this] {
+            _config->getOnStopRequest()();
+        });
+    }
 }
 
 LoadGraphResult<Graph*> SystemManager::loadGraph(std::string_view name) {

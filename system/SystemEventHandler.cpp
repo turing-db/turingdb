@@ -57,13 +57,11 @@ SystemEventHandler::SystemEventHandler(const fs::Path& socketPath)
 }
 
 SystemEventHandler::~SystemEventHandler() {
-    terminate();
+    stop();
 }
 
 bool SystemEventHandler::initialize(const fs::Path& socketPath) {
     if (_instance) {
-        terminate();
-        _instance.reset();
         return false;
     }
 
@@ -71,27 +69,25 @@ bool SystemEventHandler::initialize(const fs::Path& socketPath) {
 
     const bool res = _instance->initializeImpl();
     if (!res) {
-        SystemEventHandler::terminate();
+        _instance.reset();
     }
 
     return res;
 }
 
 void SystemEventHandler::terminate() {
-    if (!_instance) {
-        return;
-    }
+    _instance.reset();
+}
 
-    if (!_instance->_running.exchange(false)) {
-        return;
-    }
+void SystemEventHandler::stop() {
+    if (_running.exchange(false)) {
+        uint64_t value = 1;
+        if (::write(_signalFd._write, &value, sizeof(value)) != sizeof(value)) {
+            spdlog::error("Failed to wake signalling thread: {}", strerror(errno));
+        }
 
-    uint64_t value = 1;
-    if (::write(_signalFd._write, &value, sizeof(value)) != sizeof(value)) {
-        spdlog::error("Failed to wake signalling thread: {}", strerror(errno));
+        _thread.join();
     }
-
-    _instance->_thread.join();
 
     if (_signalFd._read != -1) {
         ::close(_signalFd._read);
@@ -101,14 +97,14 @@ void SystemEventHandler::terminate() {
         ::close(_signalFd._write);
     }
 
-    if (_instance->_sockFd != -1) {
-        ::close(_instance->_sockFd);
+    if (_sockFd != -1) {
+        ::close(_sockFd);
     }
 
     _signalFd._read = -1;
     _signalFd._write = -1;
-    _instance->_sockFd = -1;
-    _instance->_socketPath.rm();
+    _sockFd = -1;
+    _socketPath.rm();
 }
 
 void SystemEventHandler::setOnStop(const std::function<void()>& onStop) {
