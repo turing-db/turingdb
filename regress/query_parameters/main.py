@@ -1,6 +1,8 @@
 import os
 from datetime import datetime, timedelta, timezone
 
+import numpy
+
 import turingdb
 from turingdb.exceptions import TuringDBException
 
@@ -60,6 +62,27 @@ def check(kind: str, db: turingdb.TuringDB) -> None:
         assert "must carry a timezone" in str(error), f"{kind}: a naive datetime gave {error}"
     else:
         raise AssertionError(f"{kind}: a naive datetime parameter was accepted")
+
+    profile = numpy.array([1.0, 0.0], dtype=numpy.float32)
+    scored = db.query("RETURN cosine_similarity($v, (1.0, 0.0)) AS s, $v AS v", query_parameters={"v": profile})
+    similarity = scored["s"].tolist()
+    returned = scored["v"].tolist()
+    assert similarity == [1.0], f"{kind}: a float32 array parameter gave {similarity}"
+    assert numpy.array_equal(returned[0], profile), f"{kind}: a float32 array parameter came back as {returned}"
+
+    try:
+        db.query("RETURN cosine_similarity($v, (1.0, 0.0))", query_parameters={"v": [1.0, 0.0]})
+    except TuringDBException as error:
+        assert "Invalid arguments for function 'cosine_similarity'" in str(error), f"{kind}: a list gave {error}"
+    else:
+        raise AssertionError(f"{kind}: a list was taken as an embedding")
+
+    try:
+        db.query("RETURN cosine_similarity($v, (1.0, 0.0))", query_parameters={"v": numpy.array([1.0, 0.0])})
+    except TuringDBException as error:
+        assert "an Embedding is a 1-dimensional float32 array" in str(error), f"{kind}: a float64 array gave {error}"
+    else:
+        raise AssertionError(f"{kind}: a float64 array was taken as an embedding")
 
     try:
         db.query("MATCH (n:$label) RETURN n")

@@ -263,12 +263,21 @@ def LoadCSV : TuringOp<"load_csv", [Pure]> {
   let summary = "Produce one row per record of a CSV file, a column per field the query reads";
 
   let description = [{
-    The source op for `LOAD CSV 'people.csv' AS row`. The file is fixed by the query, so
-    it reads no column and opens a dataflow of its own, the way db.unwind_const opens one
+    The source op for `LOAD CSV 'people.csv' AS row`. The file is fixed for the whole run,
+    so it reads no row and opens a dataflow of its own, the way db.unwind_const opens one
     from a literal list - one row per record of the file:
 
       %name, %age = db.load_csv("people.csv", [0 : ui64, 1 : ui64])
         : !db.column<!storage.string>, !db.column<!storage.string>
+
+    The path is either `path`, the one the query spells, or `bound_path`, a string column
+    holding one value for the whole run, which the load reads when it starts. A parameter
+    is one, so `LOAD CSV $path AS row` loads
+
+      %name = db.load_csv(%path : !db.column<!storage.string>, [0 : ui64])
+        : !db.column<!storage.string>
+
+    Exactly one of the two is given, and the program does not depend on the path bound.
 
     A record is many values, and an op has a fixed number of results, so the row is not
     one column: `fields` names the fields the query reads and the op produces one column
@@ -296,14 +305,14 @@ def LoadCSV : TuringOp<"load_csv", [Pure]> {
 
     Reading a file is deterministic, so the op is Pure. With incoming rows
     (`LOAD CSV ... MATCH (a)`) it is crossed with them through db.cross_product, the way
-    a search reading no column is; there is no expanding variant of this op.
+    a search reading no row is; there is no expanding variant of this op.
   }];
 
   // The file to read and the fields to produce, each entry a ui64 index or a header
-  // name. Being attributes and not SSA values they are absent from `operands`; the
-  // path is resolved against the data directory, and a header name against the file's
-  // header line, when the load runs.
-  let arguments = (ins StrAttr:$path,
+  // name. The path is resolved against the data directory, and a header name against
+  // the file's header line, when the load runs.
+  let arguments = (ins OptionalAttr<StrAttr>:$path,
+                       Optional<Column>:$bound_path,
                        ArrayAttr:$fields,
                        UnitAttr:$with_headers,
                        UnitAttr:$skip_on_error);
@@ -315,7 +324,8 @@ def LoadCSV : TuringOp<"load_csv", [Pure]> {
   // it, as db.count's do. The result types follow, qualified, as db.scan_nodes prints
   // its one.
   let assemblyFormat = [{
-    `(` $path `,` $fields `)` (`with_headers` $with_headers^)? (`skip_on_error` $skip_on_error^)?
+    `(` custom<CSVPath>($path, $bound_path, type($bound_path)) `,` $fields `)`
+    (`with_headers` $with_headers^)? (`skip_on_error` $skip_on_error^)?
     attr-dict `:` qualified(type($results))
   }];
 }
@@ -323,16 +333,32 @@ def LoadCSV : TuringOp<"load_csv", [Pure]> {
 /**
 * VectorSearch
 */
-def VectorSearch : TuringOp<"vector_search", [Pure]> {
+def VectorSearch : TuringOp<"vector_search", [Pure, AttrSizedOperandSegments]> {
   let summary = "Produce the nearest neighbours of a query vector, with the distance each scored";
 
   let description = [{
     The source op for `VECTOR SEARCH IN vec1 FOR 3 (1.0, 0.0) YIELD ids, score`. The
-    index, the neighbour count and the query vector are all fixed by the query, so it
-    reads no column and opens a dataflow of its own, the way db.unwind_const opens one
-    from a literal list:
+    index, the neighbour count and the query vector are all fixed for the whole run, so it
+    reads no row and opens a dataflow of its own, the way db.unwind_const opens one from a
+    literal list:
 
       %ids, %scores = db.vector_search("vec1", 3, [1.000000e+00, 0.000000e+00])
+        : !db.column<!storage.node_id>, !db.column<f64>
+
+    The neighbour count is either `k`, the one the query spells, or `bound_k`, an i64
+    column holding one value for the whole run, which the search reads when it starts. A
+    parameter is one, so `VECTOR SEARCH IN vec1 FOR $k (1.0, 0.0)` searches
+
+      %ids, %scores = db.vector_search("vec1", %k : !db.column<i64>, [1.000000e+00, 0.000000e+00])
+        : !db.column<!storage.node_id>, !db.column<f64>
+
+    Exactly one of the two is given. A bound count below 1 fails the search when it runs.
+
+    The query vector is likewise either `query_vector` or `bound_query_vector`, an
+    embedding column holding one value for the whole run, so `VECTOR SEARCH IN vec1 FOR 3
+    $v` searches
+
+      %ids, %scores = db.vector_search("vec1", 3, %v : !db.column<!storage.embedding>)
         : !db.column<!storage.node_id>, !db.column<f64>
 
     The two results are row-aligned, one row per neighbour, ordered nearest first:
@@ -349,23 +375,27 @@ def VectorSearch : TuringOp<"vector_search", [Pure]> {
     matches no edge and holds no property - so an index whose IDs are not node IDs still
     reports every neighbour it found.
 
-    `query_vector` must have as many elements as the index' dimension, which the schema
+    The query vector must have as many elements as the index' dimension, which the schema
     holds rather than the IR, so the search itself reports a mismatch. Reading the index
     is a deterministic read, so the op is Pure. With incoming rows
     (VECTOR SEARCH ... YIELD ids MATCH (n)) it is crossed with them through
-    db.cross_product; there is no variant of this op that takes a column.
+    db.cross_product; there is no variant of this op that searches once per row.
   }];
 
-  // Every parameter is fixed by the query, so none is an SSA value: the index to search,
-  // how many neighbours to report, and the vector to search for.
-  let arguments = (ins StrAttr:$index_name, UI64Attr:$k, DenseF32ArrayAttr:$query_vector);
+  // The index to search, how many neighbours to report, and the vector to search for.
+  let arguments = (ins StrAttr:$index_name,
+                       OptionalAttr<UI64Attr>:$k,
+                       Optional<Column>:$bound_k,
+                       OptionalAttr<DenseF32ArrayAttr>:$query_vector,
+                       Optional<Column>:$bound_query_vector);
   let results   = (outs ColumnNodeIDs:$ids, ColumnDoubles:$scores);
   let hasVerifier = 1;
 
   // The parameters print inside the parens ahead of the colon, as db.const_scan_nodes
   // prints its IDs; the two result types follow, qualified, as db.scan_edges prints its.
   let assemblyFormat = [{
-    `(` $index_name `,` $k `,` $query_vector `)`
+    `(` $index_name `,` custom<NeighbourCount>($k, $bound_k, type($bound_k)) `,`
+    custom<QueryVector>($query_vector, $bound_query_vector, type($bound_query_vector)) `)`
     attr-dict `:` qualified(type($ids)) `,` qualified(type($scores))
   }];
 }

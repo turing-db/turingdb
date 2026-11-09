@@ -105,6 +105,9 @@ size_t parameterValueBytes(const ParameterValue& value) {
         case ValueType::Duration:
             return sizeof(types::Duration::Primitive);
         break;
+        case ValueType::Embedding:
+            return sizeof(types::Embedding::Primitive);
+        break;
         case ValueType::List:
             return sizeof(ListView);
         break;
@@ -161,6 +164,9 @@ void writeParameterValue(LocalMemory* memory, Cursor& cursor, const ParameterVal
         break;
         case ValueType::Duration:
             cursor.writeValue(CellTag::Duration, value.getDuration());
+        break;
+        case ValueType::Embedding:
+            cursor.writeValue(CellTag::Embedding, memory->embeddingBuffer().insert(value.getEmbedding()));
         break;
         default:
             throw IRException(fmt::format("A parameter cannot hold a {} inside a list or a map", value.getTypeName()));
@@ -1265,7 +1271,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
         } else if (nl::LoadCSV loadCSV = mlir::dyn_cast<nl::LoadCSV>(operation)) {
             IteratorConfig config;
             config._kind = IteratorKind::LoadCSV;
-            config._csvPath = loadCSV.getPath();
+            config._csvPath = loadCSV.getPath().value_or(llvm::StringRef());
+            config._csvBoundPath = loadCSV.getBoundPath();
             config._csvFields = loadCSV.getFieldsAttr();
             config._csvHasHeaders = loadCSV.getWithHeaders();
             config._csvSkipOnError = loadCSV.getSkipOnError();
@@ -1274,8 +1281,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             IteratorConfig config;
             config._kind = IteratorKind::VectorSearch;
             config._indexName = vectorSearch.getIndexName();
-            config._neighbourCount = vectorSearch.getK();
-            config._queryVector = vectorSearch.getQueryVector();
+            config._neighbourCount = vectorSearch.getK().value_or(0);
+            config._boundNeighbourCount = vectorSearch.getBoundK();
+            config._queryVector = vectorSearch.getQueryVector().value_or(llvm::ArrayRef<float>());
+            config._boundQueryVector = vectorSearch.getBoundQueryVector();
             _iteratorConfigs[vectorSearch.getResult()] = config;
         } else if (nl::Unwind unwind = mlir::dyn_cast<nl::Unwind>(operation)) {
             IteratorConfig config;
@@ -2012,6 +2021,9 @@ Column* NLTranslator::boundParameterColumn(llvm::StringRef name, mlir::Type elem
         case ValueType::DateTime:
             return allocBoundConstant<types::DateTime::Primitive>(_memory, value.getDateTime());
         break;
+        case ValueType::Embedding:
+            return allocBoundConstant<types::Embedding::Primitive>(_memory, _memory->embeddingBuffer().insert(value.getEmbedding()));
+        break;
         default:
             throw IRException(fmt::format("Parameter ${} is a {}, which a parameter cannot hold",
                                           name,
@@ -2110,6 +2122,13 @@ void NLTranslator::translateLoadCSVLoop(const IteratorConfig& config,
                                                                                 config._csvSkipOnError);
     loopData->setLimit(limit);
 
+    const mlir::Value boundPath = config._csvBoundPath;
+    if (boundPath) {
+        const Column* column = getColumn(boundPath);
+        bioassert(column->getKind() == ColumnConst<types::String::Primitive>::staticKind(), "A bound path holds one value for the run");
+        loopData->setBoundPath(static_cast<const ColumnConst<types::String::Primitive>*>(column));
+    }
+
     for (const mlir::Attribute field : config._csvFields) {
         if (const auto header = mlir::dyn_cast<mlir::StringAttr>(field)) {
             const llvm::StringRef name = header.getValue();
@@ -2146,6 +2165,20 @@ void NLTranslator::translateVectorSearchLoop(const IteratorConfig& config,
                                                                                           config._neighbourCount,
                                                                                           queryVector);
     loopData->setLimit(limit);
+
+    const mlir::Value boundCount = config._boundNeighbourCount;
+    if (boundCount) {
+        const Column* column = getColumn(boundCount);
+        bioassert(column->getKind() == ColumnConst<types::Int64::Primitive>::staticKind(), "A bound neighbour count holds one value for the run");
+        loopData->setBoundNeighbourCount(static_cast<const ColumnConst<types::Int64::Primitive>*>(column));
+    }
+
+    const mlir::Value boundQueryVector = config._boundQueryVector;
+    if (boundQueryVector) {
+        const Column* column = getColumn(boundQueryVector);
+        bioassert(column->getKind() == ColumnConst<types::Embedding::Primitive>::staticKind(), "A bound query vector holds one value for the run");
+        loopData->setBoundQueryVector(static_cast<const ColumnConst<types::Embedding::Primitive>*>(column));
+    }
 
     body->emplaceStmt(&NLExecutor::runVectorSearchLoop, loopData);
 

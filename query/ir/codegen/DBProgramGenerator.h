@@ -1435,7 +1435,7 @@ private:
     // The attribute carrying an embedding literal's floats: a dense f32 array, which -
     // unlike a dense tensor - stores a repeated run element by element rather than
     // uniquing it down to the one value every element holds
-    mlir::Attribute embeddingLiteralAttr(const EmbeddingLiteral* literal);
+    mlir::DenseF32ArrayAttr embeddingLiteralAttr(const EmbeddingLiteral* literal);
 
     // Fills one attribute per element of a literal list, each keeping its literal's type
     void translateListElements(const ListLiteral* list,

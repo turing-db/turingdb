@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <stdint.h>
+#include <algorithm>
 #include <initializer_list>
 #include <limits>
 #include <optional>
@@ -24,6 +25,7 @@ namespace {
 using Int64 = types::Int64::Primitive;
 using UInt64 = types::UInt64::Primitive;
 using String = types::String::Primitive;
+using Embedding = types::Embedding::Primitive;
 
 }
 
@@ -193,4 +195,23 @@ TEST_F(ParameterValueReaderTest, theInt64BoundsAreRead) {
     } catch (const TuringException& error) {
         EXPECT_EQ(std::string(error.what()), "Integer 9223372036854775808 exceeds the Int64 range");
     }
+}
+
+TEST_F(ParameterValueReaderTest, anEmbeddingIsAnEmbedding) {
+    const std::vector<float> floats {1.0f, -0.5f};
+
+    ParameterValue value;
+    readParameterValue(column<Embedding>({Embedding {floats}}), 0, value);
+
+    ASSERT_EQ(value.getType(), ValueType::Embedding);
+    EXPECT_TRUE(std::ranges::equal(value.getEmbedding(), floats));
+
+    std::vector<ListBuffer<>::ListItemVariant> elements;
+    elements.emplace_back(Embedding {floats});
+    ColumnConst<ListView>* list = _memory.alloc<ColumnConst<ListView>>();
+    list->set(_lists.insert(elements));
+
+    readParameterValue(list, 0, value);
+    ASSERT_EQ(value.getList().size(), 1u);
+    EXPECT_TRUE(std::ranges::equal(value.getList()[0].getEmbedding(), floats));
 }

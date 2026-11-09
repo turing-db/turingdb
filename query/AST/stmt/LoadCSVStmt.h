@@ -5,11 +5,11 @@
 #include <vector>
 
 #include "Stmt.h"
-#include "Path.h"
 
 namespace db {
 
 class CypherAST;
+class Expr;
 class Symbol;
 class VarDecl;
 
@@ -30,12 +30,12 @@ public:
     using Fields = std::vector<Field>;
 
     static LoadCSVStmt* create(CypherAST* ast,
-                               std::string_view filePath,
+                               Expr* path,
                                Symbol* alias);
 
     Kind getKind() const override { return Kind::LOAD_CSV; }
 
-    const fs::Path& getFilePath() const { return _filePath; }
+    Expr* getPath() const { return _path; }
     Symbol* getAlias() const { return _alias; }
     bool hasHeaders() const { return _hasHeaders; }
     bool skipOnError() const { return _skipOnError; }
@@ -59,14 +59,14 @@ public:
     size_t declareField(std::string_view header);
 
 private:
-    fs::Path _filePath;
+    Expr* _path {nullptr};
     Symbol* _alias {nullptr};
     VarDecl* _aliasDecl {nullptr};
     Fields _fields;
     bool _hasHeaders {false};
     bool _skipOnError {false};
 
-    LoadCSVStmt(std::string_view filePath, Symbol* alias);
+    LoadCSVStmt(Expr* path, Symbol* alias);
     ~LoadCSVStmt() override;
 };
 

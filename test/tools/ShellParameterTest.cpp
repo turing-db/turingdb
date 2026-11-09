@@ -73,3 +73,11 @@ TEST_F(ShellParameterTest, anEscapedExpressionRunsNothing) {
     firstCellUnder(output, "| escaped |", escaped);
     EXPECT_EQ(escaped, "0") << output;
 }
+
+TEST_F(ShellParameterTest, anEmbeddingExpressionBindsAnEmbedding) {
+    std::string output;
+    runLines(":param v => (1.0, 0.5)\nSHOW PARAMETERS\n", output);
+
+    EXPECT_NE(output.find("| Embedding "), std::string::npos) << output;
+    EXPECT_NE(output.find("| [1, 0.5] "), std::string::npos) << output;
+}

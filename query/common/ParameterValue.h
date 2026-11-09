@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <map>
+#include <span>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -17,7 +18,8 @@ class ParameterValue {
 public:
     using List = std::vector<ParameterValue>;
     using Map = std::map<std::string, ParameterValue>;
-    using Variant = std::variant<std::monostate, int64_t, double, bool, std::string, List, Map, Duration, DateTime>;
+    using Embedding = std::vector<float>;
+    using Variant = std::variant<std::monostate, int64_t, double, bool, std::string, List, Map, Duration, DateTime, Embedding>;
 
     ParameterValue();
     ParameterValue(const ParameterValue& other);
@@ -39,6 +41,7 @@ public:
     const Map& getMap() const;
     Duration getDuration() const;
     DateTime getDateTime() const;
+    std::span<const float> getEmbedding() const;
 
     void setNull();
     void setInt64(int64_t value);
@@ -50,6 +53,8 @@ public:
     Map& setMap();
     void setDuration(Duration value);
     void setDateTime(DateTime value);
+    void setEmbedding(std::span<const float> value);
+    Embedding& setEmbedding();
 
 private:
     Variant _value;

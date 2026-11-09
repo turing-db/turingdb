@@ -738,6 +738,9 @@ void asString(std::string& out, const ParameterValue& root) {
             case ValueType::DateTime:
                 asString(out, value.getDateTime());
             break;
+            case ValueType::Embedding:
+                asString(out, value.getEmbedding());
+            break;
             case ValueType::List: {
                 const ParameterValue::List& list = value.getList();
 

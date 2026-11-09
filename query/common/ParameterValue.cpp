@@ -108,6 +108,8 @@ ValueType ParameterValue::getType() const {
         return ValueType::Duration;
     } else if (std::holds_alternative<DateTime>(_value)) {
         return ValueType::DateTime;
+    } else if (std::holds_alternative<Embedding>(_value)) {
+        return ValueType::Embedding;
     }
 
     bioassert(false, "A parameter holds a value of no known kind");
@@ -157,6 +159,11 @@ DateTime ParameterValue::getDateTime() const {
     return std::get<DateTime>(_value);
 }
 
+std::span<const float> ParameterValue::getEmbedding() const {
+    bioassert(std::holds_alternative<Embedding>(_value), "Parameter is not an Embedding");
+    return std::get<Embedding>(_value);
+}
+
 void ParameterValue::setNull() {
     _value.emplace<std::monostate>();
 }
@@ -195,6 +202,14 @@ void ParameterValue::setDuration(Duration value) {
 
 void ParameterValue::setDateTime(DateTime value) {
     _value.emplace<DateTime>(value);
+}
+
+void ParameterValue::setEmbedding(std::span<const float> value) {
+    _value.emplace<Embedding>(value.begin(), value.end());
+}
+
+ParameterValue::Embedding& ParameterValue::setEmbedding() {
+    return _value.emplace<Embedding>();
 }
 
 void ParameterValue::detachContainer(std::vector<Variant>& worklist) {

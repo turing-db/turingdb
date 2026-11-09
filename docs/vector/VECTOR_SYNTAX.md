@@ -80,8 +80,10 @@ VECTOR SEARCH IN <index_name> FOR <k> (<vector>) YIELD <variable> [, score]
 
 **Parameters:**
 - `<index_name>` - Name of the vector index to search
-- `<k>` - Number of nearest neighbors to return (positive integer)
-- `<vector>` - Query vector as a parenthesised list of float values
+- `<k>` - Number of nearest neighbors to return (positive integer), or a parameter holding one
+- `<vector>` - Query vector as a parenthesised list of float values, or a parameter holding
+  an embedding. The Python clients send a 1-dimensional `numpy.float32` array as an
+  embedding and the JS client a `Float32Array`; a list of numbers is not an embedding
 - `<variable>` - Variable name to hold the result nodes (typically `ids`)
 - `score` - Optional second yielded variable, the distance each neighbor scored
 
@@ -94,6 +96,9 @@ search reports, which is what lets several searches stand side by side in one qu
 ```cypher
 -- Find 10 nearest neighbors for a 4-dimensional query vector
 VECTOR SEARCH IN test_index FOR 10 (0.256, 0.12, 0.12345, 0.89) YIELD ids RETURN ids
+
+-- The neighbour count and the query vector bound as parameters
+VECTOR SEARCH IN test_index FOR $k $vector YIELD ids RETURN ids
 
 -- Report the distance each neighbor scored alongside it
 VECTOR SEARCH IN test_index FOR 10 (0.256, 0.12, 0.12345, 0.89) YIELD ids, score

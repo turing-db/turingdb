@@ -2,8 +2,10 @@
 
 #include <stddef.h>
 #include <string.h>
+#include <algorithm>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "ChunkedBuffer.h"
 #include "DecodeContext.h"
@@ -30,6 +32,7 @@ using Int64 = types::Int64::Primitive;
 using Double = types::Double::Primitive;
 using Bool = types::Bool::Primitive;
 using String = types::String::Primitive;
+using Embedding = types::Embedding::Primitive;
 
 }
 
@@ -251,4 +254,31 @@ TEST_F(TuringProtoParameterWriterTest, aDurationAndADateTimeKeepTheirTags) {
     EXPECT_EQ(entry->getKey(), "when");
     ASSERT_EQ(entry->getValue().getTag(), CellTag::DateTime);
     EXPECT_EQ(entry->getValue().getAs<DateTime>(), DateTime {1'762'351'500'000'000});
+}
+
+TEST_F(TuringProtoParameterWriterTest, anEmbeddingKeepsItsTag) {
+    const std::vector<float> profile {1.0f, -0.5f, 3.25f};
+
+    ParameterMap parameters;
+    parameters.insert("profile").setEmbedding(profile);
+    parameters.insert("profiles").setList().emplace_back().setEmbedding(profile);
+
+    write(parameters);
+
+    MapView view;
+    decode(view);
+    ASSERT_EQ(view.size(), 2u);
+
+    auto entry = view.begin();
+    EXPECT_EQ(entry->getKey(), "profile");
+    ASSERT_EQ(entry->getValue().getTag(), CellTag::Embedding);
+    EXPECT_TRUE(std::ranges::equal(entry->getValue().getAs<Embedding>(), profile));
+    ++entry;
+    EXPECT_EQ(entry->getKey(), "profiles");
+    ASSERT_EQ(entry->getValue().getTag(), CellTag::ListView);
+
+    const ListView list = entry->getValue().getAs<ListView>();
+    ASSERT_EQ(list.size(), 1u);
+    ASSERT_EQ(list.front().getTag(), CellTag::Embedding);
+    EXPECT_TRUE(std::ranges::equal(list.front().getAs<Embedding>(), profile));
 }

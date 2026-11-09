@@ -446,9 +446,8 @@ LoadCSVStmt* CypherGrammar::parseLoadCSVStmt() {
     const SourcePosition start = currentPosition();
     expect(CypherTokenKind::LOAD);
     expect(CypherTokenKind::CSV);
-    expect(CypherTokenKind::STRING_LITERAL);
 
-    const std::string_view path = _previous._text;
+    Expr* path = parseLiteralOrParameterExpr(CypherTokenKind::STRING_LITERAL);
 
     const bool hasHeaders = accept(CypherTokenKind::WITH);
     if (hasHeaders) {
@@ -492,15 +491,14 @@ VectorSearchStmt* CypherGrammar::parseVectorSearchStmt() {
     Symbol* index = parseName();
 
     expect(CypherTokenKind::FOR);
-    expect(CypherTokenKind::DIGIT);
-    const int64_t neighbourCount = _previous._integer;
+    Expr* neighbourCount = parseLiteralOrParameterExpr(CypherTokenKind::DIGIT);
 
-    EmbeddingLiteral* queryVector = parseEmbeddingLiteral();
+    Expr* queryVector = parseLiteralOrParameterExpr(CypherTokenKind::OPAREN);
     YieldClause* yield = parseYieldClause();
 
     VectorSearchStmt* stmt = VectorSearchStmt::create(_ast);
     stmt->setIndexName(index->getName());
-    stmt->setK(static_cast<uint64_t>(neighbourCount));
+    stmt->setK(neighbourCount);
     stmt->setQueryVector(queryVector);
     stmt->setYield(yield);
     locate(stmt, start);

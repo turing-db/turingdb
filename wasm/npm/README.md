@@ -63,9 +63,10 @@ await client.query("MATCH (n:Person) WHERE n.age >= $age RETURN n.name LIMIT $li
 A number with no fraction is sent as an integer and any other number as a float, so
 `30` is an integer and `2.5` a float. `double(30)` sends `30` as a float, and a `BigInt`
 is sent as an integer. Strings, booleans, `null`, arrays and plain objects are sent as
-strings, booleans, null, lists and maps. Any other value, such as a `Date` or
-`undefined`, throws a `TuringQueryError` with status `PARAMETER_ERROR` before the query
-is sent.
+strings, booleans, null, lists and maps. A `Float32Array` is sent as an embedding, the
+type `VECTOR SEARCH` and `cosine_similarity` take; an array of numbers stays a list. Any
+other value, such as a `Date`, a `Float64Array` or `undefined`, throws a
+`TuringQueryError` with status `PARAMETER_ERROR` before the query is sent.
 
 ## Column
 

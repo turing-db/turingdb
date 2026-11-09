@@ -3066,12 +3066,14 @@ TEST_F(ParseEdgeCaseTest, parsesEntityDetailsAndReadingClauses) {
     expectError("LOAD CSV",
                 "     1 | LOAD CSV\n"
                 "       |      ^^^\n"
-                "-------* syntax error, unexpected PROG_END, expecting STRING_LITERAL");
+                "-------* syntax error, unexpected PROG_END, expecting DOLLAR or STRING_LITERAL");
 
-    expectParse("LOAD CSV 'f' AS r RETURN r", {query({loadCSV({._path = "f", ._alias = "r"})}, returning({symbol("r")}))});
+    expectParse("LOAD CSV 'f' AS r RETURN r", {query({loadCSV({._path = string("f"), ._alias = "r"})}, returning({symbol("r")}))});
+
+    expectParse("LOAD CSV $f AS r RETURN r", {query({loadCSV({._path = parameter("f"), ._alias = "r"})}, returning({symbol("r")}))});
 
     expectParse("LOAD CSV 'f' WITH HEADERS ON ERROR SKIP AS r RETURN r",
-                {query({loadCSV({._path = "f", ._alias = "r", ._headers = true, ._skipOnError = true})},
+                {query({loadCSV({._path = string("f"), ._alias = "r", ._headers = true, ._skipOnError = true})},
                        returning({symbol("r")}))});
 
     expectError("LOAD CSV 'f' ON ERROR 5",
@@ -3183,10 +3185,29 @@ TEST_F(ParseEdgeCaseTest, parsesEntityDetailsAndReadingClauses) {
 
     expectParse("VECTOR SEARCH IN v FOR 3 (1, 2) YIELD ids RETURN ids",
                 {query({vectorSearch({._index = "v",
-                                      ._neighbours = 3,
-                                      ._queryVector = embedding({1.0f, 2.0f}),
+                                      ._neighbours = integer(3),
+                                      ._queryVector = literal(embedding({1.0f, 2.0f})),
                                       ._yield = yield({symbol("ids")})})},
                        returning({symbol("ids")}))});
+
+    expectParse("VECTOR SEARCH IN v FOR $k (1, 2) YIELD ids RETURN ids",
+                {query({vectorSearch({._index = "v",
+                                      ._neighbours = parameter("k"),
+                                      ._queryVector = literal(embedding({1.0f, 2.0f})),
+                                      ._yield = yield({symbol("ids")})})},
+                       returning({symbol("ids")}))});
+
+    expectParse("VECTOR SEARCH IN v FOR 3 $q YIELD ids RETURN ids",
+                {query({vectorSearch({._index = "v",
+                                      ._neighbours = integer(3),
+                                      ._queryVector = parameter("q"),
+                                      ._yield = yield({symbol("ids")})})},
+                       returning({symbol("ids")}))});
+
+    expectError("VECTOR SEARCH IN v FOR 3 [1, 2] YIELD ids",
+                "     1 | VECTOR SEARCH IN v FOR 3 [1, 2] YIELD ids\n"
+                "       |                          ^\n"
+                "-------* syntax error, unexpected OBRACK, expecting OPAREN or DOLLAR");
 
     expectError("VECTOR SEARCH IN v FOR 3 (1) YIELD ids",
                 "     1 | VECTOR SEARCH IN v FOR 3 (1) YIELD ids\n"
@@ -3195,8 +3216,8 @@ TEST_F(ParseEdgeCaseTest, parsesEntityDetailsAndReadingClauses) {
 
     expectParse("VECTOR SEARCH IN v FOR 3 (-1.5, 2e3) YIELD *",
                 {query({vectorSearch({._index = "v",
-                                      ._neighbours = 3,
-                                      ._queryVector = embedding({-1.5f, 2000.0f}),
+                                      ._neighbours = integer(3),
+                                      ._queryVector = literal(embedding({-1.5f, 2000.0f})),
                                       ._yield = yieldAll()})})});
 
     expectError("MATCH (n IS NULL) RETURN n",

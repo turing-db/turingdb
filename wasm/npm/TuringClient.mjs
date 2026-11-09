@@ -231,6 +231,12 @@ class ByteWriter {
         this._length += 8;
     }
 
+    f32(value) {
+        this._reserve(4);
+        this._view.setFloat32(this._length, value, true);
+        this._length += 4;
+    }
+
     f64(value) {
         this._reserve(8);
         this._view.setFloat64(this._length, value, true);
@@ -350,7 +356,8 @@ function writeMap(writer, map, pathOf, ancestors) {
     }
 }
 
-// An integral number goes as an Int64, as Cypher reads 470, and any other number as a Double
+// An integral number goes as an Int64, as Cypher reads 470, and any other number as a Double.
+// A Float32Array goes as an Embedding, the type a query returns one as.
 function writeParameterValue(writer, value, path, ancestors) {
     if (value === null) {
         writer.u8(CELL_TAG_NULL);
@@ -380,6 +387,12 @@ function writeParameterValue(writer, value, path, ancestors) {
         writer.u8(CELL_TAG_STRING);
         writer.u32(bytes.length);
         writer.bytes(bytes);
+    } else if (value instanceof Float32Array) {
+        writer.u8(CELL_TAG_EMBEDDING);
+        writer.u32(value.byteLength);
+        for (const element of value) {
+            writer.f32(element);
+        }
     } else if (ancestors.has(value)) {
         throwParameterError(path, "refers back to a value that contains it");
     } else if (Array.isArray(value)) {

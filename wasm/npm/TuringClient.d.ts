@@ -82,7 +82,8 @@ export declare function double(value: number): DoubleValue;
 
 /**
  * A query parameter. A number with no fraction goes as an Int64 and any other number as a
- * Double. A bigint goes as an Int64, and double(x) as a Double.
+ * Double. A bigint goes as an Int64, double(x) as a Double, and a Float32Array as an
+ * Embedding.
  */
 export type ParameterValue =
     | bigint
@@ -91,6 +92,7 @@ export type ParameterValue =
     | string
     | null
     | DoubleValue
+    | Float32Array
     | ParameterValue[]
     | { [key: string]: ParameterValue };
 

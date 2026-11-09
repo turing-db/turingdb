@@ -1449,6 +1449,20 @@ void appendBoundNodeIDs(const NLConstScanLoopData& loopData, const ScannedNodes&
     }
 }
 
+size_t searchedNeighbourCount(const NLVectorSearchLoopData& loopData) {
+    const ColumnConst<types::Int64::Primitive>* bound = loopData.getBoundNeighbourCount();
+    if (!bound) {
+        return loopData.getNeighbourCount();
+    }
+
+    const int64_t count = bound->getRaw();
+    if (count < 1) {
+        throw IRException(fmt::format("VECTOR SEARCH k value must be greater than 0, got {}", count));
+    }
+
+    return static_cast<size_t>(count);
+}
+
 // The position of each field a CSV load produces, in field order: the one it named, or
 // the one its header sits at in the file's header line. A position past the file's last
 // field, or a header the file does not carry, is a query naming a field that is not
@@ -8268,7 +8282,7 @@ void NLExecutor::searchVectorIndex(NLExecutionContext* context, NLVectorSearchLo
 
     vec::VectorSearchQuery query(dimension);
     query.setVector(queryVector);
-    query.setMaxResultCount(loopData->getNeighbourCount());
+    query.setMaxResultCount(searchedNeighbourCount(*loopData));
 
     vec::VectorSearchResult result;
     const vec::VectorResult<void> searched = accessor.search(&query, &result);

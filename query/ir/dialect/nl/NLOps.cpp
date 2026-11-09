@@ -24,6 +24,7 @@
 #include "GroupAggregateKindsFormat.h"
 #include "PropertyScanLiteral.h"
 #include "BoundNodeIDs.h"
+#include "BoundValueFormat.h"
 
 using namespace mlir;
 using namespace mlir::nl;
@@ -351,16 +352,48 @@ LogicalResult VectorSearch::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
+LogicalResult LoadCSV::verify() {
+    const Value boundPath = getBoundPath();
+    if (getPath().has_value() == static_cast<bool>(boundPath)) {
+        return emitOpError("requires either a path or a bound path");
+    }
+
+    const Type boundType = boundPath ? cast<ChunkType>(boundPath.getType()).getElementType() : Type();
+    if (boundType && !isa<storage::StringType>(boundType)) {
+        return emitOpError("requires a bound path of type !storage.string, got ") << boundType;
+    }
+
+    return success();
+}
+
 // The parameters db.vector_search rejects reach the index through this op unchanged: a
 // search reporting no neighbour sizes its result buffers at zero, and a query vector of
 // no dimension has nothing to score the neighbours against.
 LogicalResult VectorSearch::verify() {
-    if (getK() == 0) {
+    const std::optional<uint64_t> neighbourCount = getK();
+    const Value boundCount = getBoundK();
+    if (neighbourCount.has_value() == static_cast<bool>(boundCount)) {
+        return emitOpError("requires either a neighbour count or a bound one");
+    } else if (neighbourCount == 0) {
         return emitOpError("must report at least one neighbour");
     }
 
-    if (getQueryVector().empty()) {
+    const Type boundType = boundCount ? cast<ChunkType>(boundCount.getType()).getElementType() : Type();
+    if (boundType && !boundType.isSignlessInteger(64)) {
+        return emitOpError("requires a bound neighbour count of type i64, got ") << boundType;
+    }
+
+    const std::optional<llvm::ArrayRef<float>> queryVector = getQueryVector();
+    const Value boundQueryVector = getBoundQueryVector();
+    if (queryVector.has_value() == static_cast<bool>(boundQueryVector)) {
+        return emitOpError("requires either a query vector or a bound one");
+    } else if (queryVector && queryVector->empty()) {
         return emitOpError("must search for a vector of at least one dimension");
+    }
+
+    const Type queryVectorType = boundQueryVector ? cast<ChunkType>(boundQueryVector.getType()).getElementType() : Type();
+    if (queryVectorType && !isa<storage::EmbeddingType>(queryVectorType)) {
+        return emitOpError("requires a bound query vector of type !storage.embedding, got ") << queryVectorType;
     }
 
     return success();

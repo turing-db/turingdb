@@ -302,3 +302,54 @@ TEST_F(TuringProtoParameterReaderTest, anInstantTheEngineCannotSpellIsRefused) {
     ParameterMap decoded;
     EXPECT_THROW(roundTrip(source, decoded), TuringException);
 }
+
+TEST_F(TuringProtoParameterReaderTest, anEmbeddingComesBackAsItsFloats) {
+    const std::vector<float> profile {1.0f, -0.5f, 3.25f};
+    const std::vector<float> origin {0.0f, 0.0f};
+
+    ParameterMap source;
+    source.insert("profile").setEmbedding(profile);
+    source.insert("none").setEmbedding({});
+
+    ParameterValue::List& profiles = source.insert("profiles").setList();
+    profiles.emplace_back().setEmbedding(origin);
+    profiles.emplace_back().setInt64(1);
+
+    source.insert("stop").setMap()["at"].setEmbedding(origin);
+
+    ParameterMap decoded;
+    roundTrip(source, decoded);
+
+    const ParameterValue* decodedProfile = decoded.get("profile");
+    ASSERT_EQ(decodedProfile->getType(), ValueType::Embedding);
+    EXPECT_TRUE(std::ranges::equal(decodedProfile->getEmbedding(), profile));
+    EXPECT_TRUE(decoded.get("none")->getEmbedding().empty());
+
+    const ParameterValue::List& decodedProfiles = decoded.get("profiles")->getList();
+    ASSERT_EQ(decodedProfiles.size(), 2u);
+    EXPECT_TRUE(std::ranges::equal(decodedProfiles[0].getEmbedding(), origin));
+    EXPECT_EQ(decodedProfiles[1].getInt64(), 1);
+
+    EXPECT_TRUE(std::ranges::equal(decoded.get("stop")->getMap().at("at").getEmbedding(), origin));
+}
+
+// The bytes the npm client (wasm/npm/TuringClient.mjs) writes for {v: new Float32Array([1, 0.5])}
+// and the Python clients for {"v": numpy.array([1, 0.5], dtype=numpy.float32)}
+TEST_F(TuringProtoParameterReaderTest, readsTheEmbeddingAClientWrites) {
+    const std::vector<uint8_t> bytes = {
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x76, 0x05, 0x08, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x00, 0x3f,
+    };
+
+    TuringProtoInBuf inBuf(bytes.size());
+    memcpy(inBuf.data(), bytes.data(), bytes.size());
+    inBuf.increaseWriteOffset(bytes.size());
+
+    ParameterMap decoded;
+    readParameters(&inBuf, decoded);
+    EXPECT_EQ(inBuf.readable(), 0u);
+
+    const std::vector<float> expected {1.0f, 0.5f};
+    ASSERT_EQ(decoded.get("v")->getType(), ValueType::Embedding);
+    EXPECT_TRUE(std::ranges::equal(decoded.get("v")->getEmbedding(), expected));
+}

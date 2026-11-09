@@ -643,6 +643,16 @@ Expr* CypherGrammar::parseParameterExpr() {
     return expr;
 }
 
+Expr* CypherGrammar::parseLiteralOrParameterExpr(CypherTokenKind literal) {
+    if (check(CypherTokenKind::DOLLAR)) {
+        return parseParameterExpr();
+    } else if (!check(literal)) {
+        throwUnexpectedToken();
+    }
+
+    return parseLiteralExpr();
+}
+
 Expr* CypherGrammar::parseKeywordInvocationExpr() {
     const SourcePosition start = currentPosition();
     FunctionInvocation* invocation = examineKind() == CypherTokenKind::COUNT ? parseCountFunc() : parseNormalizeFunc();

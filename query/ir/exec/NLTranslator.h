@@ -200,13 +200,16 @@ private:
         // MLIRContext keeps alive for the whole execution.
         llvm::StringRef _indexName;
         size_t _neighbourCount {0};
+        mlir::Value _boundNeighbourCount;
         llvm::ArrayRef<float> _queryVector;
+        mlir::Value _boundQueryVector;
 
         // What a LoadCSV iterator reads: the file, the fields it produces - each a
         // position or a header name - and the two flags the load carries. Empty and false
         // for the other kinds. Views into the op's interned attribute storage too, so the
         // path and the header names outlive the translation.
         llvm::StringRef _csvPath;
+        mlir::Value _csvBoundPath;
         mlir::ArrayAttr _csvFields;
         bool _csvHasHeaders {false};
         bool _csvSkipOnError {false};

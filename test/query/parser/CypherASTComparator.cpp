@@ -882,17 +882,6 @@ bool CypherASTComparator::compareInteger(std::string_view field, int64_t expecte
     return false;
 }
 
-bool CypherASTComparator::compareUnsigned(std::string_view field, uint64_t expected, uint64_t actual) {
-    if (expected == actual) {
-        return true;
-    }
-
-    const PathScope scope(_path, field);
-    reportDifference(fmt::format("{}", expected), fmt::format("{}", actual));
-
-    return false;
-}
-
 bool CypherASTComparator::compareBound(std::string_view field, int64_t expected, int64_t actual) {
     if (expected == actual) {
         return true;
@@ -1444,7 +1433,7 @@ bool CypherASTComparator::compareShortestPathStmt(const ShortestPathStmt* expect
 }
 
 bool CypherASTComparator::compareLoadCSVStmt(const LoadCSVStmt* expected, const LoadCSVStmt* actual) {
-    return compareString("filePath", expected->getFilePath().get(), actual->getFilePath().get())
+    return compareExpr("path", expected->getPath(), actual->getPath())
            && compareSymbol("alias", expected->getAlias(), actual->getAlias())
            && compareBool("headers", expected->hasHeaders(), actual->hasHeaders())
            && compareBool("skipOnError", expected->skipOnError(), actual->skipOnError());
@@ -1452,8 +1441,8 @@ bool CypherASTComparator::compareLoadCSVStmt(const LoadCSVStmt* expected, const 
 
 bool CypherASTComparator::compareVectorSearchStmt(const VectorSearchStmt* expected, const VectorSearchStmt* actual) {
     return compareString("indexName", expected->getIndexName(), actual->getIndexName())
-           && compareUnsigned("k", expected->getK(), actual->getK())
-           && compareLiteral("queryVector", expected->getQueryVector(), actual->getQueryVector())
+           && compareExpr("k", expected->getK(), actual->getK())
+           && compareExpr("queryVector", expected->getQueryVector(), actual->getQueryVector())
            && compareYieldClause("yield", expected->getYield(), actual->getYield());
 }
 

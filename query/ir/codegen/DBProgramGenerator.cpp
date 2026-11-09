@@ -4145,8 +4145,18 @@ void DBProgramGenerator::generateLoadCSV(const LoadCSVStmt* loadCSVStmt) {
         fieldDecls.push_back(nullptr);
     }
 
-    const std::string_view path = loadCSVStmt->getFilePath().get();
-    const mlir::StringAttr pathAttr = _opBuilder.getStringAttr(llvm::StringRef {path.data(), path.size()});
+    const Expr* path = loadCSVStmt->getPath();
+
+    mlir::StringAttr pathAttr;
+    mlir::Value boundPath;
+    if (path->getKind() == Expr::Kind::PARAMETER) {
+        boundPath = translateParameterExpr(static_cast<const ParameterExpr*>(path));
+    } else {
+        const Literal* literal = static_cast<const LiteralExpr*>(path)->getLiteral();
+        const std::string_view spelled = static_cast<const StringLiteral*>(literal)->getValue();
+        pathAttr = _opBuilder.getStringAttr(llvm::StringRef {spelled.data(), spelled.size()});
+    }
+
     const mlir::ArrayAttr fieldsAttr = _opBuilder.getArrayAttr(fieldAttrs);
 
     const mlir::db::ColumnType fieldType = allocColumnType(mlir::storage::StringType::get(_mlirCtxt));
@@ -4157,6 +4167,7 @@ void DBProgramGenerator::generateLoadCSV(const LoadCSVStmt* loadCSVStmt) {
         return _opBuilder.create<mlir::db::LoadCSV>(loc,
                                                     fieldTypes,
                                                     pathAttr,
+                                                    boundPath,
                                                     fieldsAttr,
                                                     loadCSVStmt->hasHeaders(),
                                                     loadCSVStmt->skipOnError());
@@ -4229,7 +4240,7 @@ void DBProgramGenerator::publishLoadCSVFields(const LoadCSVStmt* loadCSVStmt,
 }
 
 void DBProgramGenerator::generateVectorSearch(const VectorSearchStmt* vectorSearchStmt) {
-    const EmbeddingLiteral* queryVector = vectorSearchStmt->getQueryVector();
+    const Expr* queryVector = vectorSearchStmt->getQueryVector();
     if (!queryVector) {
         throwError("VECTOR SEARCH statement has no query vector.", vectorSearchStmt);
     }
@@ -4240,13 +4251,29 @@ void DBProgramGenerator::generateVectorSearch(const VectorSearchStmt* vectorSear
         throwError("VECTOR SEARCH statement names no yielded value.", vectorSearchStmt);
     }
 
-    const std::span<const float> queryValues = queryVector->getValue();
-    const mlir::DenseF32ArrayAttr queryVectorAttr =
-        _opBuilder.getDenseF32ArrayAttr(llvm::ArrayRef<float> {queryValues.data(), queryValues.size()});
+    mlir::DenseF32ArrayAttr queryVectorAttr;
+    mlir::Value boundQueryVector;
+    if (queryVector->getKind() == Expr::Kind::PARAMETER) {
+        boundQueryVector = translateParameterExpr(static_cast<const ParameterExpr*>(queryVector));
+    } else {
+        const Literal* literal = static_cast<const LiteralExpr*>(queryVector)->getLiteral();
+        queryVectorAttr = embeddingLiteralAttr(static_cast<const EmbeddingLiteral*>(literal));
+    }
 
     const std::string_view searchedIndex = vectorSearchStmt->getIndexName();
     const llvm::StringRef indexName {searchedIndex.data(), searchedIndex.size()};
-    const uint64_t neighbourCount = vectorSearchStmt->getK();
+
+    const Expr* neighbourCount = vectorSearchStmt->getK();
+
+    mlir::IntegerAttr countAttr;
+    mlir::Value boundCount;
+    if (neighbourCount->getKind() == Expr::Kind::PARAMETER) {
+        boundCount = translateParameterExpr(static_cast<const ParameterExpr*>(neighbourCount));
+    } else {
+        const Literal* literal = static_cast<const LiteralExpr*>(neighbourCount)->getLiteral();
+        const int64_t spelled = static_cast<const IntegerLiteral*>(literal)->getValue();
+        countAttr = mlir::IntegerAttr::get(_opBuilder.getIntegerType(64, /*isSigned=*/false), spelled);
+    }
 
     const mlir::db::ColumnType idType = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
     const mlir::db::ColumnType scoreType = allocColumnType(_opBuilder.getF64Type());
@@ -4260,8 +4287,10 @@ void DBProgramGenerator::generateVectorSearch(const VectorSearchStmt* vectorSear
                                                                                   idType,
                                                                                   scoreType,
                                                                                   indexName,
-                                                                                  neighbourCount,
-                                                                                  queryVectorAttr);
+                                                                                  countAttr,
+                                                                                  boundCount,
+                                                                                  queryVectorAttr,
+                                                                                  boundQueryVector);
 
         publishVectorSearchYields(yieldItems, search.getIds(), search.getScores());
         generateYieldFilter(yieldItems);
@@ -4298,8 +4327,10 @@ void DBProgramGenerator::generateVectorSearch(const VectorSearchStmt* vectorSear
                                                                               idType,
                                                                               scoreType,
                                                                               indexName,
-                                                                              neighbourCount,
-                                                                              queryVectorAttr);
+                                                                              countAttr,
+                                                                              boundCount,
+                                                                              queryVectorAttr,
+                                                                              boundQueryVector);
     _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {search.getIds(), search.getScores()});
 
     // Anything generated from here on reads the product's results, not the factors'.
@@ -9719,7 +9750,7 @@ mlir::TypedAttr DBProgramGenerator::scalarLiteralAttr(const Literal* literal) {
     }
 }
 
-mlir::Attribute DBProgramGenerator::embeddingLiteralAttr(const EmbeddingLiteral* literal) {
+mlir::DenseF32ArrayAttr DBProgramGenerator::embeddingLiteralAttr(const EmbeddingLiteral* literal) {
     const std::span<const float> floats = literal->getValue();
 
     return mlir::DenseF32ArrayAttr::get(_mlirCtxt, llvm::ArrayRef<float> {floats.data(), floats.size()});

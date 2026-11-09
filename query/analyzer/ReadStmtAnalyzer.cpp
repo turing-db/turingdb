@@ -195,6 +195,13 @@ void ReadStmtAnalyzer::yieldEveryReturnValue(const FunctionSignature& signature,
 }
 
 void ReadStmtAnalyzer::analyze(LoadCSVStmt* loadCSV) {
+    Expr* path = loadCSV->getPath();
+    _exprAnalyzer->analyzeRootExpr(path);
+
+    if (path->getType() != EvaluatedType::String) {
+        throwError("LOAD CSV path must be a string", loadCSV);
+    }
+
     Symbol* alias = loadCSV->getAlias();
     if (!alias) {
         throwError("LOAD CSV must have an alias", loadCSV);
@@ -648,15 +655,39 @@ VarDecl* ReadStmtAnalyzer::declareGroupVariable(DeclContext* outer, EvaluatedTyp
 }
 
 void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
-    // Validate K > 0
-    if (stmt->getK() == 0) {
-        throwError("VECTOR SEARCH k value must be greater than 0", stmt);
+    Expr* neighbourCount = stmt->getK();
+    _exprAnalyzer->analyzeRootExpr(neighbourCount);
+
+    if (neighbourCount->getType() != EvaluatedType::Integer) {
+        throwError("VECTOR SEARCH k value must be an integer", stmt);
     }
 
-    // Validate vector has elements
-    const EmbeddingLiteral* queryVector = stmt->getQueryVector();
-    if (!queryVector || queryVector->getValue().empty()) {
+    if (neighbourCount->getKind() == Expr::Kind::LITERAL) {
+        const Literal* literal = static_cast<const LiteralExpr*>(neighbourCount)->getLiteral();
+        if (static_cast<const IntegerLiteral*>(literal)->getValue() == 0) {
+            throwError("VECTOR SEARCH k value must be greater than 0", stmt);
+        }
+    }
+
+    Expr* queryVector = stmt->getQueryVector();
+    if (!queryVector) {
         throwError("VECTOR SEARCH query vector cannot be empty", stmt);
+    }
+
+    _exprAnalyzer->analyzeRootExpr(queryVector);
+
+    const EvaluatedType queryVectorType = queryVector->getType();
+    if (queryVectorType != EvaluatedType::Embedding) {
+        throwError(fmt::format("VECTOR SEARCH query vector must be an Embedding, got {}",
+                               EvaluatedTypeName::value(queryVectorType)),
+                   stmt);
+    }
+
+    if (queryVector->getKind() == Expr::Kind::LITERAL) {
+        const Literal* literal = static_cast<const LiteralExpr*>(queryVector)->getLiteral();
+        if (static_cast<const EmbeddingLiteral*>(literal)->getValue().empty()) {
+            throwError("VECTOR SEARCH query vector cannot be empty", stmt);
+        }
     }
 
     // Process YIELD clause - create VarDecl for 'ids' variable

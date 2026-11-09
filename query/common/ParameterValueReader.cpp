@@ -62,7 +62,7 @@ public:
     void read(NodeID) { throwNotAValue("a node"); }
     void read(EdgeID) { throwNotAValue("an edge"); }
     void read(PathView) { throwNotAValue("a path"); }
-    void read(std::span<const float>) { throwNotAValue("an embedding"); }
+    void read(std::span<const float> embedding) { _value.setEmbedding(embedding); }
 
     void read(ListView list) {
         ParameterValue::List& elements = _value.setList();

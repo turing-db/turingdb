@@ -163,10 +163,15 @@ def LoadCSV : NLOp<"load_csv", [Pure]> {
         : !nl.iter<!nl.chunk<!storage.string>, !nl.chunk<!storage.string>>
 
     The path, the field list and the two flags are the ones db.load_csv carried,
-    forwarded as-is; the path is resolved against the data directory, and a header name
-    against the file's header line, when the loop first runs - the file is the one thing
-    a loop of this family reads outside the graph. Like nl.unwind_const it reads no
-    input chunk and carries nothing: it opens the dataflow.
+    forwarded as-is, a bound path as the chunk holding it:
+
+      %name = nl.load_csv(%path : !nl.chunk<!storage.string>, [0 : ui64])
+        : !nl.iter<!nl.chunk<!storage.string>>
+
+    The path is resolved against the data directory, and a header name against the
+    file's header line, when the loop first runs - the file is the one thing a loop of
+    this family reads outside the graph. Like nl.unwind_const it reads no row and
+    carries nothing: it opens the dataflow.
 
     Every field rides a string chunk viewing characters copied into the query's string
     buffer - a record carries no type to read them as. The number of
@@ -174,13 +179,16 @@ def LoadCSV : NLOp<"load_csv", [Pure]> {
     rather than inferred.
   }];
 
-  let arguments = (ins StrAttr:$path,
+  let arguments = (ins OptionalAttr<StrAttr>:$path,
+                       Optional<NLChunk>:$bound_path,
                        ArrayAttr:$fields,
                        UnitAttr:$with_headers,
                        UnitAttr:$skip_on_error);
   let results   = (outs NLIterator:$result);
+  let hasVerifier = 1;
   let assemblyFormat = [{
-    `(` $path `,` $fields `)` (`with_headers` $with_headers^)? (`skip_on_error` $skip_on_error^)?
+    `(` custom<CSVPath>($path, $bound_path, type($bound_path)) `,` $fields `)`
+    (`with_headers` $with_headers^)? (`skip_on_error` $skip_on_error^)?
     attr-dict `:` qualified(type($result))
   }];
 }
@@ -189,7 +197,7 @@ def LoadCSV : NLOp<"load_csv", [Pure]> {
 * VectorSearch
 */
 // Pure: reading the index is deterministic; the per-neighbour fan-out is in the nl.for.
-def VectorSearch : NLOp<"vector_search", [Pure, InferTypeOpAdaptor]> {
+def VectorSearch : NLOp<"vector_search", [Pure, InferTypeOpAdaptor, AttrSizedOperandSegments]> {
   let summary = "Create a database iterator over the nearest neighbours of a query vector";
   let description = [{
     Imperative counterpart of db.vector_search. Each step of an enclosing nl.for fills
@@ -199,9 +207,13 @@ def VectorSearch : NLOp<"vector_search", [Pure, InferTypeOpAdaptor]> {
       %n = nl.vector_search("vec1", 3, [1.000000e+00, 0.000000e+00])
         : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<f64>>>
 
-    The parameters are the ones db.vector_search carried, forwarded as-is; the search
-    runs against the session's vector indexes, which is the one thing a loop of this
-    family reads outside the graph. Like nl.unwind_const it reads no input chunk and
+    The parameters are the ones db.vector_search carried, forwarded as-is, a bound
+    neighbour count or query vector as the chunk holding it:
+
+      %n = nl.vector_search("vec1", %k : !nl.chunk<i64>, %v : !nl.chunk<!storage.embedding>)
+
+    The search runs against the session's vector indexes, which is the one thing a loop
+    of this family reads outside the graph. Like nl.unwind_const it reads no row and
     carries nothing: it opens the dataflow. The neighbours ride the same node ID chunk a
     scan binds, so a hop expands them unchanged; the distances ride a nullable value
     chunk, the shape every value-chunk consumer dispatches on, even though a neighbour is
@@ -209,9 +221,17 @@ def VectorSearch : NLOp<"vector_search", [Pure, InferTypeOpAdaptor]> {
     than spelled.
   }];
 
-  let arguments = (ins StrAttr:$index_name, UI64Attr:$k, DenseF32ArrayAttr:$query_vector);
+  let arguments = (ins StrAttr:$index_name,
+                       OptionalAttr<UI64Attr>:$k,
+                       Optional<NLChunk>:$bound_k,
+                       OptionalAttr<DenseF32ArrayAttr>:$query_vector,
+                       Optional<NLChunk>:$bound_query_vector);
   let results   = (outs NLIterator:$result);
-  let assemblyFormat = "`(` $index_name `,` $k `,` $query_vector `)` attr-dict `:` qualified(type($result))";
+  let assemblyFormat = [{
+    `(` $index_name `,` custom<NeighbourCount>($k, $bound_k, type($bound_k)) `,`
+    custom<QueryVector>($query_vector, $bound_query_vector, type($bound_query_vector)) `)`
+    attr-dict `:` qualified(type($result))
+  }];
   let hasVerifier = 1;
 }
 

@@ -152,7 +152,6 @@ private:
     bool comparePresence(std::string_view field, const void* expected, const void* actual, std::string_view className);
     bool compareBool(std::string_view field, bool expected, bool actual);
     bool compareInteger(std::string_view field, int64_t expected, int64_t actual);
-    bool compareUnsigned(std::string_view field, uint64_t expected, uint64_t actual);
     bool compareBound(std::string_view field, int64_t expected, int64_t actual);
     bool compareDouble(std::string_view field, double expected, double actual);
     bool compareFloat(std::string_view field, float expected, float actual);

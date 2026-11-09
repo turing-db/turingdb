@@ -1949,7 +1949,7 @@ void DBLowering::lowerUnwindConst(mlir::db::UnwindConst unwindConst) {
 }
 
 void DBLowering::lowerLoadCSV(mlir::db::LoadCSV loadCSV) {
-    // The file sibling of lowerUnwindConst: a source reads no column, so its loop sits at
+    // The file sibling of lowerUnwindConst: a source reads no row, so its loop sits at
     // the top of the current root block. The path, the field list and the flags are
     // forwarded as-is; the path and the header names are resolved when the loop runs. One
     // string chunk per field, so - like nl.unwind_const - the iterator type is
@@ -1962,9 +1962,12 @@ void DBLowering::lowerLoadCSV(mlir::db::LoadCSV loadCSV) {
     const llvm::SmallVector<mlir::Type> chunks(loadCSV.getResults().size(), chunk);
     const nl::IteratorType iteratorType = nl::IteratorType::get(context, chunks);
 
+    const mlir::Value boundPath = loadCSV.getBoundPath();
+
     nl::LoadCSV records = _builder.create<nl::LoadCSV>(_builder.getUnknownLoc(),
                                                        iteratorType,
                                                        loadCSV.getPathAttr(),
+                                                       boundPath ? mapValue(boundPath) : mlir::Value(),
                                                        loadCSV.getFieldsAttr(),
                                                        loadCSV.getWithHeadersAttr(),
                                                        loadCSV.getSkipOnErrorAttr());
@@ -1972,16 +1975,21 @@ void DBLowering::lowerLoadCSV(mlir::db::LoadCSV loadCSV) {
 }
 
 void DBLowering::lowerVectorSearch(mlir::db::VectorSearch vectorSearch) {
-    // The neighbour sibling of lowerUnwindConst: a source reads no column, so its loop
+    // The neighbour sibling of lowerUnwindConst: a source reads no row, so its loop
     // sits at the top of the current root block. The index, the neighbour count and the
     // query vector are forwarded as-is; the two chunk types are fixed, so the iterator
     // type is inferred rather than spelled.
     setInsertionInto(_rootBlock);
 
+    const mlir::Value boundCount = vectorSearch.getBoundK();
+    const mlir::Value boundQueryVector = vectorSearch.getBoundQueryVector();
+
     nl::VectorSearch neighbours = _builder.create<nl::VectorSearch>(_builder.getUnknownLoc(),
                                                                     vectorSearch.getIndexNameAttr(),
                                                                     vectorSearch.getKAttr(),
-                                                                    vectorSearch.getQueryVectorAttr());
+                                                                    boundCount ? mapValue(boundCount) : mlir::Value(),
+                                                                    vectorSearch.getQueryVectorAttr(),
+                                                                    boundQueryVector ? mapValue(boundQueryVector) : mlir::Value());
     buildLoopForSource(neighbours.getResult(), vectorSearch.getOperation());
 }
 

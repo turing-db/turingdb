@@ -572,6 +572,7 @@ TEST_F(NLDialectTest, loadCSVBuildsOneStringChunkPerField) {
     mlir::nl::LoadCSV load = builder.create<mlir::nl::LoadCSV>(loc,
                                                                iteratorType,
                                                                builder.getStringAttr("people.csv"),
+                                                               mlir::Value(),
                                                                fields,
                                                                builder.getUnitAttr(),
                                                                mlir::UnitAttr());
@@ -604,6 +605,7 @@ TEST_F(NLDialectTest, loadCSVRoundTripsThroughTextualForm) {
     builder.create<mlir::nl::LoadCSV>(loc,
                                       iteratorType,
                                       builder.getStringAttr("people.csv"),
+                                      mlir::Value(),
                                       builder.getArrayAttr({position}),
                                       mlir::UnitAttr(),
                                       builder.getUnitAttr());

@@ -182,6 +182,25 @@ func.func @main() {
 }
 )mlir";
 
+// VECTOR SEARCH IN people FOR $k $v YIELD ids: the count and the query vector are the
+// parameters main takes.
+const char* const boundVectorSearchProgram = R"mlir(
+func.func @main(%k: !db.column<i64>, %v: !db.column<!storage.embedding>) {
+  %ids, %scores = db.vector_search("people", %k : !db.column<i64>, %v : !db.column<!storage.embedding>) : !db.column<!storage.node_id>, !db.column<f64>
+  db.output(%ids) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// A query vector bound to a column of f64 rather than of embeddings.
+const char* const doubleBoundVectorSearchProgram = R"mlir(
+func.func @main(%v: !db.column<f64>) {
+  %ids, %scores = db.vector_search("people", 2, %v : !db.column<f64>) : !db.column<!storage.node_id>, !db.column<f64>
+  db.output(%ids) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // A factor whose region does not end in a db.yield: the parser cannot recover
 // the result types and rejects it.
 const char* const missingYieldProgram = R"mlir(
@@ -484,6 +503,35 @@ TEST_F(DBDialectTest, acceptsAVectorSearchScoringInF64) {
 // rejected here rather than silently discarded on the way to the interpreter.
 TEST_F(DBDialectTest, rejectsAVectorSearchScoringInANarrowerFloat) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(narrowScoreVectorSearchProgram);
+    EXPECT_FALSE(module);
+}
+
+TEST_F(DBDialectTest, roundTripsAVectorSearchForABoundQueryVector) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(boundVectorSearchProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::VectorSearch search;
+    module.get().walk([&](mlir::db::VectorSearch found) {
+        search = found;
+    });
+    ASSERT_TRUE(search);
+
+    mlir::func::FuncOp main = mlir::cast<mlir::func::FuncOp>(search->getParentOp());
+    EXPECT_EQ(search.getBoundK(), main.getArgument(0));
+    EXPECT_EQ(search.getBoundQueryVector(), main.getArgument(1));
+    EXPECT_FALSE(search.getQueryVector().has_value());
+
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed) << printed;
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+TEST_F(DBDialectTest, rejectsAVectorSearchForABoundQueryVectorOfDoubles) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(doubleBoundVectorSearchProgram);
     EXPECT_FALSE(module);
 }
 
@@ -1647,6 +1695,7 @@ TEST_F(DBDialectTest, verifierRejectsALoadCSVNamingNoField) {
     builder.create<mlir::db::LoadCSV>(loc,
                                       mlir::TypeRange {},
                                       builder.getStringAttr("people.csv"),
+                                      mlir::Value(),
                                       builder.getArrayAttr({}),
                                       mlir::UnitAttr(),
                                       mlir::UnitAttr());

@@ -268,3 +268,12 @@ TEST_F(TuringProtoParametersTest, aQueryAndParametersOverTheLimitGetTheServerErr
     const std::string limit = std::to_string(net::NetBuffer::BUFFER_SIZE);
     EXPECT_NE(message.find(limit), std::string::npos) << message;
 }
+
+TEST_F(TuringProtoParametersTest, anEmbeddingParameterReachesTheEngine) {
+    const std::vector<float> profile {1.0f, 0.0f};
+
+    ParameterMap parameters;
+    parameters.insert("v").setEmbedding(profile);
+
+    expectRows("RETURN cosine_similarity($v, (1.0, 0.0)), cosine_similarity($v, (0.0, 1.0))", &parameters, {{"1", "0"}});
+}

@@ -32,3 +32,11 @@ add_ir_tests(test_query_ir_parameter_argument ParameterArgumentTest.cpp)
 add_call_v3_test(test_query_ir_expression_parameter ExpressionParameterTest.cpp)
 
 add_call_v3_test(test_query_ir_parameter_lookup ParameterLookupTest.cpp)
+
+add_turing_test(test_query_ir_source_parameter SourceParameterTest.cpp)
+target_sources(test_query_ir_source_parameter PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_source_parameter PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_embedding_parameter EmbeddingParameterTest.cpp)
+target_sources(test_query_ir_embedding_parameter PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_embedding_parameter PRIVATE ${IR_TEST_DIR})

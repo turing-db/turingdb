@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include <nanobind/ndarray.h>
 #include <nanobind/stl/string.h>
 
 #include "ParameterMap.h"
@@ -21,6 +22,10 @@ namespace pybindings {
 namespace {
 
 using Item = std::pair<nb::handle, db::ParameterValue*>;
+
+// The array an Embedding is sent as. A wider float would have to be narrowed, so a float64
+// array is not one.
+using Float32Vector = nb::ndarray<const float, nb::ndim<1>, nb::device::cpu>;
 
 // Whether @param value != value holds, as it does for pandas.NaT. PyObject_RichCompareBool,
 // and so nanobind's equal(), answer by identity first and never ask.
@@ -78,6 +83,16 @@ bool isPoint(nb::handle value, nb::object& pointType) {
     return isInstance == 1;
 }
 
+void readEmbedding(const Float32Vector& source, db::ParameterValue& target) {
+    const auto floats = source.view();
+
+    db::ParameterValue::Embedding& embedding = target.setEmbedding();
+    embedding.resize(floats.shape(0));
+    for (size_t index = 0; index < embedding.size(); index++) {
+        embedding[index] = floats(index);
+    }
+}
+
 // A bool is checked before an int: in Python, bool is a subclass of int. A Point is a tuple
 // too, but a value rather than a list, and no parameter holds a point.
 void readValue(nb::handle source,
@@ -87,6 +102,8 @@ void readValue(nb::handle source,
                std::vector<Item>& worklist) {
     const bool readsAsAList = nb::isinstance<nb::list>(source)
                            || (nb::isinstance<nb::tuple>(source) && !isPoint(source, pointType));
+
+    Float32Vector floats;
 
     if (source.is_none()) {
         target.setNull();
@@ -131,6 +148,12 @@ void readValue(nb::handle source,
         } else {
             target.setDateTime(db::DateTime {microsecondsOf(source - times.getEpoch())});
         }
+    } else if (nb::try_cast(source, floats, false)) {
+        readEmbedding(floats, target);
+    } else if (nb::hasattr(source, "dtype")) {
+        throw TuringException("A parameter cannot hold a Python " + getTypeName(source) + " of "
+                              + nb::cast<std::string>(source.attr("dtype").attr("name"))
+                              + ": an Embedding is a 1-dimensional float32 array");
     } else {
         throw TuringException("A parameter cannot hold a Python " + getTypeName(source));
     }

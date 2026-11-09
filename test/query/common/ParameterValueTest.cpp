@@ -1,8 +1,10 @@
 #include <gtest/gtest.h>
 
 #include <stddef.h>
+#include <algorithm>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "ParameterValue.h"
 
@@ -158,4 +160,26 @@ TEST(ParameterValueTest, aDurationAndADateTimeKeepTheirMicroseconds) {
 
     const ParameterValue copy(when);
     EXPECT_EQ(copy.getDateTime(), when.getDateTime());
+}
+
+TEST(ParameterValueTest, anEmbeddingKeepsItsFloats) {
+    const std::vector<float> floats {1.0f, -0.5f, 3.25f};
+
+    ParameterValue profile;
+    profile.setEmbedding(floats);
+
+    EXPECT_EQ(profile.getType(), ValueType::Embedding);
+    EXPECT_EQ(profile.getTypeName(), "Embedding");
+    EXPECT_TRUE(std::ranges::equal(profile.getEmbedding(), floats));
+
+    const ParameterValue copy(profile);
+    EXPECT_TRUE(std::ranges::equal(copy.getEmbedding(), floats));
+
+    ParameterValue moved(std::move(profile));
+    EXPECT_TRUE(std::ranges::equal(moved.getEmbedding(), floats));
+
+    ParameterValue::Embedding& filled = moved.setEmbedding();
+    EXPECT_TRUE(filled.empty());
+    filled.push_back(2.0f);
+    EXPECT_EQ(moved.getEmbedding().size(), 1u);
 }

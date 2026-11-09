@@ -2,11 +2,14 @@
 #include "TuringTest.h"
 
 #include "CypherAST.h"
+#include "ExprAnalyzer.h"
 #include "Graph.h"
 #include "Literal.h"
 #include "ProcedureManager.h"
 #include "ReadStmtAnalyzer.h"
 #include "SimpleGraph.h"
+#include "decl/DeclContext.h"
+#include "expr/LiteralExpr.h"
 #include "stmt/VectorSearchStmt.h"
 #include "versioning/Transaction.h"
 
@@ -32,16 +35,23 @@ public:
     }
 
 protected:
-    void expectRejected(EmbeddingLiteral* queryVector) {
+    void expectRejected(Expr* queryVector) {
         CypherAST ast(_procedures.get(), "");
 
         VectorSearchStmt* statement = VectorSearchStmt::create(&ast);
         statement->setIndexName(indexName);
-        statement->setK(3);
+        statement->setK(LiteralExpr::create(&ast, IntegerLiteral::create(&ast, 3)));
         statement->setQueryVector(queryVector);
 
         const FrozenCommitTx transaction = _graph->openTransaction();
+        DeclContext* declContext = DeclContext::create(&ast, nullptr);
+
+        ExprAnalyzer exprAnalyzer(&ast, transaction.viewGraph());
+        exprAnalyzer.setDeclContext(declContext);
+
         ReadStmtAnalyzer analyzer(&ast, transaction.viewGraph());
+        analyzer.setExprAnalyzer(&exprAnalyzer);
+        analyzer.setDeclContext(declContext);
 
         const VectorSearchStmt* const search = statement;
         EXPECT_THROW(analyzer.analyze(search), AnalyzeException);
@@ -57,5 +67,5 @@ TEST_F(VectorSearchQueryVectorTest, rejectsASearchCarryingNoQueryVector) {
 
 TEST_F(VectorSearchQueryVectorTest, rejectsASearchForAVectorOfNoDimension) {
     CypherAST ast(_procedures.get(), "");
-    expectRejected(EmbeddingLiteral::create(&ast));
+    expectRejected(LiteralExpr::create(&ast, EmbeddingLiteral::create(&ast)));
 }

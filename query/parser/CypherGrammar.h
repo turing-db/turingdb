@@ -520,6 +520,7 @@ private:
     Expr* parsePatternPredicate();
     Expr* parseLiteralExpr();
     Expr* parseParameterExpr();
+    Expr* parseLiteralOrParameterExpr(CypherTokenKind literal);
     Expr* parseKeywordInvocationExpr();
     Expr* parseParenthesizedExpr();
     FunctionInvocation* parseFunctionInvocation(QualifiedName* name, const SourcePosition& nameStart);

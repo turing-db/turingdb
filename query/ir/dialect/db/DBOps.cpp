@@ -28,6 +28,7 @@
 #include "GroupAggregateKindsFormat.h"
 #include "PropertyScanLiteral.h"
 #include "BoundNodeIDs.h"
+#include "BoundValueFormat.h"
 
 using namespace mlir;
 using namespace mlir::db;
@@ -2649,6 +2650,16 @@ LogicalResult UnwindConst::verify() {
 // One column per field, and a field is named either by position or by header - a
 // header only where a header line was read, since nothing else resolves the name.
 LogicalResult LoadCSV::verify() {
+    const Value boundPath = getBoundPath();
+    if (getPath().has_value() == static_cast<bool>(boundPath)) {
+        return emitOpError("requires either a path or a bound path");
+    }
+
+    const Type boundType = boundPath ? cast<ColumnType>(boundPath.getType()).getType() : Type();
+    if (boundType && !isa<storage::StringType>(boundType)) {
+        return emitOpError("requires a bound path of type !storage.string, got ") << boundType;
+    }
+
     const ArrayAttr fields = getFieldsAttr();
 
     // A load producing no column produces no rows either: nothing downstream could read
@@ -2683,12 +2694,30 @@ LogicalResult LoadCSV::verify() {
 // nothing: neither is a shape the index can be asked for, so both are rejected here rather
 // than left to return an empty result the query would read as "no match".
 LogicalResult VectorSearch::verify() {
-    if (getK() == 0) {
+    const std::optional<uint64_t> neighbourCount = getK();
+    const Value boundCount = getBoundK();
+    if (neighbourCount.has_value() == static_cast<bool>(boundCount)) {
+        return emitOpError("requires either a neighbour count or a bound one");
+    } else if (neighbourCount == 0) {
         return emitOpError("must report at least one neighbour");
     }
 
-    if (getQueryVector().empty()) {
+    const Type boundType = boundCount ? cast<ColumnType>(boundCount.getType()).getType() : Type();
+    if (boundType && !boundType.isSignlessInteger(64)) {
+        return emitOpError("requires a bound neighbour count of type i64, got ") << boundType;
+    }
+
+    const std::optional<llvm::ArrayRef<float>> queryVector = getQueryVector();
+    const Value boundQueryVector = getBoundQueryVector();
+    if (queryVector.has_value() == static_cast<bool>(boundQueryVector)) {
+        return emitOpError("requires either a query vector or a bound one");
+    } else if (queryVector && queryVector->empty()) {
         return emitOpError("must search for a vector of at least one dimension");
+    }
+
+    const Type queryVectorType = boundQueryVector ? cast<ColumnType>(boundQueryVector.getType()).getType() : Type();
+    if (queryVectorType && !isa<storage::EmbeddingType>(queryVectorType)) {
+        return emitOpError("requires a bound query vector of type !storage.embedding, got ") << queryVectorType;
     }
 
     return success();

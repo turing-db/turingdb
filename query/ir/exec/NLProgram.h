@@ -644,12 +644,12 @@ private:
 };
 
 // The file sibling of NLUnwindConstLoopData: parses a CSV file one chunk of records at a
-// time into one owning string column per field the load produces. The path and the field
-// selectors are views into the module's attribute storage, which the MLIRContext keeps
-// alive for the whole execution; the path is resolved against the data directory, and a
-// header name against the file's header line, when the loop runs. The output columns are
-// the field columns of _row, which is what the parser fills. A plain source, so a
-// downstream LIMIT can bound it.
+// time into one owning string column per field the load produces. The path, unless bound
+// when the query runs, and the field selectors are views into the module's attribute
+// storage, which the MLIRContext keeps alive for the whole execution; the path is resolved
+// against the data directory, and a header name against the file's header line, when the
+// loop runs. The output columns are the field columns of _row, which is what the parser
+// fills. A plain source, so a downstream LIMIT can bound it.
 class NLLoadCSVLoopData : public NLFunctionData {
 public:
     // One field the load produces: the position `row[2]` named, or the header `row.age`
@@ -675,7 +675,8 @@ public:
 
     ColumnStringTable* getRow() const { return _row; }
     StringBuffer* getStringBuffer() const { return _stringBuffer; }
-    std::string_view getPath() const { return _path; }
+    std::string_view getPath() const { return _boundPath ? _boundPath->getRaw() : _path; }
+    void setBoundPath(const ColumnConst<types::String::Primitive>* boundPath) { _boundPath = boundPath; }
     bool hasHeaders() const { return _hasHeaders; }
     bool skipOnError() const { return _skipOnError; }
 
@@ -692,6 +693,7 @@ private:
     ColumnStringTable* _row {nullptr};
     StringBuffer* _stringBuffer {nullptr};
     std::string_view _path;
+    const ColumnConst<types::String::Primitive>* _boundPath {nullptr};
     std::vector<Field> _fields;
     NLLimitState* _limit {nullptr};
     bool _hasHeaders {false};
@@ -702,9 +704,9 @@ private:
 // The neighbour sibling of NLUnwindConstLoopData: runs one search against a vector index
 // and streams the neighbours it found one chunk at a time, into the node ID column of the
 // nodes the index holds the vectors under and a nullable f64 column of the distances they
-// scored. The index name and the query vector are views into the module's attribute
-// storage, which the MLIRContext keeps alive for the whole execution. A plain source, so
-// a downstream LIMIT can bound it.
+// scored. The index name and the query vector, unless bound when the query runs, are views
+// into the module's attribute storage, which the MLIRContext keeps alive for the whole
+// execution. A plain source, so a downstream LIMIT can bound it.
 class NLVectorSearchLoopData : public NLFunctionData {
 public:
     NLVectorSearchLoopData(ColumnNodeIDs* ids,
@@ -724,7 +726,11 @@ public:
     Column* getScores() const { return _scores; }
     std::string_view getIndexName() const { return _indexName; }
     size_t getNeighbourCount() const { return _neighbourCount; }
-    std::span<const float> getQueryVector() const { return _queryVector; }
+    std::span<const float> getQueryVector() const { return _boundQueryVector ? _boundQueryVector->getRaw() : _queryVector; }
+    void setBoundQueryVector(const ColumnConst<types::Embedding::Primitive>* queryVector) { _boundQueryVector = queryVector; }
+
+    const ColumnConst<types::Int64::Primitive>* getBoundNeighbourCount() const { return _boundNeighbourCount; }
+    void setBoundNeighbourCount(const ColumnConst<types::Int64::Primitive>* count) { _boundNeighbourCount = count; }
 
     NLLimitState* getLimit() const { return _limit; }
     void setLimit(NLLimitState* limit) { _limit = limit; }
@@ -747,7 +753,9 @@ private:
     Column* _scores {nullptr};
     std::string_view _indexName;
     size_t _neighbourCount {0};
+    const ColumnConst<types::Int64::Primitive>* _boundNeighbourCount {nullptr};
     std::span<const float> _queryVector;
+    const ColumnConst<types::Embedding::Primitive>* _boundQueryVector {nullptr};
     NLLimitState* _limit {nullptr};
     std::vector<NodeID> _neighbourIDs;
     std::vector<std::optional<types::Double::Primitive>> _neighbourScores;

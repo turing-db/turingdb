@@ -37,6 +37,7 @@ const TAG_INT = 0;
 const TAG_DOUBLE = 2;
 const TAG_BOOL = 3;
 const TAG_STRING = 4;
+const TAG_EMBEDDING = 5;
 const TAG_LIST_VIEW = 6;
 const TAG_NULL = 7;
 const TAG_NODE_ID = 8;
@@ -495,11 +496,12 @@ async function testParameters() {
         big: 2n ** 62n,
         ratio: double(2),
         stop: { rank: -1, crs: "PAD" },
+        profile: new Float32Array([1, 0.5]),
     };
     await client.query("RETURN $window", { parameters });
 
     const map = new Writer();
-    map.u32(7);
+    map.u32(8);
     map.u32(0);
     map.string("big");
     map.u8(TAG_INT);
@@ -513,6 +515,11 @@ async function testParameters() {
     map.string("open");
     map.u8(TAG_BOOL);
     map.u8(1);
+    map.string("profile");
+    map.u8(TAG_EMBEDDING);
+    map.u32(8);
+    map.f32(1);
+    map.f32(0.5);
     map.string("ratio");
     map.u8(TAG_DOUBLE);
     map.f64(2);
@@ -542,7 +549,7 @@ async function testRejectsParametersAQueryCannotHold() {
     const client = new TuringClient({ fetch: makeFakeFetch(makeEnd(1.0), {}) });
     const rejected = [
         [{ when: new Date(0) }, "$when"],
-        [{ profile: new Float32Array(2) }, "$profile"],
+        [{ profile: new Float64Array(2) }, "$profile"],
         [{ stop: { crs: undefined } }, "$stop.crs"],
         [{ calls: [1, [2, Symbol("x")]] }, "$calls[1][1]"],
         [{ big: 2n ** 63n }, "$big"],

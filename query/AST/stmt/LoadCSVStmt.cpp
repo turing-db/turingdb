@@ -6,9 +6,9 @@
 
 using namespace db;
 
-LoadCSVStmt::LoadCSVStmt(std::string_view filePath,
+LoadCSVStmt::LoadCSVStmt(Expr* path,
                          Symbol* alias)
-    : _filePath(fs::Path(std::string(filePath))),
+    : _path(path),
     _alias(alias)
 {
 }
@@ -16,9 +16,9 @@ LoadCSVStmt::LoadCSVStmt(std::string_view filePath,
 LoadCSVStmt::~LoadCSVStmt() = default;
 
 LoadCSVStmt* LoadCSVStmt::create(CypherAST* ast,
-                                 std::string_view filePath,
+                                 Expr* path,
                                  Symbol* alias) {
-    LoadCSVStmt* stmt = new LoadCSVStmt(filePath, alias);
+    LoadCSVStmt* stmt = new LoadCSVStmt(path, alias);
     ast->addStmt(stmt);
     return stmt;
 }

@@ -120,7 +120,7 @@ protected:
     };
 
     struct LoadCSVFields {
-        std::string_view _path;
+        db::Expr* _path {nullptr};
         std::string_view _alias;
         bool _headers {false};
         bool _skipOnError {false};
@@ -128,8 +128,8 @@ protected:
 
     struct VectorSearchFields {
         std::string_view _index;
-        uint64_t _neighbours {0};
-        db::EmbeddingLiteral* _queryVector {nullptr};
+        db::Expr* _neighbours {nullptr};
+        db::Expr* _queryVector {nullptr};
         db::YieldClause* _yield {nullptr};
     };
 

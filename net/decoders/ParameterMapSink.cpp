@@ -103,7 +103,9 @@ ParameterMapSink::~ParameterMapSink() {
 }
 
 float* ParameterMapSink::allocEmbedding(size_t numFloats) {
-    throwUnsupportedType("Embedding");
+    db::ParameterValue::Embedding& embedding = nextSlot().setEmbedding();
+    embedding.resize(numFloats);
+    return embedding.data();
 }
 
 uint64_t* ParameterMapSink::allocPathIDs(size_t idCount) {
