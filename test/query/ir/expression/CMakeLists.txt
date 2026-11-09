@@ -177,3 +177,5 @@ add_turing_test(test_query_ir_schema_id_equality SchemaIDEqualityTest.cpp)
 add_turing_test(test_query_ir_schema_id_membership SchemaIDMembershipTest.cpp)
 
 add_turing_test(test_query_ir_schema_id_empty_or_null_list SchemaIDEmptyOrNullListTest.cpp)
+
+add_turing_test(test_query_ir_membership_over_a_map MembershipOverAMapTest.cpp)

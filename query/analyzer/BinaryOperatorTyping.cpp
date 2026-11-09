@@ -56,7 +56,7 @@ enum class TypingReason : uint8_t {
     IncompatibleAdditionTypes,
     IncompatibleConcatenationTypes,
     IncompatibleNumericTypes,
-    NotACollection,
+    NotAList,
     IncompatibleMemberTypes,
     InvalidOperator,
 };
@@ -275,13 +275,13 @@ RuleResult membershipType(EvaluatedType a, const ExprType& rhs) {
 
     // A type-erased cell holds whatever its row put there, so the test reads the list
     // it holds, or a list of one where it holds something else
-    const bool searchesACollection = b == EvaluatedType::List || b == EvaluatedType::Map;
+    const bool searchesAList = b == EvaluatedType::List;
     const bool searchesACell = b == EvaluatedType::Any;
     const bool searchesNull = b == EvaluatedType::Null;
     const bool noElementCanEqual = equalityType(a, memberType(rhs))._reason == TypingReason::IncompatibleTypes;
 
-    if (!searchesACollection && !searchesACell && !searchesNull) {
-        return invalid(TypingReason::NotACollection);
+    if (!searchesAList && !searchesACell && !searchesNull) {
+        return invalid(TypingReason::NotAList);
     } else if (searchesNull) {
         return valid(EvaluatedType::Null);
     } else if (noElementCanEqual) {
@@ -436,8 +436,8 @@ void writeError(TypingReason reason, const ExprType& lhs, const ExprType& rhs, B
         case TypingReason::IncompatibleNumericTypes:
             out._error = fmt::format("Operands are not valid and compatible numeric types: '{}' and '{}'", left, right);
         break;
-        case TypingReason::NotACollection:
-            out._error = fmt::format("IN operand must be a list or map, not '{}'", right);
+        case TypingReason::NotAList:
+            out._error = fmt::format("IN operand must be a list, not '{}'", right);
         break;
         case TypingReason::IncompatibleMemberTypes:
             out._error = fmt::format("IN cannot compare '{}' with an element of type '{}'",
