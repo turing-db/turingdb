@@ -13,14 +13,14 @@ using namespace db;
 namespace {
 
 // The list element types an unwind can drain into a column of that very type: the entity
-// IDs, the value types a nullable value chunk is laid out for, and a nested list, which
-// drains into a list column one level shallower. An unresolved element, an embedding, or
-// the !storage.any a heterogeneous list holds drains as tagged scalars instead - none of
-// them names a column shape the drain could fill.
+// IDs, the value types a nullable value chunk is laid out for, the schema IDs, and a nested
+// list, which drains into a list column one level shallower. An unresolved element, an
+// embedding, or the !storage.any a heterogeneous list holds drains as tagged scalars instead -
+// none of them names a column shape the drain could fill.
 bool drainsToItsOwnElementType(mlir::Type listElement) {
     if (mlir::isa<mlir::storage::NodeIDType, mlir::storage::EdgeIDType, mlir::storage::StringType, mlir::storage::ListType>(listElement)) {
         return true;
-    } else if (mlir::isa<mlir::Float64Type>(listElement)) {
+    } else if (mlir::isa<mlir::Float64Type>(listElement) || mlir::storage::namesASchemaID(listElement)) {
         return true;
     }
 

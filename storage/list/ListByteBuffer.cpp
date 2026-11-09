@@ -128,4 +128,8 @@ template CellView ListByteBuffer<>::write(CellTag, const types::Duration::Primit
 template CellView ListByteBuffer<>::write(CellTag, const MapView&);
 template CellView ListByteBuffer<>::write(CellTag, const PathView&);
 template CellView ListByteBuffer<>::write(CellTag, const types::Point::Primitive&);
+template CellView ListByteBuffer<>::write(CellTag, const LabelID&);
+template CellView ListByteBuffer<>::write(CellTag, const EdgeTypeID&);
+template CellView ListByteBuffer<>::write(CellTag, const PropertyTypeID&);
+template CellView ListByteBuffer<>::write(CellTag, const ValueType&);
 }

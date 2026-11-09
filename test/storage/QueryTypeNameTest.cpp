@@ -34,6 +34,10 @@ constexpr std::array CELL_TAG_TYPES {
     CellTagType {CellTag::Duration, EvaluatedType::Duration},
     CellTagType {CellTag::Path, EvaluatedType::GraphPath},
     CellTagType {CellTag::Point, EvaluatedType::Point},
+    CellTagType {CellTag::LabelID, EvaluatedType::Label},
+    CellTagType {CellTag::EdgeTypeID, EvaluatedType::EdgeType},
+    CellTagType {CellTag::PropertyTypeID, EvaluatedType::PropertyType},
+    CellTagType {CellTag::ValueType, EvaluatedType::ValueType},
     CellTagType {CellTag::INVALID, EvaluatedType::Invalid},
 };
 

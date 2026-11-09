@@ -2091,8 +2091,7 @@ NLUnwindElementEmitFunction NLTranslator::selectListUnwindEmit(mlir::Type chunkT
     const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        return NLExecutor::selectListUnwindValueEmit(sourceIsNullable,
-                                                     valueTypeFromElementType(nullableType.getValueType()));
+        return NLExecutor::selectListUnwindValueEmit(sourceIsNullable, chunkKindFromNullableValue(nullableType.getValueType()));
     } else if (mlir::isa<storage::NodeIDType>(elementType)) {
         return NLExecutor::selectListUnwindNodeEmit(sourceIsNullable);
     } else if (mlir::isa<storage::EdgeIDType>(elementType)) {
@@ -3931,7 +3930,7 @@ void NLTranslator::translateListIndex(nl::ListIndex index, NLStmtContainer* body
         if (readsATaggedCell) {
             fn = NLExecutor::selectBinary<OP_INDEX>(lhs, rhs, _memory, result);
         } else {
-            fn = NLExecutor::selectValueListIndex(valueTypeFromElementType(elementType), lhs, rhs, _memory, result);
+            fn = NLExecutor::selectValueListIndex(chunkKindFromNullableValue(elementType), lhs, rhs, _memory, result);
         }
     }
 
@@ -4053,7 +4052,7 @@ NLListItemReadFunction NLTranslator::selectListItemRead(mlir::Type chunkType) {
     }
 
     const mlir::Type valueElement = nullableType.getValueType();
-    return NLExecutor::selectValueListItemRead(valueTypeFromElementType(valueElement));
+    return NLExecutor::selectValueListItemRead(chunkKindFromNullableValue(valueElement));
 }
 
 void NLTranslator::translateMakeList(nl::MakeList makeList, NLStmtContainer* body) {
@@ -4101,7 +4100,7 @@ NLMapValueReadFunction NLTranslator::selectMapValueRead(mlir::Type chunkType) {
     }
 
     const mlir::Type valueElement = nullableType.getValueType();
-    return NLExecutor::selectValueMapValueRead(valueTypeFromElementType(valueElement));
+    return NLExecutor::selectValueMapValueRead(chunkKindFromNullableValue(valueElement));
 }
 
 void NLTranslator::translateMakeMap(nl::MakeMap makeMap, NLStmtContainer* body) {
@@ -4217,7 +4216,7 @@ void NLTranslator::translateContainerIndex(nl::ContainerIndex index, NLStmtConta
         run = NLExecutor::selectEntityContainerIndex(chunkKindFromElementType(resultElement));
     } else {
         const auto nullableType = mlir::cast<storage::NullableType>(resultElement);
-        run = NLExecutor::selectValueContainerIndex(valueTypeFromElementType(nullableType.getValueType()));
+        run = NLExecutor::selectValueContainerIndex(chunkKindFromNullableValue(nullableType.getValueType()));
     }
 
     NLContainerIndexData* data = _program->allocFunctionData<NLContainerIndexData>(base,
@@ -6598,13 +6597,13 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
             value._fold = fold;
             value._listEmit = listEmit;
         } else if (mlir::isa<storage::NullableType>(element)) {
-            const ValueType valueType = nullableChunkValueType(column.getType());
+            const NLChunkKind kind = getNullableChunkKind(column.getType());
 
-            value._buffer = allocValueColumnForValueType(valueType);
-            value._fold = isDistinct ? NLExecutor::selectCollectDistinctFold(valueType)
-                                     : NLExecutor::selectCollectFold(valueType);
-            value._unwindCollectEmit = NLExecutor::selectUnwindCollectValueEmit(valueType);
-            value._listEmit = NLExecutor::selectCollectListEmit(valueType);
+            value._buffer = allocColumnForKind(kind);
+            value._fold = isDistinct ? NLExecutor::selectCollectDistinctFold(kind)
+                                     : NLExecutor::selectCollectFold(kind);
+            value._unwindCollectEmit = NLExecutor::selectUnwindCollectValueEmit(kind);
+            value._listEmit = NLExecutor::selectCollectListEmit(kind);
         } else if (mlir::isa<storage::ListType>(element)) {
             NLCollectFoldFunction fold = nullptr;
             NLCollectListEmitFunction listEmit = nullptr;
@@ -6920,20 +6919,6 @@ void NLTranslator::translateCollectLoop(const IteratorConfig& config,
     body->emplaceStmt(&NLExecutor::runCollectLoop, loopData);
 
     translateBlock(loopBody, loopData->getStmts());
-}
-
-// A plain (non-nullable) value column of the collected type's primitive: collect
-// drops nulls, so only present values land here. It grows as values are appended
-// across steps, so no initial reserve is needed.
-Column* NLTranslator::allocValueColumnForValueType(ValueType valueType) {
-    Column* column = nullptr;
-
-    const auto alloc = [&]<SupportedType T>() {
-        column = _memory->alloc<ColumnVector<typename T::Primitive>>();
-    };
-    ValueTypeDispatcher(valueType).execute(alloc);
-
-    return column;
 }
 
 void NLTranslator::translateProcedure(nl::Procedure procedureOp, NLStmtContainer* body) {

@@ -93,6 +93,10 @@ public:
         MakeMemoryPool<ColumnConst<std::optional<types::DateTime::Primitive>>>::type,
         MakeMemoryPool<ColumnConst<std::optional<types::Duration::Primitive>>>::type,
         MakeMemoryPool<ColumnConst<std::optional<types::Point::Primitive>>>::type,
+        MakeMemoryPool<ColumnConst<std::optional<EdgeTypeID>>>::type,
+        MakeMemoryPool<ColumnConst<std::optional<LabelID>>>::type,
+        MakeMemoryPool<ColumnConst<std::optional<PropertyTypeID>>>::type,
+        MakeMemoryPool<ColumnConst<std::optional<ValueType>>>::type,
 
         MakeMemoryPool<ColumnConst<PropertyNull>>::type,
 

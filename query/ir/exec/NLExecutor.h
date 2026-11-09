@@ -367,9 +367,9 @@ public:
     static NLBinaryFn selectBinary(const Column* lhs, const Column* rhs,
                                    LocalMemory* memory, Column*& result);
 
-    // Index a list whose cells all hold @param valueType, reading each one out as that
-    // type. selectBinary<OP_INDEX> is the sibling for a list naming no one type.
-    static NLBinaryFn selectValueListIndex(ValueType valueType, const Column* lhs, const Column* rhs,
+    // Index a list whose cells all hold values of @param kind, reading each one out as that
+    // kind. selectBinary<OP_INDEX> is the sibling for a list naming no one type.
+    static NLBinaryFn selectValueListIndex(NLChunkKind kind, const Column* lhs, const Column* rhs,
                                            LocalMemory* memory, Column*& result);
 
     // Index a list of nodes or of edges, reading each element out as the entity column it
@@ -446,7 +446,7 @@ public:
 
     static NLHandlerFunction selectCellContainerIndex(bool nullable);
     static NLHandlerFunction selectEntityContainerIndex(NLChunkKind kind);
-    static NLHandlerFunction selectValueContainerIndex(ValueType valueType);
+    static NLHandlerFunction selectValueContainerIndex(NLChunkKind kind);
 
     static NLContainerReadFunction selectContainerRead(const Column* input);
     static NLSubscriptReadFunction selectSubscriptRead(const Column* input);
@@ -866,14 +866,14 @@ public:
     static NLGroupKeyGatherFunction selectGroupKeyGather(NLChunkKind kind);
     static NLGroupKeyGatherFunction selectOptGroupKeyGather(NLChunkKind kind);
 
-    // The collect fold for a column of this value type: appends each present value to
+    // The collect fold for a nullable column of this kind: appends each present value to
     // its group's list in the flat value buffer.
-    static NLCollectFoldFunction selectCollectFold(ValueType valueType);
-    static NLCollectFoldFunction selectCollectDistinctFold(ValueType valueType);
+    static NLCollectFoldFunction selectCollectFold(NLChunkKind kind);
+    static NLCollectFoldFunction selectCollectDistinctFold(NLChunkKind kind);
 
-    // The unwind value-emit / collect list-emit for a column of this value type: the
-    // drain-side siblings of selectCollectFold, baked from the same value type.
-    static NLUnwindCollectValueEmitFunction selectUnwindCollectValueEmit(ValueType valueType);
+    // The unwind value-emit / collect list-emit for a column of this kind: the drain-side
+    // siblings of selectCollectFold, baked from the same kind.
+    static NLUnwindCollectValueEmitFunction selectUnwindCollectValueEmit(NLChunkKind kind);
 
     // The row counts an nl.unwind reads its source column with: a list column drains its
     // elements, a type-erased column drains a cell tagged as a list and drops one tagged
@@ -890,13 +890,13 @@ public:
     // only one whose elements share no type fills the type-erased column. A scalar column
     // needs none - its cells are the elements, gathered through the carry set.
     static NLUnwindElementEmitFunction selectListUnwindElementEmit(bool sourceIsNullable);
-    static NLUnwindElementEmitFunction selectListUnwindValueEmit(bool sourceIsNullable, ValueType valueType);
+    static NLUnwindElementEmitFunction selectListUnwindValueEmit(bool sourceIsNullable, NLChunkKind kind);
     static NLUnwindElementEmitFunction selectListUnwindNodeEmit(bool sourceIsNullable);
     static NLUnwindElementEmitFunction selectListUnwindEdgeEmit(bool sourceIsNullable);
     static NLUnwindElementEmitFunction selectListUnwindPathEmit(bool sourceIsNullable);
     static NLUnwindElementEmitFunction selectTaggedUnwindElementEmit();
     static NLUnwindElementEmitFunction selectOptTaggedUnwindElementEmit();
-    static NLCollectListEmitFunction selectCollectListEmit(ValueType valueType);
+    static NLCollectListEmitFunction selectCollectListEmit(NLChunkKind kind);
 
     // The reads an nl.make_list takes one element out of a column with: a nullable value
     // column gives the value it holds or a tagged null, an entity the ID it holds or that
@@ -904,7 +904,7 @@ public:
     // or that null where it holds none, a nested list the cell it holds in every row, a
     // type-erased column the cell under the tag it already carries, and a column owning its
     // characters a copy of them.
-    static NLListItemReadFunction selectValueListItemRead(ValueType valueType);
+    static NLListItemReadFunction selectValueListItemRead(NLChunkKind kind);
     static NLListItemReadFunction selectNodeListItemRead();
     static NLListItemReadFunction selectEdgeListItemRead();
     static NLListItemReadFunction selectPathListItemRead();
@@ -915,7 +915,7 @@ public:
 
     // The reads an nl.make_map takes one value out of a column with, one per column kind as
     // for nl.make_list, plus a nested map as the cell it holds in every row.
-    static NLMapValueReadFunction selectValueMapValueRead(ValueType valueType);
+    static NLMapValueReadFunction selectValueMapValueRead(NLChunkKind kind);
     static NLMapValueReadFunction selectNodeMapValueRead();
     static NLMapValueReadFunction selectEdgeMapValueRead();
     static NLMapValueReadFunction selectPathMapValueRead();

@@ -65,6 +65,14 @@ CellTag elementTag(mlir::Type element) {
         return CellTag::Point;
     } else if (mlir::isa<storage::EmbeddingType>(element)) {
         return CellTag::Embedding;
+    } else if (mlir::isa<storage::LabelIDType>(element)) {
+        return CellTag::LabelID;
+    } else if (mlir::isa<storage::EdgeTypeIDType>(element)) {
+        return CellTag::EdgeTypeID;
+    } else if (mlir::isa<storage::PropertyTypeIDType>(element)) {
+        return CellTag::PropertyTypeID;
+    } else if (mlir::isa<storage::ValueTypeType>(element)) {
+        return CellTag::ValueType;
     }
 
     return CellTag::INVALID;

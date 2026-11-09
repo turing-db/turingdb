@@ -95,3 +95,20 @@ column they read from, and `ListContainer`, `MapContainer` and `NLValueStore` co
 A path is a value of the query that matched it, so a property cannot hold one: a write of a list
 or a map holding a path, at any depth, is rejected. `EncodedList` and `EncodedMap` still encode a
 path, as its ID count then its IDs, since they also compare query values.
+
+## Schema IDs
+
+A list element or a map value may be the ID of a label, an edge type or a property type, or a
+value type: what `db.labels()`, `db.edgeTypes()` and `db.propertyTypes()` yield. Each has a tag of
+its own, `CellTag::LabelID`, `EdgeTypeID`, `PropertyTypeID` and `ValueType`, and is laid out as a
+node ID is: the tag, then the fixed-width value.
+
+An element equals a value of its own kind holding the same number, and nothing else: label 3 is
+not edge type 3, nor the integer 3. A list holding schema IDs sorts as their columns sort, an ID by
+its number and a value type by its ordinal, and the four kinds sort after every number and before
+null. `<` and its siblings order none of them.
+
+A schema ID is a value of the query, as a path is, so a property cannot hold one: a write of a list
+or a map holding one, at any depth, is rejected. `EncodedList` and `EncodedMap` encode it as its
+fixed-width value, since they also compare query values.
+

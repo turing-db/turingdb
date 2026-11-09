@@ -729,7 +729,7 @@ bool namesAnEntityType(mlir::Type element) {
 }
 
 // The element types an index reads out as a value column rather than as a tagged cell:
-// the scalars a value column holds, and the lists a list of lists is made of.
+// the scalars a value column holds, the schema IDs, and the lists a list of lists is made of.
 bool namesAnIndexedValueType(mlir::Type element) {
     if (!element) {
         return false;
@@ -739,7 +739,8 @@ bool namesAnIndexedValueType(mlir::Type element) {
         return integerType.getWidth() == 1 || integerType.getWidth() == 64;
     }
 
-    return mlir::isa<mlir::Float64Type, storage::StringType, storage::EmbeddingType, storage::ListType>(element);
+    return mlir::isa<mlir::Float64Type, storage::StringType, storage::EmbeddingType, storage::ListType>(element)
+        || storage::namesASchemaID(element);
 }
 
 // Internal type of listChunk
@@ -7775,7 +7776,8 @@ mlir::Value DBLowering::nullableValueChunk(mlir::Value chunk) {
     const bool isScalar = valueType != ValueType::Invalid
                        && valueType != ValueType::List
                        && valueType != ValueType::Map;
-    if (!isScalar) {
+    const bool isSchemaID = storage::namesASchemaID(valueElement);
+    if (!isScalar && !isSchemaID) {
         throw IRException("Only a scalar value column can be read as a nullable value column");
     }
 

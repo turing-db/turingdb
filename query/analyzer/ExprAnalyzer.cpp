@@ -1010,7 +1010,8 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     const bool readsAValue = convertibleToValueType(elementType);
     const bool readsAnEntity = elementType == EvaluatedType::NodePattern
                             || elementType == EvaluatedType::EdgePattern;
-    const bool readsTheElementType = readsAValue || readsAnEntity;
+    const bool readsASchemaID = namesASchemaID(elementType);
+    const bool readsTheElementType = readsAValue || readsAnEntity || readsASchemaID;
     const EvaluatedType indexedType = readsTheElementType ? elementType : EvaluatedType::Any;
 
     expr->setType(indexedType);
@@ -1368,6 +1369,15 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, const Func
             const EvaluatedType type = arg->getType();
             const VarDecl* decl = _ctxt->createUnnamedVariable(_ast, type);
             arg->setExprVarDecl(decl);
+        }
+
+        if (signature->searchesItsList()) {
+            BinaryTyping search;
+            BinaryOperatorTyping::type(BinaryOperator::In, providedArgs[1]->getExprType(), providedArgs[0]->getExprType(), search);
+
+            if (!search.isValid()) {
+                throwError(fmt::format("'{}' cannot search this list: {}", name, search._error), expr);
+            }
         }
 
         bool readsANull = false;

@@ -185,6 +185,10 @@ inline std::optional<double> cellNumber(const CellView cell) {
         case CellTag::Duration:
         case CellTag::Path:
         case CellTag::Point:
+        case CellTag::LabelID:
+        case CellTag::EdgeTypeID:
+        case CellTag::PropertyTypeID:
+        case CellTag::ValueType:
         case CellTag::INVALID:
             return std::nullopt;
         break;

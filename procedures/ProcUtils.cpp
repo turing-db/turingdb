@@ -115,6 +115,18 @@ void appendCell(std::string& out, CellView element) {
             out += ']';
         }
         break;
+        case CellTag::LabelID:
+            out += fmt::format("{}", element.getAs<LabelID>().getValue());
+        break;
+        case CellTag::EdgeTypeID:
+            out += fmt::format("{}", element.getAs<EdgeTypeID>().getValue());
+        break;
+        case CellTag::PropertyTypeID:
+            out += fmt::format("{}", element.getAs<PropertyTypeID>().getValue());
+        break;
+        case CellTag::ValueType:
+            ProcUtils::appendJsonString(out, ValueTypeName::value(element.getAs<ValueType>()));
+        break;
         case CellTag::Null:
         case CellTag::INVALID:
             out += "null";

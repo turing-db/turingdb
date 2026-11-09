@@ -236,6 +236,14 @@ void FunctionDecls::initDefault() {
     collectPaths->setIsAggregate(true);
     collectPaths->setCollectsItsArgument(true);
 
+    for (const EvaluatedType schemaType : {EvaluatedType::Label, EvaluatedType::EdgeType, EvaluatedType::PropertyType, EvaluatedType::ValueType}) {
+        FunctionSignature* collectSchemaIDs = createFunction("collect");
+        collectSchemaIDs->setArguments({schemaType});
+        collectSchemaIDs->setReturnTypes({{EvaluatedType::List}});
+        collectSchemaIDs->setIsAggregate(true);
+        collectSchemaIDs->setCollectsItsArgument(true);
+    }
+
     // A list collects into a list of lists: one level deeper over the same innermost
     // elements, so unwinding it twice hands those elements back with their own type.
     FunctionSignature* collectLists = createFunction("collect");
@@ -964,6 +972,10 @@ void FunctionDecls::initCollectionFunctions() {
         EvaluatedType::NodePattern,
         EvaluatedType::EdgePattern,
         EvaluatedType::GraphPath,
+        EvaluatedType::Label,
+        EvaluatedType::EdgeType,
+        EvaluatedType::PropertyType,
+        EvaluatedType::ValueType,
         EvaluatedType::List,
         EvaluatedType::Map,
         EvaluatedType::Any,
@@ -974,6 +986,7 @@ void FunctionDecls::initCollectionFunctions() {
 
     for (FunctionSignature* indexOf : indexOfs) {
         indexOf->setReturnTypes({{EvaluatedType::Integer}});
+        indexOf->setSearchesItsList(true);
     }
 }
 

@@ -74,6 +74,18 @@ void readScalar(const char* bytes, db::ParameterValue& slot) {
         case db::CellTag::Point:
             throwUnsupportedType("Point");
         break;
+        case db::CellTag::LabelID:
+            throwUnsupportedType("LabelID");
+        break;
+        case db::CellTag::EdgeTypeID:
+            throwUnsupportedType("EdgeTypeID");
+        break;
+        case db::CellTag::PropertyTypeID:
+            throwUnsupportedType("PropertyTypeID");
+        break;
+        case db::CellTag::ValueType:
+            throwUnsupportedType("ValueType");
+        break;
         default:
             throw TuringException(fmt::format("Invalid value tag {} in a parameter", static_cast<uint32_t>(tag)));
         break;

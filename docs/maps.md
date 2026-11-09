@@ -12,6 +12,9 @@ a one-byte `CellTag`, then the bytes of the value.
 The key is a view. So is a string or embedding value, and a list or nested map value is a view
 into another buffer. A `MapBuffer` therefore owns none of the data a map refers to.
 
+A query map's value may also be a path or a schema ID, held as a list element holds one
+(`docs/lists.md`). A stored map holds neither: a write of a map holding one is rejected.
+
 # Map properties
 
 `ValueType::Map` is a stored property type, held by `TypedPropertyContainer<types::Map>`: one

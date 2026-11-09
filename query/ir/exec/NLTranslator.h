@@ -892,11 +892,6 @@ private:
                                    mlir::Block& loopBody,
                                    NLStmtContainer* body);
 
-    // Pool-allocate the flat value buffer for a collected value type: a plain
-    // ColumnVector<Primitive> (not nullable - collect drops nulls) that grows as
-    // present values are appended across steps.
-    Column* allocValueColumnForValueType(ValueType valueType);
-
     void translateProcedure(mlir::nl::Procedure procedureOp, NLStmtContainer* body);
 
     // Bind the argument chunks of a call as the procedure's input columns, one per

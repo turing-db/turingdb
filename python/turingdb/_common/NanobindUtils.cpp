@@ -249,6 +249,8 @@ struct ValueToPyObject {
             return dateTime(element.getAs<T>());
         } else if constexpr (std::is_same_v<T, db::types::Point::Primitive>) {
             return point(element.getAs<T>());
+        } else if constexpr (std::is_same_v<T, db::ValueType>) {
+            return toPyString(db::ValueTypeName::value(element.getAs<T>()));
         } else if constexpr (std::is_same_v<T, db::PathView>) {
             nb::list ids;
             for (const uint64_t id : element.getAs<T>().getIDs()) {

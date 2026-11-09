@@ -71,6 +71,18 @@ size_t db::hashCell(CellView element) {
         case CellTag::Point:
             return combine(seed, hashValue(element.getAs<types::Point::Primitive>()));
         break;
+        case CellTag::LabelID:
+            return combine(seed, hashValue(element.getAs<LabelID>().getValue()));
+        break;
+        case CellTag::EdgeTypeID:
+            return combine(seed, hashValue(element.getAs<EdgeTypeID>().getValue()));
+        break;
+        case CellTag::PropertyTypeID:
+            return combine(seed, hashValue(element.getAs<PropertyTypeID>().getValue()));
+        break;
+        case CellTag::ValueType:
+            return combine(seed, hashValue(element.getAs<ValueType>()));
+        break;
         case CellTag::Embedding: {
             size_t hash = seed;
             for (const float value : element.getAs<types::Embedding::Primitive>()) {

@@ -15,4 +15,8 @@ namespace mlir::storage {
 // joins to !storage.any.
 Type joinedElementType(Type lhs, Type rhs);
 
+// Whether @param type is the ID of a label, an edge type or a property type, or a value type:
+// what a schema procedure yields
+bool namesASchemaID(Type type);
+
 }

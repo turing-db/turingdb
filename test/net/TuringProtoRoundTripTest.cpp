@@ -1124,6 +1124,81 @@ TEST(TuringProtoRoundTripTest, RoundTripsThePathsListsAndMapsHold) {
     EXPECT_TRUE(std::ranges::equal(routeValue.getAs<db::PathView>().getIDs(), oneHop));
 }
 
+// A schema ID or a value type a list or a map holds goes on the wire as its tag and its
+// fixed-width value, as a node ID does; the small chunk size splits the list across packets
+TEST(TuringProtoRoundTripTest, RoundTripsTheSchemaIDsListsAndMapsHold) {
+    constexpr size_t ID_COUNT = 6;
+    constexpr std::array<db::ValueType, 3> VALUE_TYPES {db::ValueType::String, db::ValueType::Int64, db::ValueType::Bool};
+
+    db::LocalMemory localMem;
+    db::DataframeManager dfMan;
+    db::Dataframe source;
+
+    std::vector<db::MapBuffer<>::MapKeyValuePair> pairs;
+    pairs.emplace_back("edgeType", db::EdgeTypeID {1});
+    pairs.emplace_back("label", db::LabelID {8});
+    pairs.emplace_back("property", db::PropertyTypeID {7});
+    pairs.emplace_back("type", db::ValueType::Duration);
+    const db::MapView schema = localMem.mapBuffer().insert(pairs);
+
+    std::vector<db::ListBuffer<>::ListItemVariant> items;
+    for (size_t index = 0; index < ID_COUNT; index++) {
+        items.emplace_back(db::LabelID {index});
+        items.emplace_back(db::EdgeTypeID {index});
+        items.emplace_back(db::PropertyTypeID {static_cast<uint16_t>(index)});
+        items.emplace_back(VALUE_TYPES[index % VALUE_TYPES.size()]);
+    }
+    items.emplace_back(schema);
+
+    auto* listCol = localMem.alloc<db::ColumnConst<db::ListView>>();
+    listCol->set(localMem.listBuffer().insert(items));
+    addColumn(&dfMan, &source, "schema", listCol);
+
+    const auto packets = encodeDataframeWithChunkSize(source, 48);
+    expectPacketSequence(packets, true);
+    EXPECT_GE(countPacketsOfType(packets, net::proto::MessageTypes::CHUNK), 2u);
+
+    net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
+    net::proto::ChunkedBuffer<char> stringBuffer;
+    db::ListBuffer<> listBuffer;
+    db::MapBuffer<> mapBuffer;
+    db::Dataframe decoded;
+    std::vector<net::proto::DecodedColumnSchema> schemas;
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &pathBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+
+    ASSERT_EQ(decoded.cols().size(), 1u);
+    const auto* decodedList = decoded.cols().at(0)->as<db::ColumnConst<db::ListView>>();
+    ASSERT_NE(decodedList, nullptr);
+
+    const std::span<const db::CellView> elements = decodedList->at(0).elements();
+    ASSERT_EQ(elements.size(), 4 * ID_COUNT + 1);
+
+    for (size_t index = 0; index < ID_COUNT; index++) {
+        const db::CellView label = elements[4 * index];
+        const db::CellView edgeType = elements[4 * index + 1];
+        const db::CellView propertyType = elements[4 * index + 2];
+        const db::CellView valueType = elements[4 * index + 3];
+
+        ASSERT_EQ(label.getTag(), db::CellTag::LabelID);
+        EXPECT_EQ(label.getAs<db::LabelID>(), db::LabelID {index});
+        ASSERT_EQ(edgeType.getTag(), db::CellTag::EdgeTypeID);
+        EXPECT_EQ(edgeType.getAs<db::EdgeTypeID>(), db::EdgeTypeID {index});
+        ASSERT_EQ(propertyType.getTag(), db::CellTag::PropertyTypeID);
+        EXPECT_EQ(propertyType.getAs<db::PropertyTypeID>(), db::PropertyTypeID {static_cast<uint16_t>(index)});
+        ASSERT_EQ(valueType.getTag(), db::CellTag::ValueType);
+        EXPECT_EQ(valueType.getAs<db::ValueType>(), VALUE_TYPES[index % VALUE_TYPES.size()]);
+    }
+
+    ASSERT_EQ(elements.back().getTag(), db::CellTag::MapView);
+    const std::span<const db::MapEntryView> entries = elements.back().getAs<db::MapView>().entries();
+    ASSERT_EQ(entries.size(), 4u);
+    EXPECT_EQ(entries[0].getValue().getAs<db::EdgeTypeID>(), db::EdgeTypeID {1});
+    EXPECT_EQ(entries[1].getValue().getAs<db::LabelID>(), db::LabelID {8});
+    EXPECT_EQ(entries[2].getValue().getAs<db::PropertyTypeID>(), db::PropertyTypeID {7});
+    EXPECT_EQ(entries[3].getValue().getAs<db::ValueType>(), db::ValueType::Duration);
+}
+
 // A column of cells viewing the values a map holds - one per row, what m.key reads
 TEST(TuringProtoRoundTripTest, RoundTripsCellsViewingMapValues) {
     db::LocalMemory localMem;

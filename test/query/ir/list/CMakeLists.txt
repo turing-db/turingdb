@@ -189,3 +189,5 @@ add_turing_test(test_query_ir_list_out_of_bounds ListOutOfBoundsTest.cpp)
 add_turing_test(test_query_ir_list_conversion_functions ListConversionFunctionsTest.cpp)
 
 add_ir_tests(test_query_ir_negated_list_equality NegatedListEqualityTest.cpp)
+
+add_turing_test(test_query_ir_list_of_schema_ids ListOfSchemaIDsTest.cpp)

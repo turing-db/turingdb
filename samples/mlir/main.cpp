@@ -493,6 +493,22 @@ private:
             }
             break;
 
+            case CellTag::LabelID:
+                std::cout << element.getAs<LabelID>().getValue();
+            break;
+
+            case CellTag::EdgeTypeID:
+                std::cout << element.getAs<EdgeTypeID>().getValue();
+            break;
+
+            case CellTag::PropertyTypeID:
+                std::cout << element.getAs<PropertyTypeID>().getValue();
+            break;
+
+            case CellTag::ValueType:
+                std::cout << ValueTypeName::value(element.getAs<ValueType>());
+            break;
+
             case CellTag::MapView:
             case CellTag::Path:
             case CellTag::INVALID:

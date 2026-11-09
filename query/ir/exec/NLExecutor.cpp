@@ -3076,6 +3076,30 @@ void distinctAppendElementBytes(NLSerializedKey& key, const CellView element) {
             return;
         break;
 
+        case CellTag::LabelID:
+            key.push_back(static_cast<char>(tag));
+            distinctAppendValueBytes(key, element.getAs<LabelID>().getValue());
+            return;
+        break;
+
+        case CellTag::EdgeTypeID:
+            key.push_back(static_cast<char>(tag));
+            distinctAppendValueBytes(key, element.getAs<EdgeTypeID>().getValue());
+            return;
+        break;
+
+        case CellTag::PropertyTypeID:
+            key.push_back(static_cast<char>(tag));
+            distinctAppendValueBytes(key, element.getAs<PropertyTypeID>().getValue());
+            return;
+        break;
+
+        case CellTag::ValueType:
+            key.push_back(static_cast<char>(tag));
+            distinctAppendValueBytes(key, element.getAs<ValueType>());
+            return;
+        break;
+
         case CellTag::Embedding:
             key.push_back(static_cast<char>(tag));
             distinctAppendValueBytes(key, element.getAs<types::Embedding::Primitive>());
@@ -3354,6 +3378,22 @@ uint64_t hashKeyValue(CellView cell) {
 
         case CellTag::Path:
             return hashKeyValue(cell.getAs<PathView>());
+        break;
+
+        case CellTag::LabelID:
+            return hashKeyValue(cell.getAs<LabelID>());
+        break;
+
+        case CellTag::EdgeTypeID:
+            return hashKeyValue(cell.getAs<EdgeTypeID>());
+        break;
+
+        case CellTag::PropertyTypeID:
+            return hashKeyValue(cell.getAs<PropertyTypeID>());
+        break;
+
+        case CellTag::ValueType:
+            return hashKeyValue(cell.getAs<ValueType>());
         break;
 
         case CellTag::Null:
@@ -5136,6 +5176,22 @@ Item taggedItem(const CellView element) {
             return Item {element.getAs<PathView>()};
         break;
 
+        case CellTag::LabelID:
+            return Item {element.getAs<LabelID>()};
+        break;
+
+        case CellTag::EdgeTypeID:
+            return Item {element.getAs<EdgeTypeID>()};
+        break;
+
+        case CellTag::PropertyTypeID:
+            return Item {element.getAs<PropertyTypeID>()};
+        break;
+
+        case CellTag::ValueType:
+            return Item {element.getAs<ValueType>()};
+        break;
+
         case CellTag::INVALID:
             throw IRException("cannot collect an untagged element");
         break;
@@ -5356,6 +5412,80 @@ void collectListEmit(const Column* values,
     }
 }
 
+// Invoke handler with the element a collect of a nullable chunk of @param kind buffers: a
+// scalar, an embedding, a schema ID or a list. A map collects through handlers of its own.
+template <typename Handler>
+void dispatchCollectedChunkKind(NLChunkKind kind, Handler&& handler) {
+    switch (kind) {
+        case NLChunkKind::EdgeTypeID:
+            return handler.template operator()<EdgeTypeID>();
+        break;
+
+        case NLChunkKind::LabelID:
+            return handler.template operator()<LabelID>();
+        break;
+
+        case NLChunkKind::PropertyTypeID:
+            return handler.template operator()<PropertyTypeID>();
+        break;
+
+        case NLChunkKind::ValueTypeCode:
+            return handler.template operator()<ValueType>();
+        break;
+
+        case NLChunkKind::Int64:
+            return handler.template operator()<types::Int64::Primitive>();
+        break;
+
+        case NLChunkKind::UInt64:
+            return handler.template operator()<types::UInt64::Primitive>();
+        break;
+
+        case NLChunkKind::Double:
+            return handler.template operator()<types::Double::Primitive>();
+        break;
+
+        case NLChunkKind::Bool:
+            return handler.template operator()<types::Bool::Primitive>();
+        break;
+
+        case NLChunkKind::String:
+            return handler.template operator()<types::String::Primitive>();
+        break;
+
+        case NLChunkKind::Embedding:
+            return handler.template operator()<types::Embedding::Primitive>();
+        break;
+
+        case NLChunkKind::List:
+            return handler.template operator()<ListView>();
+        break;
+
+        case NLChunkKind::DateTime:
+            return handler.template operator()<types::DateTime::Primitive>();
+        break;
+
+        case NLChunkKind::Duration:
+            return handler.template operator()<types::Duration::Primitive>();
+        break;
+
+        case NLChunkKind::Point:
+            return handler.template operator()<types::Point::Primitive>();
+        break;
+
+        case NLChunkKind::Map:
+        case NLChunkKind::NodeID:
+        case NLChunkKind::EdgeID:
+        case NLChunkKind::LabelSetID:
+        case NLChunkKind::Path:
+        case NLChunkKind::PathRef:
+            throw IRException("collect does not support this value type");
+        break;
+    }
+
+    bioassert(false, "Unknown NLChunkKind");
+}
+
 // Every cell of the column is a list of its own, so none of them is the null a
 // comprehension hands its row back.
 bool presentCell(const Column*, size_t) {
@@ -5461,6 +5591,10 @@ NLKeyedValue readKeyedCell(const CellView cell) {
         case CellTag::Embedding:
         case CellTag::ListView:
         case CellTag::Path:
+        case CellTag::LabelID:
+        case CellTag::EdgeTypeID:
+        case CellTag::PropertyTypeID:
+        case CellTag::ValueType:
             return NLKeylessValue {tag};
         break;
         case CellTag::INVALID:
@@ -5824,6 +5958,10 @@ NLSubscript subscriptOf(const CellView cell) {
         case CellTag::Duration:
         case CellTag::Path:
         case CellTag::Point:
+        case CellTag::LabelID:
+        case CellTag::EdgeTypeID:
+        case CellTag::PropertyTypeID:
+        case CellTag::ValueType:
             return NLNeitherPositionNorKey {tag};
         break;
         case CellTag::INVALID:
@@ -10252,13 +10390,9 @@ NLCaseWriteFn NLExecutor::selectNullCellWrite() {
     return &caseWriteNullTaggedCell;
 }
 
-NLListItemReadFunction NLExecutor::selectValueListItemRead(ValueType valueType) {
+NLListItemReadFunction NLExecutor::selectValueListItemRead(NLChunkKind kind) {
     NLListItemReadFunction selected = nullptr;
-
-    const auto select = [&]<SupportedType T>() {
-        selected = &valueItem<ListBuffer<>::ListItemVariant, typename T::Primitive>;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
+    dispatchOptChunkKind(kind, [&]<typename Element>() { selected = &valueItem<ListBuffer<>::ListItemVariant, Element>; });
 
     return selected;
 }
@@ -10529,13 +10663,9 @@ NLHandlerFunction NLExecutor::selectEntityContainerIndex(NLChunkKind kind) {
     throw IRException("a container index reads its entities out of a list of nodes or of edges");
 }
 
-NLHandlerFunction NLExecutor::selectValueContainerIndex(ValueType valueType) {
+NLHandlerFunction NLExecutor::selectValueContainerIndex(NLChunkKind kind) {
     NLHandlerFunction selected = nullptr;
-
-    const auto select = [&]<SupportedType T>() {
-        selected = &runContainerIndex<std::optional<typename T::Primitive>>;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
+    dispatchOptChunkKind(kind, [&]<typename Element>() { selected = &runContainerIndex<std::optional<Element>>; });
 
     return selected;
 }
@@ -10704,13 +10834,9 @@ NLListItemReadFunction NLExecutor::selectTaggedListItemRead(bool nullable) {
     return nullable ? &optTaggedColumnItem<ListBuffer<>::ListItemVariant> : &taggedColumnItem<ListBuffer<>::ListItemVariant>;
 }
 
-NLMapValueReadFunction NLExecutor::selectValueMapValueRead(ValueType valueType) {
+NLMapValueReadFunction NLExecutor::selectValueMapValueRead(NLChunkKind kind) {
     NLMapValueReadFunction selected = nullptr;
-
-    const auto select = [&]<SupportedType T>() {
-        selected = &valueItem<MapBuffer<>::MapItemVariant, typename T::Primitive>;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
+    dispatchOptChunkKind(kind, [&]<typename Element>() { selected = &valueItem<MapBuffer<>::MapItemVariant, Element>; });
 
     return selected;
 }
@@ -11001,7 +11127,7 @@ NLBinaryFn NLExecutor::selectEntityListIndex(NLChunkKind kind,
     return selected;
 }
 
-NLBinaryFn NLExecutor::selectValueListIndex(ValueType valueType,
+NLBinaryFn NLExecutor::selectValueListIndex(NLChunkKind kind,
                                             const Column* lhs,
                                             const Column* rhs,
                                             LocalMemory* memory,
@@ -11009,8 +11135,8 @@ NLBinaryFn NLExecutor::selectValueListIndex(ValueType valueType,
     using Pairs = PairRestrictions<OP_INDEX>;
 
     NLBinaryFn selected = nullptr;
-    const auto select = [&]<SupportedType T>() {
-        using Selector = ValueListIndexSelector<typename T::Primitive>;
+    dispatchOptChunkKind(kind, [&]<typename Element>() {
+        using Selector = ValueListIndexSelector<Element>;
 
         Selector selector {._memory = memory};
         ColumnDoubleDispatcher<typename Pairs::Allowed,
@@ -11020,8 +11146,7 @@ NLBinaryFn NLExecutor::selectValueListIndex(ValueType valueType,
 
         result = selector._result;
         selected = selector._fn;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
+    });
 
     return selected;
 }
@@ -12143,24 +12268,18 @@ void NLExecutor::runCollectUpdate(NLExecutionContext* context, NLFunctionData* d
     aggregates.compactValues();
 }
 
-NLCollectFoldFunction NLExecutor::selectCollectFold(ValueType valueType) {
+NLCollectFoldFunction NLExecutor::selectCollectFold(NLChunkKind kind) {
     NLCollectFoldFunction selected = nullptr;
-
-    const auto select = [&]<SupportedType T>() {
-        selected = &collectFold<typename T::Primitive>;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
+    dispatchCollectedChunkKind(kind, [&]<typename Element>() { selected = &collectFold<Element>; });
 
     return selected;
 }
 
-NLCollectFoldFunction NLExecutor::selectCollectDistinctFold(ValueType valueType) {
+// The collect(DISTINCT x) fold for a column of this kind: collect's own domain, with each of
+// a group's values buffered once
+NLCollectFoldFunction NLExecutor::selectCollectDistinctFold(NLChunkKind kind) {
     NLCollectFoldFunction selected = nullptr;
-
-    const auto select = [&]<SupportedType T>() {
-        selected = &collectFoldDistinct<typename T::Primitive>;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
+    dispatchCollectedChunkKind(kind, [&]<typename Element>() { selected = &collectFoldDistinct<Element>; });
 
     return selected;
 }
@@ -12185,15 +12304,12 @@ NLUnwindElementEmitFunction NLExecutor::selectListUnwindElementEmit(bool sourceI
                             : &unwindListElementEmit<ColumnVector<ListView>>;
 }
 
-NLUnwindElementEmitFunction NLExecutor::selectListUnwindValueEmit(bool sourceIsNullable, ValueType valueType) {
+NLUnwindElementEmitFunction NLExecutor::selectListUnwindValueEmit(bool sourceIsNullable, NLChunkKind kind) {
     NLUnwindElementEmitFunction selected = nullptr;
-
-    const auto select = [&]<SupportedType T>() {
-        selected = sourceIsNullable
-                       ? &unwindListValueEmit<ColumnOptVector<ListView>, typename T::Primitive>
-                       : &unwindListValueEmit<ColumnVector<ListView>, typename T::Primitive>;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
+    dispatchOptChunkKind(kind, [&]<typename Element>() {
+        selected = sourceIsNullable ? &unwindListValueEmit<ColumnOptVector<ListView>, Element>
+                                    : &unwindListValueEmit<ColumnVector<ListView>, Element>;
+    });
 
     return selected;
 }
@@ -12229,24 +12345,16 @@ NLUnwindElementEmitFunction NLExecutor::selectOptTaggedUnwindElementEmit() {
     return &unwindOptTaggedElementEmit;
 }
 
-NLUnwindCollectValueEmitFunction NLExecutor::selectUnwindCollectValueEmit(ValueType valueType) {
+NLUnwindCollectValueEmitFunction NLExecutor::selectUnwindCollectValueEmit(NLChunkKind kind) {
     NLUnwindCollectValueEmitFunction selected = nullptr;
-
-    const auto select = [&]<SupportedType T>() {
-        selected = &unwindCollectValueEmit<typename T::Primitive>;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
+    dispatchCollectedChunkKind(kind, [&]<typename Element>() { selected = &unwindCollectValueEmit<Element>; });
 
     return selected;
 }
 
-NLCollectListEmitFunction NLExecutor::selectCollectListEmit(ValueType valueType) {
+NLCollectListEmitFunction NLExecutor::selectCollectListEmit(NLChunkKind kind) {
     NLCollectListEmitFunction selected = nullptr;
-
-    const auto select = [&]<SupportedType T>() {
-        selected = &collectListEmit<typename T::Primitive>;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
+    dispatchCollectedChunkKind(kind, [&]<typename Element>() { selected = &collectListEmit<Element>; });
 
     return selected;
 }

@@ -66,6 +66,18 @@ size_t hashMapValue(MapEntryView entry) {
         case CellTag::Point:
             return combine(seed, hashValue(entry.getValue().getAs<types::Point::Primitive>()));
         break;
+        case CellTag::LabelID:
+            return combine(seed, hashValue(entry.getValue().getAs<LabelID>().getValue()));
+        break;
+        case CellTag::EdgeTypeID:
+            return combine(seed, hashValue(entry.getValue().getAs<EdgeTypeID>().getValue()));
+        break;
+        case CellTag::PropertyTypeID:
+            return combine(seed, hashValue(entry.getValue().getAs<PropertyTypeID>().getValue()));
+        break;
+        case CellTag::ValueType:
+            return combine(seed, hashValue(entry.getValue().getAs<ValueType>()));
+        break;
         case CellTag::Embedding: {
             size_t hash = seed;
             for (const float value : entry.getValue().getAs<types::Embedding::Primitive>()) {
@@ -134,6 +146,18 @@ bool sameMapValue(MapEntryView lhs, MapEntryView rhs) {
         break;
         case CellTag::Point:
             return lhs.getValue().getAs<types::Point::Primitive>() == rhs.getValue().getAs<types::Point::Primitive>();
+        break;
+        case CellTag::LabelID:
+            return lhs.getValue().getAs<LabelID>() == rhs.getValue().getAs<LabelID>();
+        break;
+        case CellTag::EdgeTypeID:
+            return lhs.getValue().getAs<EdgeTypeID>() == rhs.getValue().getAs<EdgeTypeID>();
+        break;
+        case CellTag::PropertyTypeID:
+            return lhs.getValue().getAs<PropertyTypeID>() == rhs.getValue().getAs<PropertyTypeID>();
+        break;
+        case CellTag::ValueType:
+            return lhs.getValue().getAs<ValueType>() == rhs.getValue().getAs<ValueType>();
         break;
         case CellTag::Embedding: {
             const types::Embedding::Primitive lhsValues = lhs.getValue().getAs<types::Embedding::Primitive>();

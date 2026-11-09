@@ -64,6 +64,18 @@ struct CellTagDispatcher {
             case CellTag::Point:
                 return executor.template operator()<types::Point::Primitive>(view);
             break;
+            case CellTag::LabelID:
+                return executor.template operator()<LabelID>(view);
+            break;
+            case CellTag::EdgeTypeID:
+                return executor.template operator()<EdgeTypeID>(view);
+            break;
+            case CellTag::PropertyTypeID:
+                return executor.template operator()<PropertyTypeID>(view);
+            break;
+            case CellTag::ValueType:
+                return executor.template operator()<ValueType>(view);
+            break;
 
             case CellTag::INVALID:
             break;
@@ -149,6 +161,26 @@ struct TypeToCellTag<PathView> {
 template <>
 struct TypeToCellTag<types::Point::Primitive> {
     static constexpr CellTag Tag = CellTag::Point;
+};
+
+template <>
+struct TypeToCellTag<LabelID> {
+    static constexpr CellTag Tag = CellTag::LabelID;
+};
+
+template <>
+struct TypeToCellTag<EdgeTypeID> {
+    static constexpr CellTag Tag = CellTag::EdgeTypeID;
+};
+
+template <>
+struct TypeToCellTag<PropertyTypeID> {
+    static constexpr CellTag Tag = CellTag::PropertyTypeID;
+};
+
+template <>
+struct TypeToCellTag<ValueType> {
+    static constexpr CellTag Tag = CellTag::ValueType;
 };
 
 }

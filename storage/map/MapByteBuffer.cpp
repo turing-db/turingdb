@@ -135,4 +135,8 @@ template MapEntryView MapByteBuffer<>::write(std::string_view, CellTag, const ty
 template MapEntryView MapByteBuffer<>::write(std::string_view, CellTag, const types::Duration::Primitive&);
 template MapEntryView MapByteBuffer<>::write(std::string_view, CellTag, const PathView&);
 template MapEntryView MapByteBuffer<>::write(std::string_view, CellTag, const types::Point::Primitive&);
+template MapEntryView MapByteBuffer<>::write(std::string_view, CellTag, const LabelID&);
+template MapEntryView MapByteBuffer<>::write(std::string_view, CellTag, const EdgeTypeID&);
+template MapEntryView MapByteBuffer<>::write(std::string_view, CellTag, const PropertyTypeID&);
+template MapEntryView MapByteBuffer<>::write(std::string_view, CellTag, const ValueType&);
 }

@@ -64,6 +64,18 @@ void encodeElement(CellView element, std::vector<std::byte>& out) {
         case CellTag::Point:
             appendValue(out, element.getAs<types::Point::Primitive>());
         break;
+        case CellTag::LabelID:
+            appendValue(out, element.getAs<LabelID>());
+        break;
+        case CellTag::EdgeTypeID:
+            appendValue(out, element.getAs<EdgeTypeID>());
+        break;
+        case CellTag::PropertyTypeID:
+            appendValue(out, element.getAs<PropertyTypeID>());
+        break;
+        case CellTag::ValueType:
+            appendValue(out, element.getAs<ValueType>());
+        break;
         case CellTag::Null:
         break;
         case CellTag::String: {
@@ -195,6 +207,18 @@ private:
             break;
             case CellTag::Point:
                 return read<types::Point::Primitive>();
+            break;
+            case CellTag::LabelID:
+                return read<LabelID>();
+            break;
+            case CellTag::EdgeTypeID:
+                return read<EdgeTypeID>();
+            break;
+            case CellTag::PropertyTypeID:
+                return read<PropertyTypeID>();
+            break;
+            case CellTag::ValueType:
+                return read<ValueType>();
             break;
             case CellTag::Null:
                 return PropertyNull {};

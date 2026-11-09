@@ -34,17 +34,58 @@ using namespace db;
 
 namespace {
 
-// A path is a value of the query that matched it, not one a graph stores: a property
-// holding one anywhere inside a list or a map is turned away, as Neo4j turns it away
-void throwIfAnyHoldsAPath(std::vector<CellView>& pending) {
+// A path and a schema ID are values of the query that read them, not ones a graph stores: a
+// property holding one anywhere inside a list or a map is turned away, as Neo4j turns a path
+// away. Empty for a value a property can hold.
+std::string_view unstorableValueName(CellTag tag) {
+    switch (tag) {
+        case CellTag::Path:
+            return "a path";
+        break;
+        case CellTag::LabelID:
+            return "a label ID";
+        break;
+        case CellTag::EdgeTypeID:
+            return "an edge type ID";
+        break;
+        case CellTag::PropertyTypeID:
+            return "a property type ID";
+        break;
+        case CellTag::ValueType:
+            return "a value type";
+        break;
+        case CellTag::Int:
+        case CellTag::UInt:
+        case CellTag::Double:
+        case CellTag::Bool:
+        case CellTag::String:
+        case CellTag::Embedding:
+        case CellTag::ListView:
+        case CellTag::Null:
+        case CellTag::NodeID:
+        case CellTag::EdgeID:
+        case CellTag::DateTime:
+        case CellTag::MapView:
+        case CellTag::Duration:
+        case CellTag::Point:
+        case CellTag::INVALID:
+            return {};
+        break;
+    }
+
+    return {};
+}
+
+void throwIfAnyHoldsAnUnstorableValue(std::vector<CellView>& pending) {
     while (!pending.empty()) {
         const CellView cell = pending.back();
         pending.pop_back();
 
         const CellTag tag = cell.getTag();
+        const std::string_view unstorable = unstorableValueName(tag);
 
-        if (tag == CellTag::Path) {
-            throw IRException("A property value cannot hold a path, in a list or a map or on its own");
+        if (!unstorable.empty()) {
+            throw IRException(fmt::format("A property value cannot hold {}, in a list or a map or on its own", unstorable));
         } else if (tag == CellTag::ListView) {
             const ListView list = cell.getAs<ListView>();
             pending.insert(pending.end(), list.begin(), list.end());
@@ -56,12 +97,12 @@ void throwIfAnyHoldsAPath(std::vector<CellView>& pending) {
     }
 }
 
-void throwIfHoldsAPath(ListView list) {
+void throwIfHoldsAnUnstorableValue(ListView list) {
     std::vector<CellView> pending(list.begin(), list.end());
-    throwIfAnyHoldsAPath(pending);
+    throwIfAnyHoldsAnUnstorableValue(pending);
 }
 
-void throwIfHoldsAPath(MapView map) {
+void throwIfHoldsAnUnstorableValue(MapView map) {
     std::vector<CellView> pending;
     pending.reserve(map.size());
 
@@ -69,7 +110,7 @@ void throwIfHoldsAPath(MapView map) {
         pending.push_back(entry.getValue());
     }
 
-    throwIfAnyHoldsAPath(pending);
+    throwIfAnyHoldsAnUnstorableValue(pending);
 }
 
 class ConstPropertyExtractor {
@@ -112,7 +153,7 @@ public:
     void operator()(const ColumnConst<ListView>* typed) {
         _buf.clear();
         _buf.reserve(_rowCount);
-        throwIfHoldsAPath(typed->getRaw());
+        throwIfHoldsAnUnstorableValue(typed->getRaw());
         const types::List::OwningPrimitive encoded(typed->getRaw());
         for (size_t i = 0; i < _rowCount; i++) {
             _buf.emplace_back(_propID, encoded);
@@ -154,7 +195,7 @@ public:
 
         std::optional<types::List::OwningPrimitive> owned;
         if (value.has_value()) {
-            throwIfHoldsAPath(*value);
+            throwIfHoldsAnUnstorableValue(*value);
             owned.emplace(*value);
         }
 
@@ -164,7 +205,7 @@ public:
     void operator()(const ColumnConst<MapView>* typed) {
         _buf.clear();
         _buf.reserve(_rowCount);
-        throwIfHoldsAPath(typed->getRaw());
+        throwIfHoldsAnUnstorableValue(typed->getRaw());
         const types::Map::OwningPrimitive encoded(typed->getRaw());
         for (size_t i = 0; i < _rowCount; i++) {
             _buf.emplace_back(_propID, encoded);
@@ -225,7 +266,7 @@ public:
         _buf.clear();
         _buf.reserve(typed->size());
         for (const ListView val : *typed) {
-            throwIfHoldsAPath(val);
+            throwIfHoldsAnUnstorableValue(val);
             _buf.emplace_back(_propID, types::List::OwningPrimitive(val));
         }
     }
@@ -234,7 +275,7 @@ public:
         _buf.clear();
         _buf.reserve(typed->size());
         for (const MapView val : *typed) {
-            throwIfHoldsAPath(val);
+            throwIfHoldsAnUnstorableValue(val);
             _buf.emplace_back(_propID, types::Map::OwningPrimitive(val));
         }
     }
@@ -289,7 +330,7 @@ public:
                 continue;
             }
 
-            throwIfHoldsAPath(*val);
+            throwIfHoldsAnUnstorableValue(*val);
             _buf.emplace_back(_propID, types::List::OwningPrimitive(*val));
         }
     }
@@ -305,7 +346,7 @@ public:
                 continue;
             }
 
-            throwIfHoldsAPath(*val);
+            throwIfHoldsAnUnstorableValue(*val);
             _buf.emplace_back(_propID, types::Map::OwningPrimitive(*val));
         }
     }
@@ -384,11 +425,11 @@ void stageCellAsItsType(const CellView cell,
         }
         break;
         case ValueType::List:
-            throwIfHoldsAPath(cell.getAs<types::List::Primitive>());
+            throwIfHoldsAnUnstorableValue(cell.getAs<types::List::Primitive>());
             value = std::optional<types::List::OwningPrimitive> {std::in_place, cell.getAs<types::List::Primitive>()};
         break;
         case ValueType::Map:
-            throwIfHoldsAPath(cell.getAs<types::Map::Primitive>());
+            throwIfHoldsAnUnstorableValue(cell.getAs<types::Map::Primitive>());
             value = std::optional<types::Map::OwningPrimitive> {std::in_place, cell.getAs<types::Map::Primitive>()};
         break;
         case ValueType::Invalid:

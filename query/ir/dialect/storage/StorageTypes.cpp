@@ -86,6 +86,10 @@ mlir::Type mlir::storage::joinedElementType(Type lhs, Type rhs) {
     return joined;
 }
 
+bool mlir::storage::namesASchemaID(Type type) {
+    return isa<LabelIDType, EdgeTypeIDType, PropertyTypeIDType, ValueTypeType>(type);
+}
+
 #define GET_TYPEDEF_CLASSES
 #include "StorageTypes.cpp.inc"
 

@@ -155,6 +155,26 @@ void renderCellView(const CellView& element, std::string& out) {
             return;
         break;
 
+        case CellTag::LabelID:
+            out += std::to_string(element.getAs<LabelID>().getValue());
+            return;
+        break;
+
+        case CellTag::EdgeTypeID:
+            out += std::to_string(element.getAs<EdgeTypeID>().getValue());
+            return;
+        break;
+
+        case CellTag::PropertyTypeID:
+            out += std::to_string(element.getAs<PropertyTypeID>().getValue());
+            return;
+        break;
+
+        case CellTag::ValueType:
+            out += ValueTypeName::value(element.getAs<ValueType>());
+            return;
+        break;
+
         case CellTag::Embedding:
         case CellTag::INVALID:
         break;

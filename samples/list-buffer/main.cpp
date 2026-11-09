@@ -26,6 +26,8 @@ int main() {
             spdlog::info("element: {}", "map");
         } else if constexpr (std::is_same_v<T, PathView>) {
             spdlog::info("element: {}", "path");
+        } else if constexpr (std::is_same_v<T, ValueType>) {
+            spdlog::info("element: {}", ValueTypeName::value(value));
         } else if constexpr (std::is_same_v<T, PropertyNull>) {
             spdlog::info("element: {}", "null");
         } else if constexpr (std::is_same_v<T, types::DateTime::Primitive>) {

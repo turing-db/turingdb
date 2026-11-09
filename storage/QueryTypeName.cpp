@@ -49,6 +49,18 @@ std::string_view db::queryTypeName(CellTag tag) {
         case CellTag::Point:
             return "Point";
         break;
+        case CellTag::LabelID:
+            return "Label";
+        break;
+        case CellTag::EdgeTypeID:
+            return "EdgeType";
+        break;
+        case CellTag::PropertyTypeID:
+            return "PropertyType";
+        break;
+        case CellTag::ValueType:
+            return "ValueType";
+        break;
         case CellTag::INVALID:
             return "Invalid";
         break;

@@ -86,6 +86,10 @@ const CELL_TAG_MAP_VIEW = 11;
 const CELL_TAG_DURATION = 12;
 const CELL_TAG_PATH = 13;
 const CELL_TAG_POINT = 14;
+const CELL_TAG_LABEL_ID = 15;
+const CELL_TAG_EDGE_TYPE_ID = 16;
+const CELL_TAG_PROPERTY_TYPE_ID = 17;
+const CELL_TAG_VALUE_TYPE = 18;
 
 // Mirrors db::PointCRS (storage/metadata/Point.h): the SRID of each CRS ordinal.
 const POINT_SRIDS = [7203, 9157, 4326, 4979];
@@ -532,8 +536,16 @@ export class NestedReader {
             case CELL_TAG_UINT:
             case CELL_TAG_NODE_ID:
             case CELL_TAG_EDGE_ID:
+            case CELL_TAG_LABEL_ID:
+            case CELL_TAG_EDGE_TYPE_ID:
                 this._cursor = payload + 8;
                 return this._view.getBigUint64(payload, true);
+            case CELL_TAG_PROPERTY_TYPE_ID:
+                this._cursor = payload + 2;
+                return this._view.getUint16(payload, true);
+            case CELL_TAG_VALUE_TYPE:
+                this._cursor = payload + 1;
+                return this._bytes[payload];
             case CELL_TAG_DATETIME:
             case CELL_TAG_DURATION:
                 this._cursor = payload + 8;

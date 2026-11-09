@@ -23,9 +23,11 @@ namespace db {
  * Follows Cypher's orderability across types - MAP < NODE < EDGE < LIST < PATH < DATETIME < DURATION <
  * STRING < BOOLEAN < NUMBER < NULL - so a null sorts after every value and two elements of one type compare
  * by their own order: entities by their ID, numbers numerically whatever they are tagged
- * as, strings lexicographically, lists element-wise, paths by their IDs in path order. An
- * embedding has no order, so <=> throws on one; == still compares embeddings element-wise,
- * at any depth.
+ * as, strings lexicographically, lists element-wise, paths by their IDs in path order. The
+ * schema kinds Cypher has none of sort after NUMBER, as LABEL < EDGE TYPE < PROPERTY TYPE <
+ * VALUE TYPE, an ID by its number and a value type by its ordinal, as ORDER BY sorts their
+ * columns. An embedding has no order, so <=> throws on one; == still compares embeddings
+ * element-wise, at any depth.
  */
 std::strong_ordering operator<=>(CellView lhs, CellView rhs);
 bool operator==(CellView lhs, CellView rhs);
@@ -136,21 +138,24 @@ inline bool operator==(const CellView element, const EdgeID value) {
         && element.getAs<EdgeID>() == value;
 }
 
-// No cell holds a schema ID or a value type, so no element equals one
 inline bool operator==(const CellView element, const LabelID value) {
-    return false;
+    return element.getTag() == CellTag::LabelID
+        && element.getAs<LabelID>() == value;
 }
 
 inline bool operator==(const CellView element, const EdgeTypeID value) {
-    return false;
+    return element.getTag() == CellTag::EdgeTypeID
+        && element.getAs<EdgeTypeID>() == value;
 }
 
 inline bool operator==(const CellView element, const PropertyTypeID value) {
-    return false;
+    return element.getTag() == CellTag::PropertyTypeID
+        && element.getAs<PropertyTypeID>() == value;
 }
 
 inline bool operator==(const CellView element, const ValueType value) {
-    return false;
+    return element.getTag() == CellTag::ValueType
+        && element.getAs<ValueType>() == value;
 }
 
 inline bool operator==(const CellView element, const ListView value) {

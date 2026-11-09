@@ -36,6 +36,10 @@ enum class CellOrderClass {
     String,
     Bool,
     Number,
+    Label,
+    EdgeType,
+    PropertyType,
+    ValueType,
     Null,
 };
 
@@ -93,6 +97,22 @@ CellOrderClass orderClassOf(CellTag tag) {
 
         case CellTag::Point:
             return CellOrderClass::Point;
+        break;
+
+        case CellTag::LabelID:
+            return CellOrderClass::Label;
+        break;
+
+        case CellTag::EdgeTypeID:
+            return CellOrderClass::EdgeType;
+        break;
+
+        case CellTag::PropertyTypeID:
+            return CellOrderClass::PropertyType;
+        break;
+
+        case CellTag::ValueType:
+            return CellOrderClass::ValueType;
         break;
 
         case CellTag::INVALID:
@@ -239,6 +259,22 @@ std::strong_ordering compareValues(const Lhs lhs, const Rhs rhs) {
 
         case CellOrderClass::Duration:
             return valueOf<types::Duration::Primitive>(lhs) <=> valueOf<types::Duration::Primitive>(rhs);
+        break;
+
+        case CellOrderClass::Label:
+            return valueOf<LabelID>(lhs) <=> valueOf<LabelID>(rhs);
+        break;
+
+        case CellOrderClass::EdgeType:
+            return valueOf<EdgeTypeID>(lhs) <=> valueOf<EdgeTypeID>(rhs);
+        break;
+
+        case CellOrderClass::PropertyType:
+            return valueOf<PropertyTypeID>(lhs) <=> valueOf<PropertyTypeID>(rhs);
+        break;
+
+        case CellOrderClass::ValueType:
+            return valueOf<ValueType>(lhs) <=> valueOf<ValueType>(rhs);
         break;
 
         case CellOrderClass::Null:

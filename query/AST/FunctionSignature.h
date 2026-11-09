@@ -93,6 +93,10 @@ public:
     // list types what it binds - head and last.
     bool returnsAnElementOfItsArgument() const { return _returnsAnElementOfItsArgument; }
 
+    // Whether this searches its first argument, a list, for its second, so it takes the
+    // operands IN takes - coll.indexOf.
+    bool searchesItsList() const { return _searchesItsList; }
+
     // The shape the list this returns has whatever it was called with - range, whose
     // elements are integers however its bounds were written. A signature naming none
     // leaves the shape to the rule its other flags name.
@@ -125,6 +129,8 @@ public:
 
     void setReturnedListShape(const ListShape& shape) { _returnedListShape = shape; }
 
+    void setSearchesItsList(bool searches) { _searchesItsList = searches; }
+
 private:
     std::string _fullName;
     ArgumentTypes _argumentTypes;
@@ -137,6 +143,7 @@ private:
     bool _unifiesItsArguments {false};
     bool _returnsItsArgumentShape {false};
     bool _returnsAnElementOfItsArgument {false};
+    bool _searchesItsList {false};
 };
 
 }

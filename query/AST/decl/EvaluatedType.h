@@ -145,11 +145,21 @@ inline bool convertibleToValueType(EvaluatedType e) {
     return toValueType(e).has_value();
 }
 
+// The types a schema procedure yields: the ID of a label, an edge type or a property type,
+// and the value type of a property type
+inline bool namesASchemaID(EvaluatedType e) {
+    return e == EvaluatedType::Label
+        || e == EvaluatedType::EdgeType
+        || e == EvaluatedType::PropertyType
+        || e == EvaluatedType::ValueType;
+}
+
 // The types a list is homogeneous in: the scalars a value column holds, the entities a
 // pattern binds - [n, m] is a list of nodes, as collect(n) gathers one - the paths it names,
-// and the lists a nesting is made of.
+// the schema IDs a procedure yields, and the lists a nesting is made of.
 inline bool namesAListElementType(EvaluatedType type) {
     return convertibleToValueType(type)
+        || namesASchemaID(type)
         || type == EvaluatedType::NodePattern
         || type == EvaluatedType::EdgePattern
         || type == EvaluatedType::GraphPath
@@ -191,15 +201,6 @@ inline bool holdsAnEntityPerRow(EvaluatedType e) {
 // any holds the row's own type, which is checked as each row is read.
 inline bool namesATruthValue(EvaluatedType e) {
     return e == EvaluatedType::Bool || e == EvaluatedType::Null || e == EvaluatedType::Any;
-}
-
-// The types a schema procedure yields: the ID of a label, an edge type or a property type,
-// and the value type of a property type
-inline bool namesASchemaID(EvaluatedType e) {
-    return e == EvaluatedType::Label
-        || e == EvaluatedType::EdgeType
-        || e == EvaluatedType::PropertyType
-        || e == EvaluatedType::ValueType;
 }
 
 // The types = and <> take: every value, every entity, every path and every schema ID
