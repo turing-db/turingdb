@@ -92,6 +92,8 @@ private:
     friend DataPartMerger;
     friend CommitBuilder;
 
+    using EntitiesByProperty = std::unordered_map<PropertyTypeID, std::unordered_set<EntityID>>;
+
     NodeID _firstNodeID {0};
     EdgeID _firstEdgeID {0};
     NodeID _nextNodeID {0};
@@ -122,6 +124,12 @@ private:
     std::unique_ptr<PropertyManager> _nodeProperties;
     std::unique_ptr<PropertyManager> _edgeProperties;
 
+    // Nulls of an embedding property no datapart holds a value of yet. They mask nothing,
+    // so no container takes them, but they still keep an older write of the same entity
+    // from taking their place.
+    EntitiesByProperty _nodeNullsWithoutContainer;
+    EntitiesByProperty _edgeNullsWithoutContainer;
+
     std::vector<LabelSetHandle>& coreNodeLabelSets() { return _coreNodeLabelSets; }
     std::vector<EdgeRecord>& edges() { return _edges; }
     std::unique_ptr<PropertyManager>& nodeProperties() { return _nodeProperties; }
@@ -139,7 +147,7 @@ private:
                                                                  size_t partIndex);
 
     std::optional<size_t> findEmbeddingDimension(PropertyTypeID ptID) const;
-    void registerEmbeddingWrite(PropertyManager& properties,
+    bool registerEmbeddingWrite(PropertyManager& properties,
                                 PropertyTypeID ptID,
                                 const std::optional<types::Embedding::Primitive>& value);
 

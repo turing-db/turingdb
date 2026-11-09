@@ -52,3 +52,5 @@ add_ir_tests(test_query_ir_set_mutate_properties SetMutatePropertiesTest.cpp)
 add_ir_tests(test_query_ir_set_replace_properties SetReplacePropertiesTest.cpp)
 
 add_turing_test(test_query_ir_where_over_values_read_before_set WhereOverValuesReadBeforeSetTest.cpp)
+
+add_turing_test(test_query_ir_set_null_on_new_property SetNullOnNewPropertyTest.cpp)
