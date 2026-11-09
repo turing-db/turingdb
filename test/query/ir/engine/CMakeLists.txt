@@ -32,6 +32,8 @@ target_include_directories(test_query_ir_lowering_determinism PRIVATE ${IR_TEST_
 
 add_ir_tests(test_query_ir_limit_in_widened_fold LimitInWidenedFoldTest.cpp)
 
+add_ir_tests(test_query_ir_carried_column_row_source CarriedColumnRowSourceTest.cpp)
+
 add_turing_test(test_query_ir_cypher_output CypherOutputTest.cpp)
 target_include_directories(test_query_ir_cypher_output PRIVATE ${IR_TEST_DIR})
 
