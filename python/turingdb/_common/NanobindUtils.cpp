@@ -331,6 +331,19 @@ nb::object repeatElement(const T& element, size_t rowCount) {
     return repeatValueAsNdarray(element, rowCount);
 }
 
+// pandas 2 reads bare integers given a timedelta64[us] dtype as nanoseconds,
+// so an array of microseconds carries its unit itself.
+template <typename Row>
+nb::object withTemporalUnit(const nb::object& array) {
+    if constexpr (db::IsDateTime<Row>) {
+        return array.attr("view")("datetime64[us]");
+    } else if constexpr (db::IsDuration<Row>) {
+        return array.attr("view")("timedelta64[us]");
+    } else {
+        return array;
+    }
+}
+
 }
 
 nb::dict dataframeToNumpy(db::Dataframe* df) {
@@ -372,6 +385,8 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                     return toPyElement(row, listVisitor);
                 });
             }
+
+            value = withTemporalUnit<Row>(value);
         };
 
         db::ColumnSingleDispatcher<db::OutputtedTypes::Allowed, decltype(convert), db::OutputtedTypes::Excluded>::dispatch(col, convert);
