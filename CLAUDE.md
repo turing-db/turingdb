@@ -371,6 +371,32 @@ full column. The crash was in the translator, but making `to_any` accept a const
 have left lowering non-deterministic. The fix routed all 13 erases in lowering through
 `eraseOp`.
 
+## DenseMap moves its entries on erase and on growth
+
+**No iterator, reference or pointer into an `llvm::DenseMap` or `llvm::DenseSet` survives an
+erase from it or an insert into it.** Both move entries. A stale reference reads whatever the
+heap left there, so the bug changes between runs.
+- An erase leaves no tombstone. This LLVM's `eraseFromFilledBucket` shifts the entries after
+  the hole back into it (Knuth's Algorithm R). Erasing while iterating skips the entry that
+  moves into the hole. Use `remove_if`, which `DenseMap.h` names as the replacement.
+- An insert that grows the table moves every entry to a new bucket array and frees the old
+  one. `M[k] = it->second` and `M[a] = M.at(b)` then read freed memory: C++17 evaluates the
+  right side first, but only to a reference, and the copy reads it after `M[k]` has grown
+  the table. Copy the value into a local before the insert.
+- A reference from `M[k]` or `M.find(k)->second` does not live across a call that can insert
+  into or erase from `M`, including a call handed `*this`.
+- `InsertionOrderedMap` keeps references across an insert, since its entries live in a
+  `std::deque`, but not iterators. An erase invalidates both.
+- valgrind reports these on every run that moves the entry: the read lands in a freed bucket
+  array. A native run mostly reads the old value and passes.
+
+Worked example: `rowSource` in `IRRowAlignment.cpp` wrote `sources[value] = operandIt->second`.
+The 48th entry grows the table from 64 buckets to 128. A `coalesce` of a 46-term sum carried
+across a hop put the `nl.fill_nulls` at that entry. Once glibc reused the freed array, the
+source read back was garbage, and `sameRowSource` segfaulted on it in 9 runs of 10
+(`CarriedColumnRowSourceTest`). The first version of the scrub in `DBLowering::eraseOp` erased
+from `_valueMap` while iterating it and kept one of two entries holding a freed value.
+
 ## C++ Coding Style
 
 Please read `CODING_STYLE.md` for guidelines before any new work.
