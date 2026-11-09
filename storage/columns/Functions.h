@@ -802,6 +802,8 @@ std::optional<types::String::Primitive> cellString(const CellView cell, std::str
 
 std::optional<types::Int64::Primitive> cellInteger(const CellView cell, std::string_view functionName);
 
+std::optional<types::Embedding::Primitive> cellEmbedding(const CellView cell, std::string_view functionName);
+
 types::Int64::Primitive unsignedCharacterArgument(types::UInt64::Primitive value, std::string_view functionName);
 
 [[noreturn]] void throwUnconvertibleCell(std::string_view functionName, CellTag held);
@@ -1666,6 +1668,8 @@ class CosineSimilarityFunction {
 public:
     using ResultType = types::Double::Primitive;
 
+    static constexpr std::string_view NAME = "cosine_similarity";
+
     ResultType operator()(const types::Embedding::Primitive& a,
                           const types::Embedding::Primitive& b);
 };
@@ -1673,6 +1677,8 @@ public:
 class EuclideanDistanceFunction {
 public:
     using ResultType = types::Double::Primitive;
+
+    static constexpr std::string_view NAME = "euclidean_distance";
 
     ResultType operator()(const types::Embedding::Primitive& a,
                           const types::Embedding::Primitive& b);
@@ -1745,83 +1751,48 @@ struct FunctionExecutor<EdgeTypesFunction, Res, Arg> {
     }
 };
 
-template <typename Op, typename Res, typename ArgA, typename ArgB>
-struct BinaryFunctionExecutor {
-    static void apply(ColumnVector<Res>* res,
-                      const ColumnVector<ArgA>* lhs,
-                      const ColumnVector<ArgB>* rhs) {
-        bioassert(lhs->size() == rhs->size(), "Misshapen ColumnVectors.");
-        const size_t size = lhs->size();
-
-        res->resize(size);
-
-        const auto& lhsRaw = lhs->getRaw();
-        const auto& rhsRaw = rhs->getRaw();
-        auto& resRaw = res->getRaw();
-
-        auto op = Op {};
-        for (size_t i = 0; i < size; i++) {
-            resRaw[i] = op(lhsRaw[i], rhsRaw[i]);
-        }
-    }
-
-    static void apply(ColumnVector<Res>* res,
-                      const ColumnVector<ArgA>* lhs,
-                      const ColumnConst<ArgB>* rhs) {
-        const size_t size = lhs->size();
-        res->resize(size);
-
-        const auto& lhsRaw = lhs->getRaw();
-        const auto& val = rhs->getRaw();
-        auto& resRaw = res->getRaw();
-
-        auto op = Op {};
-        for (size_t i = 0; i < size; i++) {
-            resRaw[i] = op(TypeUtils::unwrap(lhsRaw[i]), TypeUtils::unwrap(val));
-        }
-    }
-
-    static void apply(ColumnVector<Res>* res,
-                      const ColumnConst<ArgA>* lhs,
-                      const ColumnVector<ArgB>* rhs) {
-        const size_t size = rhs->size();
-        res->resize(size);
-
-
-        const auto& val = lhs->getRaw();
-        const auto& rhsRaw = rhs->getRaw();
-        auto& resRaw = res->getRaw();
-
-        auto op = Op {};
-        for (size_t i = 0; i < size; i++) {
-            resRaw[i] = op(TypeUtils::unwrap(val), TypeUtils::unwrap(rhsRaw[i]));
-        }
-    }
-
-    static void apply(ColumnConst<Res>* res,
-                      const ColumnConst<ArgA>* lhs,
-                      const ColumnConst<ArgB>* rhs) {
-        auto op = Op {};
-        const Res& result = op(lhs->getRaw(), rhs->getRaw());
-        res->set(result);
-    }
-};
-
 template <typename F>
-struct BinaryFunc {
-    template <typename T, typename U>
-        requires TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>
-    inline decltype(auto) operator()(T&& a, U&& b) {
-        return optionalGeneric<F>(std::forward<T>(a), std::forward<U>(b));
+class EmbeddingFunction {
+public:
+    using Embedding = types::Embedding::Primitive;
+    using ResultType = typename F::ResultType;
+
+    ResultType operator()(const Embedding& a, const Embedding& b) const {
+        return F {}(a, b);
     }
 
     template <typename T, typename U>
-    inline decltype(auto) operator()(T&& a, U&& b) {
-        return F {}(std::forward<T>(a), std::forward<U>(b));
+    std::optional<ResultType> operator()(const T& a, const U& b) const {
+        const std::optional<Embedding> lhs = argument(a);
+        const std::optional<Embedding> rhs = argument(b);
+
+        if (!lhs.has_value() || !rhs.has_value()) {
+            return std::nullopt;
+        }
+
+        return F {}(*lhs, *rhs);
+    }
+
+private:
+    static std::optional<Embedding> argument(const Embedding& embedding) {
+        return embedding;
+    }
+
+    static std::optional<Embedding> argument(const CellView cell) {
+        return cellEmbedding(cell, F::NAME);
+    }
+
+    template <typename T>
+    static std::optional<Embedding> argument(const std::optional<T>& value) {
+        if (!value.has_value()) {
+            return std::nullopt;
+        }
+
+        return argument(*value);
     }
 };
 
-using CosineSimilarity = BinaryFunc<CosineSimilarityFunction>;
-using EuclideanDistance = BinaryFunc<EuclideanDistanceFunction>;
+using CosineSimilarity = EmbeddingFunction<CosineSimilarityFunction>;
+using EuclideanDistance = EmbeddingFunction<EuclideanDistanceFunction>;
 
 }

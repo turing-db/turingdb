@@ -7204,7 +7204,7 @@ void DBLowering::lowerBinaryFunction(mlir::Operation* op) {
     const mlir::Type baseElement = spec->element(_builder, lhsElement);
 
     mlir::Type resultElement = baseElement;
-    if (isNullableChunk(lhsChunk.getType()) || isNullableChunk(rhsChunk.getType())) {
+    if (mayHoldANull(lhsChunk.getType()) || mayHoldANull(rhsChunk.getType())) {
         resultElement = storage::NullableType::get(_builder.getContext(), baseElement);
     }
 

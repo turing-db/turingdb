@@ -183,21 +183,6 @@ struct ColumnFunctions {
 
         FunctionExecutor<Op, InternalW, InternalT>::apply(res, arg);
     }
-
-    /// Binary function (e.g. cosine_similarity, euclidean_distance)
-    template <typename Op, typename ColW, typename ColT, typename ColU>
-    static void exec(ColW* res, const ColT* lhs, const ColU* rhs) {
-        using DecayColT = TypeUtils::decay_col_t<ColT>;
-        using InternalT = InnerTypeHelper<DecayColT>::type;
-
-        using DecayColU = TypeUtils::decay_col_t<ColU>;
-        using InternalU = InnerTypeHelper<DecayColU>::type;
-
-        using DecayColW = TypeUtils::decay_col_t<ColW>;
-        using InternalRes = InnerTypeHelper<DecayColW>::type;
-
-        BinaryFunctionExecutor<Op, InternalRes, InternalT, InternalU>::apply(res, lhs, rhs);
-    }
 };
 
 /// Generic Column projection and manipulation

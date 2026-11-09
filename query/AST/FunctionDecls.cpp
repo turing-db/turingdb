@@ -945,14 +945,16 @@ void FunctionDecls::initDefault() {
     coalesce->setRequiredArgCount(1);
     coalesce->setUnifiesItsArguments(true);
 
-    // Embedding distance functions
-    FunctionSignature* cosineSim = createFunction("cosine_similarity");
-    cosineSim->setArguments({EvaluatedType::Embedding, EvaluatedType::Embedding});
-    cosineSim->setReturnTypes({{EvaluatedType::Double}});
+    const PossibleArgTypes embeddingOrCell {EvaluatedType::Embedding, EvaluatedType::Any};
 
-    FunctionSignature* euclidDist = createFunction("euclidean_distance");
-    euclidDist->setArguments({EvaluatedType::Embedding, EvaluatedType::Embedding});
-    euclidDist->setReturnTypes({{EvaluatedType::Double}});
+    for (const std::string_view name : {"cosine_similarity", "euclidean_distance"}) {
+        std::vector<FunctionSignature*> embeddingFunctions;
+        createOverloads(name, {embeddingOrCell, embeddingOrCell}, embeddingFunctions);
+
+        for (FunctionSignature* embeddingFunction : embeddingFunctions) {
+            embeddingFunction->setReturnTypes({{EvaluatedType::Double}});
+        }
+    }
 }
 
 void FunctionDecls::initCollectionFunctions() {

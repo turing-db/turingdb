@@ -460,6 +460,18 @@ std::optional<types::Int64::Primitive> db::cellInteger(const CellView cell, std:
     throwCellTypeError(functionName, "an integer", tag);
 }
 
+std::optional<types::Embedding::Primitive> db::cellEmbedding(const CellView cell, std::string_view functionName) {
+    const CellTag tag = cell.getTag();
+
+    if (tag == CellTag::Embedding) {
+        return cell.getAs<types::Embedding::Primitive>();
+    } else if (tag == CellTag::Null) {
+        return std::nullopt;
+    }
+
+    throwCellTypeError(functionName, "an embedding", tag);
+}
+
 types::Int64::Primitive db::unsignedCharacterArgument(types::UInt64::Primitive value, std::string_view functionName) {
     const types::UInt64::Primitive largest = static_cast<types::UInt64::Primitive>(MAX_CHARACTER_ARGUMENT);
     if (value > largest) {

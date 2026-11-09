@@ -60,3 +60,5 @@ target_sources(test_query_ir_reduce_into_a_tagged_cell PRIVATE ${IR_TEST_DIR}/St
 target_include_directories(test_query_ir_reduce_into_a_tagged_cell PRIVATE ${IR_TEST_DIR})
 
 add_ir_tests(test_query_ir_cell_read_verifier CellReadVerifierTest.cpp)
+
+add_call_v3_test(test_query_ir_any_embedding_function_over_cell EmbeddingFunctionOverCellTest.cpp)

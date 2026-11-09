@@ -1189,21 +1189,21 @@ struct BinaryOpTraits<OP_INDEX_OF> {
 
 template <>
 struct BinaryOpTraits<OP_FUNC_COSINE_SIMILARITY> {
-    using Functor = CosineSimilarityFunction;
+    using Functor = CosineSimilarity;
 
     template <typename ResCol, typename LhsCol, typename RhsCol>
     static void exec(ResCol* result, const LhsCol* lhs, const RhsCol* rhs) {
-        ColumnFunctions::exec<CosineSimilarity>(result, lhs, rhs);
+        BinaryOperators::exec<Functor>(result, lhs, rhs);
     }
 };
 
 template <>
 struct BinaryOpTraits<OP_FUNC_EUCLIDEAN_DISTANCE> {
-    using Functor = EuclideanDistanceFunction;
+    using Functor = EuclideanDistance;
 
     template <typename ResCol, typename LhsCol, typename RhsCol>
     static void exec(ResCol* result, const LhsCol* lhs, const RhsCol* rhs) {
-        ColumnFunctions::exec<EuclideanDistance>(result, lhs, rhs);
+        BinaryOperators::exec<Functor>(result, lhs, rhs);
     }
 };
 

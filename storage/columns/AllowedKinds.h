@@ -690,7 +690,9 @@ template <ColumnOperator Op>
 requires (Op == OP_FUNC_COSINE_SIMILARITY) || (Op == OP_FUNC_EUCLIDEAN_DISTANCE)
 struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
-        OptionalKindPairs<types::Embedding::Primitive, types::Embedding::Primitive>::Pairs
+        OptionalKindPairs<types::Embedding::Primitive, types::Embedding::Primitive>::Pairs,
+        CellKindPairs<types::Embedding::Primitive>::Pairs,
+        OptionalKindPairs<CellView, CellView>::Pairs
     >;
     using AllowedMixed = AllowedMixedList<>;
     using Excluded = ExcludedContainers<
