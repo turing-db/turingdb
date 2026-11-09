@@ -63,7 +63,8 @@ mlir::Value rowSource(mlir::Value column) {
                 continue;
             }
 
-            sources[value] = operandIt->second;
+            const mlir::Value operandSource = operandIt->second;
+            sources[value] = operandSource;
         } else if (!computedRowByRow) {
             sources[value] = value;
         } else {
