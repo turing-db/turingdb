@@ -107,6 +107,7 @@ public:
 
     void setGroup(size_t row, size_t group) { _groups[row] = group; }
     size_t createGroup(size_t row);
+    void assignNullGroup(size_t row, size_t* nullGroup);
 
 private:
     std::vector<size_t>& _groups;
@@ -130,8 +131,6 @@ struct NLPackedKey {
     bool operator==(const NLPackedKey& other) const = default;
 };
 
-// A key column whose values have a fixed width, as a packed key holds it: the handle writing its
-// values, where they start in the key, and the bit of the key's null bitmap a null sets
 struct NLPackedKeyColumn {
     NLKeyPackFunction _pack {nullptr};
     size_t _valueOffset {0};
@@ -152,7 +151,7 @@ public:
     void pack(std::span<const Column* const> keyColumns, size_t beginRow, size_t endRow);
 
     const std::vector<Key>& getKeys() const { return _keys; }
-    bool isNull(size_t index) const { return _nulls[index] != std::byte {0}; }
+    bool isNull(size_t index) const requires NullAside { return _nulls[index] != std::byte {0}; }
 
 private:
     std::vector<NLPackedKeyColumn> _keyColumns;

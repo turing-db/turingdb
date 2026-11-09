@@ -87,6 +87,14 @@ size_t NLGroupAssignment::createGroup(size_t row) {
     return _groupCount++;
 }
 
+void NLGroupAssignment::assignNullGroup(size_t row, size_t* nullGroup) {
+    if (*nullGroup == NO_GROUP) {
+        *nullGroup = createGroup(row);
+    }
+
+    setGroup(row, *nullGroup);
+}
+
 void NLKeylessGroupHashTable::assign(std::span<const Column* const> keyColumns, NLGroupAssignment& assignment) {
     const size_t rowCount = assignment.getRowCount();
 
@@ -137,9 +145,7 @@ void NLPackedKeyBatch<Key, NullAside>::pack(std::span<const Column* const> keyCo
 }
 
 template <typename Key, bool NullAside>
-NLDirectGroupHashTable<Key, NullAside>::NLDirectGroupHashTable()
-    : _groups(std::numeric_limits<Key>::max() + size_t {1}, NLGroupAssignment::NO_GROUP)
-{
+NLDirectGroupHashTable<Key, NullAside>::NLDirectGroupHashTable() {
 }
 
 template <typename Key, bool NullAside>
@@ -164,6 +170,10 @@ void NLDirectGroupHashTable<Key, NullAside>::assign(std::span<const Column* cons
                                                     NLGroupAssignment& assignment) {
     const size_t rowCount = assignment.getRowCount();
 
+    if (_groups.empty()) {
+        _groups.assign(std::numeric_limits<Key>::max() + size_t {1}, NLGroupAssignment::NO_GROUP);
+    }
+
     for (size_t beginRow = 0; beginRow < rowCount; beginRow += ASSIGN_BATCH_ROWS) {
         const size_t endRow = std::min(rowCount, beginRow + ASSIGN_BATCH_ROWS);
 
@@ -175,11 +185,7 @@ void NLDirectGroupHashTable<Key, NullAside>::assign(std::span<const Column* cons
 
             if constexpr (NullAside) {
                 if (_batch.isNull(index)) {
-                    if (_nullGroup == NLGroupAssignment::NO_GROUP) {
-                        _nullGroup = assignment.createGroup(row);
-                    }
-
-                    assignment.setGroup(row, _nullGroup);
+                    assignment.assignNullGroup(row, &_nullGroup);
                     continue;
                 }
             }
@@ -259,11 +265,7 @@ void NLPackedGroupHashTable<Words, NullAside>::assign(std::span<const Column* co
 
             if constexpr (NullAside) {
                 if (_batch.isNull(index)) {
-                    if (_nullGroup == NLGroupAssignment::NO_GROUP) {
-                        _nullGroup = assignment.createGroup(row);
-                    }
-
-                    assignment.setGroup(row, _nullGroup);
+                    assignment.assignNullGroup(row, &_nullGroup);
                     continue;
                 }
             }
@@ -400,11 +402,7 @@ void NLStringGroupHashTable<Element>::assign(std::span<const Column* const> keyC
         } else if (element.has_value()) {
             assignment.setGroup(row, _cells.findOrCreateGroup(*element, row, assignment));
         } else {
-            if (_nullGroup == NLGroupAssignment::NO_GROUP) {
-                _nullGroup = assignment.createGroup(row);
-            }
-
-            assignment.setGroup(row, _nullGroup);
+            assignment.assignNullGroup(row, &_nullGroup);
         }
     }
 }
