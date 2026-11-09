@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <limits>
 #include <unordered_set>
 #include <spdlog/spdlog.h>
 
@@ -60,7 +61,7 @@ TEST(LabelSetTest, LabelSet) {
             size_t index = rand() % TemplateLabelSet<IntegerType, IntegerCount>::BitCount;
             bitset.set(index);
 
-            uint |= (IntegerType)1 << index;
+            uint |= (IntegerType)1 << (index % std::numeric_limits<IntegerType>::digits);
         }
     }
 
