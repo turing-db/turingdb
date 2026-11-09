@@ -10852,6 +10852,13 @@ NLCaseResetFn NLExecutor::selectCaseReset(ValueType valueType) {
     return reset;
 }
 
+NLCaseResetFn NLExecutor::selectCaseReset(NLChunkKind kind) {
+    NLCaseResetFn reset = nullptr;
+    dispatchIDChunkKind(kind, [&]<typename ID>() { reset = &caseResetColumn<ID>; });
+
+    return reset;
+}
+
 NLTruthReadFunction NLExecutor::selectTruthRead(bool nullable, bool untypedNull, bool taggedCells) {
     if (untypedNull) {
         return &readNullTruth;
@@ -10943,6 +10950,13 @@ NLFillNullRowsFn NLExecutor::selectFillNullRows(ValueType valueType) {
     return selected;
 }
 
+NLFillNullRowsFn NLExecutor::selectFillNullRows(NLChunkKind kind) {
+    NLFillNullRowsFn selected = nullptr;
+    dispatchIDChunkKind(kind, [&]<typename ID>() { selected = &fillNullRows<std::optional<ID>>; });
+
+    return selected;
+}
+
 NLFillNullRowsFn NLExecutor::selectOwnNullFillNullRows(NLChunkKind kind) {
     if (kind == NLChunkKind::NodeID) {
         return &fillNullRows<NodeID>;
@@ -10978,6 +10992,21 @@ NLCaseWriteFn NLExecutor::selectCaseWrite(ValueType valueType,
         }
     };
     ValueTypeDispatcher(valueType).execute(select);
+
+    return write;
+}
+
+NLCaseWriteFn NLExecutor::selectCaseWrite(NLChunkKind kind, bool nullable, bool untypedNull) {
+    NLCaseWriteFn write = nullptr;
+    dispatchIDChunkKind(kind, [&]<typename ID>() {
+        if (untypedNull) {
+            write = &caseWriteNull<ID>;
+        } else if (nullable) {
+            write = &caseWriteOptCell<ID>;
+        } else {
+            write = &caseWritePlainCell<ID>;
+        }
+    });
 
     return write;
 }

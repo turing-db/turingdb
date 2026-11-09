@@ -506,18 +506,20 @@ public:
 
     // Size the CASE result to the step's rows, all absent
     static NLCaseResetFn selectCaseReset(ValueType valueType);
+    static NLCaseResetFn selectCaseReset(NLChunkKind kind);
 
     // Read one branch's condition column: a mask, a nullable mask - where a null row is
     // not a match - or the null literal, which matches no row at all
     static NLCaseTestFn selectCaseTest(const Column* condition, bool nullable, bool untypedNull);
 
     // Copy one branch's value column into the result, which lowering resolved to the one
-    // nullable value column every branch promotes into. A branch of null writes nothing:
-    // the reset already left the row absent.
+    // nullable value or ID column every branch promotes into. A branch of null writes
+    // nothing: the reset already left the row absent.
     static NLCaseWriteFn selectCaseWrite(ValueType valueType,
                                          const Column* value,
                                          bool nullable,
                                          bool untypedNull);
+    static NLCaseWriteFn selectCaseWrite(NLChunkKind kind, bool nullable, bool untypedNull);
 
     // The siblings of the two above for a selection whose branches are nodes, edges or
     // paths: such a column carries its null in a value of its own rather than in an
@@ -526,9 +528,10 @@ public:
 
     static NLCaseWriteFn selectOwnNullCaseWrite(NLChunkKind kind, bool untypedNull);
 
-    // Fill the null rows of a nullable value column, of a node, an edge or a path column,
-    // which holds its null in a value of its own, and of a column of tagged cells
+    // Fill the null rows of a nullable value or ID column, of a node, an edge or a path
+    // column, which holds its null in a value of its own, and of a column of tagged cells
     static NLFillNullRowsFn selectFillNullRows(ValueType valueType);
+    static NLFillNullRowsFn selectFillNullRows(NLChunkKind kind);
     static NLFillNullRowsFn selectOwnNullFillNullRows(NLChunkKind kind);
     static NLFillNullRowsFn selectTaggedCellFillNullRows();
 

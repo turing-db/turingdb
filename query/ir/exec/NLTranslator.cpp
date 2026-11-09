@@ -4820,11 +4820,15 @@ void NLTranslator::translateNullTest(NullTestOp nullTest, NLStmtContainer* body)
 NLCaseResetFn NLTranslator::selectCaseResetForChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
+    const auto nullableElement = mlir::dyn_cast<storage::NullableType>(elementType);
+    const mlir::Type valueElement = nullableElement ? nullableElement.getValueType() : mlir::Type {};
 
     if (isAnyChunk(chunkType)) {
         return NLExecutor::selectTaggedCellReset();
     } else if (holdsItsOwnNull(elementType)) {
         return NLExecutor::selectOwnNullCaseReset(chunkKindFromElementType(elementType));
+    } else if (valueElement && isNullableIDValue(valueElement)) {
+        return NLExecutor::selectCaseReset(chunkKindFromElementType(valueElement));
     }
 
     return NLExecutor::selectCaseReset(nullableChunkValueType(chunkType));
@@ -4833,11 +4837,15 @@ NLCaseResetFn NLTranslator::selectCaseResetForChunkType(mlir::Type chunkType) {
 NLFillNullRowsFn NLTranslator::selectFillNullRowsForChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
+    const auto nullableElement = mlir::dyn_cast<storage::NullableType>(elementType);
+    const mlir::Type valueElement = nullableElement ? nullableElement.getValueType() : mlir::Type {};
 
     if (mlir::isa<storage::AnyType>(elementType)) {
         return NLExecutor::selectTaggedCellFillNullRows();
     } else if (holdsItsOwnNull(elementType)) {
         return NLExecutor::selectOwnNullFillNullRows(chunkKindFromElementType(elementType));
+    } else if (valueElement && isNullableIDValue(valueElement)) {
+        return NLExecutor::selectFillNullRows(chunkKindFromElementType(valueElement));
     }
 
     return NLExecutor::selectFillNullRows(nullableChunkValueType(chunkType));
@@ -4860,10 +4868,16 @@ NLCaseWriteFn NLTranslator::selectCaseWriteForChunkType(mlir::Type resultChunkTy
                                                         mlir::Type valueChunkType) {
     const auto resultChunk = mlir::cast<nl::ChunkType>(resultChunkType);
     const mlir::Type resultElement = resultChunk.getElementType();
+    const auto nullableResult = mlir::dyn_cast<storage::NullableType>(resultElement);
+    const mlir::Type resultValue = nullableResult ? nullableResult.getValueType() : mlir::Type {};
 
     if (holdsItsOwnNull(resultElement)) {
         return NLExecutor::selectOwnNullCaseWrite(chunkKindFromElementType(resultElement),
                                                   isUntypedNullChunk(valueChunkType));
+    } else if (resultValue && isNullableIDValue(resultValue)) {
+        return NLExecutor::selectCaseWrite(chunkKindFromElementType(resultValue),
+                                           isNullableChunk(valueChunkType),
+                                           isUntypedNullChunk(valueChunkType));
     }
 
     return NLExecutor::selectCaseWrite(nullableChunkValueType(resultChunkType),

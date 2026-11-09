@@ -4796,11 +4796,9 @@ mlir::Value DBLowering::branchChunkAs(mlir::Value chunk, mlir::Type chunkType) {
 
     if (!nullableResult) {
         return converted;
-    } else if (mlir::isa<storage::ListType, storage::MapType>(resultValue)) {
-        return nullableContainerChunk(converted);
     }
 
-    return nullableValueChunk(converted);
+    return paddedColumnChunk(converted);
 }
 
 mlir::Value DBLowering::toAnyChunk(mlir::Value chunk, mlir::Type chunkType) {
@@ -6653,14 +6651,6 @@ mlir::Type DBLowering::caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks
     // selection is that literal, laid out over its rows
     if (!unified) {
         return _builder.getNoneType();
-    }
-
-    // A node, an edge or a path is selected as what it is rather than as an ID's integer,
-    // so the selection answers a column the rest of the query still reads as one.
-    const bool isValue = elementTypeToValueType(unified) != ValueType::Invalid;
-
-    if (!isValue && !holdsItsOwnNull(unified)) {
-        throw IRException("db.case requires value, entity or path branches");
     }
 
     return unified;
