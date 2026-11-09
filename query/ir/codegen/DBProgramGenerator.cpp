@@ -7044,8 +7044,11 @@ void DBProgramGenerator::typeSubqueryBranchResults(SubqueryBranchResults& branch
     for (const llvm::SmallVector<PublishedColumn>& branchColumns : branchResults._branchColumns) {
         for (size_t columnIndex = 0; columnIndex < branchColumns.size(); columnIndex++) {
             const mlir::db::ColumnType resultType = mlir::cast<mlir::db::ColumnType>(resultTypes[columnIndex]);
-            if (mlir::isa<mlir::NoneType>(resultType.getType()) || isUntypedNullColumnType(resultType)) {
-                resultTypes[columnIndex] = branchColumns[columnIndex]._column.getType();
+            const mlir::Type branchType = branchColumns[columnIndex]._column.getType();
+            const bool resultNamesNoType = mlir::isa<mlir::NoneType>(resultType.getType()) || isUntypedNullColumnType(resultType);
+
+            if (resultNamesNoType && !isUntypedNullColumnType(branchType)) {
+                resultTypes[columnIndex] = branchType;
             }
         }
     }

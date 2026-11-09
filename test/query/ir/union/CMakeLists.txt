@@ -18,3 +18,8 @@ add_turing_test(test_query_ir_union_path_null_branch UnionPathNullBranchTest.cpp
 
 # A first branch answering null leaves the column the type the other branches give it.
 add_turing_test(test_query_ir_union_null_first_branch UnionNullFirstBranchTest.cpp)
+
+# A label, edge type or property type ID, or a value type, beside a branch answering null.
+add_turing_test(test_query_ir_union_schema_id_null_branch UnionSchemaIDNullBranchTest.cpp)
+target_sources(test_query_ir_union_schema_id_null_branch PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_union_schema_id_null_branch PRIVATE ${IR_TEST_DIR})

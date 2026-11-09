@@ -4690,7 +4690,6 @@ mlir::Type DBLowering::unionResultType(llvm::ArrayRef<mlir::MutableOperandRange>
     const unsigned operandIndex = static_cast<unsigned>(columnIndex);
 
     mlir::Type sharedType;
-    mlir::Type nullType;
     mlir::Type element;
     bool branchesAgree = true;
     bool holdsANull = false;
@@ -4698,7 +4697,6 @@ mlir::Type DBLowering::unionResultType(llvm::ArrayRef<mlir::MutableOperandRange>
     for (const mlir::MutableOperandRange& columns : branchColumns) {
         const mlir::Type branchType = columns[operandIndex].get().getType();
         if (isUntypedNullChunk(branchType)) {
-            nullType = branchType;
             holdsANull = true;
             continue;
         }
@@ -4712,9 +4710,9 @@ mlir::Type DBLowering::unionResultType(llvm::ArrayRef<mlir::MutableOperandRange>
             continue;
         }
 
-        const bool holdsCells = holdsAsTaggedCell(branchElement)
-                             && holdsAsTaggedCell(chunkValueElement(_builder, sharedType));
-        if (branchType != sharedType && !holdsCells) {
+        const mlir::Type sharedElement = chunkValueElement(_builder, sharedType);
+        const bool holdsCells = holdsAsTaggedCell(branchElement) && holdsAsTaggedCell(sharedElement);
+        if (branchElement != sharedElement && !holdsCells) {
             throwOnDisagreeingBranchTypes(branchType, sharedType, columnNames, columnIndex);
         }
 
@@ -4730,18 +4728,12 @@ mlir::Type DBLowering::unionResultType(llvm::ArrayRef<mlir::MutableOperandRange>
         return sharedType;
     }
 
-    mlir::MLIRContext* const context = _builder.getContext();
     const bool isContainer = mlir::isa<storage::ListType, storage::MapType>(element);
-
-    if (holdsItsOwnNull(element) || (isContainer && !holdsANull)) {
-        return nl::ChunkType::get(context, element);
-    } else if (isContainer || elementTypeToValueType(element) != ValueType::Invalid) {
-        return nl::ChunkType::get(context, storage::NullableType::get(context, element));
+    if (isContainer && !holdsANull) {
+        return nl::ChunkType::get(_builder.getContext(), element);
     }
 
-    // A value no tagged cell, no optional and no null of its own holds has no row a branch
-    // spelling the value null could fill
-    throwOnDisagreeingBranchTypes(nullType, sharedType, columnNames, columnIndex);
+    return caseResultChunkType(element);
 }
 
 // A branch that dedups keys its rows on the chunks it is handed, so its column is converted
