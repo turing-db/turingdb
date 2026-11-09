@@ -110,6 +110,37 @@ TEST_F(MergeMapPropertyTest, createsANodeWhereTheMapDiffers) {
     expectRows("MATCH (n:Tagged) RETURN count(n)", {{"2"}});
 }
 
+TEST_F(MergeMapPropertyTest, matchesAMapHoldingANull) {
+    write("MERGE (n:Tagged {attrs: {a: 1, b: null}})");
+    write("MERGE (n:Tagged {attrs: {a: 1, b: null}})");
+    expectRows("MATCH (n:Tagged) RETURN count(n)", {{"1"}});
+}
+
+TEST_F(MergeMapPropertyTest, mergesAMapBuiltPerRow) {
+    write("UNWIND [1, 2, 1] AS i MERGE (n:Tagged {attrs: {a: i}})");
+    write("UNWIND [2, 3] AS i MERGE (n:Tagged {attrs: {a: i}})");
+    expectRows("MATCH (n:Tagged) RETURN n.attrs.a", {{"1"}, {"2"}, {"3"}});
+}
+
+TEST_F(MergeMapPropertyTest, mergesAnUnwoundMap) {
+    write("UNWIND [{a: 1}, {a: 2}, {a: 1}] AS m MERGE (n:Tagged {attrs: m})");
+    expectRows("MATCH (n:Tagged) RETURN n.attrs.a", {{"1"}, {"2"}});
+}
+
+TEST_F(MergeMapPropertyTest, mergesAMapReadFromAProperty) {
+    write("MATCH (n:Person {name: 'Remy'}) SET n.attrs = {a: 1}");
+    write("MATCH (p:Person {name: 'Remy'}) MERGE (n:Tagged {attrs: p.attrs})");
+    write("MATCH (p:Person {name: 'Remy'}) MERGE (n:Tagged {attrs: p.attrs})");
+    expectRows("MATCH (n:Tagged) RETURN n.attrs.a", {{"1"}});
+}
+
+TEST_F(MergeMapPropertyTest, mergesAnEdgeOnAMap) {
+    write("MATCH (a:Person {name: 'Remy'}), (b:Person {name: 'Adam'}) MERGE (a)-[:TAGGED {attrs: {a: 1}}]->(b)");
+    write("MATCH (a:Person {name: 'Remy'}), (b:Person {name: 'Adam'}) MERGE (a)-[:TAGGED {attrs: {a: 1}}]->(b)");
+    write("MATCH (a:Person {name: 'Remy'}), (b:Person {name: 'Adam'}) MERGE (a)-[:TAGGED {attrs: {a: 2}}]->(b)");
+    expectRows("MATCH ()-[e:TAGGED]->() RETURN e.attrs.a", {{"1"}, {"2"}});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

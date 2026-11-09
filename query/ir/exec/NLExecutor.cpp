@@ -2785,6 +2785,23 @@ void distinctKeyAppendPlainColumn(const Column* column, size_t row, NLSerialized
     distinctAppendValueBytes(key, raw[row]);
 }
 
+void distinctAppendListBytes(NLSerializedKey& key, const ListView list);
+void distinctAppendMapBytes(NLSerializedKey& key, const MapView map);
+
+template <typename Primitive>
+void distinctAppendPresentValue(NLSerializedKey& key, const Primitive& value) {
+    key.push_back('\1');
+    distinctAppendValueBytes(key, value);
+}
+
+void distinctAppendPresentValue(NLSerializedKey& key, const ListView list) {
+    distinctAppendListBytes(key, list);
+}
+
+void distinctAppendPresentValue(NLSerializedKey& key, const MapView map) {
+    distinctAppendMapBytes(key, map);
+}
+
 // Serialize one row of a nullable value column into the row key as a tag byte telling
 // null from present, then, when present, the value's bytes. A null serializes to the
 // tag alone, so all nulls share a key and DISTINCT dedups them together, matching Cypher.
@@ -2798,8 +2815,7 @@ void distinctKeyAppendOptColumn(const Column* column, size_t row, NLSerializedKe
         return;
     }
 
-    key.push_back('\1');
-    distinctAppendValueBytes(key, *value);
+    distinctAppendPresentValue(key, *value);
 }
 
 // What a key value packs as, holding the value as its serialized key does: an ID's integer, a
@@ -3179,7 +3195,7 @@ void distinctKeyAppendOptListColumn(const Column* column, size_t row, NLSerializ
         return;
     }
 
-    distinctAppendListBytes(key, *list);
+    distinctAppendPresentValue(key, *list);
 }
 
 void distinctKeyAppendOptMapColumn(const Column* column, size_t row, NLSerializedKey& key) {
@@ -3192,7 +3208,7 @@ void distinctKeyAppendOptMapColumn(const Column* column, size_t row, NLSerialize
         return;
     }
 
-    distinctAppendMapBytes(key, *map);
+    distinctAppendPresentValue(key, *map);
 }
 
 template <typename Integral>
@@ -7012,19 +7028,17 @@ void throwIfNodesHaveEdges(const GraphView& view, const ColumnNodeIDs* nodes) {
 
 // A merge keys the value a row asks for against the value the graph holds, and those
 // arrive in a plain and a nullable column respectively: the two have to serialize alike,
-// which is why a plain row writes the tag byte the nullable one writes for a value.
+// which is why a plain row keys its value as a nullable column keys a present one.
 template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
 void mergeKeyAppendPlainColumn(const Column* column, size_t row, NLSerializedKey& key) {
     const auto& raw = static_cast<const ColumnType*>(column)->getRaw();
 
-    key.push_back('\1');
-    distinctAppendValueBytes(key, raw[row]);
+    distinctAppendPresentValue(key, raw[row]);
 }
 
 template <typename ElementType>
 void mergeKeyAppendConstColumn(const Column* column, size_t row, NLSerializedKey& key) {
-    key.push_back('\1');
-    distinctAppendValueBytes(key, (*static_cast<const ColumnConst<ElementType>*>(column))[row]);
+    distinctAppendPresentValue(key, (*static_cast<const ColumnConst<ElementType>*>(column))[row]);
 }
 
 // The numeric siblings of the three above, keying the row's value in KeyType - the type
@@ -7036,14 +7050,12 @@ template <typename ElementType, typename KeyType>
 void mergeKeyAppendNumericPlainColumn(const Column* column, size_t row, NLSerializedKey& key) {
     const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
 
-    key.push_back('\1');
-    distinctAppendValueBytes(key, static_cast<KeyType>(raw[row]));
+    distinctAppendPresentValue(key, static_cast<KeyType>(raw[row]));
 }
 
 template <typename ElementType, typename KeyType>
 void mergeKeyAppendNumericConstColumn(const Column* column, size_t row, NLSerializedKey& key) {
-    key.push_back('\1');
-    distinctAppendValueBytes(key, static_cast<KeyType>((*static_cast<const ColumnConst<ElementType>*>(column))[row]));
+    distinctAppendPresentValue(key, static_cast<KeyType>((*static_cast<const ColumnConst<ElementType>*>(column))[row]));
 }
 
 template <typename ElementType, typename KeyType>
@@ -7056,8 +7068,7 @@ void mergeKeyAppendNumericOptColumn(const Column* column, size_t row, NLSerializ
         return;
     }
 
-    key.push_back('\1');
-    distinctAppendValueBytes(key, static_cast<KeyType>(*value));
+    distinctAppendPresentValue(key, static_cast<KeyType>(*value));
 }
 
 // Keys the way a nullable column's null row does, so a merge on a null value binds the
@@ -14246,11 +14257,19 @@ NLKeyAppendFunction NLExecutor::selectPlainMergeKeyAppendFunction(NLChunkKind ki
         case NLChunkKind::LabelID:
         case NLChunkKind::PropertyTypeID:
         case NLChunkKind::ValueTypeCode:
-        case NLChunkKind::List:
-        case NLChunkKind::Map:
         case NLChunkKind::Path:
         case NLChunkKind::PathRef:
             throw IRException("a MERGE pattern cannot constrain a property to this value");
+        break;
+
+        case NLChunkKind::List:
+            throwUnlessKeyedAsItsOwnType(ValueType::List, keyType);
+            return &mergeKeyAppendPlainColumn<ListView>;
+        break;
+
+        case NLChunkKind::Map:
+            throwUnlessKeyedAsItsOwnType(ValueType::Map, keyType);
+            return &mergeKeyAppendPlainColumn<MapView>;
         break;
 
         case NLChunkKind::DateTime:
@@ -14302,7 +14321,8 @@ NLKeyAppendFunction NLExecutor::selectConstMergeKeyAppendFunction(ValueType valu
         break;
 
         case ValueType::List:
-            throw IRException("a MERGE pattern cannot constrain a property to a list");
+            throwUnlessKeyedAsItsOwnType(ValueType::List, keyType);
+            return &mergeKeyAppendConstColumn<ListView>;
         break;
 
         case ValueType::DateTime:
@@ -14321,7 +14341,8 @@ NLKeyAppendFunction NLExecutor::selectConstMergeKeyAppendFunction(ValueType valu
         break;
 
         case ValueType::Map:
-            throw IRException("a MERGE pattern cannot constrain a property to a map");
+            throwUnlessKeyedAsItsOwnType(ValueType::Map, keyType);
+            return &mergeKeyAppendConstColumn<MapView>;
         break;
 
         case ValueType::Invalid:
