@@ -614,50 +614,26 @@ typename T::Primitive constantValueAs(mlir::Attribute value) {
     }
 }
 
-template <Number Target>
-bool resolveNumberLiteral(mlir::IntegerAttr integer,
-                          mlir::FloatAttr floating,
-                          NLScanByPropertyValueLoopData::Literal& value) {
-    Target number {};
-    const bool converts = floating ? convertNumberExactly(floating.getValueAsDouble(), number)
-                                   : convertNumberExactly(integer.getInt(), number);
-
-    if (converts) {
-        value = number;
-    }
-
-    return converts;
-}
-
-// Resolves a property-value scan's literal to the property's stored type. A number equals
-// a number of another type by value, so 32.0 finds an age of 32. Any other pairing - a
-// negative integer against UInt64, 32.5 against Int64, a string against a number - leaves
-// the scan unmatchable.
+// Resolves a property-value scan's literal to the property's stored type
 bool resolvePropertyScanLiteral(ValueType valueType,
                                 mlir::TypedAttr literal,
                                 NLScanByPropertyValueLoopData::Literal& value) {
     const mlir::IntegerAttr integer = mlir::dyn_cast<mlir::IntegerAttr>(literal);
     const mlir::FloatAttr floating = mlir::dyn_cast<mlir::FloatAttr>(literal);
-    const mlir::StringAttr string = mlir::dyn_cast<mlir::StringAttr>(literal);
     const bool isBoolLiteral = integer && integer.getType().isSignlessInteger(1);
-    const bool isIntegerLiteral = integer && !isBoolLiteral;
-    const bool isNumberLiteral = isIntegerLiteral || floating;
 
-    if (valueType == ValueType::Int64 && isNumberLiteral) {
-        return resolveNumberLiteral<types::Int64::Primitive>(integer, floating, value);
-    } else if (valueType == ValueType::UInt64 && isNumberLiteral) {
-        return resolveNumberLiteral<types::UInt64::Primitive>(integer, floating, value);
-    } else if (valueType == ValueType::Double && isNumberLiteral) {
-        return resolveNumberLiteral<types::Double::Primitive>(integer, floating, value);
-    } else if (valueType == ValueType::Bool && isBoolLiteral) {
-        value = CustomBool(integer.getInt() != 0);
-        return true;
-    } else if (valueType == ValueType::String && string) {
-        value = std::string(string.getValue());
-        return true;
+    NLScanByPropertyValueLoopData::Literal given;
+    if (isBoolLiteral) {
+        given = CustomBool(integer.getInt() != 0);
+    } else if (integer) {
+        given = integer.getInt();
+    } else if (floating) {
+        given = floating.getValueAsDouble();
+    } else {
+        given = std::string(mlir::cast<mlir::StringAttr>(literal).getValue());
     }
 
-    return false;
+    return NLScanByPropertyValueLoopData::convertToStored(valueType, given, value);
 }
 
 // The runtime reduction the interpreter dispatches on, from the MLIR one the op
@@ -1169,11 +1145,14 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
         } else if (nl::ConstScanNodes constScanNodes = mlir::dyn_cast<nl::ConstScanNodes>(operation)) {
             IteratorConfig config {IteratorKind::ConstScanNodes, {}, {}};
             config._nodeIDs = constScanNodes.getNodeIDs();
+            const mlir::OperandRange boundIDs = constScanNodes.getBoundIDs();
+            config._boundNodeIDs.assign(boundIDs.begin(), boundIDs.end());
             _iteratorConfigs[constScanNodes.getResult()] = config;
         } else if (nl::ScanNodesByPropertyValue scanByValue = mlir::dyn_cast<nl::ScanNodesByPropertyValue>(operation)) {
             IteratorConfig config {IteratorKind::ScanNodesByPropertyValue, {}, {}};
             config._property = scanByValue.getProperty();
-            config._propertyValue = scanByValue.getValue();
+            config._propertyValue = scanByValue.getValueAttr();
+            config._boundPropertyValue = scanByValue.getBoundValue();
             if (const std::optional<mlir::ArrayAttr> labels = scanByValue.getLabels()) {
                 resolveLabelNames(*labels, config._labels);
             }
@@ -1789,13 +1768,21 @@ void NLTranslator::translateConstScanLoop(const IteratorConfig& config,
     NLConstScanLoopData* loopData = _program->allocFunctionData<NLConstScanLoopData>(nodeIDs);
     loopData->setLimit(limit);
 
-    const GraphReader reader = _view->read();
-
     loopData->reserveNodeIDs(config._nodeIDs.size());
     for (const int64_t nodeID : config._nodeIDs) {
-        const NodeID candidate(static_cast<uint64_t>(nodeID));
-        if (reader.graphHasNode(candidate)) {
-            loopData->addNodeID(candidate);
+        loopData->addNodeID(NodeID(static_cast<uint64_t>(nodeID)));
+    }
+
+    for (const mlir::Value bound : config._boundNodeIDs) {
+        const Column* column = getColumn(bound);
+        const mlir::Type boundType = mlir::cast<nl::ChunkType>(bound.getType()).getElementType();
+
+        if (mlir::isa<storage::ListType>(boundType)) {
+            bioassert(column->getKind() == ColumnConst<ListView>::staticKind(), "Bound node IDs hold one list for the run");
+            loopData->addBoundIDList(static_cast<const ColumnConst<ListView>*>(column));
+        } else {
+            bioassert(column->getKind() == ColumnConst<types::Int64::Primitive>::staticKind(), "A bound node ID holds one value for the run");
+            loopData->addBoundID(static_cast<const ColumnConst<types::Int64::Primitive>*>(column));
         }
     }
 
@@ -1823,10 +1810,11 @@ void NLTranslator::translateScanByPropertyValueLoop(const IteratorConfig& config
     NLScanByPropertyValueLoopData::Literal literal;
     bool matchable = false;
 
+    const mlir::Value bound = config._boundPropertyValue;
     if (labelsResolved && propertyType) {
         propertyTypeID = propertyType->_id;
         valueType = propertyType->_valueType;
-        matchable = resolvePropertyScanLiteral(valueType, config._propertyValue, literal);
+        matchable = bound || resolvePropertyScanLiteral(valueType, config._propertyValue, literal);
     }
 
     NLScanByPropertyValueLoopData* loopData = _program->allocFunctionData<NLScanByPropertyValueLoopData>(nodeIDs,
@@ -1837,6 +1825,11 @@ void NLTranslator::translateScanByPropertyValueLoop(const IteratorConfig& config
                                                                                                          byLabel,
                                                                                                          matchable);
     loopData->setLimit(limit);
+
+    if (bound) {
+        const mlir::Type boundType = mlir::cast<nl::ChunkType>(bound.getType()).getElementType();
+        loopData->setBoundValue(getColumn(bound), elementTypeToValueType(boundType));
+    }
 
     body->emplaceStmt(&NLExecutor::runScanNodesByPropertyValueLoop, loopData);
 

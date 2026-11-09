@@ -105,7 +105,7 @@ TEST_F(FuseScanByPropertyValueCodegenTest, rootIntegerEqualityBecomesAFusedScan)
     mlir::db::ScanNodesByPropertyValue scan = expectSoleFusedScan(*module, "age");
     ASSERT_TRUE(scan);
 
-    const mlir::IntegerAttr literal = mlir::dyn_cast<mlir::IntegerAttr>(scan.getValue());
+    const mlir::IntegerAttr literal = mlir::dyn_cast<mlir::IntegerAttr>(scan.getValueAttr());
     ASSERT_TRUE(literal);
     EXPECT_EQ(literal.getInt(), 32);
 
@@ -126,7 +126,7 @@ TEST_F(FuseScanByPropertyValueCodegenTest, stringEqualityBecomesAFusedScan) {
     mlir::db::ScanNodesByPropertyValue scan = expectSoleFusedScan(*module, "name");
     ASSERT_TRUE(scan);
 
-    const mlir::StringAttr literal = mlir::dyn_cast<mlir::StringAttr>(scan.getValue());
+    const mlir::StringAttr literal = mlir::dyn_cast<mlir::StringAttr>(scan.getValueAttr());
     ASSERT_TRUE(literal);
     EXPECT_EQ(literal.getValue(), "Remy");
 
@@ -144,7 +144,7 @@ TEST_F(FuseScanByPropertyValueCodegenTest, boolEqualityBecomesAFusedScan) {
     mlir::db::ScanNodesByPropertyValue scan = expectSoleFusedScan(*module, "isFrench");
     ASSERT_TRUE(scan);
 
-    const mlir::BoolAttr literal = mlir::dyn_cast<mlir::BoolAttr>(scan.getValue());
+    const mlir::BoolAttr literal = mlir::dyn_cast<mlir::BoolAttr>(scan.getValueAttr());
     ASSERT_TRUE(literal);
     EXPECT_TRUE(literal.getValue());
 }

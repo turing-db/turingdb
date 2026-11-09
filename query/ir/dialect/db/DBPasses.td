@@ -217,6 +217,11 @@ def CountPathRows : Pass<"count_path_rows"> {
     let summary = "Count the rows a path was built over, or the handles a walk's list was expanded from, instead of building the path or the list";
 }
 
+def CanonicalizeNodeIDEqualities : Pass<"canonicalize_node_id_equalities"> {
+    let summary = "Compare a node to an integer rather than its id() to it, so the passes that look a node up by its ID match one shape";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def CanonicalizeCoalesce : Pass<"canonicalize_coalesce"> {
     let summary = "Drop the arguments of a coalesce no row takes its value out of or no row reaches, and replace a coalesce left with one argument by the value of that argument";
     let dependentDialects = ["mlir::db::DB"];

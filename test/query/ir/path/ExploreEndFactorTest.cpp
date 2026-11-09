@@ -211,7 +211,7 @@ protected:
 
         mlir::db::ScanNodesByPropertyValue set = fused.getEndNodes().getDefiningOp<mlir::db::ScanNodesByPropertyValue>();
         ASSERT_TRUE(set);
-        EXPECT_EQ(mlir::dyn_cast<mlir::StringAttr>(set.getValue()).getValue(), "Adam");
+        EXPECT_EQ(mlir::dyn_cast<mlir::StringAttr>(set.getValueAttr()).getValue(), "Adam");
         EXPECT_EQ(&set->getBlock()->front(), set.getOperation());
         EXPECT_TRUE(mlir::isa<mlir::func::FuncOp>(set->getParentOp()));
     }

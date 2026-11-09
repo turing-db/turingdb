@@ -1884,23 +1884,33 @@ void DBLowering::lowerScanNodesByLabel(mlir::db::ScanNodesByLabel scanNodesByLab
 }
 
 void DBLowering::lowerConstScanNodes(mlir::db::ConstScanNodes constScanNodes) {
-    // The constant-set sibling of lowerScanNodes: a scan reads no column, so its
+    // The constant-set sibling of lowerScanNodes: a scan reads no row, so its
     // loop sits at the top of the current root block. The node ID list is the set
     // of rows to emit, not a column input, so it is forwarded as-is to the nl op -
     // translation resolves each entry to a storage NodeID.
     setInsertionInto(_rootBlock);
 
+    llvm::SmallVector<mlir::Value, 2> boundIDs;
+    for (const mlir::Value bound : constScanNodes.getBoundIDs()) {
+        boundIDs.push_back(mapValue(bound));
+    }
+
     nl::ConstScanNodes nodes = _builder.create<nl::ConstScanNodes>(_builder.getUnknownLoc(),
-                                                                   constScanNodes.getNodeIDsAttr());
+                                                                   constScanNodes.getNodeIDsAttr(),
+                                                                   boundIDs);
     buildLoopForSource(nodes.getResult(), constScanNodes.getOperation());
 }
 
 void DBLowering::lowerScanNodesByPropertyValue(mlir::db::ScanNodesByPropertyValue scanNodesByPropertyValue) {
     setInsertionInto(_rootBlock);
 
+    const mlir::Value bound = scanNodesByPropertyValue.getBoundValue();
+    const mlir::Value boundChunk = bound ? mapValue(bound) : mlir::Value();
+
     nl::ScanNodesByPropertyValue nodes = _builder.create<nl::ScanNodesByPropertyValue>(_builder.getUnknownLoc(),
                                                                                        scanNodesByPropertyValue.getPropertyAttr(),
-                                                                                       scanNodesByPropertyValue.getValue(),
+                                                                                       scanNodesByPropertyValue.getValueAttr(),
+                                                                                       boundChunk,
                                                                                        scanNodesByPropertyValue.getLabelsAttr());
     buildLoopForSource(nodes.getResult(), scanNodesByPropertyValue.getOperation());
 }

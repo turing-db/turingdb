@@ -1390,6 +1390,65 @@ typename T::Primitive propertyScanLiteralAs(const NLScanByPropertyValueLoopData:
     }
 }
 
+template <SupportedType T>
+typename T::Primitive boundValueAs(const Column* bound) {
+    bioassert(bound->getKind() == ColumnConst<typename T::Primitive>::staticKind(), "A bound value holds one value for the run");
+
+    return static_cast<const ColumnConst<typename T::Primitive>*>(bound)->getRaw();
+}
+
+// The value bound to a property-value scan, read as the literal a query spells
+bool readBoundPropertyValue(const Column* bound, ValueType boundType, NLScanByPropertyValueLoopData::Literal& given) {
+    switch (boundType) {
+        case ValueType::Int64:
+            given = boundValueAs<types::Int64>(bound);
+            return true;
+        break;
+        case ValueType::Double:
+            given = boundValueAs<types::Double>(bound);
+            return true;
+        break;
+        case ValueType::Bool:
+            given = boundValueAs<types::Bool>(bound);
+            return true;
+        break;
+        case ValueType::String:
+            given = std::string(boundValueAs<types::String>(bound));
+            return true;
+        break;
+        default:
+            return false;
+        break;
+    }
+}
+
+// Appends to @param listed the nodes a scan produces that the bound IDs of a const scan
+// name: a null or a negative ID names none
+void appendBoundNodeIDs(const NLConstScanLoopData& loopData, const ScannedNodes& scanned, std::vector<NodeID>& listed) {
+    const auto appendNodeID = [&scanned, &listed](int64_t nodeID) {
+        if (nodeID < 0) {
+            return;
+        }
+
+        const NodeID candidate(static_cast<uint64_t>(nodeID));
+        if (scanned.contains(candidate)) {
+            listed.push_back(candidate);
+        }
+    };
+
+    for (const ColumnConst<types::Int64::Primitive>* bound : loopData.getBoundIDs()) {
+        appendNodeID(bound->getRaw());
+    }
+
+    for (const ColumnConst<ListView>* bound : loopData.getBoundIDLists()) {
+        for (const CellView element : bound->getRaw()) {
+            if (element.getTag() == CellTag::Int) {
+                appendNodeID(element.getAs<types::Int64::Primitive>());
+            }
+        }
+    }
+}
+
 // The position of each field a CSV load produces, in field order: the one it named, or
 // the one its header sits at in the file's header line. A position past the file's last
 // field, or a header the file does not carry, is a query naming a field that is not
@@ -7938,15 +7997,17 @@ void NLExecutor::runScanNodesByLabelLoop(NLExecutionContext* context, NLFunction
 }
 
 template <SupportedType T>
-void NLExecutor::runScanNodesByPropertyValueLoopAs(NLExecutionContext* context, NLScanByPropertyValueLoopData* loopData) {
+void NLExecutor::runScanNodesByPropertyValueLoopAs(NLExecutionContext* context,
+                                                   NLScanByPropertyValueLoopData* loopData,
+                                                   const NLScanByPropertyValueLoopData::Literal& literal) {
     const NLStmtContainer* loopBody = loopData->getStmts();
     ColumnNodeIDs* nodeIDs = loopData->getNodeIDs();
     const NLLimitState* limit = loopData->getLimit();
 
-    // The literal and the label set are owned by the loop data, which lives for the whole
-    // program, so a string view of the one and a handle on the other stay valid for
-    // every fill below.
-    const typename T::Primitive value = propertyScanLiteralAs<T>(loopData->getLiteral());
+    // The label set is owned by the loop data, which lives for the whole program, and the
+    // literal outlives the loop, so a string view of the one and a handle on the other stay
+    // valid for every fill below.
+    const typename T::Primitive value = propertyScanLiteralAs<T>(literal);
     const LabelSetHandle labelset = loopData->isByLabel() ? LabelSetHandle(loopData->getLabelSet()) : LabelSetHandle();
 
     NLPropertyValueScan<T> graphNodes(context, nodeIDs, loopData->getPropertyTypeID(), value, labelset);
@@ -7967,21 +8028,35 @@ void NLExecutor::runScanNodesByPropertyValueLoop(NLExecutionContext* context, NL
         return;
     }
 
-    switch (loopData->getValueType()) {
+    const ValueType valueType = loopData->getValueType();
+
+    NLScanByPropertyValueLoopData::Literal boundLiteral;
+    const Column* bound = loopData->getBoundValue();
+    if (bound) {
+        NLScanByPropertyValueLoopData::Literal given;
+        const bool readsBound = readBoundPropertyValue(bound, loopData->getBoundType(), given);
+        if (!readsBound || !NLScanByPropertyValueLoopData::convertToStored(valueType, given, boundLiteral)) {
+            return;
+        }
+    }
+
+    const NLScanByPropertyValueLoopData::Literal& literal = bound ? boundLiteral : loopData->getLiteral();
+
+    switch (valueType) {
         case ValueType::Int64:
-            runScanNodesByPropertyValueLoopAs<types::Int64>(context, loopData);
+            runScanNodesByPropertyValueLoopAs<types::Int64>(context, loopData, literal);
         break;
         case ValueType::UInt64:
-            runScanNodesByPropertyValueLoopAs<types::UInt64>(context, loopData);
+            runScanNodesByPropertyValueLoopAs<types::UInt64>(context, loopData, literal);
         break;
         case ValueType::Double:
-            runScanNodesByPropertyValueLoopAs<types::Double>(context, loopData);
+            runScanNodesByPropertyValueLoopAs<types::Double>(context, loopData, literal);
         break;
         case ValueType::Bool:
-            runScanNodesByPropertyValueLoopAs<types::Bool>(context, loopData);
+            runScanNodesByPropertyValueLoopAs<types::Bool>(context, loopData, literal);
         break;
         case ValueType::String:
-            runScanNodesByPropertyValueLoopAs<types::String>(context, loopData);
+            runScanNodesByPropertyValueLoopAs<types::String>(context, loopData, literal);
         break;
         default:
             throw IRException("scan_nodes_by_property_value cannot scan this property type");
@@ -7993,10 +8068,26 @@ void NLExecutor::runConstScanNodesLoop(NLExecutionContext* context, NLFunctionDa
     NLConstScanLoopData* loopData = static_cast<NLConstScanLoopData*>(data);
     const NLStmtContainer* loopBody = loopData->getStmts();
     ColumnNodeIDs* nodeIDs = loopData->getNodeIDs();
-    const std::span<const NodeID> constNodeIDs = loopData->getConstNodeIDs();
     const size_t chunkSize = context->getChunkSize();
-    const size_t totalCount = constNodeIDs.size();
     const GraphView* view = context->getView();
+
+    const ScannedNodes scanned(*view, context->getWriteBuffer(), context->getFirstQueryNode());
+
+    std::vector<NodeID>& listed = loopData->getListedNodeIDs();
+    listed.clear();
+    std::ranges::copy_if(loopData->getConstNodeIDs(), std::back_inserter(listed), [&scanned](NodeID node) {
+        return scanned.contains(node);
+    });
+
+    if (loopData->hasBoundIDs()) {
+        appendBoundNodeIDs(*loopData, scanned, listed);
+
+        std::ranges::sort(listed);
+        listed.erase(std::unique(listed.begin(), listed.end()), listed.end());
+    }
+
+    const std::span<const NodeID> constNodeIDs = listed;
+    const size_t totalCount = constNodeIDs.size();
 
     // A null limit leaves the loop unbounded, exactly as in runScanNodesLoop.
     const NLLimitState* limit = loopData->getLimit();
@@ -8017,8 +8108,7 @@ void NLExecutor::runConstScanNodesLoop(NLExecutionContext* context, NLFunctionDa
 
         cursor += rows;
 
-        // The translator dropped the IDs the graph had deleted, before any DELETE of this
-        // query ran
+        // The IDs were checked when the loop started, before any DELETE of this query ran
         if (view->hasDeletedNodes()) {
             std::erase_if(raw, [view](NodeID node) { return view->isDeleted(node); });
         }

@@ -96,7 +96,7 @@ TEST_F(FuseScanByPropertyValueTest, fusesIntegerEquality) {
     ASSERT_TRUE(scan);
     EXPECT_EQ(scan.getProperty(), "age");
 
-    const mlir::IntegerAttr literal = mlir::dyn_cast<mlir::IntegerAttr>(scan.getValue());
+    const mlir::IntegerAttr literal = mlir::dyn_cast<mlir::IntegerAttr>(scan.getValueAttr());
     ASSERT_TRUE(literal);
     EXPECT_TRUE(literal.getType().isSignlessInteger(64));
     EXPECT_EQ(literal.getInt(), 32);
@@ -157,7 +157,7 @@ TEST_F(FuseScanByPropertyValueTest, fusesStringEquality) {
     ASSERT_TRUE(scan);
     EXPECT_EQ(scan.getProperty(), "name");
 
-    const mlir::StringAttr literal = mlir::dyn_cast<mlir::StringAttr>(scan.getValue());
+    const mlir::StringAttr literal = mlir::dyn_cast<mlir::StringAttr>(scan.getValueAttr());
     ASSERT_TRUE(literal);
     EXPECT_EQ(literal.getValue(), "Remy");
     EXPECT_TRUE(mlir::isa<mlir::storage::StringType>(literal.getType()));
@@ -185,7 +185,7 @@ TEST_F(FuseScanByPropertyValueTest, fusesDoubleEquality) {
     mlir::db::ScanNodesByPropertyValue scan = expectSoleFusedScan(*module);
     ASSERT_TRUE(scan);
 
-    const mlir::FloatAttr literal = mlir::dyn_cast<mlir::FloatAttr>(scan.getValue());
+    const mlir::FloatAttr literal = mlir::dyn_cast<mlir::FloatAttr>(scan.getValueAttr());
     ASSERT_TRUE(literal);
     EXPECT_DOUBLE_EQ(literal.getValueAsDouble(), 0.5);
 }
@@ -212,7 +212,7 @@ TEST_F(FuseScanByPropertyValueTest, fusesBoolEquality) {
     mlir::db::ScanNodesByPropertyValue scan = expectSoleFusedScan(*module);
     ASSERT_TRUE(scan);
 
-    const mlir::BoolAttr literal = mlir::dyn_cast<mlir::BoolAttr>(scan.getValue());
+    const mlir::BoolAttr literal = mlir::dyn_cast<mlir::BoolAttr>(scan.getValueAttr());
     ASSERT_TRUE(literal);
     EXPECT_TRUE(literal.getValue());
 }

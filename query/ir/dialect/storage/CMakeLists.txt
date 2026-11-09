@@ -38,6 +38,7 @@ add_mlir_library(turing_db_ir_storagedialect_s
   NullLiteralType.cpp
   ColumnIndicesFormat.cpp
   PropertyScanLiteral.cpp
+  BoundNodeIDs.cpp
 
   DEPENDS
   StorageDialectIncGen

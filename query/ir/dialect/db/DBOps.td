@@ -70,36 +70,55 @@ def ConstScanNodes : TuringOp<"const_scan_nodes", [Pure]> {
   let description = [{
     The constant-set counterpart of db.scan_nodes: where that produces every node
     in the graph, this produces exactly the nodes whose IDs are listed on the op -
-    a set known at plan time rather than discovered by walking the graph:
+    a set fixed before the scan starts rather than discovered by walking the graph:
 
       %a = db.const_scan_nodes([0, 3, 7]) : !db.column<!storage.node_id>
 
     It seeds a dataflow from a known set of nodes - the declarative counterpart of
     the plan's ConstScanNode, which turns a node-ID membership predicate
     (MATCH (n) WHERE id(n) IN [0, 3, 7]) into a direct scan of those IDs rather
-    than a full scan followed by a filter. Like db.scan_nodes it reads no column
-    and takes no input, so it opens a dataflow rather than consuming one; the IDs
-    are emitted in the order listed. Producing a fixed list is deterministic, so
-    the op is Pure.
+    than a full scan followed by a filter. Like db.scan_nodes it reads no row and
+    takes no input, so it opens a dataflow rather than consuming one; the IDs are
+    emitted in the order listed. Producing a fixed list is deterministic, so the
+    op is Pure.
+
+    `nodeIDs` lists the IDs the query spells. `boundIDs` are the IDs bound when the
+    query runs, each a column holding one value for the whole run: an integer, or a
+    list of integers. A parameter is one, so `id(n) = $id OR id(n) IN $ids` scans
+
+      %a = db.const_scan_nodes([], %id, %ids : !db.column<i64>, !db.column<!storage.list<i64>>)
+        : !db.column<!storage.node_id>
+
+    The scan reads the bound IDs when it starts, so the program does not depend on
+    the values bound. With bound IDs it emits the nodes the listed and the bound
+    IDs name, each once, in ID order.
 
     A node ID is a non-negative handle, so the signless i64 dense array matches
     the index list db.sort carries; each entry is a storage NodeID once lowered.
-    A listed ID that names no node in the graph matches nothing, so it is dropped
-    during lowering and the scan yields only the nodes that exist - the same
-    set-membership semantics as the WHERE id(n) IN ... it models. A list whose IDs
-    are all absent, or an empty list, simply yields no row - not an error, matching
-    that same set-membership.
+    An ID that names no node in the graph matches nothing, so it is dropped and the
+    scan yields only the nodes that exist - the same set-membership semantics as
+    the WHERE id(n) IN ... it models. A null or a negative bound ID names no node
+    either. No ID at all yields no row - not an error, matching that same
+    set-membership.
   }];
 
-  // `nodeIDs` is the constant set of node IDs to emit. Being an attribute and not
-  // an SSA value, it is absent from `operands`; lowering forwards it as-is.
-  let arguments = (ins DenseI64ArrayAttr:$nodeIDs);
+  let arguments = (ins DenseI64ArrayAttr:$nodeIDs, Variadic<Column>:$boundIDs);
   let results   = (outs ColumnNodeIDs:$result);
+  let hasVerifier = 1;
+
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$result, "::llvm::ArrayRef<int64_t>":$nodeIDs), [{
+      build($_builder, $_state, result, nodeIDs, ::mlir::ValueRange());
+    }]>
+  ];
 
   // The node ID list prints inside the parens as `[0, 3, 7]`, ahead of the colon,
-  // the same place db.scan_nodes_by_label prints its labels; the result type
-  // follows, qualified, as db.scan_nodes prints it.
-  let assemblyFormat = "`(` $nodeIDs `)` attr-dict `:` qualified(type($result))";
+  // the same place db.scan_nodes_by_label prints its labels, followed by the bound
+  // IDs and their types; the result type follows, qualified, as db.scan_nodes
+  // prints it.
+  let assemblyFormat = [{
+    `(` $nodeIDs (`,` $boundIDs^ `:` type($boundIDs))? `)` attr-dict `:` qualified(type($result))
+  }];
 }
 
 /**
@@ -135,12 +154,12 @@ def FetchNodes : TuringOp<"fetch_nodes", [Pure, DeclareOpInterfaceMethods<Column
 * ScanNodesByPropertyValue
 */
 def ScanNodesByPropertyValue : TuringOp<"scan_nodes_by_property_value", [Pure]> {
-  let summary = "Produce the nodes whose named property equals a literal";
+  let summary = "Produce the nodes whose named property equals a value";
 
   let description = [{
     The property-equality counterpart of db.scan_nodes_by_label: where that
     produces the nodes carrying a label, this produces the nodes whose named
-    property holds exactly the given literal, optionally among the nodes
+    property holds exactly the given value, optionally among the nodes
     carrying every listed label:
 
       %a = db.scan_nodes_by_property_value("age", 32 : i64) : !db.column<!storage.node_id>
@@ -153,34 +172,44 @@ def ScanNodesByPropertyValue : TuringOp<"scan_nodes_by_property_value", [Pure]> 
     and emits only the matching node IDs. A node that lacks the property never
     appears, exactly as the filter dropped it on a null value.
 
-    `property` is the property name as spelled in the query; `value` is the
-    literal it is compared against - the typed attribute db.constant carried,
-    which is one of the literal kinds the query language can spell: a signless
-    i64 integer, an f64 double, an i1 boolean or a !storage.string. Lowering
-    forwards both as-is; translation resolves the name against the schema and
-    coerces the literal to the stored type. A name the schema does not hold, or
-    a literal no stored value of that property could equal, deliberately scans
-    nothing rather than raising: the fusion is more permissive than the filter
-    form, which throws on both. Neither shape reaches here from Cypher - the
-    analyzer rejects an unknown property and a mismatched literal type before
-    codegen. `labels`, when present, is the label list db.scan_nodes_by_label
-    carried, with the same superset semantics: a label absent from the schema
-    likewise yields no rows.
+    `property` is the property name as spelled in the query. The value is either
+    `value`, the literal the query spells - the typed attribute db.constant
+    carried, one of the literal kinds the query language can spell: a signless
+    i64 integer, an f64 double, an i1 boolean or a !storage.string - or
+    `boundValue`, a column of one of those types holding one value for the whole
+    run, which the scan reads when it starts. A parameter is one:
 
-    Like db.scan_nodes it reads no column and takes no input, so it opens a
+      %c = db.scan_nodes_by_property_value("age", %age : !db.column<i64>) : !db.column<!storage.node_id>
+
+    Exactly one of the two is given. Lowering forwards both as-is; translation
+    resolves the name against the schema and the scan coerces the value to the
+    stored type. A name the schema does not hold, or a value no stored value of
+    that property could equal, deliberately scans nothing rather than raising:
+    the fusion is more permissive than the filter form, which throws on both.
+    Neither shape reaches here from Cypher - the analyzer rejects an unknown
+    property and a mismatched literal type before codegen. `labels`, when
+    present, is the label list db.scan_nodes_by_label carried, with the same
+    superset semantics: a label absent from the schema likewise yields no rows.
+
+    Like db.scan_nodes it reads no row and takes no input, so it opens a
     dataflow rather than consuming one. Scanning the graph is a deterministic
     read, so the op is Pure.
   }];
 
-  let arguments = (ins StrAttr:$property, TypedAttrInterface:$value, OptionalAttr<LabelRefArrayAttr>:$labels);
+  let arguments = (ins StrAttr:$property,
+                       OptionalAttr<TypedAttrInterface>:$value,
+                       Optional<Column>:$boundValue,
+                       OptionalAttr<LabelRefArrayAttr>:$labels);
   let results   = (outs ColumnNodeIDs:$result);
   let hasVerifier = 1;
 
-  // The name, literal and optional labels print inside the parens as
+  // The name, value and optional labels print inside the parens as
   // `"age", 32 : i64, ["Person"]`, ahead of the colon, the same place
   // db.get_node_properties prints its name; the result type follows, qualified,
   // as db.scan_nodes prints it.
-  let assemblyFormat = "`(` $property `,` $value (`,` $labels^)? `)` attr-dict `:` qualified(type($result))";
+  let assemblyFormat = [{
+    `(` $property `,` custom<PropertyScanValue>($value, $boundValue, type($boundValue)) (`,` $labels^)? `)` attr-dict `:` qualified(type($result))
+  }];
 }
 
 /**

@@ -97,6 +97,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
 #define GEN_PASS_DEF_COUNTFROMMETADATA
 #define GEN_PASS_DEF_CANONICALIZECOALESCE
+#define GEN_PASS_DEF_CANONICALIZENODEIDEQUALITIES
 #define GEN_PASS_DEF_HOISTUNCONDITIONALREGIONS
 #include "DBPasses.h.inc"
 
@@ -191,6 +192,12 @@ void runFilterWorklist(Operation* root, MatchFilter matchFilter, RewriteFilter r
         rewriteFilter(match, rewriter);
         return true;
     });
+}
+
+// Whether @param value is bound before the query runs, as a parameter is: it holds one value
+// for the whole run, which any op can read wherever it stands
+bool isBoundBeforeTheRun(Value value) {
+    return ::db::isFunctionArgument(value);
 }
 
 bool isNodeSource(Operation* op) {
@@ -731,7 +738,35 @@ bool nodeIDOfLiteral(Attribute literal, int64_t& nodeID) {
     return nodeID >= 0;
 }
 
-bool matchNodeIDEquality(Value mask, Value scanColumn, int64_t& nodeID) {
+// The IDs a disjunction over a node column names: the ones the query spells, and the columns
+// holding the ones bound when it runs, each an ID or a list of them
+struct NodeIDList {
+    llvm::SmallVector<int64_t> _literals;
+    llvm::SmallVector<Value, 2> _bound;
+};
+
+bool matchBoundNodeIDs(Value side, bool listsIDs, NodeIDList& nodeIDs) {
+    if (!isBoundBeforeTheRun(side)) {
+        return false;
+    }
+
+    const Type element = cast<ColumnType>(side.getType()).getType();
+    const storage::ListType list = dyn_cast<storage::ListType>(element);
+
+    const bool holdsAnID = !listsIDs && element.isSignlessInteger(64);
+    const bool holdsIDs = listsIDs && list && list.getElementType().isSignlessInteger(64);
+    if (!holdsAnID && !holdsIDs) {
+        return false;
+    }
+
+    if (!llvm::is_contained(nodeIDs._bound, side)) {
+        nodeIDs._bound.push_back(side);
+    }
+
+    return true;
+}
+
+bool matchNodeIDEquality(Value mask, Value scanColumn, NodeIDList& nodeIDs) {
     EqOp equality = mask.getDefiningOp<EqOp>();
     if (!equality) {
         return false;
@@ -751,13 +786,20 @@ bool matchNodeIDEquality(Value mask, Value scanColumn, int64_t& nodeID) {
 
     ConstantOp constant = constantSide.getDefiningOp<ConstantOp>();
     if (!constant) {
+        return matchBoundNodeIDs(constantSide, false, nodeIDs);
+    }
+
+    int64_t nodeID = 0;
+    if (!nodeIDOfLiteral(constant.getValue(), nodeID)) {
         return false;
     }
 
-    return nodeIDOfLiteral(constant.getValue(), nodeID);
+    nodeIDs._literals.push_back(nodeID);
+
+    return true;
 }
 
-bool matchNodeIDMembership(Value mask, Value scanColumn, llvm::SmallVectorImpl<int64_t>& nodeIDs) {
+bool matchNodeIDMembership(Value mask, Value scanColumn, NodeIDList& nodeIDs) {
     InOp membership = mask.getDefiningOp<InOp>();
     if (!membership || comparedNodeColumn(membership.getLhs()) != scanColumn) {
         return false;
@@ -766,7 +808,7 @@ bool matchNodeIDMembership(Value mask, Value scanColumn, llvm::SmallVectorImpl<i
     const Value list = membership.getRhs();
     ConstantOp constant = list.getDefiningOp<ConstantOp>();
     if (!constant) {
-        return false;
+        return matchBoundNodeIDs(list, true, nodeIDs);
     }
 
     const ArrayAttr elements = dyn_cast<ArrayAttr>(constant.getValue());
@@ -784,7 +826,7 @@ bool matchNodeIDMembership(Value mask, Value scanColumn, llvm::SmallVectorImpl<i
             return false;
         }
 
-        nodeIDs.push_back(nodeID);
+        nodeIDs._literals.push_back(nodeID);
     }
 
     return true;
@@ -792,7 +834,7 @@ bool matchNodeIDMembership(Value mask, Value scanColumn, llvm::SmallVectorImpl<i
 
 // An UNWIND of N elements folds into a chain of N - 1 ORs, so the walk keeps its own stack:
 // recursing once per OR overflows the thread's stack on a list of a few thousand.
-bool collectNodeIDDisjunction(Value mask, Value scanColumn, llvm::SmallVectorImpl<int64_t>& nodeIDs) {
+bool collectNodeIDDisjunction(Value mask, Value scanColumn, NodeIDList& nodeIDs) {
     llvm::SmallVector<Value> pending {mask};
     while (!pending.empty()) {
         const Value disjunct = pending.pop_back_val();
@@ -803,24 +845,61 @@ bool collectNodeIDDisjunction(Value mask, Value scanColumn, llvm::SmallVectorImp
             continue;
         }
 
-        int64_t nodeID = 0;
-        if (matchNodeIDEquality(disjunct, scanColumn, nodeID)) {
-            nodeIDs.push_back(nodeID);
-        } else if (!matchNodeIDMembership(disjunct, scanColumn, nodeIDs)) {
+        const bool listsNodes = matchNodeIDEquality(disjunct, scanColumn, nodeIDs)
+                             || matchNodeIDMembership(disjunct, scanColumn, nodeIDs);
+        if (!listsNodes) {
             return false;
         }
     }
 
-    llvm::sort(nodeIDs);
-    nodeIDs.erase(std::unique(nodeIDs.begin(), nodeIDs.end()), nodeIDs.end());
+    llvm::SmallVector<int64_t>& literals = nodeIDs._literals;
+    llvm::sort(literals);
+    literals.erase(std::unique(literals.begin(), literals.end()), literals.end());
 
     return true;
 }
 
-// eq(get_node_properties(column, property), constant), with the constant on either side
+// A node equals an integer by the ID it carries, so it stands in for its id() compared to
+// one. It does not against a double: id(n) = 2.0 holds of node 2, n = 2.0 of none.
+bool matchNodeIDComparedToAnInteger(EqOp equality, unsigned& idOperand) {
+    for (unsigned operand = 0; operand < 2; operand++) {
+        ElementID id = equality->getOperand(operand).getDefiningOp<ElementID>();
+        const Value other = equality->getOperand(1 - operand);
+
+        const bool readsANodeID = id && isNodeColumn(id.getInput());
+        if (readsANodeID && ::db::inferredColumnElement(other).isSignlessInteger(64)) {
+            idOperand = operand;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+struct CanonicalizeNodeIDEqualities : public impl::CanonicalizeNodeIDEqualitiesBase<CanonicalizeNodeIDEqualities> {
+    void runOnOperation() override {
+        llvm::SmallVector<std::pair<EqOp, unsigned>> equalities;
+        getOperation()->walk([&equalities](EqOp equality) {
+            unsigned idOperand = 0;
+            if (matchNodeIDComparedToAnInteger(equality, idOperand)) {
+                equalities.emplace_back(equality, idOperand);
+            }
+        });
+
+        for (const auto& [equality, operand] : equalities) {
+            ElementID id = equality->getOperand(operand).getDefiningOp<ElementID>();
+            equality->setOperand(operand, id.getInput());
+            eraseIfUnused(id);
+        }
+    }
+};
+
+// eq(get_node_properties(column, property), value), with the value on either side: a
+// constant, or a column bound before the query runs
 struct PropertyEquality {
     GetNodeProperties _read;
     TypedAttr _value;
+    Value _boundValue;
 };
 
 bool matchPropertyEquality(EqOp equality, PropertyEquality& match) {
@@ -839,17 +918,19 @@ bool matchPropertyEquality(EqOp equality, PropertyEquality& match) {
     }
 
     ConstantOp constant = constantSide.getDefiningOp<ConstantOp>();
-    if (!constant) {
-        return false;
-    }
+    const TypedAttr literal = constant ? dyn_cast<TypedAttr>(constant.getValue()) : TypedAttr();
+    const bool scansTheLiteral = literal && storage::isPropertyScanLiteral(literal);
+    const bool scansTheBoundValue = !constant
+                                 && isBoundBeforeTheRun(constantSide)
+                                 && storage::isPropertyScanType(cast<ColumnType>(constantSide.getType()).getType());
 
-    const TypedAttr literal = dyn_cast<TypedAttr>(constant.getValue());
-    if (!literal || !storage::isPropertyScanLiteral(literal)) {
+    if (!scansTheLiteral && !scansTheBoundValue) {
         return false;
     }
 
     match._read = read;
     match._value = literal;
+    match._boundValue = scansTheBoundValue ? constantSide : Value();
     return true;
 }
 
@@ -3008,7 +3089,7 @@ struct NodeIDScanChain {
     FilterOp _filter;
     Value _conjunct;
     ScanSource _source;
-    llvm::SmallVector<int64_t> _nodeIDs;
+    NodeIDList _nodeIDs;
 };
 
 Value disjunctionColumn(Value mask) {
@@ -3019,8 +3100,8 @@ Value disjunctionColumn(Value mask) {
     if (InOp membership = mask.getDefiningOp<InOp>()) {
         return comparedNodeColumn(membership.getLhs());
     } else if (EqOp equality = mask.getDefiningOp<EqOp>()) {
-        const Value lhs = equality.getLhs();
-        return comparedNodeColumn(lhs.getDefiningOp<ConstantOp>() ? equality.getRhs() : lhs);
+        const Value lhsColumn = comparedNodeColumn(equality.getLhs());
+        return lhsColumn ? lhsColumn : comparedNodeColumn(equality.getRhs());
     }
 
     return {};
@@ -3096,7 +3177,8 @@ bool matchPatternScanSource(FilterOp filter, Value column, LineageClimbs& climbs
 }
 
 bool matchNodeIDConjunct(FilterOp filter, Value conjunct, LineageClimbs& climbs, OpAnswers& reaching, NodeIDScanChain& chain) {
-    chain._nodeIDs.clear();
+    chain._nodeIDs._literals.clear();
+    chain._nodeIDs._bound.clear();
 
     const Value column = disjunctionColumn(conjunct);
     if (!column || !collectNodeIDDisjunction(conjunct, column, chain._nodeIDs)) {
@@ -3124,7 +3206,10 @@ void fuseScanByNodeIDs(NodeIDScanChain& chain, mlir::RewriterBase& rewriter) {
     const mlir::Location loc = chain._filter.getLoc();
 
     rewriter.setInsertionPoint(scan);
-    ConstScanNodes constScan = rewriter.create<ConstScanNodes>(loc, scan->getResult(0).getType(), chain._nodeIDs);
+    ConstScanNodes constScan = rewriter.create<ConstScanNodes>(loc,
+                                                               scan->getResult(0).getType(),
+                                                               chain._nodeIDs._literals,
+                                                               chain._nodeIDs._bound);
 
     llvm::SmallVector<Value> fused {constScan.getResult()};
     if (chain._source._labels) {
@@ -5270,7 +5355,7 @@ bool matchEndBoundConjunct(Value conjunct, ExplorePaths exploration, EndBoundExp
     }
 
     const OpResult carriedResult = dyn_cast<OpResult>(carried);
-    if (!carriedResult || carriedResult.getOwner() != exploration.getOperation()) {
+    if (!carriedResult || carriedResult.getOwner() != exploration.getOperation() || !isNodeColumn(carried)) {
         return false;
     }
 
@@ -5624,7 +5709,8 @@ struct NodeScanPredicate {
     Value _column;
     StringAttr _property;
     TypedAttr _value;
-    llvm::SmallVector<int64_t> _nodeIDs;
+    Value _boundValue;
+    NodeIDList _nodeIDs;
 };
 
 bool matchNodeIDPredicate(Value conjunct, NodeScanPredicate& predicate) {
@@ -5654,6 +5740,7 @@ bool matchNodeScanPredicate(Value conjunct, NodeScanPredicate& predicate) {
     predicate._column = read.getInputNodes();
     predicate._property = read.getPropertyAttr();
     predicate._value = property._value;
+    predicate._boundValue = property._boundValue;
 
     return true;
 }
@@ -5690,11 +5777,15 @@ Value buildNodeScan(const NodeScanPredicate& predicate, ArrayAttr labels, Locati
                                                                                  nodeColumnType,
                                                                                  predicate._property,
                                                                                  predicate._value,
+                                                                                 predicate._boundValue,
                                                                                  labels);
         return scan.getResult();
     }
 
-    ConstScanNodes listed = builder.create<ConstScanNodes>(loc, nodeColumnType, predicate._nodeIDs);
+    ConstScanNodes listed = builder.create<ConstScanNodes>(loc,
+                                                           nodeColumnType,
+                                                           predicate._nodeIDs._literals,
+                                                           predicate._nodeIDs._bound);
     llvm::SmallVector<Value> nodes {listed.getResult()};
     if (labels) {
         keepLabelledRows(nodes, labels, loc, builder);
@@ -7577,6 +7668,7 @@ struct PropertyValueScanChain {
     ScanSource _source;
     StringAttr _property;
     TypedAttr _value;
+    Value _boundValue;
 };
 
 // The conjuncts of a mask, as an `and` tree spells them: the predicates that all have to
@@ -7618,6 +7710,7 @@ bool matchPropertyValueScanChain(FilterOp filter, PropertyValueScanChain& chain)
         chain._conjunct = conjunct;
         chain._property = property._read.getPropertyAttr();
         chain._value = property._value;
+        chain._boundValue = property._boundValue;
 
         return true;
     });
@@ -7631,6 +7724,7 @@ void fuseScanByPropertyValue(PropertyValueScanChain& chain, mlir::RewriterBase& 
                                                                                chain._source._column.getType(),
                                                                                chain._property,
                                                                                chain._value,
+                                                                               chain._boundValue,
                                                                                chain._source._labels);
 
     rewriter.replaceOp(scan, fused.getResult());
@@ -9812,13 +9906,25 @@ private:
     }
 };
 
+// A list bound when the query runs has a length no statistic of the graph measures, so it
+// reads at the figure an uncountable source does
+double estimateListedNodes(ConstScanNodes constScan) {
+    double listed = static_cast<double>(constScan.getNodeIDs().size());
+    for (const Value bound : constScan.getBoundIDs()) {
+        const bool listsIDs = isa<storage::ListType>(cast<ColumnType>(bound.getType()).getType());
+        listed += listsIDs ? static_cast<double>(uncountableRows) : 1.0;
+    }
+
+    return listed;
+}
+
 // The rows an op seeds a factor with, and nothing at all when it seeds none - a fetch, a
 // filter or a hop reads a column rather than making one. A listed set of IDs is its own
 // count, a literal list one row per element, a by-label scan what the graph holds under
 // those labels, and a property scan the share of those an equality keeps.
 std::optional<double> estimateSourceRows(Operation* op, const RowEstimator& estimator, WalkKnowledge& knowledge) {
     if (ConstScanNodes constScan = dyn_cast<ConstScanNodes>(op)) {
-        return static_cast<double>(constScan.getNodeIDs().size());
+        return estimateListedNodes(constScan);
     } else if (UnwindConst unwind = dyn_cast<UnwindConst>(op)) {
         return static_cast<double>(unwind.getElements().size());
     } else if (ScanNodesByLabel byLabel = dyn_cast<ScanNodesByLabel>(op)) {
@@ -12192,7 +12298,11 @@ bool fusesIntoScanByPropertyValue(FilterOp filter, Value start, const SeedPatter
     };
 
     const MaskCone cone = collectMaskCone(filter.getMask());
-    if (!llvm::all_of(cone._inputs, readsTheStart)) {
+    const bool readsTheStartAlone = llvm::all_of(cone._inputs, [&readsTheStart](Value input) {
+        return readsTheStart(input) || isBoundBeforeTheRun(input);
+    });
+
+    if (!readsTheStartAlone) {
         return false;
     }
 

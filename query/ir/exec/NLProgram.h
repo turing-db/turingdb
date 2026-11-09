@@ -27,6 +27,7 @@
 #include "NLValueStore.h"
 #include "ProcedureContext.h"
 #include "ProcedureState.h"
+#include "columns/ColumnConst.h"
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnMask.h"
@@ -516,9 +517,9 @@ private:
 // of node IDs rather than a walk of the graph. Reuses the plain scan's node chunk,
 // limit and body; adds the owned list of node IDs the loop emits, one chunk-sized
 // slice per step. The translator fills the list in place through addNodeID after
-// allocating the data, so the resolved IDs are never staged in a temporary; the
-// list is owned here so it outlives the op's attribute storage (this data lives
-// for the whole program).
+// allocating the data, so the IDs are never staged in a temporary; the list is
+// owned here so it outlives the op's attribute storage (this data lives for the
+// whole program).
 class NLConstScanLoopData : public NLScanLoopData {
 public:
     NLConstScanLoopData(ColumnNodeIDs* nodeIDs)
@@ -528,13 +529,27 @@ public:
 
     std::span<const NodeID> getConstNodeIDs() const { return _constNodeIDs; }
 
-    // Reserve room for the resolved list, then append each valid ID in turn: the
-    // translator fills the list here directly rather than building and copying one.
+    // Reserve room for the list, then append each ID in turn: the translator fills the
+    // list here directly rather than building and copying one.
     void reserveNodeIDs(size_t count) { _constNodeIDs.reserve(count); }
     void addNodeID(NodeID nodeID) { _constNodeIDs.push_back(nodeID); }
 
+    std::span<const ColumnConst<types::Int64::Primitive>* const> getBoundIDs() const { return _boundIDs; }
+    std::span<const ColumnConst<ListView>* const> getBoundIDLists() const { return _boundIDLists; }
+    bool hasBoundIDs() const { return !_boundIDs.empty() || !_boundIDLists.empty(); }
+
+    void addBoundID(const ColumnConst<types::Int64::Primitive>* column) { _boundIDs.push_back(column); }
+    void addBoundIDList(const ColumnConst<ListView>* column) { _boundIDLists.push_back(column); }
+
+    std::vector<NodeID>& getListedNodeIDs() { return _listedNodeIDs; }
+
 private:
     std::vector<NodeID> _constNodeIDs;
+    std::vector<const ColumnConst<types::Int64::Primitive>*> _boundIDs;
+    std::vector<const ColumnConst<ListView>*> _boundIDLists;
+
+    // The IDs naming a node a scan produces, listed again each time the loop starts
+    std::vector<NodeID> _listedNodeIDs;
 };
 
 // nl.scan_nodes_by_property_value loop data. The label set and the literal are owned here
@@ -569,6 +584,18 @@ public:
     const LabelSet& getLabelSet() const { return _labelset; }
     bool isByLabel() const { return _byLabel; }
 
+    // The column holding the value bound when the query runs, which stands in for the
+    // literal, and the type of that value; a null column when the query spells the literal
+    const Column* getBoundValue() const { return _boundValue; }
+    ValueType getBoundType() const { return _boundType; }
+    void setBoundValue(const Column* boundValue, ValueType boundType);
+
+    // Converts @param given to the @param stored type of the property. A number equals a
+    // number of another type by value, so 32.0 finds an age of 32. Any other pairing - a
+    // negative integer against UInt64, 32.5 against Int64, a string against a number -
+    // converts to nothing, and the scan matches no node.
+    static bool convertToStored(ValueType stored, const Literal& given, Literal& converted);
+
 private:
     PropertyTypeID _propertyTypeID {};
     ValueType _valueType {ValueType::Invalid};
@@ -576,6 +603,8 @@ private:
     LabelSet _labelset;
     bool _byLabel {false};
     bool _matchable {false};
+    const Column* _boundValue {nullptr};
+    ValueType _boundType {ValueType::Invalid};
 };
 
 // The literal-list sibling of NLConstScanLoopData: streams a fixed ListView one chunk

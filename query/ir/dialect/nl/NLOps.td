@@ -55,48 +55,67 @@ def ConstScanNodes : NLOp<"const_scan_nodes", [Pure, InferTypeOpAdaptor]> {
   let summary = "Create a database iterator over a fixed, explicitly listed set of nodes";
   let description = [{
     Imperative counterpart of db.const_scan_nodes. Each step of an enclosing
-    nl.for fills one chunk of the node IDs listed in `nodeIDs`:
+    nl.for fills one chunk of the node IDs listed in `nodeIDs` or held by the
+    `boundIDs` chunks:
 
       %nodes = nl.const_scan_nodes([0, 3, 7])
+      %bound = nl.const_scan_nodes([], %ids : !nl.chunk<!storage.list<i64>>)
 
     `nodeIDs` is the same constant list db.const_scan_nodes carried; translation
-    resolves each entry to a storage NodeID, dropping any that name no node in the
-    graph. Emitting a known set needs no graph walk, but it narrows only which rows
-    are produced, never their shape, so - like nl.scan_nodes - the result is always
-    !nl.iter<!nl.chunk<!storage.node_id>> and is inferred, not spelled out.
+    turns each entry into a storage NodeID. The bound IDs are read when the loop
+    starts, each node emitted once, in ID order. The loop drops, when it starts,
+    any ID naming no node a scan would produce. Emitting a known set needs no graph
+    walk, but it narrows only which rows are produced, never their shape, so - like
+    nl.scan_nodes - the result is always !nl.iter<!nl.chunk<!storage.node_id>> and
+    is inferred, not spelled out.
   }];
-  let arguments = (ins DenseI64ArrayAttr:$nodeIDs);
+  let arguments = (ins DenseI64ArrayAttr:$nodeIDs, Variadic<NLChunk>:$boundIDs);
   let results   = (outs NLIterator:$result);
-  let assemblyFormat = "`(` $nodeIDs `)` attr-dict";
+  let hasVerifier = 1;
+
+  let builders = [
+    OpBuilder<(ins "::mlir::DenseI64ArrayAttr":$nodeIDs), [{
+      build($_builder, $_state, nodeIDs, ::mlir::ValueRange());
+    }]>
+  ];
+
+  let assemblyFormat = "`(` $nodeIDs (`,` $boundIDs^ `:` type($boundIDs))? `)` attr-dict";
 }
 
 /**
 * ScanNodesByPropertyValue
 */
 def ScanNodesByPropertyValue : NLOp<"scan_nodes_by_property_value", [Pure, InferTypeOpAdaptor]> {
-  let summary = "Create a database iterator over the nodes whose named property equals a literal";
+  let summary = "Create a database iterator over the nodes whose named property equals a value";
   let description = [{
     Imperative counterpart of db.scan_nodes_by_property_value. Each step of an
     enclosing nl.for fills one chunk of the node IDs whose `property` holds
-    exactly `value`, among the nodes carrying every label in `labels` when the
+    exactly the value, among the nodes carrying every label in `labels` when the
     list is given:
 
       %nodes = nl.scan_nodes_by_property_value("age", 32 : i64)
       %people = nl.scan_nodes_by_property_value("age", 32 : i64, ["Person"])
+      %bound = nl.scan_nodes_by_property_value("age", %age : !nl.chunk<i64>)
 
-    `property`, `value` and `labels` are the same name, literal and label list
-    the db op carried; translation resolves the names against the schema and
-    coerces the literal to the stored type, the same way an nl.get_property_type
-    name is resolved by the property fetch that consumes it. A property or label
-    absent from the schema is carried by no node, so the loop yields no chunk.
-    Filtering by value narrows only the rows, never their shape, so - like
-    nl.scan_nodes - the result is always !nl.iter<!nl.chunk<!storage.node_id>>
-    and is inferred, not spelled out.
+    `property`, `value`, `boundValue` and `labels` are the same name, literal,
+    bound chunk and label list the db op carried; translation resolves the names
+    against the schema, the same way an nl.get_property_type name is resolved by
+    the property fetch that consumes it, and the value is coerced to the stored
+    type, the bound one when the loop starts. A property or label absent from the
+    schema is carried by no node, so the loop yields no chunk. Filtering by value
+    narrows only the rows, never their shape, so - like nl.scan_nodes - the result
+    is always !nl.iter<!nl.chunk<!storage.node_id>> and is inferred, not spelled
+    out.
   }];
-  let arguments = (ins StrAttr:$property, TypedAttrInterface:$value, OptionalAttr<LabelRefArrayAttr>:$labels);
+  let arguments = (ins StrAttr:$property,
+                       OptionalAttr<TypedAttrInterface>:$value,
+                       Optional<NLChunk>:$boundValue,
+                       OptionalAttr<LabelRefArrayAttr>:$labels);
   let results   = (outs NLIterator:$result);
   let hasVerifier = 1;
-  let assemblyFormat = "`(` $property `,` $value (`,` $labels^)? `)` attr-dict";
+  let assemblyFormat = [{
+    `(` $property `,` custom<PropertyScanValue>($value, $boundValue, type($boundValue)) (`,` $labels^)? `)` attr-dict
+  }];
 }
 
 /**

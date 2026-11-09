@@ -180,12 +180,14 @@ private:
         // keeps alive for the whole translation; resolved to owned NodeIDs when the
         // loop is translated.
         llvm::ArrayRef<int64_t> _nodeIDs;
+        llvm::SmallVector<mlir::Value, 2> _boundNodeIDs;
 
         // The property name and literal a ScanNodesByPropertyValue iterator matches on;
         // empty and null for the other kinds. Like _labels, views into the op's interned
         // attribute storage; resolved against the schema when the loop is translated.
         llvm::StringRef _property;
         mlir::TypedAttr _propertyValue;
+        mlir::Value _boundPropertyValue;
 
         // The literal list an UnwindConst iterator emits; a null (empty) ListView
         // for the other kinds. Materialized by materializeListView into the

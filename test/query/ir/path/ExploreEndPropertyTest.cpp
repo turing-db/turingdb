@@ -278,7 +278,7 @@ TEST_F(ExploreEndPropertyTest, fusesThePropertyFilterIntoAnEndSet) {
         mlir::db::ScanNodesByPropertyValue set = fused.getEndNodes().getDefiningOp<mlir::db::ScanNodesByPropertyValue>();
         ASSERT_TRUE(set) << program;
         EXPECT_EQ(set.getProperty(), "name");
-        EXPECT_EQ(mlir::dyn_cast<mlir::StringAttr>(set.getValue()).getValue(), "Adam");
+        EXPECT_EQ(mlir::dyn_cast<mlir::StringAttr>(set.getValueAttr()).getValue(), "Adam");
         EXPECT_FALSE(set.getLabels().has_value());
 
         // The set is scanned ahead of the seeds, so lowering fills it before the walk runs

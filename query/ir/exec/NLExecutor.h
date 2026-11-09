@@ -1007,7 +1007,9 @@ private:
     static void searchVectorIndex(NLExecutionContext* context, NLVectorSearchLoopData* loopData);
 
     template <SupportedType T>
-    static void runScanNodesByPropertyValueLoopAs(NLExecutionContext* context, NLScanByPropertyValueLoopData* loopData);
+    static void runScanNodesByPropertyValueLoopAs(NLExecutionContext* context,
+                                                  NLScanByPropertyValueLoopData* loopData,
+                                                  const NLScanByPropertyValueLoopData::Literal& literal);
 };
 
 }

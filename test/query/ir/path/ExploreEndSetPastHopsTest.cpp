@@ -283,7 +283,7 @@ TEST_F(ExploreEndSetPastHopsTest, endsTheWalkOnTheNodesOneHopFromTheNamedOne) {
     mlir::db::ScanNodesByPropertyValue named = reversed.getInputNodes().getDefiningOp<mlir::db::ScanNodesByPropertyValue>();
     ASSERT_TRUE(named);
     EXPECT_EQ(named.getProperty(), "name");
-    EXPECT_EQ(mlir::dyn_cast<mlir::StringAttr>(named.getValue()).getValue(), "Cooking");
+    EXPECT_EQ(mlir::dyn_cast<mlir::StringAttr>(named.getValueAttr()).getValue(), "Cooking");
 
     // The set is built ahead of the seeds, so lowering fills it before the walk runs
     EXPECT_EQ(&named->getBlock()->front(), named.getOperation());
@@ -396,7 +396,7 @@ TEST_F(ExploreEndSetPastHopsTest, endsOnTheEndsOwnPredicateWhicheverFilterComesF
 
     mlir::db::ScanNodesByPropertyValue named = exploration.getEndNodes().getDefiningOp<mlir::db::ScanNodesByPropertyValue>();
     ASSERT_TRUE(named);
-    EXPECT_EQ(mlir::dyn_cast<mlir::StringAttr>(named.getValue()).getValue(), "Adam");
+    EXPECT_EQ(mlir::dyn_cast<mlir::StringAttr>(named.getValueAttr()).getValue(), "Adam");
     EXPECT_EQ(countOps<mlir::db::GetInEdgesByType>(*module), 0u);
 
     Rows rows;

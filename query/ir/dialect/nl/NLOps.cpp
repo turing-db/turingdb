@@ -23,6 +23,7 @@
 #include "NullLiteralType.h"
 #include "GroupAggregateKindsFormat.h"
 #include "PropertyScanLiteral.h"
+#include "BoundNodeIDs.h"
 
 using namespace mlir;
 using namespace mlir::nl;
@@ -289,14 +290,31 @@ LogicalResult ConstScanNodes::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
+LogicalResult ConstScanNodes::verify() {
+    for (const Value bound : getBoundIDs()) {
+        const Type element = cast<ChunkType>(bound.getType()).getElementType();
+        if (!storage::isBoundNodeIDsType(element)) {
+            return emitOpError("requires bound IDs of type i64 or !storage.list<i64>, got ") << element;
+        }
+    }
+
+    return success();
+}
+
 LogicalResult ScanNodesByPropertyValue::verify() {
     if (getProperty().empty()) {
         return emitOpError("requires a non-empty property name");
     }
 
-    const TypedAttr literal = getValue();
-    if (!storage::isPropertyScanLiteral(literal)) {
-        return emitOpError(storage::propertyScanLiteralKinds()) << literal.getType();
+    const std::optional<TypedAttr> literal = getValue();
+    const Value bound = getBoundValue();
+    if (literal.has_value() == static_cast<bool>(bound)) {
+        return emitOpError("requires either a literal or a bound value");
+    }
+
+    const Type valueType = literal ? literal->getType() : cast<ChunkType>(bound.getType()).getElementType();
+    if (!storage::isPropertyScanType(valueType)) {
+        return emitOpError(storage::propertyScanLiteralKinds()) << valueType;
     }
 
     const std::optional<ArrayAttr> labels = getLabels();

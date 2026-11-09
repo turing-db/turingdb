@@ -10,6 +10,7 @@
 #include "NLMergeWorkingSet.h"
 #include "Procedure.h"
 #include "ProcedureData.h"
+#include "NumberOrder.h"
 
 #include "BioAssert.h"
 #include "IRException.h"
@@ -24,6 +25,24 @@ constexpr size_t FOLD_BATCH_ROWS = 256;
 
 size_t alignOffset(size_t offset, size_t alignment) {
     return (offset + alignment - 1) / alignment * alignment;
+}
+
+template <Number Target>
+bool convertNumber(const NLScanByPropertyValueLoopData::Literal& given, NLScanByPropertyValueLoopData::Literal& converted) {
+    Target number {};
+
+    bool converts = false;
+    if (const int64_t* integer = std::get_if<int64_t>(&given)) {
+        converts = convertNumberExactly(*integer, number);
+    } else if (const double* floating = std::get_if<double>(&given)) {
+        converts = convertNumberExactly(*floating, number);
+    }
+
+    if (converts) {
+        converted = number;
+    }
+
+    return converts;
 }
 
 }
@@ -157,6 +176,29 @@ NLRuntimeProperty* NLProgram::getRuntimeProperty(std::string_view name) {
     }
 
     return property.get();
+}
+
+void NLScanByPropertyValueLoopData::setBoundValue(const Column* boundValue, ValueType boundType) {
+    _boundValue = boundValue;
+    _boundType = boundType;
+}
+
+bool NLScanByPropertyValueLoopData::convertToStored(ValueType stored, const Literal& given, Literal& converted) {
+    if (stored == ValueType::Int64) {
+        return convertNumber<types::Int64::Primitive>(given, converted);
+    } else if (stored == ValueType::UInt64) {
+        return convertNumber<types::UInt64::Primitive>(given, converted);
+    } else if (stored == ValueType::Double) {
+        return convertNumber<types::Double::Primitive>(given, converted);
+    } else if (stored == ValueType::Bool && std::holds_alternative<CustomBool>(given)) {
+        converted = given;
+        return true;
+    } else if (stored == ValueType::String && std::holds_alternative<std::string>(given)) {
+        converted = given;
+        return true;
+    }
+
+    return false;
 }
 
 NLProcedureState::NLProcedureState(const Procedure* procedure,

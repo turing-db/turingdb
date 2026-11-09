@@ -30,3 +30,5 @@ target_sources(test_query_ir_edge_type_parameter PRIVATE ${PARAMETER_TEST_DIR}/P
 add_ir_tests(test_query_ir_parameter_argument ParameterArgumentTest.cpp)
 
 add_call_v3_test(test_query_ir_expression_parameter ExpressionParameterTest.cpp)
+
+add_call_v3_test(test_query_ir_parameter_lookup ParameterLookupTest.cpp)
