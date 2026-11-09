@@ -193,6 +193,13 @@ inline bool namesATruthValue(EvaluatedType e) {
     return e == EvaluatedType::Bool || e == EvaluatedType::Null || e == EvaluatedType::Any;
 }
 
+// The types IN, a list comprehension, a reduce and a slice read as a list. A tagged cell
+// names no type until a row is in hand, and a null reads into a null rather than into a
+// type error, as an UNWIND of one emits no row.
+inline bool readsAsAList(EvaluatedType e) {
+    return e == EvaluatedType::List || e == EvaluatedType::Any || e == EvaluatedType::Null;
+}
+
 // The types = and <> take: every value, every entity and every path
 inline bool namesAnEqualityOperand(EvaluatedType e) {
     return namesAComparableValue(e)

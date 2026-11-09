@@ -137,14 +137,6 @@ ListShape selectedListShape(const Expr* value) {
     return ListShape::selected(value->getType(), value->getListShape());
 }
 
-// A tagged cell names no type until a row is in hand, and a null reads into a null rather
-// than into a type error, as an UNWIND of one emits no row
-bool readsAsAList(EvaluatedType type) {
-    return type == EvaluatedType::List
-        || type == EvaluatedType::Any
-        || type == EvaluatedType::Null;
-}
-
 // The shape of the list these elements make, joined from the one-element list each makes:
 // [1, null, 3] is a list of integers with a null in it, [1, 'a'] a list of tagged scalars,
 // and [] is a list of no type, as [null, null] is.

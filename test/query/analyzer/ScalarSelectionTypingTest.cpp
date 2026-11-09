@@ -63,31 +63,31 @@ protected:
 
 TEST_F(ScalarSelectionTypingTest, rejectsInOverACaseOfNumbers) {
     expectRejected("UNWIND [true, false] AS b RETURN 1 IN CASE WHEN b THEN 1 ELSE 2.0 END",
-                   "IN operand must be a list or map, not 'Integer or Double'");
+                   "IN operand must be a list, not 'Integer or Double'");
 }
 
 TEST_F(ScalarSelectionTypingTest, rejectsInOverACaseOfScalarsOfDifferentKinds) {
     expectRejected("UNWIND [true, false] AS b RETURN 1 IN CASE WHEN b THEN 1 ELSE 'a' END",
-                   "IN operand must be a list or map, not 'Integer or String'");
+                   "IN operand must be a list, not 'Integer or String'");
     expectRejected("UNWIND [true, false] AS b RETURN 1 IN CASE WHEN b THEN 1 WHEN NOT b THEN 'a' END",
-                   "IN operand must be a list or map, not 'Integer or String'");
+                   "IN operand must be a list, not 'Integer or String'");
     expectRejected("MATCH (n:Person) UNWIND [true, false] AS b RETURN 1 IN CASE WHEN b THEN n ELSE 1 END",
-                   "IN operand must be a list or map, not 'NodePattern or Integer'");
+                   "IN operand must be a list, not 'NodePattern or Integer'");
 }
 
 TEST_F(ScalarSelectionTypingTest, rejectsInOverACoalesceOfScalars) {
     expectRejected("RETURN 1 IN coalesce(null, 1, 'a')",
-                   "IN operand must be a list or map, not 'Integer or String'");
+                   "IN operand must be a list, not 'Integer or String'");
 }
 
 TEST_F(ScalarSelectionTypingTest, rejectsInOverAVariableBoundToACaseOfScalars) {
     expectRejected("UNWIND [true, false] AS b WITH CASE WHEN b THEN 1 ELSE 2.0 END AS v RETURN 1 IN v",
-                   "IN operand must be a list or map, not 'Integer or Double'");
+                   "IN operand must be a list, not 'Integer or Double'");
 }
 
 TEST_F(ScalarSelectionTypingTest, rejectsInOverAUnionColumnOfScalars) {
     expectRejected("CALL { RETURN 1 AS v UNION ALL RETURN 'a' AS v } RETURN 1 IN v",
-                   "IN operand must be a list or map, not 'Integer or String'");
+                   "IN operand must be a list, not 'Integer or String'");
 }
 
 TEST_F(ScalarSelectionTypingTest, rejectsAComprehensionOverACaseOfScalars) {
@@ -118,9 +118,8 @@ TEST_F(ScalarSelectionTypingTest, rejectsAnOperatorNoBranchOfACaseTakes) {
                    "Operands are not valid and compatible numeric types: 'String or Bool' and 'Integer'");
 }
 
-TEST_F(ScalarSelectionTypingTest, acceptsInOverACaseWithACollectionBranch) {
+TEST_F(ScalarSelectionTypingTest, acceptsInOverACaseWithAListBranch) {
     expectAccepted("UNWIND [true, false] AS b RETURN 1 IN CASE WHEN b THEN [1] ELSE 2.0 END");
-    expectAccepted("UNWIND [true, false] AS b RETURN 'a' IN CASE WHEN b THEN {a: 1} ELSE 2 END");
     expectAccepted("UNWIND [true, false] AS b RETURN 1 IN CASE WHEN b THEN [1] ELSE [2.0] END");
     expectAccepted("UNWIND [true, false] AS b WITH CASE WHEN b THEN [1] ELSE 2.0 END AS v RETURN 1 IN v");
 }

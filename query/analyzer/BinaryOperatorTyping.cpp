@@ -56,7 +56,7 @@ enum class TypingReason : uint8_t {
     IncompatibleAdditionTypes,
     IncompatibleConcatenationTypes,
     IncompatibleNumericTypes,
-    NotACollection,
+    NotAList,
     InvalidOperator,
 };
 
@@ -270,13 +270,9 @@ RuleResult powerType(EvaluatedType a, EvaluatedType b) {
 RuleResult membershipType(EvaluatedType b) {
     // A type-erased cell holds whatever its row put there, so the test reads the list
     // it holds, or a list of one where it holds something else
-    const bool searchesACollection = b == EvaluatedType::List || b == EvaluatedType::Map;
-    const bool searchesACell = b == EvaluatedType::Any;
-    const bool searchesNull = b == EvaluatedType::Null;
-
-    if (!searchesACollection && !searchesACell && !searchesNull) {
-        return invalid(TypingReason::NotACollection);
-    } else if (searchesNull) {
+    if (!readsAsAList(b)) {
+        return invalid(TypingReason::NotAList);
+    } else if (b == EvaluatedType::Null) {
         return valid(EvaluatedType::Null);
     }
 
@@ -447,8 +443,8 @@ void writeError(TypingReason reason, const ExprType& lhs, const ExprType& rhs, B
         case TypingReason::IncompatibleNumericTypes:
             out._error = fmt::format("Operands are not valid and compatible numeric types: '{}' and '{}'", left, right);
         break;
-        case TypingReason::NotACollection:
-            out._error = fmt::format("IN operand must be a list or map, not '{}'", right);
+        case TypingReason::NotAList:
+            out._error = fmt::format("IN operand must be a list, not '{}'", right);
         break;
         case TypingReason::InvalidOperator:
             out._error = "Invalid operand in binary expression.";
