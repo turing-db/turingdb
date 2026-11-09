@@ -428,8 +428,9 @@ struct CellTextKindPairs<OP_ADD> {
     >::Type;
 };
 
-// A cell meets a list under '+' alone, which joins the list the cell holds or takes the
-// cell as one element
+// A cell meets a list, or a value '+' only appends to a list, under '+' alone: a list joins
+// the list the cell holds or takes the cell as one element, any other value is appended to
+// the list the cell holds
 template <ColumnOperator Op>
 struct CellListKindPairs {
     using Pairs = std::tuple<>;
@@ -437,7 +438,20 @@ struct CellListKindPairs {
 
 template <>
 struct CellListKindPairs<OP_ADD> {
-    using Pairs = CellKindPairs<ListView>::Pairs;
+    using Pairs = TupleFlatten<
+        CellKindPairs<ListView>::Pairs,
+        CellKindPairs<MapView>::Pairs,
+        CellKindPairs<NodeID>::Pairs,
+        CellKindPairs<EdgeID>::Pairs,
+        CellKindPairs<types::Point::Primitive>::Pairs,
+        CellKindPairs<types::Embedding::Primitive>::Pairs,
+
+        // A path column holds its null in the path, so it has no optional sibling
+        std::tuple<
+            KindPair<CellView, GraphPath>,
+            KindPair<std::optional<CellView>, GraphPath>
+        >
+    >::Type;
 };
 
 template <ColumnOperator Op>

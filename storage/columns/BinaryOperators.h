@@ -11,6 +11,7 @@
 
 #include <spdlog/fmt/bundled/format.h>
 
+#include "BinaryPredicates.h"
 #include "ColumnVector.h"
 #include "ValueText.h"
 #include "ColumnConst.h"
@@ -274,18 +275,11 @@ inline bool holdsAList(const T& value) {
     }
 }
 
-/// Whether such an operand is null: an absent value, the null literal, or a cell tagged as one.
+/// Whether such an operand is null: an absent value, the null literal, a cell tagged as one,
+/// or the entity or path an OPTIONAL MATCH left where its pattern missed.
 template <typename T>
 inline bool holdsNull(const T& value) {
-    using Decayed = std::decay_t<T>;
-
-    if constexpr (std::is_same_v<Decayed, CellView>) {
-        return value.getTag() == CellTag::Null;
-    } else if constexpr (TypeUtils::is_optional_v<T>) {
-        return !value.has_value() || holdsNull(*value);
-    } else {
-        return std::is_same_v<Decayed, PropertyNull>;
-    }
+    return !holdsAValue(value);
 }
 
 template <typename T>
@@ -298,6 +292,8 @@ inline std::string_view operandTypeName(const T& value) {
         return value.has_value() ? operandTypeName(*value) : queryTypeName(CellTag::Null);
     } else if constexpr (std::is_same_v<Decayed, types::String::OwningPrimitive>) {
         return queryTypeName(CellTag::String);
+    } else if constexpr (std::is_same_v<Decayed, GraphPath>) {
+        return queryTypeName(CellTag::Path);
     } else {
         return queryTypeName(TypeToCellTag<Decayed>::Tag);
     }
@@ -335,6 +331,8 @@ inline ListView joinedListOperand(QueryListBuffer* listBuffer, StringBuffer* str
         return joinedListOperand(listBuffer, stringBuffer, *value);
     } else if constexpr (std::is_same_v<Decayed, types::String::OwningPrimitive>) {
         item = stringBuffer->insert(value);
+    } else if constexpr (std::is_same_v<Decayed, GraphPath>) {
+        item = PathView {value.getIDs()};
     } else {
         item = arithmeticOperand(value);
     }

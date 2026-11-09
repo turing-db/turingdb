@@ -32,6 +32,8 @@ add_call_v3_test(test_query_ir_any_concatenation_over_no_row AnyConcatenationOve
 
 add_call_v3_test(test_query_ir_any_cell_addition_type_error AnyCellAdditionTypeErrorTest.cpp)
 
+add_call_v3_test(test_query_ir_any_cell_joins_any_value AnyCellJoinsAnyValueTest.cpp)
+
 add_turing_test(test_query_ir_any_property_read AnyPropertyReadTest.cpp)
 
 add_turing_test(test_query_ir_any_entity_property_read_by_name EntityPropertyReadByNameTest.cpp)

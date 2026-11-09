@@ -152,11 +152,11 @@ RuleResult additionType(EvaluatedType a, EvaluatedType b) {
     const bool oneSideIsAList = leftIsAList || b == EvaluatedType::List;
     const EvaluatedType scalar = leftIsAList ? b : a;
 
-    // A cell meets a string or a boolean row by row: holding text or a number it joins it
-    // as text, holding a list it takes it as an element
-    const bool addsToAny = pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::String)
-                        || pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Char)
-                        || pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Bool);
+    // A cell holding a list takes any value beside it as one more element, so whether the
+    // pair adds, joins as text or raises is only known row by row
+    const bool leftIsACell = a == EvaluatedType::Any;
+    const bool oneSideIsACell = leftIsACell || b == EvaluatedType::Any;
+    const EvaluatedType besideTheCell = leftIsACell ? b : a;
 
     const bool eitherNull = a == EvaluatedType::Null || b == EvaluatedType::Null;
 
@@ -168,15 +168,12 @@ RuleResult additionType(EvaluatedType a, EvaluatedType b) {
         return valid(EvaluatedType::List);
     } else if (concatenatesAsText(pair)) {
         return valid(EvaluatedType::String);
-    } else if (addsToAny) {
+    } else if (oneSideIsACell && joinsAList(besideTheCell)) {
         return valid(EvaluatedType::Any);
     } else if (pair == TypePairBitset(EvaluatedType::DateTime, EvaluatedType::Duration)) {
         return valid(EvaluatedType::DateTime);
     } else if (pair == TypePairBitset(EvaluatedType::Duration, EvaluatedType::Duration)) {
         return valid(EvaluatedType::Duration);
-    } else if (computesTimeOverAny(pair)) {
-        //TODO: This needs to be handled as a deferred type
-        return valid(EvaluatedType::Any);
     } else if (numeric != EvaluatedType::Invalid) {
         return valid(numeric);
     }
