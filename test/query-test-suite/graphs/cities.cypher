@@ -1,3 +1,11 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:a50305363e13307e52a5b463a629cfa40d13c848520edb3fa9272d6ab38b6e65
-size 525
+CREATE (paris:City {name: 'Paris', population: 2100000}),
+       (lyon:City {name: 'Lyon', population: 520000}),
+       (marseille:City {name: 'Marseille', population: 870000}),
+       (lille:City {name: 'Lille', population: 235000}),
+       (paris)-[:ROAD {km: 465}]->(lyon),
+       (lyon)-[:ROAD {km: 315}]->(marseille),
+       (marseille)-[:ROAD {km: 775}]->(paris),
+       (paris)-[:ROAD {km: 225}]->(lille);
+
+MATCH (lille:City {name: 'Lille'}), (lyon:City {name: 'Lyon'})
+CREATE (lille)-[:TRAIN {minutes: 180}]->(lyon);
