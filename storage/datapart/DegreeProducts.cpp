@@ -45,7 +45,7 @@ bool selects(const DegreeSelection& selection, const TypedDegree& degree) {
         return false;
     }
 
-    return selection._isEveryType || std::ranges::contains(selection._edgeTypes, degree._edgeTypeID);
+    return selection._isEveryType || std::ranges::find(selection._edgeTypes, degree._edgeTypeID) != selection._edgeTypes.end();
 }
 
 DegreeCount& findDegree(std::vector<DegreeCount>& degrees, const TypedDegree& degree) {

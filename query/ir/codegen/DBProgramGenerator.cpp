@@ -7431,7 +7431,7 @@ void DBProgramGenerator::collectPublishedColumns(llvm::SmallVectorImpl<Published
 
 void DBProgramGenerator::publishProjectedAliases(llvm::SmallVectorImpl<PublishedColumn>& published) const {
     for (const auto& [decl, column] : _part._projectedColumns) {
-        const bool publishedAlready = std::ranges::contains(published, decl, &PublishedColumn::_decl);
+        const bool publishedAlready = std::ranges::find(published, decl, &PublishedColumn::_decl) != published.end();
 
         if (decl->isUnnamed() || publishedAlready) {
             continue;
