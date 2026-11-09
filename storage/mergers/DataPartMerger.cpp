@@ -1,6 +1,7 @@
 #include "DataPartMerger.h"
 
 #include <range/v3/view/enumerate.hpp>
+#include <spdlog/fmt/fmt.h>
 
 #include "datapart/DataPart.h"
 #include "writers/DataPartBuilder.h"
@@ -11,6 +12,7 @@
 #include "metadata/PropertyTypeDispatcher.h"
 #include "properties/PropertyManager.h"
 #include "reader/GraphReader.h"
+#include "versioning/VersionControlException.h"
 
 #include "ID.h"
 
@@ -153,13 +155,16 @@ std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts) c
                     }
 
                 } else if constexpr (std::is_same_v<Type, types::Embedding>) {
+                    const TombstoneRanges& keptRanges = nodeRangesPerPart.at(idx).at(propertyID);
+                    if (keptRanges.getNumRemainingEntities() == 0) {
+                        return;
+                    }
+
+                    auto& oldContainer = propertyContainer->cast<types::Embedding>();
+                    const EmbeddingContainer& oldValues = oldContainer.getRawContainer();
+                    const size_t dimension = oldValues.getDimension();
+
                     if (!nodePropertyManager.hasPropertyType(propertyID)) {
-                        if (_nodePropertiesCount[propertyID] == 0) {
-                            emptyNodeProperties.insert(propertyID);
-                            return;
-                        }
-                        const auto& oldEmbContainer = propertyContainer->cast<types::Embedding>();
-                        const size_t dimension = oldEmbContainer.getRawContainer().getDimension();
                         nodePropertyManager.registerEmbeddingPropertyType(propertyID, dimension);
 
                         auto& newEmbContainer = nodePropertyManager.getMutableContainer<types::Embedding>(propertyID);
@@ -170,10 +175,14 @@ std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts) c
                         _nodePropertiesCount[propertyID] = 0;
                     }
 
-                    auto& oldContainer = propertyContainer->cast<types::Embedding>();
                     auto& newContainer = nodePropertyManager.getMutableContainer<types::Embedding>(propertyID);
 
-                    const TombstoneRanges& keptRanges = nodeRangesPerPart.at(idx).at(propertyID);
+                    const EmbeddingContainer& mergedValues = newContainer.getRawContainer();
+                    const size_t mergedDimension = mergedValues.getDimension();
+                    if (dimension != mergedDimension) {
+                        throwEmbeddingDimensionError(propertyID, mergedDimension, dimension);
+                    }
+
                     for (const auto& [start, size] : keptRanges) {
                         std::memcpy(newContainer._values._views.data() + _nodePropertiesCount[propertyID],
                                     oldContainer._values._views.data() + start,
@@ -317,13 +326,16 @@ std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts) c
                     }
 
                 } else if constexpr (std::is_same_v<Type, types::Embedding>) {
+                    const TombstoneRanges& keptRanges = edgeRangesPerPart.at(idx).at(propertyID);
+                    if (keptRanges.getNumRemainingEntities() == 0) {
+                        return;
+                    }
+
+                    auto& oldContainer = propertyContainer->cast<types::Embedding>();
+                    const EmbeddingContainer& oldValues = oldContainer.getRawContainer();
+                    const size_t dimension = oldValues.getDimension();
+
                     if (!edgePropertyManager.hasPropertyType(propertyID)) {
-                        if (_edgePropertiesCount[propertyID] == 0) {
-                            emptyEdgeProperties.insert(propertyID);
-                            return;
-                        }
-                        const auto& oldEmbContainer = propertyContainer->cast<types::Embedding>();
-                        const size_t dimension = oldEmbContainer.getRawContainer().getDimension();
                         edgePropertyManager.registerEmbeddingPropertyType(propertyID, dimension);
 
                         auto& newEmbContainer = edgePropertyManager.getMutableContainer<types::Embedding>(propertyID);
@@ -334,10 +346,14 @@ std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts) c
                         _edgePropertiesCount[propertyID] = 0;
                     }
 
-                    auto& oldContainer = propertyContainer->cast<types::Embedding>();
                     auto& newContainer = edgePropertyManager.getMutableContainer<types::Embedding>(propertyID);
 
-                    const TombstoneRanges& keptRanges = edgeRangesPerPart.at(idx).at(propertyID);
+                    const EmbeddingContainer& mergedValues = newContainer.getRawContainer();
+                    const size_t mergedDimension = mergedValues.getDimension();
+                    if (dimension != mergedDimension) {
+                        throwEmbeddingDimensionError(propertyID, mergedDimension, dimension);
+                    }
+
                     for (const auto& [start, size] : keptRanges) {
                         std::memcpy(newContainer._values._views.data() + _edgePropertiesCount[propertyID],
                                     oldContainer._values._views.data() + start,
@@ -443,4 +459,17 @@ std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts) c
     }
 
     return datapartBuilder;
+}
+
+void DataPartMerger::throwEmbeddingDimensionError(PropertyTypeID propertyID,
+                                                  size_t mergedDimension,
+                                                  size_t partDimension) const {
+    const GraphMetadata& metadata = _graphView.metadata();
+    const PropertyTypeMap& propertyTypes = metadata.propTypes();
+    const std::optional<std::string_view> name = propertyTypes.getName(propertyID);
+
+    throw VersionControlException(fmt::format("Cannot merge the data parts: embedding property '{}' has dimension {} in one and {} in another",
+                                              name.value_or(""),
+                                              mergedDimension,
+                                              partDimension));
 }

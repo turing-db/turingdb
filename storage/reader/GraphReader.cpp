@@ -571,6 +571,23 @@ bool GraphReader::isEdgeProperty(PropertyTypeID ptID) const {
     return isEdgeProperty;
 }
 
+std::optional<size_t> GraphReader::findEmbeddingDimension(PropertyTypeID ptID) const {
+    for (const WeakArc<DataPart>& part : rv::reverse(_view.dataparts())) {
+        const PropertyManager& nodeProperties = part->nodeProperties();
+        const PropertyManager& edgeProperties = part->edgeProperties();
+
+        const std::optional<size_t> dimension = nodeProperties.findEmbeddingDimension(ptID).or_else([&] {
+            return edgeProperties.findEmbeddingDimension(ptID);
+        });
+
+        if (dimension) {
+            return dimension;
+        }
+    }
+
+    return std::nullopt;
+}
+
 template std::optional<const types::UInt64::Primitive*> GraphReader::tryGetNodeProperty<types::UInt64>(PropertyTypeID ptID, NodeID nodeID) const;
 template std::optional<const types::Int64::Primitive*> GraphReader::tryGetNodeProperty<types::Int64>(PropertyTypeID ptID, NodeID nodeID) const;
 template std::optional<const types::Double::Primitive*> GraphReader::tryGetNodeProperty<types::Double>(PropertyTypeID ptID, NodeID nodeID) const;

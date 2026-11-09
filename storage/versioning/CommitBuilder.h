@@ -115,5 +115,6 @@ private:
     void initialize(const Commit* prevCommit);
     void initializeMerge(const Commit* prevCommit);
     void updateCommitStats();
+    void checkEmbeddingDimensions() const;
 };
 }

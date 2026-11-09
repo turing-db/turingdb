@@ -121,7 +121,9 @@ CommitResult<void> VersionController::submitChange(Change* change, JobSystem& jo
         if (!commitBuilder->writeBuffer().isFlushed()) {
             commitBuilder->flushWriteBuffer(jobSystem);
         }
+    }
 
+    for (auto& commitBuilder : change->_commits) {
         auto buildRes = commitBuilder->build(jobSystem);
         if (!buildRes) {
             return buildRes.get_unexpected();

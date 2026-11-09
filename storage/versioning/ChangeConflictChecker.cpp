@@ -5,11 +5,13 @@
 #include "Change.h"
 #include "CommitBuilder.h"
 #include "versioning/CommitWriteBuffer.h"
+#include "versioning/EmbeddingDimensionChecker.h"
 #include "EntityIDRebaser.h"
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
 #include "columns/ColumnVector.h"
 #include "ID.h"
+#include "datapart/DataPart.h"
 #include "datapart/EdgeRecord.h"
 
 #include "BioAssert.h"
@@ -55,6 +57,7 @@ void ChangeConflictChecker::checkConflicts() {
     const std::unique_ptr<Commit>& latestCommit = _commitsSinceBranch.back();
     const CommitData& latestCommitData = latestCommit->data();
     checkNewEdgesIncidentToDeleted(latestCommitData);
+    checkEmbeddingDimensions(latestCommitData);
 }
 
 void ChangeConflictChecker::checkNewEdgesIncidentToDeleted(const CommitData& latestCommitData) {
@@ -244,3 +247,24 @@ void ChangeConflictChecker::checkUpdatedEdgeConflicts(const ConflictCheckSets& w
     }
 }
 
+void ChangeConflictChecker::checkEmbeddingDimensions(const CommitData& latestCommitData) const {
+    const GraphView mainView(&latestCommitData);
+
+    for (const std::unique_ptr<CommitBuilder>& commitBuilder : _change._commits) {
+        const CommitData& commitData = commitBuilder->commitData();
+        const GraphMetadata& metadata = commitData.metadata();
+        EmbeddingDimensionChecker dimensions(metadata.propTypes());
+
+        for (const WeakArc<DataPart>& part : commitData.commitDataparts()) {
+            dimensions.addWrites(part->nodeProperties());
+            dimensions.addWrites(part->edgeProperties());
+        }
+
+        const CommitWriteBuffer& writeBuffer = commitBuilder->writeBuffer();
+        if (!writeBuffer.isFlushed()) {
+            dimensions.addWrites(writeBuffer);
+        }
+
+        dimensions.checkAgainst(mainView);
+    }
+}

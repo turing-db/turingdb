@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -137,8 +138,10 @@ private:
                                                                  size_t edgeCount,
                                                                  size_t partIndex);
 
-    size_t getNodeEmbeddingDimension(PropertyTypeID ptID) const;
-    size_t getEdgeEmbeddingDimension(PropertyTypeID ptID) const;
+    std::optional<size_t> findEmbeddingDimension(PropertyTypeID ptID) const;
+    void registerEmbeddingWrite(PropertyManager& properties,
+                                PropertyTypeID ptID,
+                                const std::optional<types::Embedding::Primitive>& value);
 
     DataPartBuilder() = default;
 };

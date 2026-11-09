@@ -93,22 +93,6 @@ protected:
         ASSERT_TRUE(submitStatus.isOk()) << "query: " << query << "\nerror: " << submitStatus.getError();
     }
 
-    void expectWriteRejectedOnSubmit(std::string_view query, std::string_view reason) {
-        ChangeID changeID;
-        openChange(changeID);
-
-        NullSink sink;
-        QueryStatus status;
-        _interpreter->execute(status, query, _graphName, CommitHash::head(), changeID, &sink);
-        ASSERT_TRUE(status.isOk()) << "query: " << query << "\nerror: " << status.getError();
-
-        const QueryStatus submitStatus = submit(changeID);
-        ASSERT_FALSE(submitStatus.isOk()) << "submit accepted: " << query;
-
-        const std::string& error = submitStatus.getError();
-        EXPECT_NE(error.find(reason), std::string::npos) << "query: " << query << "\nerror: " << error;
-    }
-
     void expectRows(std::string_view query, const Rows& expected) {
         RowSink sink;
         QueryStatus status;
@@ -201,13 +185,13 @@ TEST_F(SetEmbeddingNullTest, readsNullForTheEmbeddingSetToNullOnAMatchedEdge) {
     expectRows("MATCH ()-[e:LINKS]->() RETURN e.name, e.evec IS NULL", {{"Alpha -> Beta", "true"}});
 }
 
-// evec is an edge property, so no datapart holds a node container to take a dimension
-// from. The write is accepted and the change fails to build at submit.
-TEST_F(SetEmbeddingNullTest, rejectsTheNullWhenNoDatapartKnowsTheDimension) {
-    expectWriteRejectedOnSubmit("MATCH (d:Doc {name: 'Alpha'}) SET d.evec = null",
-                                "dimension is unknown");
+// Only an edge carries evec, and an embedding property has one dimension on nodes and
+// edges alike, so the node's null takes the dimension the edge holds
+TEST_F(SetEmbeddingNullTest, setsToNullOnANodeAnEmbeddingOnlyAnEdgeCarries) {
+    applyWrite("MATCH (d:Doc {name: 'Alpha'}) SET d.evec = null");
 
-    expectRows("MATCH (d:Doc) WHERE d.vec IS NOT NULL RETURN d.name", {{"Alpha"}, {"Beta"}});
+    expectRows("MATCH (d:Doc) WHERE d.evec IS NOT NULL RETURN d.name", {});
+    expectRows("MATCH ()-[e:LINKS]->() RETURN e.name, e.evec IS NULL", {{"Alpha -> Beta", "false"}});
 }
 
 int main(int argc, char** argv) {

@@ -143,6 +143,7 @@ set(storage_sources
         versioning/ScannedNodes.cpp
         versioning/ChangeRebaser.cpp
         versioning/ChangeConflictChecker.cpp
+        versioning/EmbeddingDimensionChecker.cpp
         versioning/MetadataRebaser.cpp
         versioning/DataPartRebaser.cpp
         versioning/EntityIDRebaser.cpp

@@ -15,6 +15,7 @@
 #include "versioning/VersionController.h"
 #include "versioning/Transaction.h"
 #include "versioning/CommitView.h"
+#include "versioning/EmbeddingDimensionChecker.h"
 #include "writers/DataPartBuilder.h"
 #include "writers/MetadataBuilder.h"
 #include "CommitJournal.h"
@@ -133,6 +134,8 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
     Tombstones& tombstones = _commitData->_tombstones;
 
     bioassert(_commit->history().journal().empty(), "Journal must be empty on flush.");
+
+    checkEmbeddingDimensions();
 
     // At this point, any conflict checking should have already been done in @ref
     // Change::rebase, so all writes are valid.
@@ -274,6 +277,19 @@ void CommitBuilder::initializeMerge(const Commit* prevCommit) {
 
     // Create the write buffer for this commit
     _writeBuffer = std::make_unique<CommitWriteBuffer>(commitData().history().journal(), _view);
+}
+
+void CommitBuilder::checkEmbeddingDimensions() const {
+    const GraphMetadata& metadata = _commitData->metadata();
+    EmbeddingDimensionChecker dimensions(metadata.propTypes());
+
+    for (const std::unique_ptr<DataPartBuilder>& builder : _builders) {
+        dimensions.addWrites(*builder->_nodeProperties);
+        dimensions.addWrites(*builder->_edgeProperties);
+    }
+
+    dimensions.addWrites(*_writeBuffer);
+    dimensions.checkAgainst(viewGraph());
 }
 
 namespace db {

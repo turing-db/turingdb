@@ -104,3 +104,14 @@ const LabelSetPropertyIndexer* PropertyManager::tryGetIndexer(PropertyTypeID ptI
     return nullptr;
 }
 
+std::optional<size_t> PropertyManager::findEmbeddingDimension(PropertyTypeID ptID) const {
+    const auto it = _embeddings.find(ptID);
+    if (it == _embeddings.end()) {
+        return std::nullopt;
+    }
+
+    const TypedPropertyContainer<types::Embedding>& container = it->second->cast<types::Embedding>();
+    const EmbeddingContainer& values = container.getRawContainer();
+
+    return values.getDimension();
+}

@@ -1,7 +1,5 @@
 #include "DataPartBuilder.h"
 
-#include <range/v3/view/reverse.hpp>
-
 #include "Graph.h"
 #include "ID.h"
 #include "datapart/DataPart.h"
@@ -9,29 +7,16 @@
 #include "metadata/PropertyType.h"
 #include "properties/PropertyManager.h"
 #include "reader/GraphReader.h"
+#include "versioning/EmbeddingDimensionChecker.h"
 #include "versioning/VersionControlException.h"
 #include "writers/MetadataBuilder.h"
 
 using namespace db;
 
-namespace rv = ranges::views;
-
 namespace {
 
 constexpr std::string_view embeddingDimensionError =
     "Could not set new embedding property to NULL, as its dimension is unknown.";
-
-std::optional<size_t> findEmbeddingDimension(const PropertyManager& properties,
-                                             PropertyTypeID ptID) {
-    const TypedPropertyContainer<types::Embedding>* container =
-        properties.tryGetContainer<types::Embedding>(ptID);
-
-    if (!container) {
-        return std::nullopt;
-    }
-
-    return container->getRawContainer().getDimension();
-}
 
 }
 
@@ -169,11 +154,7 @@ template <>
 void DataPartBuilder::addNodeProperty<types::Embedding>(NodeID nodeID,
                                                         PropertyTypeID ptID,
                                                         std::optional<types::Embedding::Primitive>&& value) {
-    if (!_nodeProperties->hasPropertyType(ptID)) {
-        const size_t dimension = value.has_value() ? value->size() : getNodeEmbeddingDimension(ptID);
-
-        _nodeProperties->registerEmbeddingPropertyType(ptID, dimension);
-    }
+    registerEmbeddingWrite(*_nodeProperties, ptID, value);
 
     if (nodeID < _firstNodeID) {
         _patchNodeLabelSets.emplace(nodeID, LabelSetHandle {});
@@ -186,11 +167,8 @@ void DataPartBuilder::addEdgeProperty<types::Embedding>(const EdgeRecord& edge,
                                                         PropertyTypeID ptID,
                                                         std::optional<types::Embedding::Primitive>&& value,
                                                         LabelSetHandle srcLblSet/*={}*/) {
-    if (!_edgeProperties->hasPropertyType(ptID)) {
-        const size_t dimension = value.has_value() ? value->size() : getEdgeEmbeddingDimension(ptID);
+    registerEmbeddingWrite(*_edgeProperties, ptID, value);
 
-        _edgeProperties->registerEmbeddingPropertyType(ptID, dimension);
-    }
     if (edge._edgeID < _firstEdgeID) {
         _patchedEdges.emplace(edge._edgeID, edge);
         _patchNodeLabelSets.emplace(edge._nodeID, srcLblSet);
@@ -260,28 +238,30 @@ template void DataPartBuilder::addEdgeProperty<types::Map>(const EdgeRecord&,
                                                            std::optional<types::Map::OwningPrimitive>&&,
                                                            LabelSetHandle);
 
-size_t DataPartBuilder::getNodeEmbeddingDimension(PropertyTypeID ptID) const {
-    for (const WeakArc<DataPart>& part : rv::reverse(_view.dataparts())) {
-        const std::optional<size_t> dimension = findEmbeddingDimension(part->nodeProperties(), ptID);
+std::optional<size_t> DataPartBuilder::findEmbeddingDimension(PropertyTypeID ptID) const {
+    const GraphReader reader = _view.read();
 
-        if (dimension.has_value()) {
-            return *dimension;
-        }
-    }
-
-    throw VersionControlException(std::string {embeddingDimensionError});
+    return _nodeProperties->findEmbeddingDimension(ptID)
+        .or_else([&] { return _edgeProperties->findEmbeddingDimension(ptID); })
+        .or_else([&] { return reader.findEmbeddingDimension(ptID); });
 }
 
-size_t DataPartBuilder::getEdgeEmbeddingDimension(PropertyTypeID ptID) const {
-    for (const WeakArc<DataPart>& part : rv::reverse(_view.dataparts())) {
-        const std::optional<size_t> dimension = findEmbeddingDimension(part->edgeProperties(), ptID);
+void DataPartBuilder::registerEmbeddingWrite(PropertyManager& properties,
+                                             PropertyTypeID ptID,
+                                             const std::optional<types::Embedding::Primitive>& value) {
+    const std::optional<size_t> heldDimension = findEmbeddingDimension(ptID);
+    const std::optional<size_t> dimension = value.has_value() ? value->size() : heldDimension;
 
-        if (dimension.has_value()) {
-            return *dimension;
-        }
+    if (!dimension.has_value()) {
+        throw VersionControlException(std::string {embeddingDimensionError});
+    } else if (heldDimension.has_value() && *heldDimension != *dimension) {
+        const std::optional<std::string_view> name = _metadata->findPropertyTypeName(ptID);
+        EmbeddingDimensionChecker::throwDimensionError(name.value_or(""), *heldDimension, *dimension);
     }
 
-    throw VersionControlException(std::string {embeddingDimensionError});
+    if (!properties.hasPropertyType(ptID)) {
+        properties.registerEmbeddingPropertyType(ptID, *dimension);
+    }
 }
 
 template bool DataPartBuilder::hasProperty<types::Embedding>(NodeID id, PropertyTypeID pid);

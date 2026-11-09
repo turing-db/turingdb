@@ -58,6 +58,7 @@ private:
 
     void checkUpdatedNodeConflicts(const ConflictCheckSets& writes, const CommitWriteBuffer& writeBuffer);
     void checkUpdatedEdgeConflicts(const ConflictCheckSets& writes, const CommitWriteBuffer& writeBuffer);
+    void checkEmbeddingDimensions(const CommitData& latestCommitData) const;
 };
 
 }

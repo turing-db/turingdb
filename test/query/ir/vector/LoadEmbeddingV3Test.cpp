@@ -320,6 +320,26 @@ TEST_F(LoadEmbeddingV3Test, refusesAPropertyThatAlreadyHoldsAnotherType) {
                            "cannot store embeddings");
 }
 
+TEST_F(LoadEmbeddingV3Test, refusesVectorsOfAnotherDimensionThanThePropertyHolds) {
+    const std::string fourDimensional = writeEmbeddingParquet("four.parquet", {0, 1, 2}, loadedVectors);
+    const std::string threeDimensional = writeEmbeddingParquet("three.parquet", {3}, {{1.0f, 0.0f, 0.0f}});
+
+    ChangeID first;
+    newChange(first);
+
+    NullSink sink;
+    runQuery(fmt::format("LOAD EMBEDDING FROM '{}' AS emb", fourDimensional), first, sink);
+    runQuery("CHANGE SUBMIT", first, sink);
+
+    ChangeID second;
+    newChange(second);
+
+    runQuery(fmt::format("LOAD EMBEDDING FROM '{}' AS emb", threeDimensional), second, sink);
+    runQueryExpectingError("COMMIT",
+                           second,
+                           "Embedding property 'emb' has dimension 4 and cannot take an embedding of dimension 3");
+}
+
 TEST_F(LoadEmbeddingV3Test, refusesANodeTheGraphDoesNotHave) {
     const std::string file = writeEmbeddingParquet("missing.parquet", {999}, {loadedVectors[0]});
 

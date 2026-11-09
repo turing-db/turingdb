@@ -58,12 +58,12 @@ TEST_F(EmbeddingDimensionMismatchTest, raisesOnAnElementOfAnotherDimensionOnEith
 
 TEST_F(EmbeddingDimensionMismatchTest, raisesOnTheRowWhosePropertyHasAnotherDimension) {
     runWrite("CREATE (:Vec {name: 'a', e: (1.0, 0.0)})");
-    runWrite("CREATE (:Vec {name: 'b', e: (1.0, 0.0, 0.0)})");
+    runWrite("CREATE (:Vec {name: 'b', f: (1.0, 0.0, 0.0)})");
 
     expectRows("MATCH (n:Vec) WHERE n.name = 'a' RETURN cosine_similarity(n.e, (1.0, 0.0)), euclidean_distance((1.0, 0.0), n.e)",
                {{"1", "0"}});
-    runQueryExpectingError("MATCH (n:Vec) RETURN cosine_similarity(n.e, (1.0, 0.0))", COSINE_THREE_AND_TWO);
-    runQueryExpectingError("MATCH (a:Vec {name: 'a'}), (b:Vec {name: 'b'}) RETURN euclidean_distance(a.e, b.e)",
+    runQueryExpectingError("MATCH (n:Vec) RETURN cosine_similarity(coalesce(n.e, n.f), (1.0, 0.0))", COSINE_THREE_AND_TWO);
+    runQueryExpectingError("MATCH (a:Vec {name: 'a'}), (b:Vec {name: 'b'}) RETURN euclidean_distance(a.e, b.f)",
                            EUCLIDEAN_TWO_AND_THREE);
 }
 
@@ -80,10 +80,11 @@ TEST_F(EmbeddingDimensionMismatchTest, comparesEmbeddingsOfDifferentDimensionsAs
                {{"false", "false", "false"}});
 
     runWrite("CREATE (:Vec {name: 'a', e: (1.0, 0.0)})");
-    runWrite("CREATE (:Vec {name: 'b', e: (1.0, 0.0, 0.0)})");
+    runWrite("CREATE (:Vec {name: 'b', f: (1.0, 0.0, 0.0)})");
 
-    expectRows("MATCH (n:Vec) WHERE n.e = (1.0, 0.0, 0.0) RETURN n.name", {{"b"}});
-    expectRows("MATCH (a:Vec), (b:Vec) WHERE a.e = b.e RETURN a.name, b.name", {{"a", "a"}, {"b", "b"}});
+    expectRows("MATCH (n:Vec) WHERE coalesce(n.e, n.f) = (1.0, 0.0, 0.0) RETURN n.name", {{"b"}});
+    expectRows("MATCH (a:Vec), (b:Vec) WHERE coalesce(a.e, a.f) = coalesce(b.e, b.f) RETURN a.name, b.name",
+               {{"a", "a"}, {"b", "b"}});
 }
 
 int main(int argc, char** argv) {

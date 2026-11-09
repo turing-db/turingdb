@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <unordered_map>
 
 #include "ID.h"
@@ -227,6 +228,8 @@ public:
     }
 
     const LabelSetPropertyIndexer* tryGetIndexer(PropertyTypeID ptID) const;
+
+    std::optional<size_t> findEmbeddingDimension(PropertyTypeID ptID) const;
 
 private:
     friend DataPartLoader;

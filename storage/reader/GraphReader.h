@@ -140,6 +140,8 @@ public:
     bool isNodeProperty(PropertyTypeID ptID) const;
     bool isEdgeProperty(PropertyTypeID ptID) const;
 
+    [[nodiscard]] std::optional<size_t> findEmbeddingDimension(PropertyTypeID ptID) const;
+
     template <SupportedType T>
     [[nodiscard]] std::optional<const typename T::Primitive*> tryGetNodeProperty(PropertyTypeID ptID,
                                                                                  NodeID nodeID) const;
