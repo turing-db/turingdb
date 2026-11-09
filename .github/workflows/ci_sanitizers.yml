@@ -1,0 +1,89 @@
+name: CI Sanitizers
+
+on:
+  schedule:
+    - cron: '0 1 * * *'
+
+  workflow_dispatch:
+
+
+concurrency:
+  group: ci-sanitizers-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+
+jobs:
+  asan-ubsan:
+    name: ASan and UBSan unit tests
+    strategy:
+      matrix:
+        os: [ "ubuntu-24.04-turing" ]
+    runs-on: ${{ matrix.os }}
+
+    env:
+      BUILD_JOBS: 4
+      CMAKE_BUILD_PARALLEL_LEVEL: 4
+      CTEST_PARALLEL_LEVEL: 4
+      PYTHON_VERSION: '3.14'
+
+    steps:
+    - name: Use the host's build parallelism
+      run: |
+        if [ -n "${HOST_BUILD_JOBS:-}" ]; then
+          echo "BUILD_JOBS=$HOST_BUILD_JOBS" >> "$GITHUB_ENV"
+          echo "CMAKE_BUILD_PARALLEL_LEVEL=$HOST_BUILD_JOBS" >> "$GITHUB_ENV"
+          echo "CTEST_PARALLEL_LEVEL=$HOST_BUILD_JOBS" >> "$GITHUB_ENV"
+        fi
+
+    - uses: actions/checkout@v4
+      with:
+        lfs: true
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+
+    - name: Build dependencies
+      uses: ./.github/actions/build-dependencies
+      with:
+        os: ${{ matrix.os }}
+
+    - name: Setup Python
+      run: uv python install "$PYTHON_VERSION"
+
+    - name: Configure
+      run: |
+        mkdir -p build
+        cd build
+        cmake -G Ninja -DTURING_SANITIZE="address;undefined" -DPython_EXECUTABLE="$(uv python find "$PYTHON_VERSION")" ..
+
+    - name: Build
+      run: ninja -C build -j "$BUILD_JOBS"
+
+    # gtest reads GTEST_REPEAT from the environment. TuringTestMain turns shuffle on, and
+    # gtest draws and prints a new seed for each iteration. Truncating the head of a long
+    # output keeps its tail, where the sanitizer report and the failing seed are.
+    # LLVM's Allocator.h poisons slabs when compiled with ASan, and the uninstrumented MLIR
+    # library never unpoisons them, so allow_user_poisoning=0 turns that poisoning off.
+    - name: Run unit tests 10 times, shuffled
+      env:
+        GTEST_REPEAT: 10
+        ASAN_OPTIONS: detect_stack_use_after_return=1:detect_leaks=1:allow_user_poisoning=0
+        LSAN_OPTIONS: suppressions=${{ github.workspace }}/test/lsan_suppressions.txt
+        UBSAN_OPTIONS: print_stacktrace=1
+      run: |
+        cd build
+        ctest --output-on-failure --timeout 7200 --test-output-truncation head
+
+    - name: Upload test log
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: sanitizer-test-log
+        path: build/Testing/Temporary/LastTest.log
+
+    - name: Reclaim disk (self-hosted)
+      if: always()
+      uses: ./.github/actions/clean-self-hosted-runner

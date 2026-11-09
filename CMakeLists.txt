@@ -127,6 +127,30 @@ else()
     endif()
 endif()
 
+set(TURING_SANITIZE "" CACHE STRING "Sanitizers to build with: a list of address and undefined")
+if (TURING_SANITIZE)
+    foreach(sanitizer ${TURING_SANITIZE})
+        if (NOT sanitizer MATCHES "^(address|undefined)$")
+            message(FATAL_ERROR "Unknown sanitizer in TURING_SANITIZE: ${sanitizer}")
+        endif()
+    endforeach()
+
+    list(JOIN TURING_SANITIZE "," SANITIZERS)
+    message(STATUS "Sanitizers: ${SANITIZERS}")
+
+    add_compile_options(-fsanitize=${SANITIZERS} -fno-sanitize-recover=all -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=${SANITIZERS})
+
+    # MLIR is built without RTTI, which the vptr check needs
+    if ("undefined" IN_LIST TURING_SANITIZE)
+        add_compile_options(-fno-sanitize=vptr)
+    endif()
+
+    if (NOT ${DEBUG_BUILD})
+        set(OPTIMIZE_FLAGS "-O1 -g1 ${CFP_FLAG}")
+    endif()
+endif()
+
 # Architecture targeting for portable PyPI wheels (Linux only).
 # x86_64: -march=haswell (AVX2, FMA, BMI1/2)
 # aarch64: -march=armv8-a (baseline ARMv8)
@@ -225,6 +249,16 @@ if(TURING_USE_MOLD AND NOT APPLE)
             message(STATUS "Using mold linker ${MOLD_VERSION}")
         endif()
     endif()
+endif()
+
+# GCC's sanitizer instrumentation raises false -Wmaybe-uninitialized. The launcher fails a
+# compile on any of them that cmake/sanitize_exclusions.txt does not list.
+if (TURING_SANITIZE AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-error=maybe-uninitialized>)
+    set(CMAKE_CXX_COMPILER_LAUNCHER
+        ${CMAKE_SOURCE_DIR}/scripts/sanitize_launcher.py
+        ${CMAKE_SOURCE_DIR}/cmake/sanitize_exclusions.txt
+        ${CMAKE_CXX_COMPILER_LAUNCHER})
 endif()
 
 # Create compilation database and symlink in the src folder

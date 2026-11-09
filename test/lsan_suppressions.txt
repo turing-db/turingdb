@@ -1,0 +1,5 @@
+# Leaks LeakSanitizer reports in code outside TuringDB, in LSan's suppression format.
+
+# libomp, through faiss: the OpenMP runtime allocates 176 bytes of global state once and
+# never frees it.
+leak:___kmp_allocate

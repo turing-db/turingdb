@@ -1,0 +1,97 @@
+name: Build dependencies
+description: >-
+  Check out the submodules, then restore external/dependencies from the cache, or
+  build it with dependencies.sh and save it. Every workflow that builds turingdb
+  goes through this action, so they all restore and save under one cache key.
+
+inputs:
+  os:
+    description: The runner label the job runs on. It prefixes the cache key.
+    required: true
+
+runs:
+  using: composite
+  steps:
+  # --force always checks the submodules out. A failed update leaves the ones it
+  # already cloned without a working tree, and on the persistent self-hosted
+  # workspaces a later plain update skips any whose HEAD is the recorded commit.
+  - name: Checkout submodules (shallow)
+    shell: bash
+    run: |
+      attempt=1
+      max_attempts=3
+      until git submodule update --init --force --depth 1 && \
+            git submodule foreach '
+              if [ "$name" != "external/AFLplusplus" ]; then
+                  git submodule update --init --force --recursive --depth 1
+              fi
+            '; do
+          if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "Submodule init failed after $attempt attempts"
+              exit 1
+          fi
+          echo "Submodule init attempt $attempt failed; retrying after backoff"
+          sleep $((attempt * 10))
+          attempt=$((attempt + 1))
+      done
+
+  # hashFiles does not see submodule bumps, and the dependencies are built from the submodules.
+  - name: Hash submodule commits
+    id: submodules
+    shell: bash
+    run: echo "hash=$(git ls-tree -r HEAD | awk '$2 == "commit"' | git hash-object --stdin)" >> "$GITHUB_OUTPUT"
+
+  # The self-hosted Linux runner containers of a host share one cache directory
+  # on its disk, mounted at /opt/actions-local-cache (no cache egress), so a key
+  # one of them saves is restored by all of them. The macOS and -arm runners use
+  # the GitHub-hosted cache.
+  - name: Restore dependencies (self-hosted Linux)
+    id: cache-dependencies-self-hosted
+    if: runner.os == 'Linux' && contains(inputs.os, 'turing')
+    shell: bash
+    # The salt busts poisoned entries: fail-fast-cancelled jobs saved
+    # partial external/dependencies trees (e.g. missing curl) under this
+    # per-OS key, which later cache-hit jobs then restored and failed on at
+    # find_package. Bump the salt to discard them and re-save a clean tree
+    # (with fail-fast disabled, jobs now run to completion so caches stay clean).
+    run: >-
+      python3 scripts/ci_cache.py restore
+      --base /opt/actions-local-cache
+      --path external/dependencies
+      --clean-key ${{ inputs.os }}-dependencies-
+      --key ${{ inputs.os }}-dependencies-v5-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules') }}-${{ steps.submodules.outputs.hash }}
+
+  - name: Restore dependencies (GitHub-hosted)
+    id: cache-dependencies-github-hosted
+    if: ${{ !(runner.os == 'Linux' && contains(inputs.os, 'turing')) }}
+    uses: actions/cache/restore@v4
+    with:
+      path: external/dependencies
+      key: ${{ inputs.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules') }}-${{ steps.submodules.outputs.hash }}
+
+  - name: Install build tools
+    shell: bash
+    run: ./install_build_tools.sh
+
+  - name: Build dependencies
+    shell: bash
+    run: ./dependencies.sh
+    env:
+      SKIP_BUILD_IF_CACHED: ${{ steps.cache-dependencies-self-hosted.outputs.cache-hit || steps.cache-dependencies-github-hosted.outputs.cache-hit }}
+
+  - name: Save dependencies (self-hosted Linux)
+    if: steps.cache-dependencies-self-hosted.outputs.cache-hit == 'false'
+    shell: bash
+    run: >-
+      python3 scripts/ci_cache.py save
+      --base /opt/actions-local-cache
+      --path external/dependencies
+      --key ${{ steps.cache-dependencies-self-hosted.outputs.key }}
+
+  # actions/cache only saves in its post step, and only when the whole job succeeds.
+  - name: Save dependencies (GitHub-hosted)
+    if: steps.cache-dependencies-github-hosted.outcome == 'success' && steps.cache-dependencies-github-hosted.outputs.cache-hit != 'true'
+    uses: actions/cache/save@v4
+    with:
+      path: external/dependencies
+      key: ${{ steps.cache-dependencies-github-hosted.outputs.cache-primary-key }}

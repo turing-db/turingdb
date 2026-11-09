@@ -1,0 +1,17 @@
+# Diagnostics GCC raises falsely in the sanitizer build, one per line:
+#
+#   <warning> <header>:<line> <object>
+#
+# <header> matches a suffix of the path. <object> matches the whole object the warning
+# names, * standing for any run of characters. scripts/sanitize_launcher.py fails a
+# compile on any diagnostic of a demoted warning that no line here matches.
+
+# std::regex: _State holds its std::function only under _S_opcode_match, and builds,
+# moves and destroys it only under that opcode test, which GCC does not follow.
+maybe-uninitialized bits/std_function.h:405 *(std::function<bool(char)>*)((char*)&__tmp + offsetof(std::__detail::_StateT, *)).std::function<bool(char)>::_M_invoker
+maybe-uninitialized bits/std_function.h:247 *(const std::_Function_base*)((char*)&__tmp + offsetof(std::__detail::_StateT, *)).std::_Function_base::_M_manager
+
+# llvm::SmallDenseMap and SmallDenseSet: the constructor's allocateBuckets sets Small, or
+# builds the LargeRep, before getBuckets and getNumBuckets read either, whatever the variable.
+maybe-uninitialized llvm/ADT/DenseMap.h:1060 *(const llvm::SmallDenseMap<*>::LargeRep*)((char*)&* + offsetof(*)).llvm::SmallDenseMap<*>::LargeRep::Buckets
+maybe-uninitialized llvm/ADT/DenseMap.h:1069 *(const llvm::SmallDenseMap<*>::LargeRep*)((char*)&* + offsetof(*)).llvm::SmallDenseMap<*>::LargeRep::NumBuckets
