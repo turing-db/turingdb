@@ -859,7 +859,10 @@ bool holdsAsTaggedCell(mlir::Type element) {
     const bool isContainer = mlir::isa<storage::ListType, storage::MapType>(element);
     const bool isEntityOrCell = mlir::isa<storage::NodeIDType, storage::EdgeIDType, storage::AnyType>(element);
 
-    return isContainer || isEntityOrCell || elementTypeToValueType(element) != ValueType::Invalid;
+    return isContainer
+        || isEntityOrCell
+        || storage::namesASchemaID(element)
+        || elementTypeToValueType(element) != ValueType::Invalid;
 }
 
 // The value-reduction AggregateKind matching a grouped aggregate's kind, so the
@@ -4795,10 +4798,12 @@ mlir::Value DBLowering::branchChunkAs(mlir::Value chunk, mlir::Type chunkType) {
 }
 
 mlir::Value DBLowering::toAnyChunk(mlir::Value chunk, mlir::Type chunkType) {
-    mlir::OpBuilder::InsertionGuard guard(_builder);
-    _builder.setInsertionPointAfterValue(chunk);
+    const mlir::Value itemChunk = listItemChunk(chunk);
 
-    return _builder.create<nl::ToAny>(_builder.getUnknownLoc(), chunkType, chunk).getResult();
+    mlir::OpBuilder::InsertionGuard guard(_builder);
+    _builder.setInsertionPointAfterValue(itemChunk);
+
+    return _builder.create<nl::ToAny>(_builder.getUnknownLoc(), chunkType, itemChunk).getResult();
 }
 
 void DBLowering::throwOnDisagreeingBranchTypes(mlir::Type branchType,

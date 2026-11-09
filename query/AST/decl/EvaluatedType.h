@@ -263,6 +263,7 @@ inline bool holdsAsAny(EvaluatedType e) {
         || e == EvaluatedType::Char
         || e == EvaluatedType::NodePattern
         || e == EvaluatedType::EdgePattern
+        || namesASchemaID(e)
         || convertibleToValueType(e);
 }
 
