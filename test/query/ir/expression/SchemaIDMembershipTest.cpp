@@ -55,7 +55,6 @@ TEST_F(SchemaIDMembershipTest, rejectsElementsAnIDCannotEqual) {
         expectRejected(search + "[0, 1] RETURN count(*)", compared + "'Integer'");
         expectRejected(search + "['Person', 'String'] RETURN count(*)", compared + "'String'");
         expectRejected(search + "[[0]] RETURN count(*)", compared + "'List'");
-        expectRejected(search + "[0, 'Person'] RETURN count(*)", compared + "'Any'");
     }
 }
 

@@ -291,10 +291,10 @@ inline EvaluatedType commonType(EvaluatedType carried, EvaluatedType value) {
     return selectedType(carried, value);
 }
 
-// The types <, <=, > and >= take: every value, entities and paths included, though only
-// numbers, strings, booleans, datetimes, durations, points and lists have an order
+// The types <, <=, > and >= take: the ones = and <> take, though only numbers, strings,
+// booleans, datetimes, durations, points and lists have an order
 inline bool namesAnOrderingOperand(EvaluatedType e) {
-    return namesAnEqualityOperand(e) && !namesASchemaID(e);
+    return namesAnEqualityOperand(e);
 }
 
 // The class a type is ordered in, or nullopt for a type with no order: a map, an

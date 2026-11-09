@@ -213,6 +213,10 @@ struct PairRestrictions<Op> {
         CellKindPairs<MapView>::Pairs,
         CellKindPairs<NodeID>::Pairs,
         CellKindPairs<EdgeID>::Pairs,
+        CellKindPairs<LabelID>::Pairs,
+        CellKindPairs<EdgeTypeID>::Pairs,
+        CellKindPairs<PropertyTypeID>::Pairs,
+        CellKindPairs<ValueType>::Pairs,
         std::tuple<
             KindPair<CellView, GraphPath>,
             KindPair<std::optional<CellView>, GraphPath>

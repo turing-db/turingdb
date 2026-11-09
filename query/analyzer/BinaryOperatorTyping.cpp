@@ -103,15 +103,22 @@ RuleResult numericRule(EvaluatedType a, EvaluatedType b) {
     return valid(numeric);
 }
 
+// A schema ID equals only an ID of its kind and has no order, which turns away a pair whose
+// types are known. A tagged cell holds the row's type and a null stands for any value, so
+// beside either the comparison is typed as it is for any other value.
+bool pairsASchemaIDWithAKnownType(EvaluatedType a, EvaluatedType b) {
+    const bool knowsA = !namesATaggedCell(a) && a != EvaluatedType::Null;
+    const bool knowsB = !namesATaggedCell(b) && b != EvaluatedType::Null;
+
+    return (namesASchemaID(a) || namesASchemaID(b)) && knowsA && knowsB;
+}
+
 // What = and <> answer over two types: null against a null, a boolean between two operands
 // an equality takes. Two doubles are not tested for equality, which rounding makes
 // unreliable, and a schema ID is equal only to one of its kind.
 RuleResult equalityType(EvaluatedType a, EvaluatedType b) {
     const bool equatesTwoDoubles = a == EvaluatedType::Double && b == EvaluatedType::Double;
-    const bool equatesASchemaIDAcrossKinds = (namesASchemaID(a) || namesASchemaID(b))
-                                             && a != b
-                                             && a != EvaluatedType::Null
-                                             && b != EvaluatedType::Null;
+    const bool equatesASchemaIDAcrossKinds = a != b && pairsASchemaIDWithAKnownType(a, b);
     const bool takesA = a == EvaluatedType::Null || namesAnEqualityOperand(a);
     const bool takesB = b == EvaluatedType::Null || namesAnEqualityOperand(b);
 
@@ -129,9 +136,12 @@ RuleResult equalityType(EvaluatedType a, EvaluatedType b) {
 // What <, <=, > and >= answer over two types: null against a null or across order classes,
 // a boolean within one
 RuleResult orderingType(EvaluatedType a, EvaluatedType b) {
+    const bool takesBoth = namesAnOrderingOperand(a) && namesAnOrderingOperand(b);
+    const bool ordersASchemaID = pairsASchemaIDWithAKnownType(a, b);
+
     if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
         return valid(EvaluatedType::Null);
-    } else if (!namesAnOrderingOperand(a) || !namesAnOrderingOperand(b)) {
+    } else if (!takesBoth || ordersASchemaID) {
         return invalid(TypingReason::IncompatibleOrderingTypes);
     } else if (ordersAsDisjointTypes(a, b)) {
         return valid(EvaluatedType::Null);
