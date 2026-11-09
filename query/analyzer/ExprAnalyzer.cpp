@@ -207,6 +207,65 @@ ListShape collectedListShape(const RegularQuery* body) {
     return *shared;
 }
 
+// A scalar function answers null over a null argument, so a null stands in for whichever
+// type the signature declares. An aggregate declares its own null overload
+bool answersNullOverNull(const FunctionSignature* signature) {
+    return !signature->unifiesItsArguments() && !signature->isAggregate();
+}
+
+bool takesArgumentCount(const FunctionSignature* signature, size_t count) {
+    const bool tooFewArguments = count < signature->getMinArgCount();
+    const bool tooManyArguments = !signature->unifiesItsArguments() && count > signature->argumentTypes().size();
+
+    return !tooFewArguments && !tooManyArguments;
+}
+
+bool takesArgumentType(const FunctionSignature* signature, size_t argumentIndex, EvaluatedType argumentType) {
+    const EvaluatedType expected = signature->argumentTypes()[argumentIndex].getType();
+
+    return argumentType == expected || (answersNullOverNull(signature) && argumentType == EvaluatedType::Null);
+}
+
+bool takesArgumentTypes(const FunctionSignature* signature, const ExprChain::ExprVector& arguments) {
+    for (size_t argumentIndex = 0; argumentIndex < arguments.size(); argumentIndex++) {
+        if (!takesArgumentType(signature, argumentIndex, arguments[argumentIndex]->getType())) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool findRejectedArgument(FunctionResolver::FunctionSignatureRange signatures,
+                          const ExprChain::ExprVector& arguments,
+                          size_t& rejectedIndex) {
+    std::vector<const FunctionSignature*> candidates;
+    for (const FunctionSignature* signature : signatures) {
+        if (!signature->unifiesItsArguments() && takesArgumentCount(signature, arguments.size())) {
+            candidates.push_back(signature);
+        }
+    }
+
+    if (candidates.empty()) {
+        return false;
+    }
+
+    for (size_t argumentIndex = 0; argumentIndex < arguments.size(); argumentIndex++) {
+        const EvaluatedType argumentType = arguments[argumentIndex]->getType();
+
+        const bool taken = std::any_of(candidates.begin(), candidates.end(), [argumentIndex, argumentType](const FunctionSignature* candidate) {
+            return takesArgumentType(candidate, argumentIndex, argumentType);
+        });
+
+        if (!taken) {
+            rejectedIndex = argumentIndex;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 }
 
 ExprAnalyzer::ExprAnalyzer(CypherAST* ast, const GraphView& graphView, const ParameterMap* parameters)
@@ -1295,34 +1354,12 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, const Func
         // checked against each other once the overload is settled on.
         const bool unifiesArguments = signature->unifiesItsArguments();
 
-        const size_t minArgs = signature->getMinArgCount();
-        const size_t maxArgs = expectedArgs.size();
-
-        const bool tooFewArgs = providedArgs.size() < minArgs;
-        const bool tooManyArgs = !unifiesArguments && providedArgs.size() > maxArgs;
-
-        if (tooFewArgs || tooManyArgs) {
-            // Number of arguments does not match
+        if (!takesArgumentCount(signature, providedArgs.size())) {
             continue;
         }
 
-        // A scalar function answers null over a null argument, so a null stands in for
-        // whichever type the signature declares. An aggregate declares its own null overload
-        const bool answersNullOverNull = !unifiesArguments && !signature->isAggregate();
-
-        if (!unifiesArguments) {
-            const bool matchingArgs = std::equal(
-                expectedArgs.begin(), expectedArgs.begin() + providedArgs.size(),
-                providedArgs.begin(), [answersNullOverNull](const FunctionArgumentType& expected, const Expr* arg) {
-                    const EvaluatedType argType = arg->getType();
-
-                    return argType == expected.getType() || (answersNullOverNull && argType == EvaluatedType::Null);
-                });
-
-            if (!matchingArgs) {
-                // Argument types do not match
-                continue;
-            }
+        if (!unifiesArguments && !takesArgumentTypes(signature, providedArgs)) {
+            continue;
         }
 
         // A constant argument is read once per call, so an expression varying with the row
@@ -1382,7 +1419,7 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, const Func
         }
 
         // Found a valid signature
-        if (answersNullOverNull && readsANull) {
+        if (answersNullOverNull(signature) && readsANull) {
             expr->setType(EvaluatedType::Null);
         } else if (unifiesArguments) {
             expr->setType(unifiedArgumentType(name, providedArgs));
@@ -1463,6 +1500,17 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, const Func
                                constantReadingARow->getName(),
                                name),
                    rowReadingArg);
+    }
+
+    size_t rejectedIndex = 0;
+    if (findRejectedArgument(signatures, providedArgs, rejectedIndex)) {
+        const Expr* rejected = providedArgs[rejectedIndex];
+
+        throwError(fmt::format("Invalid arguments for function '{}': argument {} cannot be '{}'",
+                               name,
+                               rejectedIndex + 1,
+                               EvaluatedTypeName::value(rejected->getType())),
+                   rejected);
     }
 
     // Checked all overloaded signatures, none match: error

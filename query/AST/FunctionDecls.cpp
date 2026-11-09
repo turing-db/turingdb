@@ -885,13 +885,6 @@ void FunctionDecls::initDefault() {
         replace->setReturnTypes({{EvaluatedType::String}});
     }
 
-    // Only a string has a normal form, so both answer null for any other value
-    const std::vector<FunctionArgumentType> nonString = {
-        EvaluatedType::Integer, EvaluatedType::Double, EvaluatedType::Bool, EvaluatedType::List,
-        EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern, EvaluatedType::GraphPath,
-        EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Point, EvaluatedType::Embedding,
-    };
-
     const std::vector<FunctionArgumentType> normalForm = {EvaluatedType::NormalForm};
 
     const std::vector<std::pair<std::string_view, EvaluatedType>> normalFormFunctions = {
@@ -906,13 +899,21 @@ void FunctionDecls::initDefault() {
         for (FunctionSignature* ofString : ofStrings) {
             ofString->setReturnTypes({{resultType}});
         }
+    }
 
-        std::vector<FunctionSignature*> ofNonStrings;
-        createOverloads(name, {nonString, normalForm}, ofNonStrings);
+    // Only a string has a normal form: normalize() rejects any other value, and IS NORMALIZED
+    // answers null for one, as in Neo4j
+    const std::vector<FunctionArgumentType> nonString = {
+        EvaluatedType::Integer, EvaluatedType::Double, EvaluatedType::Bool, EvaluatedType::List,
+        EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern, EvaluatedType::GraphPath,
+        EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Point, EvaluatedType::Embedding,
+    };
 
-        for (FunctionSignature* ofNonString : ofNonStrings) {
-            ofNonString->setReturnTypes({{EvaluatedType::Null}});
-        }
+    std::vector<FunctionSignature*> ofNonStrings;
+    createOverloads("is_normalized", {nonString, normalForm}, ofNonStrings);
+
+    for (FunctionSignature* ofNonString : ofNonStrings) {
+        ofNonString->setReturnTypes({{EvaluatedType::Null}});
     }
 
     for (const std::string_view name : {"char_length", "character_length"}) {

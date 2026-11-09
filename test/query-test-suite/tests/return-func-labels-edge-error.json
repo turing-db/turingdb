@@ -3,8 +3,8 @@
   "graph": "simpledb",
   "query": "MATCH ()-[e]->() RETURN labels(e)",
   "expect": {
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH ()-[e]->() RETURN labels(e)\n       |                         ^^^^^^^^^\n-------* Invalid arguments for function 'labels'",
-    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH ()-[e]->() RETURN labels(e)\\n       |                         ^^^^^^^^^\\n-------* Invalid arguments for function 'labels'\"}"
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH ()-[e]->() RETURN labels(e)\n       |                                ^\n-------* Invalid arguments for function 'labels': argument 1 cannot be 'EdgePattern'",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH ()-[e]->() RETURN labels(e)\\n       |                                ^\\n-------* Invalid arguments for function 'labels': argument 1 cannot be 'EdgePattern'\"}"
   },
   "tags": [
     "functions",
