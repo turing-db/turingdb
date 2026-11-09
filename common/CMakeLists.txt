@@ -22,7 +22,6 @@ set(common_sources
         Profiler.cpp
         ThreadName.cpp
         HybridString.cpp
-        BumpPtrAllocator.cpp
 
         log/LogSetup.cpp
         log/LogUtils.cpp)
