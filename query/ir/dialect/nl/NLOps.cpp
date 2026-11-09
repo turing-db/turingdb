@@ -1,6 +1,7 @@
 #include "NLOps.h"
 #include "NLDialect.h"
 
+#include <array>
 #include <optional>
 
 #include "llvm/ADT/DenseSet.h"
@@ -213,6 +214,47 @@ bool holdsNullableBooleans(Value chunk) {
     const auto nullableType = llvm::dyn_cast<storage::NullableType>(elementType);
 
     return nullableType && nullableType.getValueType().isInteger(1);
+}
+
+bool isReadAsCellChunk(Type chunkType) {
+    return isReadAsCells(cast<ChunkType>(chunkType).getElementType());
+}
+
+LogicalResult verifyReadAsCells(Operation* op, TypeRange chunkTypes) {
+    if (!llvm::all_of(chunkTypes, isReadAsCellChunk)) {
+        return op->emitOpError("reads a cell per row out of a chunk of entities, paths, lists, maps, tagged cells "
+                               "or nullable values, never out of a plain value chunk");
+    }
+
+    return success();
+}
+
+LogicalResult verifyCellWrites(Operation* op, Type writtenChunkType, TypeRange chunkTypes) {
+    if (!isa<storage::AnyType>(valueElementOf(writtenChunkType))) {
+        return success();
+    }
+
+    return verifyReadAsCells(op, chunkTypes);
+}
+
+template <typename FoldOp>
+LogicalResult verifyAccumulatorWrites(FoldOp fold) {
+    Block& bodyBlock = fold.getBody().front();
+    const Value yielded = cast<ReduceYield>(bodyBlock.getTerminator()).getValue();
+    const std::array<Type, 2> writtenTypes {fold.getInitialValue().getType(), yielded.getType()};
+
+    return verifyCellWrites(fold.getOperation(), bodyBlock.getArgument(1).getType(), writtenTypes);
+}
+
+template <typename CaseOp>
+LogicalResult verifyCaseWrites(CaseOp caseOp) {
+    const auto valueTypes = caseOp.getValues().getTypes();
+    llvm::SmallVector<Type, 4> writtenTypes(valueTypes.begin(), valueTypes.end());
+    if (const Value defaultValue = caseOp.getDefaultValue()) {
+        writtenTypes.push_back(defaultValue.getType());
+    }
+
+    return verifyCellWrites(caseOp.getOperation(), caseOp.getResult().getType(), writtenTypes);
 }
 }
 
@@ -735,7 +777,7 @@ LogicalResult RowListsCollect::verify() {
         return emitOpError("stages under either the rows a tag names or the one row `row` names, not both");
     }
 
-    return success();
+    return verifyReadAsCells(getOperation(), getValue().getType());
 }
 
 // An nl.sort_buffer needs at least one key, and one direction per key: the two
@@ -768,6 +810,14 @@ LogicalResult SortCollect::verify() {
     return success();
 }
 
+LogicalResult Case::verify() {
+    return verifyCaseWrites(*this);
+}
+
+LogicalResult CaseMerge::verify() {
+    return verifyCaseWrites(*this);
+}
+
 LogicalResult FillNulls::verify() {
     const Type resultType = getResult().getType();
     const Type nullRowsElement = cast<ChunkType>(getNullRows().getType()).getElementType();
@@ -791,7 +841,7 @@ LogicalResult ToAny::verify() {
     const Type resultElement = cast<ChunkType>(getResult().getType()).getElementType();
 
     if (isa<storage::AnyType>(resultElement)) {
-        return success();
+        return verifyReadAsCells(getOperation(), getOperand().getType());
     }
 
     const auto nullableResult = dyn_cast<storage::NullableType>(resultElement);
@@ -929,7 +979,7 @@ LogicalResult MakeList::verify() {
         return emitOpError("result must be a chunk of lists");
     }
 
-    return success();
+    return verifyReadAsCells(getOperation(), getElements().getTypes());
 }
 
 LogicalResult StaticMapKey::verify() {
@@ -1003,7 +1053,7 @@ LogicalResult MakeMap::verify() {
         }
     }
 
-    return success();
+    return verifyReadAsCells(getOperation(), getValues().getTypes());
 }
 
 LogicalResult MergeMaps::verify() {
@@ -1116,7 +1166,9 @@ LogicalResult ListComprehension::verify() {
         return emitOpError("result must be a chunk of nullable lists");
     }
 
-    return success();
+    const Value yielded = llvm::cast<ComprehensionYield>(getBody().front().getTerminator()).getValue();
+
+    return verifyReadAsCells(getOperation(), yielded.getType());
 }
 
 LogicalResult Reduce::verify() {
@@ -1130,7 +1182,7 @@ LogicalResult Reduce::verify() {
         return emitOpError("body argument 1 must be the accumulator, of the result's type");
     }
 
-    return success();
+    return verifyAccumulatorWrites(*this);
 }
 
 LogicalResult AllReduce::verify() {
@@ -1154,7 +1206,7 @@ LogicalResult AllReduce::verify() {
         return emitOpError("result must be a chunk of nullable booleans");
     }
 
-    return success();
+    return verifyAccumulatorWrites(*this);
 }
 
 // The same body, ending on the predicate's value for each element. The result holds one

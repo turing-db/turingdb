@@ -34,11 +34,15 @@ protected:
         auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
         builder.setInsertionPointToStart(function.addEntryBlock());
 
+        const mlir::Type int64Type = mlir::IntegerType::get(&_context, 64);
+        const mlir::Type nullableChunkType = mlir::nl::ChunkType::get(&_context, mlir::storage::NullableType::get(&_context, int64Type));
+
         llvm::SmallVector<mlir::Value> values;
         for (size_t index = 0; index < keys.size(); index++) {
             mlir::nl::Constant value = builder.create<mlir::nl::Constant>(loc,
                                                                           builder.getI64IntegerAttr(static_cast<int64_t>(index)));
-            values.push_back(value.getResult());
+            mlir::nl::ToNullable cell = builder.create<mlir::nl::ToNullable>(loc, nullableChunkType, value.getResult());
+            values.push_back(cell.getResult());
         }
 
         builder.create<mlir::nl::MakeMap>(loc, values, builder.getStrArrayAttr(keys));

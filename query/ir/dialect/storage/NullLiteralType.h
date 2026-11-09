@@ -19,6 +19,11 @@ bool holdsItsOwnNull(Type elementType);
 // an edge, a path, a walk's handle or a mask
 bool isReadAsRows(Type elementType);
 
+// Whether a column of @param elementType is read as one cell per row as it stands, into a
+// list, a map or a column of tagged cells: an entity, a path, a list, a map, a tagged cell or
+// a nullable value. A plain scalar column is read through a nullable instead.
+bool isReadAsCells(Type elementType);
+
 // Turns away an equality over the null literal, shared by db.eq, db.neq, nl.eq and nl.neq,
 // which carry their operands over different column types: @param lhsElementType and
 // @param rhsElementType are the element types of the two operands.

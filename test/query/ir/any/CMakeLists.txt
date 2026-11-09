@@ -54,3 +54,9 @@ add_turing_test(test_query_ir_any_string_function_held_type_error StringFunction
 add_turing_test(test_query_ir_any_arithmetic_held_type_error ArithmeticHeldTypeErrorTest.cpp)
 
 add_turing_test(test_query_ir_any_shared_op_held_type_error SharedOpHeldTypeErrorTest.cpp)
+
+add_turing_test(test_query_ir_reduce_into_a_tagged_cell ReduceIntoATaggedCellTest.cpp)
+target_sources(test_query_ir_reduce_into_a_tagged_cell PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_reduce_into_a_tagged_cell PRIVATE ${IR_TEST_DIR})
+
+add_ir_tests(test_query_ir_cell_read_verifier CellReadVerifierTest.cpp)

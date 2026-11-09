@@ -842,18 +842,6 @@ bool holdsItsNull(mlir::Type chunkType) {
     return mlir::isa<storage::NullableType>(element) || holdsItsOwnNull(element);
 }
 
-// Whether a column of @param element goes into a list, a map or a collect as it stands: an
-// entity, a path, a list, a map and a tagged cell hold a cell in every row, their null among
-// them. A scalar value column is read as nullable instead, the way a property fetch is.
-bool holdsCellsPresentInEveryRow(mlir::Type element) {
-    return mlir::isa<storage::NodeIDType,
-                     storage::EdgeIDType,
-                     storage::PathType,
-                     storage::ListType,
-                     storage::MapType,
-                     storage::AnyType>(element);
-}
-
 // Whether a value of @param element can be held as a tagged cell
 bool holdsAsTaggedCell(mlir::Type element) {
     const bool isContainer = mlir::isa<storage::ListType, storage::MapType>(element);
@@ -2258,10 +2246,7 @@ void DBLowering::lowerListComprehension(mlir::db::ListComprehension comprehensio
     mlir::Operation* const placeholderYield =
         lowerElementBody(comprehension.getBody().front(), bodyBlock, rowTagChunk, valueChunk);
 
-    const mlir::Type valueElement = mlir::cast<nl::ChunkType>(valueChunk.getType()).getElementType();
-    if (!holdsCellsPresentInEveryRow(valueElement)) {
-        valueChunk = nullableValueChunk(valueChunk);
-    }
+    valueChunk = listItemChunk(valueChunk);
 
     _builder.setInsertionPointToEnd(bodyBlock);
     _builder.create<nl::ComprehensionYield>(loc, rowTagChunk, valueChunk);
@@ -2360,7 +2345,7 @@ NLFoldOp DBLowering::lowerFold(DBFoldOp fold, FoldResultType resultTypeOf) {
 
     while (true) {
         const nl::ChunkType accumulatorType = accumulatorChunkType(accumulated);
-        const mlir::Value initialAccumulator = promotedToAccumulated(initialChunk, accumulated);
+        const mlir::Value initialAccumulator = chunkAsElement(initialChunk, accumulated);
 
         llvm::SmallVector<mlir::Value, 8> operandChunks {operands._sourceChunk, initialAccumulator};
         operandChunks.append(operands._carriedChunks.begin(), operands._carriedChunks.end());
@@ -2389,7 +2374,7 @@ NLFoldOp DBLowering::lowerFold(DBFoldOp fold, FoldResultType resultTypeOf) {
             continue;
         }
 
-        valueChunk = promotedToAccumulated(valueChunk, accumulated);
+        valueChunk = chunkAsElement(valueChunk, accumulated);
 
         _builder.setInsertionPointToEnd(bodyBlock);
         _builder.create<nl::ReduceYield>(loc, valueChunk);
@@ -2456,17 +2441,6 @@ nl::ChunkType DBLowering::accumulatorChunkType(mlir::Type accumulated) {
     }
 
     return caseResultChunkType(accumulated);
-}
-
-mlir::Value DBLowering::promotedToAccumulated(mlir::Value chunk, mlir::Type accumulated) {
-    if (isUntypedNullChunk(chunk.getType())) {
-        return chunk;
-    }
-
-    const mlir::Type element = chunkValueElement(_builder, chunk.getType());
-    const bool promotes = element != accumulated && isNumericElement(element) && isNumericElement(accumulated);
-
-    return promotes ? chunkAsElement(chunk, accumulated) : chunk;
 }
 
 void DBLowering::lowerPatternComprehension(mlir::db::PatternComprehension comprehension) {
@@ -2566,12 +2540,7 @@ mlir::Value DBLowering::rowListsValueChunk(mlir::Value valueChunk, mlir::Value r
     // laid out over the rows it is read against
     const mlir::Value aligned = rowAlignedChunk(valueChunk, rows);
 
-    const mlir::Type valueElement = mlir::cast<nl::ChunkType>(aligned.getType()).getElementType();
-    if (holdsCellsPresentInEveryRow(valueElement)) {
-        return aligned;
-    }
-
-    return nullableValueChunk(aligned);
+    return listItemChunk(aligned);
 }
 
 mlir::Type DBLowering::listedElementType(mlir::MLIRContext* context, llvm::ArrayRef<mlir::Value> chunks) {
@@ -2691,7 +2660,7 @@ void DBLowering::containerCellChunks(mlir::ValueRange columns, llvm::SmallVector
 
 mlir::Value DBLowering::listItemChunk(mlir::Value chunk) {
     const mlir::Type element = mlir::cast<nl::ChunkType>(chunk.getType()).getElementType();
-    if (holdsCellsPresentInEveryRow(element)) {
+    if (mlir::isReadAsCells(element)) {
         return chunk;
     }
 
@@ -5233,11 +5202,7 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
 
     for (size_t valueIndex = 0; valueIndex < valueCount; valueIndex++) {
         const size_t chunkIndex = keyCount + valueIndex;
-        const mlir::Type collectedElement = mlir::cast<nl::ChunkType>(chunks[chunkIndex].getType()).getElementType();
-
-        if (!holdsCellsPresentInEveryRow(collectedElement)) {
-            chunks[chunkIndex] = nullableValueChunk(chunks[chunkIndex]);
-        }
+        chunks[chunkIndex] = listItemChunk(chunks[chunkIndex]);
     }
 
     // A reduction beside the lists reads its input as it does under a grouped

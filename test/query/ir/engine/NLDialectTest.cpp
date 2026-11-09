@@ -677,11 +677,15 @@ TEST_F(NLDialectTest, makeListBuildsAListChunkOfTheSharedElementType) {
     mlir::nl::Constant second = builder.create<mlir::nl::Constant>(loc, builder.getI64IntegerAttr(2));
 
     const mlir::Type int64Type = mlir::IntegerType::get(&_context, 64);
+    const mlir::Type nullableChunkType = mlir::nl::ChunkType::get(&_context, mlir::storage::NullableType::get(&_context, int64Type));
     const mlir::Type listChunkType = mlir::nl::ChunkType::get(&_context, mlir::storage::ListType::get(&_context, int64Type));
+
+    mlir::nl::ToNullable firstCell = builder.create<mlir::nl::ToNullable>(loc, nullableChunkType, first.getResult());
+    mlir::nl::ToNullable secondCell = builder.create<mlir::nl::ToNullable>(loc, nullableChunkType, second.getResult());
 
     mlir::nl::MakeList makeList = builder.create<mlir::nl::MakeList>(loc,
                                                                      listChunkType,
-                                                                     mlir::ValueRange {first.getResult(), second.getResult()});
+                                                                     mlir::ValueRange {firstCell.getResult(), secondCell.getResult()});
     builder.create<mlir::func::ReturnOp>(loc);
 
     EXPECT_EQ(makeList.getResult().getType(), listChunkType);

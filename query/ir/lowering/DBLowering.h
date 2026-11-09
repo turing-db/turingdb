@@ -377,9 +377,6 @@ private:
     mlir::Type accumulatedElement(mlir::Type accumulated, mlir::Type chunkType);
     mlir::nl::ChunkType accumulatorChunkType(mlir::Type accumulated);
 
-    // @param chunk converted to the accumulator's number type where it holds another one
-    mlir::Value promotedToAccumulated(mlir::Value chunk, mlir::Type accumulated);
-
     void lowerListSlice(mlir::db::ListSlice slice);
     void lowerPercentile(mlir::Operation* operation);
     void lowerPatternComprehension(mlir::db::PatternComprehension comprehension);

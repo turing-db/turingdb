@@ -653,7 +653,8 @@ def Reduce : NLOp<"reduce", [Pure, RowAlignedThroughOperands]> {
     chunks. The accumulator chunk has the result's type; the initial value and the body's
     value are written into it, so either may be the narrower type it holds - a plain
     value where it is nullable, a list of any element type where it holds lists of tagged
-    cells, any value where it holds tagged cells.
+    cells, an entity, a path, a list, a map, a cell or a nullable value where it holds
+    tagged cells.
   }];
 
   let arguments = (ins NLChunk:$source, NLChunk:$initial_value, Variadic<NLChunk>:$columns_to_filter);
@@ -3080,9 +3081,10 @@ def ToAny : NLOp<"to_any", [Pure, ConstantThroughOperands, RowAlignedThroughOper
   let description = [{
       The chunk a column takes where its rows hold values of different types, each row
       keeping the type it has: a scalar, an entity, a list or a map becomes a tagged cell,
-      and a null an absent one. A list chunk read as lists of the type its elements join
-      into - tagged cells, or the one type an empty list's none joins to - keeps the views
-      it holds, whose elements are tagged cells already.
+      and a null an absent one. A scalar is read out of a nullable chunk, never a plain
+      one. A list chunk read as lists of the type its elements join into - tagged cells,
+      or the one type an empty list's none joins to - keeps the views it holds, whose
+      elements are tagged cells already.
 
       %r = nl.to_any %x : (!nl.chunk<!storage.nullable<i64>>) -> !nl.chunk<!storage.any>
       %l = nl.to_any %y : (!nl.chunk<!storage.list<!storage.string>>)
@@ -3333,6 +3335,8 @@ def Case : NLOp<"case", [Pure, RowAlignedThroughOperands, AttrSizedOperandSegmen
                        Optional<NLChunk>:$defaultValue);
   let results   = (outs NLChunk:$result);
 
+  let hasVerifier = 1;
+
   let assemblyFormat = [{
     `(` `{` $conditions `}` `,` `{` $values `}` (`,` $defaultValue^)? `)`
     attr-dict `:` functional-type(operands, results)
@@ -3359,6 +3363,8 @@ def CaseMerge : NLOp<"case_merge", [Pure, RowAlignedWithFirstOperand, AttrSizedO
                        Variadic<NLChunk>:$values,
                        Optional<NLChunk>:$defaultValue);
   let results   = (outs NLChunk:$result);
+
+  let hasVerifier = 1;
 
   let assemblyFormat = [{
     `(` `{` $conditions `}` `,` `{` $values `}` (`,` $defaultValue^)? `)`
