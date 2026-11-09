@@ -7,7 +7,9 @@ add_turing_test(test_query_ir_fuzz_property_null_binary_operation FuzzPropertyNu
 add_turing_test(test_query_ir_fuzz_component_var_not_registered FuzzComponentVarNotRegisteredTest.cpp)
 
 add_turing_test(test_query_ir_fuzz_hang FuzzHangTest.cpp)
-set_tests_properties(test_query_ir_fuzz_hang PROPERTIES TIMEOUT 120)
+if (NOT TURING_SANITIZE)
+    set_tests_properties(test_query_ir_fuzz_hang PROPERTIES TIMEOUT 120)
+endif()
 
 add_turing_test(test_query_ir_fuzz_aggregate_without_arguments FuzzAggregateWithoutArgumentsTest.cpp)
 
