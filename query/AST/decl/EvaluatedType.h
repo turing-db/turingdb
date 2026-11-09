@@ -193,10 +193,20 @@ inline bool namesATruthValue(EvaluatedType e) {
     return e == EvaluatedType::Bool || e == EvaluatedType::Null || e == EvaluatedType::Any;
 }
 
-// The types = and <> take: every value, every entity and every path
+// The types a schema procedure yields: the ID of a label, an edge type or a property type,
+// and the value type of a property type
+inline bool namesASchemaID(EvaluatedType e) {
+    return e == EvaluatedType::Label
+        || e == EvaluatedType::EdgeType
+        || e == EvaluatedType::PropertyType
+        || e == EvaluatedType::ValueType;
+}
+
+// The types = and <> take: every value, every entity, every path and every schema ID
 inline bool namesAnEqualityOperand(EvaluatedType e) {
     return namesAComparableValue(e)
         || namesATaggedCell(e)
+        || namesASchemaID(e)
         || e == EvaluatedType::NodePattern
         || e == EvaluatedType::EdgePattern
         || e == EvaluatedType::GraphPath;
@@ -283,7 +293,7 @@ inline EvaluatedType commonType(EvaluatedType carried, EvaluatedType value) {
 // The types <, <=, > and >= take: every value, entities and paths included, though only
 // numbers, strings, booleans, datetimes, durations, points and lists have an order
 inline bool namesAnOrderingOperand(EvaluatedType e) {
-    return namesAnEqualityOperand(e);
+    return namesAnEqualityOperand(e) && !namesASchemaID(e);
 }
 
 // The class a type is ordered in, or nullopt for a type with no order: a map, an

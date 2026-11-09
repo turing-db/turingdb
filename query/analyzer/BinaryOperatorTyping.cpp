@@ -104,22 +104,19 @@ RuleResult numericRule(EvaluatedType a, EvaluatedType b) {
 
 // What = and <> answer over two types: null against a null, a boolean between two operands
 // an equality takes. Two doubles are not tested for equality, which rounding makes
-// unreliable, and a label, an edge type or a property type is the id of one, equal only to
-// an id of its kind.
+// unreliable, and a schema ID is equal only to one of its kind.
 RuleResult equalityType(EvaluatedType a, EvaluatedType b) {
     const bool equatesTwoDoubles = a == EvaluatedType::Double && b == EvaluatedType::Double;
-    const bool equatesMetadataIDs = a == b
-                                 && (a == EvaluatedType::Label
-                                     || a == EvaluatedType::EdgeType
-                                     || a == EvaluatedType::PropertyType);
+    const bool equatesASchemaIDAcrossKinds = (namesASchemaID(a) || namesASchemaID(b))
+                                             && a != b
+                                             && a != EvaluatedType::Null
+                                             && b != EvaluatedType::Null;
     const bool takesA = a == EvaluatedType::Null || namesAnEqualityOperand(a);
     const bool takesB = b == EvaluatedType::Null || namesAnEqualityOperand(b);
 
-    if (equatesMetadataIDs) {
-        return valid(EvaluatedType::Bool);
-    } else if (equatesTwoDoubles) {
+    if (equatesTwoDoubles) {
         return invalid(TypingReason::DoubleEquality);
-    } else if (!takesA || !takesB) {
+    } else if (!takesA || !takesB || equatesASchemaIDAcrossKinds) {
         return invalid(TypingReason::IncompatibleTypes);
     } else if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
         return valid(EvaluatedType::Null);

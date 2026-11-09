@@ -171,3 +171,5 @@ add_call_v3_test(test_query_ir_is_empty_function IsEmptyFunctionTest.cpp)
 add_ir_tests(test_query_ir_element_id_function ElementIdFunctionTest.cpp)
 
 add_turing_test(test_query_ir_conversion_over_no_rows ConversionOverNoRowsTest.cpp)
+
+add_turing_test(test_query_ir_schema_id_equality SchemaIDEqualityTest.cpp)

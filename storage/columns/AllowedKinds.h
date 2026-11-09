@@ -230,12 +230,18 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<NodeID, NodeID>::Pairs,
         OptionalKindPairs<EdgeID, EdgeID>::Pairs,
 
+        // A procedure never yields a null schema ID or value type, but a CASE, an OPTIONAL CALL
+        // or a UNION branch can leave one null
+        OptionalKindPairs<LabelID, LabelID>::Pairs,
+        OptionalKindPairs<EdgeTypeID, EdgeTypeID>::Pairs,
+        OptionalKindPairs<PropertyTypeID, PropertyTypeID>::Pairs,
+        OptionalKindPairs<ValueType, ValueType>::Pairs,
+
         std::tuple<
             KindPair<GraphPath, GraphPath>,
 
-            // Filtering by ID or labels/edge type
+            // Filtering by ID or labels
             KindPair<LabelSetID, LabelSetID>,
-            KindPair<EdgeTypeID, EdgeTypeID>,
 
             KindPair<NodeID, types::Int64::Primitive>,                // WHERE n = 1
             KindPair<NodeID, std::optional<types::Int64::Primitive>>, // WHERE e = e.age

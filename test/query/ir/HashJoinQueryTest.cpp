@@ -4,7 +4,9 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include "Graph.h"
+#include "ProcedureContext.h"
 #include "SimpleGraph.h"
+#include "iterators/ChunkConfig.h"
 #include "reader/GraphReader.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
@@ -85,7 +87,23 @@ void HashJoinQueryTest::runQuery(std::string_view query, StringRowSink& sink, bo
     lower(view, module.get(), nlModule.get());
 
     LocalMemory memory;
-    NLInterpreter interpreter(*nlModule, &view, &sink, &memory);
+
+    ProcedureContext procedureContext;
+    procedureContext.setGraph(_graph.get());
+    procedureContext.setGraphView(&view);
+    procedureContext.setProcedures(&_procedures);
+    procedureContext.setChunkSize(ChunkConfig::CHUNK_SIZE);
+    procedureContext.setListBuffer(&memory.listBuffer());
+    procedureContext.setStringBuffer(&memory.stringBuffer());
+
+    NLInterpreter interpreter(*nlModule,
+                              &view,
+                              &sink,
+                              &memory,
+                              ChunkConfig::CHUNK_SIZE,
+                              nullptr,
+                              nullptr,
+                              &procedureContext);
     interpreter.run();
 }
 
