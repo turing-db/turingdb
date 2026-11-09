@@ -210,8 +210,20 @@ if(TURING_USE_MOLD AND NOT APPLE)
     include(CheckLinkerFlag)
     check_linker_flag(CXX "-fuse-ld=mold" TURING_LINKER_SUPPORTS_MOLD)
     if(TURING_LINKER_SUPPORTS_MOLD)
-        add_link_options(-fuse-ld=mold)
-        message(STATUS "Using mold linker")
+        execute_process(COMMAND ${CMAKE_CXX_COMPILER} -fuse-ld=mold -Wl,--version
+                        OUTPUT_VARIABLE MOLD_VERSION_OUTPUT
+                        ERROR_QUIET)
+        string(REGEX MATCH "mold ([0-9.]+)" MOLD_VERSION_MATCH "${MOLD_VERSION_OUTPUT}")
+        set(MOLD_VERSION "${CMAKE_MATCH_1}")
+
+        # mold before 2.32 aborts building the range extension thunks of a large ARM64 library
+        # (mold issue #1224), and the shared test library is one
+        if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND MOLD_VERSION VERSION_LESS 2.32)
+            message(STATUS "Not using mold ${MOLD_VERSION}: it cannot link a large ARM64 library")
+        else()
+            add_link_options(-fuse-ld=mold)
+            message(STATUS "Using mold linker ${MOLD_VERSION}")
+        endif()
     endif()
 endif()
 
