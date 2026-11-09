@@ -3094,9 +3094,19 @@ bool ListComprehension::getRegionCarrySet(Region& region, RegionCarrySet& carryS
     return true;
 }
 
+Value ListComprehension::getRegionElementSource(Region& region, size_t& elementArgument) {
+    elementArgument = 0;
+    return getSource();
+}
+
 bool ListPredicate::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
     fillTrailingRegionCarrySet(getOperation(), region, getColumnsToFilter().size(), carrySet);
     return true;
+}
+
+Value ListPredicate::getRegionElementSource(Region& region, size_t& elementArgument) {
+    elementArgument = 0;
+    return getSource();
 }
 
 bool Reduce::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
@@ -3104,9 +3114,19 @@ bool Reduce::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
     return true;
 }
 
+Value Reduce::getRegionElementSource(Region& region, size_t& elementArgument) {
+    elementArgument = 0;
+    return getSource();
+}
+
 bool AllReduce::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
     fillTrailingRegionCarrySet(getOperation(), region, getColumnsToFilter().size(), carrySet);
     return true;
+}
+
+Value AllReduce::getRegionElementSource(Region& region, size_t& elementArgument) {
+    elementArgument = 0;
+    return getSource();
 }
 
 bool PatternComprehension::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {

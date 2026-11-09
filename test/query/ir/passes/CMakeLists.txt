@@ -217,3 +217,5 @@ add_ir_tests(test_query_ir_fold_constant_map_keys FoldConstantMapKeysTest.cpp)
 add_ir_tests(test_query_ir_container_index_speculatability ContainerIndexSpeculatabilityTest.cpp)
 
 add_ir_tests(test_query_ir_hoist_element_invariant_ops HoistElementInvariantOpsTest.cpp)
+
+add_ir_tests(test_query_ir_list_body_argument_held_tags ListBodyArgumentHeldTagsTest.cpp)

@@ -7217,31 +7217,6 @@ void trimRegionCarrySet(Operation* op) {
     carriedOperands.assign(keptColumns);
 }
 
-bool matchRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
-    ColumnCarrierOpInterface carrier = dyn_cast_or_null<ColumnCarrierOpInterface>(region.getParentOp());
-
-    return carrier && carrier.getRegionCarrySet(region, carrySet);
-}
-
-// Null for an argument the op binds itself: a list element, an accumulator or a row tag
-Value carriedColumnOf(BlockArgument argument) {
-    Region& region = *argument.getParentRegion();
-
-    RegionCarrySet carrySet;
-    if (!matchRegionCarrySet(region, carrySet)) {
-        return {};
-    }
-
-    const size_t argumentIndex = argument.getArgNumber();
-    const bool isCarried = argumentIndex >= carrySet._argumentOffset
-                        && argumentIndex < carrySet._argumentOffset + carrySet._count;
-    if (!isCarried) {
-        return {};
-    }
-
-    return region.getParentOp()->getOperand(carrySet._operandOffset + argumentIndex - carrySet._argumentOffset);
-}
-
 BlockArgument carriedArgument(Region& region, size_t carriedIndex) {
     RegionCarrySet carrySet;
     const bool carries = matchRegionCarrySet(region, carrySet);

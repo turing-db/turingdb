@@ -223,6 +223,18 @@ private:
         }
     }
 
+    bool reachRegionInput(mlir::BlockArgument argument, size_t path) {
+        if (const mlir::Value carriedColumn = mlir::db::carriedColumnOf(argument)) {
+            reach(carriedColumn, path);
+            return true;
+        } else if (const mlir::Value list = mlir::db::elementSourceOf(argument)) {
+            reach(list, prependElement(path));
+            return true;
+        }
+
+        return false;
+    }
+
     bool walkValue(mlir::Value value, size_t path) {
         const mlir::db::ColumnType column = mlir::dyn_cast<mlir::db::ColumnType>(value.getType());
         if (!column) {
@@ -235,6 +247,11 @@ private:
         const bool typed = !mlir::isa<mlir::NoneType, storage::AnyType>(element);
         if (typed && path == NO_READ) {
             return holds(elementTag(element));
+        }
+
+        const mlir::BlockArgument argument = mlir::dyn_cast<mlir::BlockArgument>(value);
+        if (argument && reachRegionInput(argument, path)) {
+            return true;
         }
 
         llvm::SmallVector<mlir::Value, 4> carried;

@@ -37,6 +37,11 @@ def ColumnCarrierOpInterface : OpInterface<"ColumnCarrierOpInterface"> {
       (ins "::mlir::Region&":$region, "::mlir::db::RegionCarrySet&":$carrySet), [{}],
       [{ return false; }]>,
     InterfaceMethod<
+      "The operand whose cells `region` takes the elements of as its argument at `elementArgument`, a cell that is no list being iterated as a list of one; null where it takes none",
+      "::mlir::Value", "getRegionElementSource",
+      (ins "::mlir::Region&":$region, "size_t&":$elementArgument), [{}],
+      [{ return {}; }]>,
+    InterfaceMethod<
       "Set `resultOffset` to the result the first column `region` yields comes out as, each next one coming out as the next result with the rows the region left it; false where the op pads or merges what its regions yield",
       "bool", "getYieldedResultOffset",
       (ins "::mlir::Region&":$region, "size_t&":$resultOffset), [{}],

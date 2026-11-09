@@ -51,6 +51,16 @@ size_t forwardedArgumentCount(Region& region);
 // argument no region forwards
 bool matchForwardedArgument(BlockArgument argument, Region*& source, size_t& forwardIndex);
 
+bool matchRegionCarrySet(Region& region, RegionCarrySet& carrySet);
+
+// The operand @param argument is carried in from; null for an argument the op binds itself: a
+// list element, an accumulator or a row tag
+Value carriedColumnOf(BlockArgument argument);
+
+// The operand whose cells @param argument takes the elements of; null for an argument binding
+// no element
+Value elementSourceOf(BlockArgument argument);
+
 }
 
 namespace mlir::OpTrait {

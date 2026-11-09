@@ -114,3 +114,41 @@ bool mlir::db::matchForwardedArgument(BlockArgument argument, Region*& source, s
 
     return false;
 }
+
+bool mlir::db::matchRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
+    ColumnCarrierOpInterface carrier = dyn_cast_or_null<ColumnCarrierOpInterface>(region.getParentOp());
+
+    return carrier && carrier.getRegionCarrySet(region, carrySet);
+}
+
+Value mlir::db::carriedColumnOf(BlockArgument argument) {
+    Region& region = *argument.getParentRegion();
+
+    RegionCarrySet carrySet;
+    if (!matchRegionCarrySet(region, carrySet)) {
+        return {};
+    }
+
+    const size_t argumentIndex = argument.getArgNumber();
+    const bool isCarried = argumentIndex >= carrySet._argumentOffset
+                        && argumentIndex < carrySet._argumentOffset + carrySet._count;
+    if (!isCarried) {
+        return {};
+    }
+
+    return region.getParentOp()->getOperand(carrySet._operandOffset + argumentIndex - carrySet._argumentOffset);
+}
+
+Value mlir::db::elementSourceOf(BlockArgument argument) {
+    Region& region = *argument.getParentRegion();
+    ColumnCarrierOpInterface carrier = dyn_cast_or_null<ColumnCarrierOpInterface>(region.getParentOp());
+    if (!carrier) {
+        return {};
+    }
+
+    size_t elementArgument = 0;
+    const Value source = carrier.getRegionElementSource(region, elementArgument);
+    const bool bindsTheElement = source && argument.getArgNumber() == elementArgument;
+
+    return bindsTheElement ? source : Value();
+}

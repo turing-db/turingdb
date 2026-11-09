@@ -711,7 +711,7 @@ def PercentileDisc : PercentileOp<"percentile_disc">;
 /**
 * ListComprehension
 */
-def ListComprehension : TuringOp<"list_comprehension", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet"]>]> {
+def ListComprehension : TuringOp<"list_comprehension", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet", "getRegionElementSource"]>]> {
   let summary = "Build one list per row out of the elements of that row's list, filtered and projected";
 
   let description = [{
@@ -766,7 +766,7 @@ def ListComprehension : TuringOp<"list_comprehension", [Pure, ConstantThroughOpe
 /**
 * ListPredicate
 */
-def ListPredicate : TuringOp<"list_predicate", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet"]>]> {
+def ListPredicate : TuringOp<"list_predicate", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet", "getRegionElementSource"]>]> {
   let summary = "Decide, per row, whether a predicate holds for the elements of that row's list";
 
   let description = [{
@@ -807,7 +807,7 @@ def ListPredicate : TuringOp<"list_predicate", [Pure, ConstantThroughOperands, D
 /**
 * Reduce
 */
-def Reduce : TuringOp<"reduce", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet"]>]> {
+def Reduce : TuringOp<"reduce", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet", "getRegionElementSource"]>]> {
   let summary = "Fold the elements of each row's list into one value per row";
 
   let description = [{
@@ -861,7 +861,7 @@ def ReduceYield : TuringOp<"reduce_yield", [Pure, Terminator, ParentOneOf<["Redu
 /**
 * AllReduce
 */
-def AllReduce : TuringOp<"all_reduce", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet"]>]> {
+def AllReduce : TuringOp<"all_reduce", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet", "getRegionElementSource"]>]> {
   let summary = "Decide, per row, whether a predicate holds after every step of a fold over that row's list";
 
   let description = [{
