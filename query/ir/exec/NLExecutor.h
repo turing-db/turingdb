@@ -887,6 +887,8 @@ public:
     static NLGroupAggregateFoldFunction selectGroupCountDistinctOptCellFold();
     static NLGroupAggregateFoldFunction selectGroupCountOptListFold();
     static NLGroupAggregateFoldFunction selectGroupCountDistinctOptListFold();
+    static NLGroupAggregateFoldFunction selectGroupCountOptIDFold(NLChunkKind kind);
+    static NLGroupAggregateFoldFunction selectGroupCountDistinctOptIDFold(NLChunkKind kind);
 
     // The append (onto a key buffer's tail) for an ID chunk of this kind / a
     // nullable value chunk of this value type. Used by nl.group_aggregate_update to

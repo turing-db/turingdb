@@ -6280,12 +6280,15 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
             const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
             const mlir::Type countElementType = chunk.getElementType();
             const auto nullable = mlir::dyn_cast<storage::NullableType>(countElementType);
+            const mlir::Type countValueType = nullable ? nullable.getValueType() : mlir::Type {};
             if (isNullableList(countElementType)) {
                 aggregate._fold = NLExecutor::selectGroupCountOptListFold();
             } else if (isNullableAny(countElementType)) {
                 aggregate._fold = NLExecutor::selectGroupCountOptCellFold();
+            } else if (nullable && isNullableIDValue(countValueType)) {
+                aggregate._fold = NLExecutor::selectGroupCountOptIDFold(chunkKindFromElementType(countValueType));
             } else if (nullable) {
-                const ValueType valueType = valueTypeFromElementType(nullable.getValueType());
+                const ValueType valueType = valueTypeFromElementType(countValueType);
                 aggregate._fold = NLExecutor::selectGroupAggregateFold(kind, valueType);
             } else if (mlir::isa<storage::AnyType>(countElementType)) {
                 aggregate._fold = NLExecutor::selectGroupCountCellFold();
@@ -6327,12 +6330,15 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
             const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
             const mlir::Type distinctElementType = chunk.getElementType();
             const auto nullable = mlir::dyn_cast<storage::NullableType>(distinctElementType);
+            const mlir::Type distinctValueType = nullable ? nullable.getValueType() : mlir::Type {};
             if (isNullableList(distinctElementType)) {
                 aggregate._fold = NLExecutor::selectGroupCountDistinctOptListFold();
             } else if (isNullableAny(distinctElementType)) {
                 aggregate._fold = NLExecutor::selectGroupCountDistinctOptCellFold();
+            } else if (nullable && isNullableIDValue(distinctValueType)) {
+                aggregate._fold = NLExecutor::selectGroupCountDistinctOptIDFold(chunkKindFromElementType(distinctValueType));
             } else if (nullable) {
-                const ValueType valueType = valueTypeFromElementType(nullable.getValueType());
+                const ValueType valueType = valueTypeFromElementType(distinctValueType);
                 aggregate._fold = NLExecutor::selectGroupAggregateFold(kind, valueType);
             } else if (mlir::isa<storage::AnyType>(distinctElementType)) {
                 aggregate._fold = NLExecutor::selectGroupCountDistinctCellFold();

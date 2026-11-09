@@ -13228,6 +13228,20 @@ NLCountFunction NLExecutor::selectOptCountFunction(NLChunkKind kind) {
     return count;
 }
 
+NLGroupAggregateFoldFunction NLExecutor::selectGroupCountOptIDFold(NLChunkKind kind) {
+    NLGroupAggregateFoldFunction fold = nullptr;
+    dispatchIDChunkKind(kind, [&]<typename ID>() { fold = &groupFoldCountPresent<ID>; });
+
+    return fold;
+}
+
+NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctOptIDFold(NLChunkKind kind) {
+    NLGroupAggregateFoldFunction fold = nullptr;
+    dispatchIDChunkKind(kind, [&]<typename ID>() { fold = &groupFoldCountDistinctPresent<ID>; });
+
+    return fold;
+}
+
 NLBroadcastFunction NLExecutor::selectOptBlockRepeatFunction(NLChunkKind kind) {
     NLBroadcastFunction broadcast = nullptr;
     dispatchIDChunkKind(kind, [&]<typename ID>() { broadcast = &blockRepeatColumn<std::optional<ID>>; });
