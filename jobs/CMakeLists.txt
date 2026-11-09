@@ -1,5 +1,7 @@
 
 set(jobs_sources
+        Job.cpp
+        JobGroup.cpp
         JobSystem.cpp)
 
 add_library(turing_db_jobs_s STATIC ${jobs_sources})

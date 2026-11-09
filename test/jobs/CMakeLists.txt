@@ -21,3 +21,5 @@ target_link_libraries(jobs_default_threads_test
 
 target_include_directories(jobs_default_threads_test
     PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+
+add_turing_test(jobs_exception_test JobExceptionTest.cpp)

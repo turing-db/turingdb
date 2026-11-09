@@ -5,7 +5,6 @@
 
 #include "Job.h"
 #include "Future.h"
-#include "Promise.h"
 #include "JobQueue.h"
 
 namespace db {
@@ -29,17 +28,12 @@ public:
     /* @brief submits a job to be executed
      *
      * @param operation closure to be executed on one of the threads
-     * @return Future<T> holding the state of the TypedPromise<T>
+     * @return Future<T> holding the value the closure returns or the exception it throws
      * */
     template <typename T>
-    Future<T> submit(JobOperation&& operation) {
-        TypedPromise<T>* promise = new TypedPromise<T>();
-        Future<T> future(promise->get_future());
-
-        Job job(
-            std::move(operation),
-            std::unique_ptr<Promise>(static_cast<Promise*>(promise))
-        );
+    Future<T> submit(JobOperation<T>&& operation) {
+        std::unique_ptr<TypedJob<T>> job = std::make_unique<TypedJob<T>>(std::move(operation));
+        Future<T> future(job->getFuture());
 
         _jobs.submit(std::move(job));
 
@@ -49,17 +43,12 @@ public:
     /* @brief submits a job to be executed
      *
      * @param operation closure to be executed on one of the threads
-     * @return SharedFuture<T> holding the shared state of the TypedPromise<T>
+     * @return SharedFuture<T> holding the value the closure returns or the exception it throws
      * */
     template <typename T>
-    SharedFuture<T> submitShared(JobOperation&& operation) {
-        TypedPromise<T>* promise = new TypedPromise<T>();
-        SharedFuture<T> future(promise->get_future().share());
-
-        Job job(
-            std::move(operation),
-            std::unique_ptr<Promise>(static_cast<Promise*>(promise))
-        );
+    SharedFuture<T> submitShared(JobOperation<T>&& operation) {
+        std::unique_ptr<TypedJob<T>> job = std::make_unique<TypedJob<T>>(std::move(operation));
+        SharedFuture<T> future(job->getFuture().share());
 
         _jobs.submit(std::move(job));
 

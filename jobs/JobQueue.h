@@ -1,8 +1,8 @@
 #pragma once
 
 #include <condition_variable>
+#include <memory>
 #include <mutex>
-#include <optional>
 #include <queue>
 
 #include "Job.h"
@@ -18,7 +18,7 @@ public:
     {
     }
 
-    void submit(Job job) {
+    void submit(std::unique_ptr<Job> job) {
         std::unique_lock lock(_mutex);
         _submitted++;
 
@@ -27,8 +27,7 @@ public:
             _runningCount++;
 
             lock.unlock();
-            job._operation(job._promise.get());
-            job._promise->finish();
+            job->run();
             lock.lock();
 
             _finished++;
@@ -44,18 +43,6 @@ public:
         }
     }
 
-    std::optional<Job> pop() {
-        std::scoped_lock lock(_mutex);
-        if (_jobs.empty()) {
-            return std::nullopt;
-        }
-
-        Job job = std::move(_jobs.front());
-        _jobs.pop();
-        _runningCount++;
-        return job;
-    }
-
     size_t size() const {
         std::scoped_lock lock(_mutex);
         return _jobs.size();
@@ -66,7 +53,7 @@ public:
         return _jobs.empty();
     }
 
-    std::optional<Job> waitJob(std::invocable auto extraCondition) {
+    std::unique_ptr<Job> waitJob(std::invocable auto extraCondition) {
         std::unique_lock lock(_mutex);
 
         _wakeCondition.wait(lock, [&] {
@@ -74,10 +61,10 @@ public:
         });
 
         if (_jobs.empty()) {
-            return std::nullopt;
+            return nullptr;
         }
 
-        Job job = std::move(_jobs.front());
+        std::unique_ptr<Job> job = std::move(_jobs.front());
         _jobs.pop();
         _runningCount++;
         return job;
@@ -110,7 +97,7 @@ private:
     std::condition_variable _wakeCondition;
     std::condition_variable _doneCondition;
     mutable std::mutex _mutex;
-    std::queue<Job> _jobs;
+    std::queue<std::unique_ptr<Job>> _jobs;
     size_t _finished {0};
     size_t _submitted {0};
     size_t _runningCount {0};

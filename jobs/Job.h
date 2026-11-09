@@ -1,24 +1,39 @@
 #pragma once
 
 #include <functional>
-#include <memory>
-#include <stdint.h>
-
-#include "Promise.h"
+#include <future>
 
 namespace db {
 
-/* @brief Closure to be executed by the JobSystem
- *
- * Takes in an abstract Promise* that can be casted
- * into a TypedPromise<T>
- * */
-using JobOperation = std::function<void(Promise*)>;
-using JobID = uint64_t;
+template <typename T>
+using JobOperation = std::function<T()>;
 
-struct Job {
-    JobOperation _operation;
-    std::unique_ptr<Promise> _promise;
+class Job {
+public:
+    virtual ~Job();
+
+    // Never throws: the operation's exception is stored in the job's future.
+    virtual void run() = 0;
+};
+
+template <typename T>
+class TypedJob : public Job {
+public:
+    explicit TypedJob(JobOperation<T>&& operation)
+        : _task(std::move(operation))
+    {
+    }
+
+    std::future<T> getFuture() {
+        return _task.get_future();
+    }
+
+    void run() override {
+        _task();
+    }
+
+private:
+    std::packaged_task<T()> _task;
 };
 
 }

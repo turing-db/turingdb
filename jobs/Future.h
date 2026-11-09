@@ -14,6 +14,7 @@ public:
     virtual ~AbstractFuture() = default;
 
     virtual void wait() = 0;
+    virtual void throwIfFailed() = 0;
 };
 
 /* @brief Wrapper class around std::future<T>
@@ -23,22 +24,18 @@ public:
  * use ShareFuture<T> instead.
  * */
 template <typename T>
-class Future : public std::future<T>, public AbstractFuture {
+class Future : public std::future<T> {
 public:
     Future() = default;
     Future(const Future&) = default;
     Future(Future&&) noexcept = default;
     Future& operator=(const Future&) = default;
     Future& operator=(Future&&) noexcept = default;
-    ~Future() override = default;
+    ~Future() = default;
 
     explicit Future(std::future<T>&& future)
         : std::future<T>(std::move(future))
     {
-    }
-
-    void wait() override {
-        std::future<T>::wait();
     }
 };
 
@@ -66,6 +63,10 @@ public:
 
     void wait() override {
         std::shared_future<T>::wait();
+    }
+
+    void throwIfFailed() override {
+        std::shared_future<T>::get();
     }
 };
 

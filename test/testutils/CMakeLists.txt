@@ -6,7 +6,9 @@ target_link_libraries(turing_testmain_obj
             turing_db_jobs_s
             spdlog)
 
-add_library(turing_testutils_s STATIC RemoteTestUtils.cpp)
+add_library(turing_testutils_s STATIC
+    ExitWithTestOutcome.cpp
+    RemoteTestUtils.cpp)
 
 target_link_libraries(turing_testutils_s
     PUBLIC  GTest::gtest

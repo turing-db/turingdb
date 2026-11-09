@@ -24,7 +24,7 @@ TEST_F(JobSystemTest, OneWorker) {
     jobsystem->init();
 
     for (size_t i = 0; i < JOB_COUNT; i++) {
-        jobsystem->submit<void>([&](Promise*) {
+        jobsystem->submit<void>([&] {
             for (size_t j = 0; j < COUNT_PER_THREAD; j++) {
                 _storage.inc();
             }
@@ -43,7 +43,7 @@ TEST_F(JobSystemTest, TwoWorkers) {
     jobsystem->init();
 
     for (size_t i = 0; i < JOB_COUNT; i++) {
-        jobsystem->submit<void>([&](Promise*) {
+        jobsystem->submit<void>([&] {
             for (size_t j = 0; j < COUNT_PER_THREAD; j++) {
                 _storage.inc();
             }
@@ -62,7 +62,7 @@ TEST_F(JobSystemTest, ManyWorkers) {
     jobsystem->init();
 
     for (size_t i = 0; i < JOB_COUNT; i++) {
-        jobsystem->submit<void>([&](Promise*) {
+        jobsystem->submit<void>([&] {
             for (size_t j = 0; j < COUNT_PER_THREAD; j++) {
                 _storage.inc();
             }
@@ -81,7 +81,7 @@ TEST_F(JobSystemTest, OneWorkerShared) {
     jobsystem->init();
 
     for (size_t i = 0; i < JOB_COUNT; i++) {
-        jobsystem->submitShared<void>([&](Promise*) {
+        jobsystem->submitShared<void>([&] {
             for (size_t j = 0; j < COUNT_PER_THREAD; j++) {
                 _storage.inc();
             }
@@ -100,7 +100,7 @@ TEST_F(JobSystemTest, TwoWorkersShared) {
     jobsystem->init();
 
     for (size_t i = 0; i < JOB_COUNT; i++) {
-        jobsystem->submitShared<void>([&](Promise*) {
+        jobsystem->submitShared<void>([&] {
             for (size_t j = 0; j < COUNT_PER_THREAD; j++) {
                 _storage.inc();
             }
@@ -119,7 +119,7 @@ TEST_F(JobSystemTest, ManyWorkersShared) {
     jobsystem->init();
 
     for (size_t i = 0; i < JOB_COUNT; i++) {
-        jobsystem->submitShared<void>([&](Promise*) {
+        jobsystem->submitShared<void>([&] {
             for (size_t j = 0; j < COUNT_PER_THREAD; j++) {
                 _storage.inc();
             }
@@ -140,7 +140,7 @@ TEST_F(JobSystemTest, OneWorkerJobGroup) {
     auto group = jobsystem->newGroup();
 
     for (size_t i = 0; i < JOB_COUNT; i++) {
-        group.submit<void>([&](Promise*) {
+        group.submit<void>([&] {
             for (size_t j = 0; j < COUNT_PER_THREAD; j++) {
                 _storage.inc();
             }
@@ -161,7 +161,7 @@ TEST_F(JobSystemTest, TwoWorkerJobGroup) {
     auto group = jobsystem->newGroup();
 
     for (size_t i = 0; i < JOB_COUNT; i++) {
-        group.submit<void>([&](Promise*) {
+        group.submit<void>([&] {
             for (size_t j = 0; j < COUNT_PER_THREAD; j++) {
                 _storage.inc();
             }
@@ -182,7 +182,7 @@ TEST_F(JobSystemTest, ManyWorkerJobGroup) {
     auto group = jobsystem->newGroup();
 
     for (size_t i = 0; i < JOB_COUNT; i++) {
-        group.submit<void>([&](Promise*) {
+        group.submit<void>([&] {
             for (size_t j = 0; j < COUNT_PER_THREAD; j++) {
                 _storage.inc();
             }
@@ -203,7 +203,7 @@ TEST_F(JobSystemTest, TooManyWorkerJobGroup) {
     auto group = jobsystem->newGroup();
 
     for (size_t i = 0; i < JOB_COUNT; i++) {
-        group.submit<void>([&](Promise*) {
+        group.submit<void>([&] {
             for (size_t j = 0; j < COUNT_PER_THREAD; j++) {
                 _storage.inc();
             }
@@ -217,6 +217,24 @@ TEST_F(JobSystemTest, TooManyWorkerJobGroup) {
     jobsystem->terminate();
 }
 
+TEST_F(JobSystemTest, TypedJobReturnsItsValue) {
+    auto jobsystem = std::make_unique<JobSystem>(2);
+    jobsystem->init();
+
+    Future<size_t> future = jobsystem->submit<size_t>([] {
+        return COUNT_PER_THREAD;
+    });
+
+    const SharedFuture<size_t> shared = jobsystem->submitShared<size_t>([] {
+        return JOB_COUNT;
+    });
+
+    ASSERT_EQ(future.get(), COUNT_PER_THREAD);
+    ASSERT_EQ(shared.get(), JOB_COUNT);
+
+    jobsystem->terminate();
+}
+
 TEST_F(JobSystemTest, SubmitFromWorker) {
     spdlog::info("Submit from worker");
 
@@ -226,9 +244,9 @@ TEST_F(JobSystemTest, SubmitFromWorker) {
     jobsystem->init();
 
         for (size_t j = 0; j < 6; j++) {
-            jobsystem->submit<void>([&](Promise*) {
+            jobsystem->submit<void>([&] {
                 for (size_t k = 0; k < 5; k++) {
-                    jobsystem->submit<void>([&](Promise*) {
+                    jobsystem->submit<void>([&] {
                         for (size_t l = 0; l < 5; l++) {
                             _storage.inc();
                         }
@@ -251,7 +269,7 @@ TEST_F(JobSystemTest, ManyJobSystems) {
     jobsystem->init();
 
         for (size_t j = 0; j < 6; j++) {
-            jobsystem->submit<void>([&](Promise*) {
+            jobsystem->submit<void>([&] {
                 for (size_t k = 0; k < 50; k++) {
                     _storage.inc();
                 }

@@ -1,42 +1,32 @@
 #pragma once
 
+#include <memory>
+#include <vector>
+
 #include "JobSystem.h"
 
 namespace db {
 
 class JobGroup {
 public:
-    explicit JobGroup(JobSystem* jobSystem)
-        : _jobSystem(jobSystem)
-    {
-    }
+    explicit JobGroup(JobSystem* jobSystem);
+    ~JobGroup();
 
-    ~JobGroup() {
-        wait();
-    }
-
-    void wait() {
-        for (auto& future : _futures) {
-            future->wait();
-        }
-
-        _futures.clear();
-    }
+    void wait();
 
     size_t size() const {
         return _futures.size();
     }
 
     template <typename T>
-    SharedFuture<T> submit(JobOperation&& operation) {
-        auto future = _jobSystem->submitShared<T>(std::move(operation));
-        SharedFuture<T>* ptr = new SharedFuture<T>(future);
-        _futures.emplace_back(static_cast<AbstractFuture*>(ptr));
+    SharedFuture<T> submit(JobOperation<T>&& operation) {
+        SharedFuture<T> future = _jobSystem->submitShared<T>(std::move(operation));
+        _futures.emplace_back(std::make_unique<SharedFuture<T>>(future));
         return future;
     }
 
 private:
-    std::vector<std::shared_ptr<AbstractFuture>> _futures;
+    std::vector<std::unique_ptr<AbstractFuture>> _futures;
     JobSystem* _jobSystem {nullptr};
 };
 

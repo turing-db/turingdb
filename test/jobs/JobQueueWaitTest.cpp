@@ -25,7 +25,7 @@ TEST_F(JobQueueWaitTest, WaitingForAJobConsumesNoCpu) {
     const std::unique_ptr<JobSystem> jobSystem = std::make_unique<JobSystem>(WORKER_COUNT);
     jobSystem->init();
 
-    jobSystem->submit<void>([](Promise*) {
+    jobSystem->submit<void>([] {
         std::this_thread::sleep_for(JOB_DURATION);
     });
 

@@ -55,18 +55,16 @@ void JobSystem::init() {
             ThreadName::set(THREAD_NAME);
 
             while (true) {
-                std::optional<Job> j = _jobs.waitJob([&] {
+                const std::unique_ptr<Job> job = _jobs.waitJob([&] {
                     return _stopRequested.load();
                 });
 
-                if (!j && _stopRequested.load()) {
+                if (!job) {
                     // No more job available and stop requested
                     return;
                 }
 
-                auto& job = j.value();
-                job._operation(job._promise.get());
-                job._promise->finish();
+                job->run();
                 _jobs.incrementFinished();
             }
         });
