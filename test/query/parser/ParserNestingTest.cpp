@@ -28,7 +28,7 @@ constexpr Nesting LABEL_BARS {"RETURN ", "[x IN xs WHERE x:A | B + ", "1", "]"};
 // the 512 KB a macOS thread starts with
 class ParserNestingTest : public ::testing::Test {
 protected:
-    static constexpr size_t STACK_BYTES = 512 * 1024;
+    static constexpr size_t STACK_BYTES = 512 * 1024 * STACK_SCALE;
     static constexpr size_t MAX_DEPTH = CypherParser::MAX_NESTING_DEPTH;
 
     // At the deepest level allowed, a query parses, or fails only the expression depth check

@@ -27,7 +27,7 @@ constexpr Nesting WHEN_MERGE {"RETURN ",
 
 class SubqueryNestingStackTest : public ::testing::Test {
 protected:
-    static constexpr size_t MACOS_THREAD_STACK = 512 * 1024;
+    static constexpr size_t MACOS_THREAD_STACK = 512 * 1024 * STACK_SCALE;
 
     static void expectParseWithinTheStackBudget(const Nesting& nesting) {
         std::string query;

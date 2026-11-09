@@ -3,6 +3,8 @@
 #include <stddef.h>
 #include <string_view>
 
+#include "StackScale.h"
+
 namespace db {
 
 class CypherAST;
@@ -21,7 +23,7 @@ public:
 
     // The frames between two levels depend on the clauses between them, so a level also stops
     // the parse past this much stack, leaving a 512 KB macOS thread room for its callers and the throw
-    static constexpr size_t MAX_STACK_BYTES = 384 * 1024;
+    static constexpr size_t MAX_STACK_BYTES = 384 * 1024 * STACK_SCALE;
 
     explicit CypherParser(CypherAST* ast);
     ~CypherParser() = default;
