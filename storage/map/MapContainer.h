@@ -56,6 +56,10 @@ public:
      */
     MapView insert(std::span<const MapKeyValuePair> entries);
 
+    /// As @ref insert, for entries whose keys and payloads already live in this container's
+    /// buffers; sorts @param entries in place
+    MapView insertOwned(std::span<MapKeyValuePair> entries);
+
     /// Stores an already-owned view, as returned by @ref insert, as the next value
     void append(MapView map);
 
@@ -65,6 +69,10 @@ public:
 
     /// The store the list values of this container's maps live in
     ListContainer& getLists() { return _lists; }
+
+    StringBuffer& getStrings() { return *_strings; }
+    EmbeddingBuffer& getEmbeddings() { return *_embeddings; }
+    PathBuffer& getPaths();
 
     const MapView& getView(size_t index) const { return _views[index]; }
 
@@ -87,7 +95,6 @@ private:
 
     MapKeyValuePair own(const MapKeyValuePair& entry);
     MapKeyValuePair ownedEntry(MapEntryView entry);
-    PathBuffer& getPaths();
 };
 
 }

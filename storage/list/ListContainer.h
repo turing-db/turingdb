@@ -60,6 +60,9 @@ public:
      */
     ListView insert(std::span<const ListItemVariant> elements);
 
+    /// As @ref insert, for elements whose payloads already live in this container's buffers
+    ListView insertOwned(std::span<const ListItemVariant> elements);
+
     /// Stores an already-owned view, as returned by @ref insert, as the next value
     void append(ListView list);
 
@@ -72,6 +75,10 @@ public:
 
     /// The store the map elements of this container's lists live in, created on first use
     MapContainer& getMaps();
+
+    StringBuffer& getStrings() { return *_strings; }
+    EmbeddingBuffer& getEmbeddings() { return *_embeddings; }
+    PathBuffer& getPaths();
 
     const ListView& getView(size_t index) const { return _views[index]; }
 
@@ -94,7 +101,6 @@ private:
 
     ListItemVariant own(const ListItemVariant& element);
     ListItemVariant ownedItem(CellView element);
-    PathBuffer& getPaths();
 };
 
 }

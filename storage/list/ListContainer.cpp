@@ -51,7 +51,11 @@ ListView ListContainer::insert(std::span<const ListItemVariant> elements) {
         owned.push_back(own(element));
     }
 
-    return _lists->insert(owned);
+    return insertOwned(owned);
+}
+
+ListView ListContainer::insertOwned(std::span<const ListItemVariant> elements) {
+    return _lists->insert(elements);
 }
 
 void ListContainer::append(ListView list) {

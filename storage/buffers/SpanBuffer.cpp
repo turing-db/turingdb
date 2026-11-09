@@ -24,6 +24,21 @@ V SpanBuffer<E, V, N>::insert(std::span<const E> items) {
 }
 
 template <typename E, typename V, size_t N>
+V SpanBuffer<E, V, N>::insertBytes(std::span<const std::byte> bytes) {
+    const size_t size = bytes.size() / sizeof(E);
+
+    _buf.reserveContiguous(size);
+
+    E* spanStart = _buf.nextPtr();
+
+    std::ranges::copy(bytes, reinterpret_cast<std::byte*>(spanStart));
+
+    _buf.commit(size);
+
+    return V {spanStart, size};
+}
+
+template <typename E, typename V, size_t N>
 void SpanBuffer<E, V, N>::clear() {
     _buf.clear();
 }

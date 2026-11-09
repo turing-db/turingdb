@@ -17,6 +17,10 @@ template <typename E, typename V, size_t N = 4096>
 class SpanBuffer {
 public:
     V insert(std::span<const E> items);
+
+    /// Copies the bytes of whole elements, which may sit at any address, into aligned storage
+    V insertBytes(std::span<const std::byte> bytes);
+
     void clear();
 
 private:

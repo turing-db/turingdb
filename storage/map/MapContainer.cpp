@@ -50,11 +50,15 @@ MapView MapContainer::insert(std::span<const MapKeyValuePair> entries) {
         owned.push_back(own(entry));
     }
 
-    std::stable_sort(owned.begin(), owned.end(), [](const MapKeyValuePair& lhs, const MapKeyValuePair& rhs) {
+    return insertOwned(owned);
+}
+
+MapView MapContainer::insertOwned(std::span<MapKeyValuePair> entries) {
+    std::stable_sort(entries.begin(), entries.end(), [](const MapKeyValuePair& lhs, const MapKeyValuePair& rhs) {
         return lhs.key < rhs.key;
     });
 
-    return _maps->insert(owned);
+    return _maps->insert(entries);
 }
 
 void MapContainer::append(MapView map) {

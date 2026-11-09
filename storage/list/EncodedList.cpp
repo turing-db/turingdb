@@ -129,7 +129,7 @@ public:
             elements.push_back(decodeElement());
         }
 
-        return _container.insert(elements);
+        return _container.insertOwned(elements);
     }
 
 private:
@@ -153,8 +153,8 @@ private:
         _offset += size;
     }
 
-    /// Hands back a span of the encoded bytes themselves; the container copies the payload
-    /// out of it as it stores the element
+    /// Hands back a span of the encoded bytes themselves, which the element's decode copies
+    /// into the container's buffers
     std::span<const std::byte> readPayload(size_t size) {
         if (_offset + size > _bytes.size()) {
             throw FatalException("Truncated encoded list");
@@ -224,22 +224,29 @@ private:
     types::String::Primitive decodeString() {
         const uint64_t size = read<uint64_t>();
         const std::span<const std::byte> payload = readPayload(size);
+        const std::string_view string {reinterpret_cast<const char*>(payload.data()), size};
 
-        return {reinterpret_cast<const char*>(payload.data()), size};
+        StringBuffer& strings = _container.getStrings();
+
+        return strings.insert(string);
     }
 
     types::Embedding::Primitive decodeEmbedding() {
         const uint64_t count = read<uint64_t>();
         const std::span<const std::byte> payload = readPayload(count * sizeof(float));
 
-        return {reinterpret_cast<const float*>(payload.data()), count};
+        ListContainer::EmbeddingBuffer& embeddings = _container.getEmbeddings();
+
+        return embeddings.insertBytes(payload);
     }
 
     PathView decodePath() {
         const uint64_t count = read<uint64_t>();
         const std::span<const std::byte> payload = readPayload(count * sizeof(uint64_t));
 
-        return PathView {reinterpret_cast<const uint64_t*>(payload.data()), count};
+        ListContainer::PathBuffer& paths = _container.getPaths();
+
+        return paths.insertBytes(payload);
     }
 
     MapView decodeMap() {
