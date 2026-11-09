@@ -9,6 +9,7 @@ namespace turing::test {
 struct QueryTestSpec {
     std::string _name;
     std::string _graphName {"simpledb"};
+    std::vector<std::string> _setup;
     std::string _query;
     std::string _expectResult;
     std::string _expectMlir;

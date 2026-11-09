@@ -30,6 +30,8 @@ import { AlertTriangle, Ban, Bug, CheckCircle2, Clock3, Copy, FilePlus, GitCompa
 type TestMeta = {
   name: string;
   enabled: boolean;
+  graph?: string;
+  setup?: string[];
   query?: string;
   tags?: string[];
   writeRequired?: boolean;
@@ -116,6 +118,9 @@ export default function App() {
   const [nameDraft, setNameDraft] = React.useState("");
   const [queryDraft, setQueryDraft] = React.useState("");
   const [isEditingQuery, setIsEditingQuery] = React.useState(false);
+  const [graphDraft, setGraphDraft] = React.useState("");
+  const [setupDraft, setSetupDraft] = React.useState<string[]>([]);
+  const [isEditingSetup, setIsEditingSetup] = React.useState(false);
   const [tagFilters, setTagFilters] = React.useState<string[]>([]);
   const [tagDraft, setTagDraft] = React.useState("");
   const [writeRequired, setWriteRequired] = React.useState(false);
@@ -183,6 +188,9 @@ export default function App() {
   React.useEffect(() => {
     setQueryDraft(selected?.query ?? "");
     setNameDraft(selected?.name ?? "");
+    setGraphDraft(selected?.graph ?? "simpledb");
+    setSetupDraft(selected?.setup ?? []);
+    setIsEditingSetup(false);
     setTagDraft("");
     setWriteRequired(selected?.writeRequired ?? false);
     setDisabledReasonDraft(selected?.disabledReason ?? "");
@@ -402,6 +410,82 @@ export default function App() {
       setIsEditingQuery(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to update query.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateGraph = async () => {
+    if (!selected) return;
+    const graph = graphDraft.trim();
+    if (!graph) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/update`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: selected.name,
+          graph
+        })
+      });
+      if (!res.ok) {
+        throw new Error(await readApiErrorMessage(res, "Failed to update test"));
+      }
+      setTests((prev) =>
+        prev.map((test) =>
+          test.name === selected.name
+            ? { ...test, graph }
+            : test
+        )
+      );
+      setSelected((prev) =>
+        prev ? { ...prev, graph } : prev
+      );
+      await runTest(selected.name);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update graph.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateSetup = async () => {
+    if (!selected) return;
+    const setup = setupDraft
+      .map((statement) => statement.trim())
+      .filter((statement) => statement !== "");
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/update`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: selected.name,
+          setup
+        })
+      });
+      if (!res.ok) {
+        throw new Error(await readApiErrorMessage(res, "Failed to update test"));
+      }
+      setTests((prev) =>
+        prev.map((test) =>
+          test.name === selected.name
+            ? { ...test, setup }
+            : test
+        )
+      );
+      setSelected((prev) =>
+        prev ? { ...prev, setup } : prev
+      );
+      await runTest(selected.name);
+      setIsEditingSetup(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update setup.";
       setError(message);
     } finally {
       setLoading(false);
@@ -768,12 +852,24 @@ export default function App() {
       `- Enabled: ${selected.enabled ? "true" : "false"}`,
       `- Write required: ${selected.writeRequired ? "true" : "false"}`,
       `- Tags: ${(selected.tags ?? []).join(", ") || "(none)"}`,
-      "",
+      `- Graph: ${selected.graph ?? "simpledb"}`,
+      ""
+    ];
+    if ((selected.setup ?? []).length > 0) {
+      lines.push(
+        "## Setup",
+        "```cypher",
+        ...(selected.setup ?? []).map((statement) => `${statement};`),
+        "```",
+        ""
+      );
+    }
+    lines.push(
       "## Query",
       "```cypher",
       selected.query ?? "",
       "```"
-    ];
+    );
     if (selectedResult) {
       lines.push(
         "",
@@ -1330,6 +1426,17 @@ export default function App() {
                   Add Tag
                 </Button>
               </div>
+              <div className="mt-3 flex items-center gap-2">
+                <input
+                  value={graphDraft}
+                  onChange={(event) => setGraphDraft(event.target.value)}
+                  placeholder="simpledb, empty or a graphs/<name>.cypher name"
+                  className="flex-1 rounded-xl border border-white/10 bg-paper px-3 py-2 text-xs text-ink focus:border-accent/60 focus:outline-none"
+                />
+                <Button variant="ghost" size="sm" onClick={updateGraph} disabled={loading || !selected}>
+                  Update Graph
+                </Button>
+              </div>
               <label className="mt-4 flex items-center gap-2 text-xs text-ink/70">
                 <input
                   type="checkbox"
@@ -1375,6 +1482,90 @@ export default function App() {
                     </Button>
                   </div>
                 </div>
+              )}
+            </div>
+          )}
+          {selected && (
+            <div className="mt-4 rounded-2xl border border-white/10 bg-steel/40 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-ink/60">Setup</p>
+              {!isEditingSetup ? (
+                <div
+                  onClick={() => setIsEditingSetup(true)}
+                  className="mt-2 grid cursor-text gap-2"
+                >
+                  {(selected.setup ?? []).length === 0 ? (
+                    <pre className="whitespace-pre-wrap rounded-xl border border-transparent bg-paper p-3 text-xs font-mono text-ink/50">
+(no setup)
+                    </pre>
+                  ) : (
+                    (selected.setup ?? []).map((statement, index) => (
+                      <pre
+                        key={index}
+                        className="whitespace-pre-wrap rounded-xl border border-transparent bg-paper p-3 text-xs font-mono text-ink"
+                      >
+{statement}
+                      </pre>
+                    ))
+                  )}
+                </div>
+              ) : (
+                <>
+                  {setupDraft.map((statement, index) => (
+                    <div key={index} className="mt-2 flex items-start gap-2">
+                      <textarea
+                        value={statement}
+                        onChange={(event) =>
+                          setSetupDraft((prev) =>
+                            prev.map((entry, position) => (position === index ? event.target.value : entry))
+                          )
+                        }
+                        className="h-20 w-full resize-none rounded-xl border border-white/10 bg-paper p-3 text-xs font-mono text-ink focus:border-accent/60 focus:outline-none"
+                        placeholder="CREATE (:Person {name: 'Ada'})"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSetupDraft((prev) => prev.filter((_, position) => position !== index))}
+                        disabled={loading}
+                        title="Remove statement"
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
+                  ))}
+                  <div className="mt-3 flex items-center justify-between gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSetupDraft((prev) => [...prev, ""])}
+                      disabled={loading}
+                    >
+                      <Plus />
+                      Add Statement
+                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSetupDraft(selected.setup ?? []);
+                          setIsEditingSetup(false);
+                        }}
+                        disabled={loading}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="accent"
+                        size="sm"
+                        onClick={updateSetup}
+                        disabled={loading || !selected}
+                      >
+                        Update Setup
+                      </Button>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           )}

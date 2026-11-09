@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "cities",
+  "query": "MATCH (a:City)-[r]->(b:City)\nRETURN a.name, type(r), b.name\nORDER BY a.name, b.name",
+  "expect": {
+    "result": "a.name,type(r),b.name\nLille,TRAIN,Lyon\nLyon,ROAD,Marseille\nMarseille,ROAD,Paris\nParis,ROAD,Lille\nParis,ROAD,Lyon",
+    "resultJson": "{\"header\":{\"column_names\":[\"a.name\",\"type(r)\",\"b.name\"],\"column_types\":[\"String\",\"String\",\"String\"]},\"data\":[[[\"Lille\",\"Lyon\",\"Marseille\",\"Paris\",\"Paris\"],[\"TRAIN\",\"ROAD\",\"ROAD\",\"ROAD\",\"ROAD\"],[\"Lyon\",\"Marseille\",\"Paris\",\"Lille\",\"Lyon\"]]]}"
+  },
+  "tags": [
+    "graph",
+    "match"
+  ],
+  "write-required": false
+}

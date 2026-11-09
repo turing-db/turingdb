@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/fmt/bundled/format.h>
 
+#include "CypherLexer.h"
 #include "FatalException.h"
 #include "File.h"
 
@@ -97,6 +98,19 @@ void QueryTestRunner::loadTestsFromDir(std::vector<QueryTestSpec>& specs,
         spec._writeRequired = doc.value("write-required", false);
         spec._disabledReason = doc.value("disabled-reason", "");
 
+        if (doc.contains("setup")) {
+            const json& setup = doc["setup"];
+            const bool isStatementList = setup.is_array()
+                                         && std::all_of(setup.begin(), setup.end(), [](const json& statement) { return statement.is_string(); });
+            if (!isStatementList) {
+                throw FatalException(fmt::format("The setup of test {} must be a list of statements", filename));
+            }
+
+            for (const json& statement : setup) {
+                spec._setup.push_back(statement.get<std::string>());
+            }
+        }
+
         if (doc.contains("tags") && doc["tags"].is_array()) {
             for (const auto& tag : doc["tags"]) {
                 if (tag.is_string()) {
@@ -136,6 +150,40 @@ void QueryTestRunner::normalizeOutput(std::string& normalized,
     }
 
     trimTrailingEmptyLines(normalized, lines);
+}
+
+void QueryTestRunner::splitStatements(std::vector<std::string>& statements, std::string_view script) {
+    statements.clear();
+
+    db::CypherLexer lexer(script);
+    db::CypherToken token;
+
+    bool inStatement = false;
+    size_t statementBegin = 0;
+    size_t statementEnd = 0;
+
+    do {
+        lexer.lex(token);
+
+        const bool endsStatement = token._kind == db::CypherTokenKind::SEMI_COLON
+                                   || token._kind == db::CypherTokenKind::PROG_END;
+
+        if (token._kind == db::CypherTokenKind::LEXER_ERROR) {
+            throw FatalException(fmt::format("Cannot split the script into statements at line {}: {}",
+                                             token._location._beginLine,
+                                             token._text));
+        } else if (!endsStatement) {
+            if (!inStatement) {
+                statementBegin = token._location._beginOffset;
+                inStatement = true;
+            }
+
+            statementEnd = token._location._endOffset;
+        } else if (inStatement) {
+            statements.emplace_back(script.substr(statementBegin, statementEnd - statementBegin));
+            inStatement = false;
+        }
+    } while (token._kind != db::CypherTokenKind::PROG_END);
 }
 
 void QueryTestRunner::readFile(std::string& content, const fs::Path& path) {

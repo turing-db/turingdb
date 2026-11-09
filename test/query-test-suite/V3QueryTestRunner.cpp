@@ -104,6 +104,108 @@ private:
     std::vector<std::string> _values;
 };
 
+constexpr std::string_view SIMPLEDB_GRAPH = "simpledb";
+constexpr std::string_view EMPTY_GRAPH = "empty";
+
+void openChange(ChangeID& changeID,
+                TuringTestEnv& env,
+                const QueryConfig& queryConfig,
+                std::string_view graphName) {
+    ChangeIDNLSink sink(changeID);
+    const QueryState state(graphName, &env.getMem(), &env.getCompilerContext(), &queryConfig, &sink);
+
+    const QueryStatus status = env.getDB().query("CHANGE NEW", state);
+    if (!status.isOk()) {
+        throw TuringException(fmt::format("CHANGE NEW failed on graph {}: {}", graphName, status.getError()));
+    }
+}
+
+void submitChange(TuringTestEnv& env,
+                  const QueryConfig& queryConfig,
+                  std::string_view graphName,
+                  ChangeID changeID) {
+    const QueryState state(graphName,
+                           &env.getMem(),
+                           &env.getCompilerContext(),
+                           &queryConfig,
+                           nullptr,
+                           CommitHash::head(),
+                           changeID);
+
+    const QueryStatus status = env.getDB().query("CHANGE SUBMIT", state);
+    if (!status.isOk()) {
+        throw TuringException(fmt::format("CHANGE SUBMIT failed on graph {}: {}", graphName, status.getError()));
+    }
+}
+
+void runSetupStatement(TuringTestEnv& env,
+                       QueryInterpreterV3& interpreter,
+                       const QueryConfig& queryConfig,
+                       std::string_view graphName,
+                       std::string_view statement) {
+    ChangeID changeID = ChangeID::head();
+    openChange(changeID, env, queryConfig, graphName);
+
+    std::vector<std::string> columnNames;
+    std::vector<std::vector<std::string>> rows;
+    CollectingNLSink sink(columnNames, rows);
+
+    QueryStatus status;
+    interpreter.execute(status, statement, graphName, CommitHash::head(), changeID, &sink);
+    if (!status.isOk()) {
+        throw TuringException(fmt::format("Setup statement failed: {}\n{}",
+                                          statement,
+                                          QueryResultFormatter::formatResultOutput(status, columnNames, rows)));
+    }
+
+    submitChange(env, queryConfig, graphName, changeID);
+}
+
+void loadGraphStatements(std::vector<std::string>& statements, std::string_view graphName) {
+    const fs::Path script = fs::Path {QUERY_TEST_SUITE_GRAPHS_DIR} / fmt::format("{}.cypher", graphName);
+    if (!script.exists()) {
+        throw TuringException(fmt::format("Unknown graph {}: it is not {} or {}, and {} does not exist",
+                                          graphName,
+                                          SIMPLEDB_GRAPH,
+                                          EMPTY_GRAPH,
+                                          script.get()));
+    }
+
+    std::string content;
+    QueryTestRunner::readFile(content, script);
+    QueryTestRunner::splitStatements(statements, content);
+}
+
+void buildGraph(TuringTestEnv& env,
+                QueryInterpreterV3& interpreter,
+                const QueryConfig& queryConfig,
+                const QueryTestSpec& spec) {
+    const bool isSimpleDB = spec._graphName == SIMPLEDB_GRAPH;
+
+    std::vector<std::string> graphStatements;
+    if (!isSimpleDB && spec._graphName != EMPTY_GRAPH) {
+        loadGraphStatements(graphStatements, spec._graphName);
+    }
+
+    Graph* graph = nullptr;
+    {
+        SystemAccessor system = env.getSystemManager().accessUnique();
+        graph = system.createGraph(spec._graphName);
+    }
+
+    if (isSimpleDB) {
+        SimpleGraph::createSimpleGraph(graph);
+    }
+
+    for (const std::string& statement : graphStatements) {
+        runSetupStatement(env, interpreter, queryConfig, spec._graphName, statement);
+    }
+
+    for (const std::string& statement : spec._setup) {
+        runSetupStatement(env, interpreter, queryConfig, spec._graphName, statement);
+    }
+}
+
 void explainDBProgram(std::string& mlirOutput,
                       QueryInterpreterV3& interpreter,
                       const QueryTestSpec& spec) {
@@ -141,26 +243,17 @@ V3QueryTestResult V3QueryTestRunner::runTest(const QueryTestSpec& spec, const fs
     auto env = turing::test::TuringTestEnv::create(outDir);
     stageDataFiles(env->getConfig().getDataDir());
 
-    Graph* graph = nullptr;
-    {
-        SystemAccessor system = env->getSystemManager().accessUnique();
-        graph = system.createGraph(spec._graphName);
-    }
-    SimpleGraph::createSimpleGraph(graph);
-    TuringDB* db = &env->getDB();
-
     QueryInterpreterV3 interpreter(&env->getSystemManager(), &env->getMem(), &env->getCompilerContext());
+    QueryConfig queryConfig;
+
+    buildGraph(*env, interpreter, queryConfig, spec);
 
     std::string mlirOutput;
     explainDBProgram(mlirOutput, interpreter, spec);
 
-    QueryConfig queryConfig;
-
     ChangeID changeID = ChangeID::head();
     if (spec._writeRequired) {
-        ChangeIDNLSink changeNewSink(changeID);
-        const QueryState changeNewState(spec._graphName, &env->getMem(), &env->getCompilerContext(), &queryConfig, &changeNewSink);
-        db->query("CHANGE NEW", changeNewState);
+        openChange(changeID, *env, queryConfig, spec._graphName);
     }
 
     std::vector<std::string> columnNames;
@@ -176,9 +269,7 @@ V3QueryTestResult V3QueryTestRunner::runTest(const QueryTestSpec& spec, const fs
     result._timeUs = static_cast<uint64_t>(duration<Microseconds>(queryStart, queryEnd));
 
     if (spec._writeRequired) {
-        const QueryState submitState(spec._graphName, &env->getMem(), &env->getCompilerContext(), &queryConfig, nullptr,
-                                     CommitHash::head(), changeID);
-        db->query("CHANGE SUBMIT", submitState);
+        submitChange(*env, queryConfig, spec._graphName, changeID);
     }
 
     QueryTestRunner::normalizeOutput(

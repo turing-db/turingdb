@@ -60,10 +60,17 @@ std::string argParserUsage(const argparse::ArgumentParser& parser) {
 
 std::string serializeTest(const QueryTestSpec& test) {
     std::string out = fmt::format(
-        "{{\"name\":\"{}\",\"query\":\"{}\",\"writeRequired\":{},"
-        "\"disabledReason\":\"{}\",\"tags\":[",
-        escapeJson(test._name), escapeJson(test._query),
+        "{{\"name\":\"{}\",\"graph\":\"{}\",\"query\":\"{}\",\"writeRequired\":{},"
+        "\"disabledReason\":\"{}\",\"setup\":[",
+        escapeJson(test._name), escapeJson(test._graphName), escapeJson(test._query),
         test._writeRequired ? "true" : "false", escapeJson(test._disabledReason));
+    for (size_t i = 0; i < test._setup.size(); ++i) {
+        if (i > 0) {
+            out += ",";
+        }
+        out += fmt::format("\"{}\"", escapeJson(test._setup[i]));
+    }
+    out += "],\"tags\":[";
     for (size_t i = 0; i < test._tags.size(); ++i) {
         if (i > 0) {
             out += ",";
@@ -84,6 +91,17 @@ std::string serializeResult(const V3QueryTestResult& result) {
         escapeJson(result._mlirOutput),
         result._resultMatched ? "true" : "false",
         result._mlirMatched ? "true" : "false", result._timeUs);
+}
+
+void runTest(V3QueryTestResult& result, V3QueryTestRunner& runner, const QueryTestSpec& test) {
+    try {
+        result = runner.runTest(test, fs::Path {"query_test_suite_cli"} / test._name);
+    } catch (const std::exception& e) {
+        // A single failing test must not abort the whole run. Record it as a
+        // failed result and keep going with the remaining tests.
+        result._name = test._name;
+        result._resultOutput = fmt::format("ERROR: {}", e.what());
+    }
 }
 
 }
@@ -154,8 +172,8 @@ int main(int argc, char** argv) {
             if (test._name != name) {
                 continue;
             }
-            const fs::Path outDir = fs::Path {"query_test_suite_cli"} / test._name;
-            const V3QueryTestResult result = runner.runTest(test, outDir);
+            V3QueryTestResult result;
+            runTest(result, runner, test);
             fmt::println("{}", serializeResult(result));
             return 0;
         }
@@ -171,14 +189,7 @@ int main(int argc, char** argv) {
         }
 
         V3QueryTestResult result;
-        try {
-            result = runner.runTest(test, fs::Path {"query_test_suite_cli"} / test._name);
-        } catch (const std::exception& e) {
-            // A single failing test must not abort the whole run. Record it as a
-            // failed result and keep going with the remaining tests.
-            result._name = test._name;
-            result._resultOutput = fmt::format("ERROR: {}", e.what());
-        }
+        runTest(result, runner, test);
 
         if (!first) {
             fmt::print(",");

@@ -185,6 +185,11 @@ Bun.serve({
 			const body = await req.json().catch(() => null);
 			const hasResult = typeof body?.result === "string";
 			const hasMlir = typeof body?.mlir === "string";
+			const hasGraph =
+				typeof body?.graph === "string" && body.graph.trim() !== "";
+			const hasSetup =
+				Array.isArray(body?.setup) &&
+				body.setup.every((statement: unknown) => typeof statement === "string");
 			const hasQuery = typeof body?.query === "string";
 			const hasNewName = typeof body?.newName === "string";
 			const hasTags = Array.isArray(body?.tags);
@@ -197,6 +202,8 @@ Bun.serve({
 				!targetName ||
 				(!hasResult &&
 					!hasMlir &&
+					!hasGraph &&
+					!hasSetup &&
 					!hasQuery &&
 					!hasNewName &&
 					!hasTags &&
@@ -219,6 +226,8 @@ Bun.serve({
 			const updatedSource = await updateTestFile(sourceTestsDir, targetName, {
 				result: body.result,
 				mlir: body.mlir,
+				graph: hasGraph ? body.graph.trim() : undefined,
+				setup: hasSetup ? body.setup : undefined,
 				query: body.query,
 				newName: body.newName,
 				tags: body.tags,
@@ -231,6 +240,8 @@ Bun.serve({
 				updatedBuild = await updateTestFile(sourceTestsDir, targetName, {
 						result: body.result,
 					mlir: body.mlir,
+					graph: hasGraph ? body.graph.trim() : undefined,
+					setup: hasSetup ? body.setup : undefined,
 					query: body.query,
 					newName: body.newName,
 					tags: body.tags,

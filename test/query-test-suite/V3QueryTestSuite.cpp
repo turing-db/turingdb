@@ -27,7 +27,14 @@ TEST_F(V3QueryTestSuite, RunAll) {
 
         ++executed;
         const fs::Path outDir = fs::Path {_outDir} / test._name;
-        const V3QueryTestResult result = runner.runTest(test, outDir);
+
+        V3QueryTestResult result;
+        try {
+            result = runner.runTest(test, outDir);
+        } catch (const std::exception& e) {
+            ADD_FAILURE() << "V3 run failed for test: " << test._name << "\n" << e.what();
+            continue;
+        }
 
         if (!result._resultMatched) {
             QueryTestRunner::normalizeOutput(normalized, test._expectResult);
