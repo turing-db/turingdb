@@ -7918,10 +7918,10 @@ mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinali
     // a map literal is laid out as the plain container chunk an nl.collect drain emits
     // instead, since no row of a literal is absent; one a function answered may be null.
     // A node, an edge, their label sets or types, a path, a walk or a mask rides the plain
-    // chunk every op takes it in.
+    // chunk every op takes it in, and an edge type a CASE left null keeps its null.
     mlir::MLIRContext* const context = _builder.getContext();
     const bool isContainer = llvm::isa<storage::ListType, storage::MapType>(valueElement);
-    const bool staysPlain = (isContainer && !nullable) || isReadAsRows(valueElement);
+    const bool staysPlain = !nullable && (isContainer || isReadAsRows(valueElement));
     const mlir::Type resultElement = staysPlain ? valueElement
                                                 : storage::NullableType::get(context, valueElement);
     const nl::ChunkType resultType = nl::ChunkType::get(context, resultElement);

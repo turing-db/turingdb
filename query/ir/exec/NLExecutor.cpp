@@ -1816,6 +1816,16 @@ void readSingleRowAsConstant(Column* result, const Column* row) {
     static_cast<ColumnConst<Element>*>(result)->set(rowRaw.front());
 }
 
+template <typename Element>
+NLUnaryFn selectRowConstantOf(const Column* row, LocalMemory* memory, Column*& result) {
+    bioassert(row->getKind() == ColumnVector<Element>::staticKind(),
+              "nl.row_constant reads a {} under a chunk of another element type",
+              row->getTypeName());
+
+    result = memory->alloc<ColumnConst<Element>>();
+    return &readSingleRowAsConstant<Element>;
+}
+
 // Range copy: rows [inputOffset, inputOffset + rowCount) of the input land at
 // output indices [0, rowCount). This lifts a skip's surviving suffix to the front
 // of a fresh chunk - nl.skip_truncate passes inputOffset = skipThisStep and
@@ -2030,20 +2040,11 @@ void toNullableConst(Column* result, const Column* operand) {
     *nullable = std::optional<Primitive>((*constant)[0]);
 }
 
-// No literal spells a schema ID or a value-type code, so no constant column holds one
-template <typename Element>
-concept SchemaIDElement = std::same_as<Element, EdgeTypeID>
-                       || std::same_as<Element, LabelID>
-                       || std::same_as<Element, PropertyTypeID>
-                       || std::same_as<Element, ValueType>;
-
 template <typename Primitive>
 NLUnaryFn selectToNullableOf(const Column* operand, LocalMemory* memory, Column*& result) {
-    if constexpr (!SchemaIDElement<Primitive>) {
-        if (operand->getContainerKind() == ContainerKind::code<ColumnConst>()) {
-            result = memory->alloc<ColumnConst<std::optional<Primitive>>>();
-            return &toNullableConst<Primitive>;
-        }
+    if (operand->getContainerKind() == ContainerKind::code<ColumnConst>()) {
+        result = memory->alloc<ColumnConst<std::optional<Primitive>>>();
+        return &toNullableConst<Primitive>;
     }
 
     result = memory->alloc<ColumnOptVector<Primitive>>();
@@ -12733,77 +12734,49 @@ NLBroadcastConstantFunction NLExecutor::selectOptCellBroadcast(const Column* val
     return &broadcastConstantColumn<CellView>;
 }
 
-NLBroadcastConstantFunction NLExecutor::selectConstantBroadcast(ValueType valueType, const Column* value) {
+NLBroadcastConstantFunction NLExecutor::selectConstantBroadcast(NLChunkKind kind, const Column* value) {
     const bool isConst = value->getContainerKind() == ContainerKind::code<ColumnConst>();
 
     NLBroadcastConstantFunction fill = nullptr;
-    const auto select = [&]<SupportedType T>() {
-        using Primitive = typename T::Primitive;
-
+    dispatchOptChunkKind(kind, [&]<typename Element>() {
         if (!isConst) {
-            fill = &broadcastSingleRowColumn<Primitive>;
-        } else if (value->getInternalKind() == InternalKind::code<std::optional<Primitive>>()) {
-            fill = &broadcastNullableConstantColumn<Primitive>;
+            fill = &broadcastSingleRowColumn<Element>;
+        } else if (value->getInternalKind() == InternalKind::code<std::optional<Element>>()) {
+            fill = &broadcastNullableConstantColumn<Element>;
         } else {
-            fill = &broadcastConstantColumn<Primitive>;
+            fill = &broadcastConstantColumn<Element>;
         }
-    };
-    ValueTypeDispatcher(valueType).execute(select);
+    });
 
     return fill;
 }
 
-NLUnaryFn NLExecutor::selectRowConstant(const Column* row, LocalMemory* memory, Column*& result) {
-    if (row->getKind() == ColumnMask::staticKind()) {
-        result = memory->alloc<ColumnConst<types::Bool::Primitive>>();
-        return &readSingleMaskRowAsConstant;
-    }
-
+NLUnaryFn NLExecutor::selectRowConstant(NLChunkKind kind, const Column* row, LocalMemory* memory, Column*& result) {
     NLUnaryFn read = nullptr;
-
-    const auto selectForElement = [&]<typename Element>() {
-        if (!read && row->getKind() == ColumnVector<Element>::staticKind()) {
-            result = memory->alloc<ColumnConst<Element>>();
-            read = &readSingleRowAsConstant<Element>;
-        }
-    };
-
-    selectForElement.template operator()<types::Int64::Primitive>();
-    selectForElement.template operator()<types::UInt64::Primitive>();
-    selectForElement.template operator()<types::Double::Primitive>();
-    selectForElement.template operator()<types::String::Primitive>();
-    selectForElement.template operator()<types::Bool::Primitive>();
-    selectForElement.template operator()<types::Embedding::Primitive>();
-    selectForElement.template operator()<types::DateTime::Primitive>();
-    selectForElement.template operator()<types::Duration::Primitive>();
-    selectForElement.template operator()<types::Point::Primitive>();
-    selectForElement.template operator()<std::optional<types::Int64::Primitive>>();
-    selectForElement.template operator()<std::optional<types::UInt64::Primitive>>();
-    selectForElement.template operator()<std::optional<types::Double::Primitive>>();
-    selectForElement.template operator()<std::optional<types::String::Primitive>>();
-    selectForElement.template operator()<std::optional<types::Bool::Primitive>>();
-    selectForElement.template operator()<std::optional<types::Embedding::Primitive>>();
-    selectForElement.template operator()<std::optional<types::DateTime::Primitive>>();
-    selectForElement.template operator()<std::optional<types::Duration::Primitive>>();
-    selectForElement.template operator()<std::optional<types::Point::Primitive>>();
-    selectForElement.template operator()<NodeID>();
-    selectForElement.template operator()<EdgeID>();
-    selectForElement.template operator()<LabelSetID>();
-    selectForElement.template operator()<EdgeTypeID>();
-    selectForElement.template operator()<GraphPath>();
-    selectForElement.template operator()<PathRef>();
-    selectForElement.template operator()<ListView>();
-    selectForElement.template operator()<std::optional<ListView>>();
-    selectForElement.template operator()<CellView>();
-    selectForElement.template operator()<std::optional<CellView>>();
-    selectForElement.template operator()<MapView>();
-    selectForElement.template operator()<std::optional<MapView>>();
-
-    if (!read) {
-        throw IRException(fmt::format("nl.row_constant can not read a {} as a constant", row->getTypeName()));
-    }
+    dispatchChunkKind(kind, [&]<typename Element>() { read = selectRowConstantOf<Element>(row, memory, result); });
 
     return read;
+}
+
+NLUnaryFn NLExecutor::selectOptRowConstant(NLChunkKind kind, const Column* row, LocalMemory* memory, Column*& result) {
+    NLUnaryFn read = nullptr;
+    dispatchOptChunkKind(kind, [&]<typename Element>() {
+        read = selectRowConstantOf<std::optional<Element>>(row, memory, result);
+    });
+
+    return read;
+}
+
+NLUnaryFn NLExecutor::selectCellRowConstant(bool nullable, const Column* row, LocalMemory* memory, Column*& result) {
+    return nullable ? selectRowConstantOf<std::optional<CellView>>(row, memory, result)
+                    : selectRowConstantOf<CellView>(row, memory, result);
+}
+
+NLUnaryFn NLExecutor::selectMaskRowConstant(const Column* row, LocalMemory* memory, Column*& result) {
+    bioassert(row->getKind() == ColumnMask::staticKind(), "nl.row_constant reads a mask chunk out of a mask");
+
+    result = memory->alloc<ColumnConst<types::Bool::Primitive>>();
+    return &readSingleMaskRowAsConstant;
 }
 
 // A !storage.any chunk is a ColumnVector<CellView> of fixed-width tagged

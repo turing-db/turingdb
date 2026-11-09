@@ -3847,7 +3847,7 @@ void NLTranslator::translateBroadcastConstant(nl::BroadcastConstant broadcast, N
     } else if (isNullableAny(resultElement)) {
         fill = NLExecutor::selectOptCellBroadcast(value);
     } else {
-        fill = NLExecutor::selectConstantBroadcast(nullableChunkValueType(resultType), value);
+        fill = NLExecutor::selectConstantBroadcast(getNullableChunkKind(resultType), value);
     }
 
     NLBroadcastConstantData* data = _program->allocFunctionData<NLBroadcastConstantData>(value, cardinality, output, fill);
@@ -3865,7 +3865,7 @@ void NLTranslator::translateRowConstant(nl::RowConstant rowConstant, NLStmtConta
     const Column* row = getColumn(rowValue);
 
     Column* result = nullptr;
-    const NLUnaryFn read = NLExecutor::selectRowConstant(row, _memory, result);
+    const NLUnaryFn read = selectRowConstantForChunkType(rowValue.getType(), row, result);
     _valueSlots[rowConstant.getResult()] = result;
 
     NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(row, result, read);
@@ -7321,6 +7321,26 @@ NLFillNullFunction NLTranslator::selectFillNullForChunkType(mlir::Type chunkType
     }
 
     return NLExecutor::selectFillNullFunction(chunkKindFromElementType(elementType));
+}
+
+NLUnaryFn NLTranslator::selectRowConstantForChunkType(mlir::Type chunkType, const Column* row, Column*& result) {
+    const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
+    const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
+
+    // nl.is_null declares an i1 chunk, but its kernel writes a mask
+    const bool readsAMask = isMaskElementType(elementType) || row->getKind() == ColumnMask::staticKind();
+
+    if (isNullableAny(elementType)) {
+        return NLExecutor::selectCellRowConstant(true, row, _memory, result);
+    } else if (nullableType) {
+        return NLExecutor::selectOptRowConstant(chunkKindFromNullableValue(nullableType.getValueType()), row, _memory, result);
+    } else if (mlir::isa<storage::AnyType>(elementType)) {
+        return NLExecutor::selectCellRowConstant(false, row, _memory, result);
+    } else if (readsAMask) {
+        return NLExecutor::selectMaskRowConstant(row, _memory, result);
+    }
+
+    return NLExecutor::selectRowConstant(chunkKindFromElementType(elementType), row, _memory, result);
 }
 
 NLCompareFunction NLTranslator::selectCompareForChunkType(mlir::Type chunkType) {

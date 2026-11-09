@@ -68,6 +68,9 @@ public:
         MakeMemoryPool<ColumnConst<PathRef>>::type,
         MakeMemoryPool<ColumnConst<LabelSetID>>::type,
         MakeMemoryPool<ColumnConst<EdgeTypeID>>::type,
+        MakeMemoryPool<ColumnConst<LabelID>>::type,
+        MakeMemoryPool<ColumnConst<PropertyTypeID>>::type,
+        MakeMemoryPool<ColumnConst<ValueType>>::type,
         MakeMemoryPool<ColumnConst<size_t>>::type,
 
         MakeMemoryPool<ColumnConst<types::Int64::Primitive>>::type,

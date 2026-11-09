@@ -294,3 +294,8 @@ add_ir_tests(test_query_ir_per_run_import_walk PerRunImportWalkTest.cpp)
 
 # A CASE or coalesce in a CALL body over a constant the body binds, in a SET, a CREATE, a MERGE and a RETURN: TUR-376.
 add_turing_test(test_query_ir_call_body_case_over_bound_constant CallBodyCaseOverBoundConstantTest.cpp)
+
+# A body run once per row imports a label, edge type or property type ID, or a value type.
+add_turing_test(test_query_ir_per_run_import_schema_id PerRunImportSchemaIDTest.cpp)
+target_sources(test_query_ir_per_run_import_schema_id PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_per_run_import_schema_id PRIVATE ${IR_TEST_DIR})

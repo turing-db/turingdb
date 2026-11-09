@@ -952,6 +952,7 @@ private:
     static NLGatherFunction selectGatherForChunkType(mlir::Type chunkType);
     static NLFetchNodesFunction selectFetchForChunkType(mlir::Type chunkType);
     static NLFillNullFunction selectFillNullForChunkType(mlir::Type chunkType);
+    NLUnaryFn selectRowConstantForChunkType(mlir::Type chunkType, const Column* row, Column*& result);
 
     // The appender that keys one row of a merge's property value column, chosen from the
     // shape the column comes in - a nullable value chunk, a constant, or a plain chunk -

@@ -671,15 +671,19 @@ public:
     static NLBroadcastFunction selectOptTileFunction(NLChunkKind kind);
 
     // The fill that lays a constant column's single value out over a step's rows,
-    // for a nullable value chunk of this value type (nl.broadcast_constant). A chunk
+    // for a nullable chunk of this kind (nl.broadcast_constant). A chunk
     // standing for every row is a ColumnConst where a literal bound it and a single-row
     // column where a kernel computed it over literals, so the value column picks the fill
-    // beside its value type.
-    static NLBroadcastConstantFunction selectConstantBroadcast(ValueType valueType, const Column* value);
+    // beside its kind.
+    static NLBroadcastConstantFunction selectConstantBroadcast(NLChunkKind kind, const Column* value);
 
     // Reads the single row a computation over constants wrote as a constant column
-    // (nl.row_constant)
-    static NLUnaryFn selectRowConstant(const Column* row, LocalMemory* memory, Column*& result);
+    // (nl.row_constant), for a plain chunk of this kind, a nullable one, a chunk of tagged
+    // cells and a mask
+    static NLUnaryFn selectRowConstant(NLChunkKind kind, const Column* row, LocalMemory* memory, Column*& result);
+    static NLUnaryFn selectOptRowConstant(NLChunkKind kind, const Column* row, LocalMemory* memory, Column*& result);
+    static NLUnaryFn selectCellRowConstant(bool nullable, const Column* row, LocalMemory* memory, Column*& result);
+    static NLUnaryFn selectMaskRowConstant(const Column* row, LocalMemory* memory, Column*& result);
 
     // The broadcast of the null literal, whose rows are the absent value rather than
     // copies of a value the constant holds
