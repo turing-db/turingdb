@@ -53,7 +53,9 @@ public:
 
     template <typename T>
     T read(size_t offset) {
-        return *reinterpret_cast<T*>(_map + offset + _alignmentOffset);
+        T value;
+        memcpy(&value, _map + offset + _alignmentOffset, sizeof(T));
+        return value;
     }
 
     template <typename T>

@@ -1,5 +1,6 @@
 add_turing_test(test_io_path PathTest.cpp)
 add_turing_test(test_io_bytebufferiterator ByteBufferIteratorTest.cpp)
+add_turing_test(test_io_unaligned_scalar_read UnalignedScalarReadTest.cpp)
 add_turing_test(test_io_filewriter FileWriterTest.cpp)
 add_turing_test(test_io_filepagewriter FilePageWriterTest.cpp)
 add_turing_test(test_io_filepagereader FilePageReaderTest.cpp)

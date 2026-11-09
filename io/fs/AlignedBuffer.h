@@ -166,10 +166,11 @@ public:
     }
 
     template <TrivialPrimitive T>
-    const T& get() {
-        const auto* ptr = reinterpret_cast<const T*>(_data);
+    std::remove_cv_t<T> get() {
+        std::remove_cv_t<T> value;
+        memcpy(&value, _data, sizeof(T));
         _data += sizeof(T);
-        return *ptr;
+        return value;
     }
 
     template <TrivialNonCharPrimitive T>
