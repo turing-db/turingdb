@@ -16,7 +16,7 @@ pull request of the current branch.
 
 Two flags change the run:
 
-- `--local` renders the diagram but pushes nothing and posts nothing.
+- `--local` renders the diagram and posts nothing.
 - `--no-diagram` writes the explanation alone and skips every PR Lens step.
 
 ## House rules
@@ -25,9 +25,9 @@ These hold on every run.
 
 1. Never edit the pull request body or its title. The explanation goes in a comment.
    This repository requires a body of one plain sentence. A comment breaks no such rule.
-2. Post nothing without a yes from the user.
-3. Push nothing to `prlens.dev` without a yes from the user. A push sends a description of
-   the change to a third party.
+2. Post the comment without asking, with every diagram it shows attached as an SVG.
+3. Never push a canvas to `prlens.dev`. A push sends a description of the change to a third
+   party, and the comment already carries the diagrams.
 4. Never commit `.pr-lens/`. The CLI adds it to `.gitignore`.
 
 ## Steps
@@ -143,53 +143,22 @@ Step 6 says why the theme is `neutral` and not `light`.
 The render prints the directory it wrote. Read the file names from the `manifest.json`
 there.
 
-### 6. Publish the diagram
+### 6. Attach the diagram
 
-The diagram goes to the pull request twice: as an attached picture, and as a canvas link.
-The picture keeps the reader on GitHub. The canvas carries what a picture cannot — the
-`payload` sample traffic on a flow step, the drill-downs, and a camera you can drive.
-
-**The picture.** `gh pr comment --attach` uploads the file with the comment and rewrites
-the reference to the uploaded asset. It needs GitHub CLI 2.99 or later:
+The diagram goes in the comment as an attached SVG. `gh pr comment --attach` uploads the
+file with the comment and rewrites the reference to the uploaded asset. It needs GitHub CLI
+2.99 or later:
 
 ```bash
 gh --version
 ```
 
-On an older `gh`, skip the attachment and say so in one line. The canvas link is then the
-only route every reader can open.
+An older `gh` cannot attach. Say so in one line, and post the comment without the diagrams.
 
 Step 5 rendered `--theme neutral` for this reason: a Markdown image cannot carry a light
 and dark pair, because `gh` leaves an HTML `<picture>` as written and appends the file at
 the bottom instead. The neutral render brings its own background and reads in both GitHub
 themes.
-
-**The canvas.** Ask the user first, in one line:
-
-> Push the diagram to prlens.dev? It becomes an unlisted page that its link reaches.
-
-On a yes:
-
-```bash
-npx @coldtea/pr-lens-cli@latest canvas push .pr-lens/<drawing>/drawn.graph.json
-```
-
-It prints three links. Keep the view link, `https://prlens.dev/c/<id>`. Never put the edit
-link, the one that ends in `#w=`, in a comment or anywhere public.
-
-**The push is the optional half. Never stall on it.** Skip it and carry on with the
-attachment alone whenever any of these holds:
-
-- the user said no, or passed `--local`;
-- a permission rule, a classifier or a sandbox refused the command;
-- the CLI failed, with no network or a `CANVAS_*` error code.
-
-Do not retry a refused push, and do not reach the same host another way. Finish the run,
-post the comment, and close with the one command the user can run:
-
-> The canvas was not pushed. To get the explorable version, run:
-> `npx @coldtea/pr-lens-cli@latest canvas push .pr-lens/<drawing>/drawn.graph.json`
-> Then send me the link and I will add it to the comment.
 
 ### 7. Assemble the comment
 
@@ -214,13 +183,7 @@ that path to the uploaded asset:
 **Where to look.** ...
 
 ![<one line that says what the diagram shows>](.pr-lens/<drawing>/<view>-neutral-<hash>.svg)
-
-[Open the animated diagram](https://prlens.dev/c/<id>)
 ```
-
-Write the canvas line only when a push actually returned a link. With no push there is no
-link, and the comment carries the attached diagrams alone. Never write the line with a
-placeholder in it, and never guess a canvas id.
 
 Three rules `gh` imposes on the reference:
 
@@ -241,7 +204,7 @@ it in the terminal.
 
 ### 8. Post it
 
-Stop with `--local`. Otherwise ask, then post:
+Stop with `--local`. Otherwise post it, without asking, with one `--attach` per diagram:
 
 ```bash
 gh pr comment <number> --body-file .pr-lens/body.md \
@@ -257,9 +220,6 @@ re-post `body.md` over it. GitHub rewrote the image paths on upload, and the loc
 still holds the `.pr-lens/` paths, which resolve to nothing for a reader.
 
 ## Notes
-
-A canvas link reaches anyone who holds it, with no login. On a private repository, say that
-to the user before the push in step 6.
 
 The PR Lens GitHub App and GitHub Action draw the same diagrams on every push, with no
 agent in the loop. This command does not install either one.
