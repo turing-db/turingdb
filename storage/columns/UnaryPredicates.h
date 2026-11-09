@@ -8,8 +8,6 @@
 #include "TypeUtils.h"
 #include "metadata/PropertyType.h"
 
-#include "FatalException.h"
-
 namespace db {
 
 namespace {
@@ -82,29 +80,6 @@ struct UnaryPredicateExecutor {
             res->set(result);
         } else {
             res->set(op(arg->getRaw()));
-        }
-    }
-
-    // Required by above
-    static void apply(ColumnVector<T>* res, const ColumnVector<T>* arg)
-        requires(std::is_same_v<T, types::Bool::Primitive>)
-    {
-        const size_t size = arg->size();
-
-        res->resize(size);
-        auto& resd = res->getRaw();
-        const auto& argd = arg->getRaw();
-
-        auto op = Op {};
-        if constexpr (!TypeUtils::is_optional_v<T>) {
-            for (size_t i = 0; i < size; i++) {
-                const bool result = op(argd[i]);
-                resd[i] = result;
-            }
-        } else {
-            // Should not occur. Optional T implies property, which will fill a mask.
-            // Implementation is purely to satsify compiler when expanding templates.
-            throw FatalException("Invalid unary-predicate operation on ColumnVector.");
         }
     }
 };

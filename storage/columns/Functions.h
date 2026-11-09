@@ -15,10 +15,7 @@
 #include <spdlog/fmt/bundled/format.h>
 
 #include "columns/CharacterArgument.h"
-#include "columns/ColumnConst.h"
 #include "columns/ValueText.h"
-#include "columns/ColumnIDs.h"
-#include "columns/ColumnVector.h"
 #include "TypeUtils.h"
 #include "CellView.h"
 #include "QueryTypeName.h"
@@ -35,8 +32,6 @@
 
 #include "ID.h"
 
-#include "TypeUtils.h"
-
 #include "BioAssert.h"
 #include "FatalException.h"
 #include "UnicodeNormalForm.h"
@@ -44,34 +39,6 @@
 namespace db {
 
 class CommitWriteBuffer;
-
-/**
- * @brief Generic function to apply a generic invokable to two possibly-optional
- * operands, where either operand being nullopt results in the final result being
- * nullopt, and the result of applying the invokable otherwise.
- */
-template <typename Func, typename T, typename U>
-    requires OptionallyInvokable<Func, T, U>
-auto optionalGenericFunc(T&& a, U&& b) -> TypeUtils::optional_invoke_result<Func, T, U> {
-    if constexpr (TypeUtils::is_optional_v<T>) {
-        if (!a.has_value()) {
-            return std::nullopt;
-        }
-    }
-
-    if constexpr (TypeUtils::is_optional_v<U>) {
-        if (!b.has_value()) {
-            return std::nullopt;
-        }
-    }
-
-    // a and b are both either engaged optionals or values, so safe to unwrap
-
-    auto&& av = TypeUtils::unwrap(a);
-    auto&& bv = TypeUtils::unwrap(b);
-
-    return Func {}(av, bv);
-}
 
 class LabelsFunction {
 public:
@@ -707,11 +674,6 @@ template <typename Argument>
 concept FormattedValue = std::is_same_v<Argument, types::DateTime::Primitive>
                          || std::is_same_v<Argument, types::Duration::Primitive>
                          || std::is_same_v<Argument, types::Point::Primitive>;
-
-// The element a column of the given type converts, with any optional unwrapped: what a
-// conversion is applied to row by row.
-template <typename ColumnType>
-using ConversionArgument = TypeUtils::unwrap_inner_t<TypeUtils::decay_col_t<ColumnType>>;
 
 // The conversion a column of the given element type goes through. A conversion is named by
 // the functor converting its own ArgType, which an element with no rule of its own maps to.
@@ -1684,73 +1646,6 @@ public:
 
     ResultType operator()(const types::Embedding::Primitive& a,
                           const types::Embedding::Primitive& b);
-};
-
-/// Generic function executor; default constructible operator
-template <typename Op, typename Res, typename Arg>
-struct FunctionExecutor {
-    static void apply(ColumnVector<Res>* res,
-                      const ColumnVector<Arg>* arg) {
-        const size_t size = arg->size();
-        res->resize(size);
-
-        const auto& argd = arg->getRaw();
-        auto& resd = res->getRaw();
-
-        auto op = Op {};
-        for (size_t i = 0; i < size; i++) {
-            resd[i] = op(argd[i]);
-        }
-    }
-
-    static void apply(ColumnConst<Res>* res,
-                      const ColumnConst<Arg>* arg) {
-        const auto& argd = arg->getRaw();
-
-        auto op = Op {};
-        auto&& result = op(argd);
-        res->set(result);
-    }
-};
-
-/// Specialisation for labels()
-template <typename Res, typename Arg>
-struct FunctionExecutor<LabelsFunction, Res, Arg> {
-    static void apply(ColumnVector<ListView>* res,
-                      const ColumnNodeIDs* arg,
-                      GraphView view,
-                      QueryListBuffer* listBuffer) {
-        const size_t size = arg->size();
-        res->resize(size);
-
-        const auto& argd = arg->getRaw();
-        auto& resd = res->getRaw();
-
-        LabelsFunction labels(view, listBuffer);
-        for (size_t i = 0; i < size ; i ++) {
-            resd[i] = labels(argd[i]);
-        }
-    }
-};
-
-/// Specialisation for type()
-template <typename Res, typename Arg>
-struct FunctionExecutor<EdgeTypesFunction, Res, Arg> {
-    static void apply(ColumnVector<std::string_view>* res,
-                      const ColumnEdgeIDs* arg,
-                      GraphView view,
-                      StringBuffer* stringBuffer) {
-        const size_t size = arg->size();
-        res->resize(size);
-
-        const auto& argd = arg->getRaw();
-        auto& resd = res->getRaw();
-
-        EdgeTypesFunction edgeType(view, stringBuffer);
-        for (size_t i = 0; i < size ; i ++) {
-            resd[i] = edgeType(argd[i]);
-        }
-    }
 };
 
 template <typename F>

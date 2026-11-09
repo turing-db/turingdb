@@ -4,15 +4,10 @@
 
 #include "BinaryOperators.h"
 #include "BinaryPredicates.h"
-#include "MaskOperators.h"
-#include "UnaryPredicates.h"
 
 #include "ColumnCombinations.h"
 #include "TypeUtils.h"
-#include "columns/Functions.h"
 #include "columns/KindTypes.h"
-
-#include "views/GraphView.h"
 
 namespace db {
 
@@ -81,134 +76,6 @@ struct BinaryPredicates {
         using InternalU = InnerTypeHelper<DecayColU>::type;
 
         BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(res, lhs, rhs);
-    }
-};
-
-/// Unary predicates, returning a Bool-like
-struct UnaryPredicates {
-    template <typename Op, typename ColT>
-    static void exec(ColumnMask* res, const ColT* arg) {
-        using DecayColT = TypeUtils::decay_col_t<ColT>;
-        using InternalT = InnerTypeHelper<DecayColT>::type;
-
-        UnaryPredicateExecutor<Op, InternalT>::apply(res, arg);
-    }
-
-    // Below specialisation is needed for expressions like NOT TRUE, NOT FALSE
-    // Both Bool and opt<Bool> are needed as there is no way to limit to
-    // ColumnConst<{Bool}> whilst also having ColumnVector<{Bool, optional<Bool>}>
-    template <typename Op, typename T>
-        requires(std::is_same_v<T, types::Bool::Primitive>)
-             || (std::is_same_v<T, std::optional<types::Bool::Primitive>>)
-    static void exec(ColumnConst<T>* res, const ColumnConst<T>* arg) {
-        UnaryPredicateExecutor<Op, T>::apply(res, arg);
-    }
-
-    // Below specialisation needed for type checker, but is never used, see above for why.
-    // The optional<Bool> case is handled by @ref exec(ColumnOptMask*, ...) because
-    // ColOptMask is a weak alias for ColumnVector<opt<Bool>>
-    template <typename Op, typename T>
-        requires(std::is_same_v<T, types::Bool::Primitive>)
-    static void exec(ColumnVector<T>* res, const ColumnVector<T>* arg) {
-        UnaryPredicateExecutor<Op, T>::apply(res, arg);
-    }
-
-    template <typename Op, typename ColT>
-    static void exec(ColumnOptMask* res, const ColT* arg) {
-        using DecayColT = TypeUtils::decay_col_t<ColT>;
-
-        using InternalT = InnerTypeHelper<DecayColT>::type;
-
-        UnaryPredicateExecutor<Op, InternalT>::apply(res, arg);
-    }
-};
-
-struct MaskOperators {
-    /// Binary operation on masks
-    template <typename Op>
-    static void exec(ColumnMask* res, const ColumnMask* lhs, const ColumnMask* rhs) {
-        MaskOpExecutor<Op>::apply(res, lhs, rhs);
-    }
-
-    /// Unary operation on masks
-    template <typename Op>
-    static void exec(ColumnMask* res, const ColumnMask* arg) {
-        MaskOpExecutor<Op>::apply(res, arg);
-    }
-
-    /// Applying masks to vectors
-    template <typename Op, typename T>
-        requires std::is_same_v<Op, Apply>
-    static void exec(ColumnVector<T>* res, const ColumnVector<T>* src, const ColumnMask* mask) {
-        MaskApplicator::apply(res, src, mask);
-    }
-
-    template <typename Op, typename T>
-        requires std::is_same_v<Op, Apply>
-    static void exec(ColumnVector<T>* res, const ColumnMask* mask, const ColumnVector<T>* src) {
-        MaskApplicator::apply(res, src, mask);
-    }
-};
-
-struct ColumnFunctions {
-    template <typename Op, typename ColT>
-    static void exec(ColumnVector<ListView>* res,
-                     const ColT* arg,
-                     const GraphView view,
-                     QueryListBuffer* listBuffer) {
-        using DecayColT = TypeUtils::decay_col_t<ColT>;
-        using InternalT = InnerTypeHelper<DecayColT>::type;
-
-        FunctionExecutor<Op, ListView, InternalT>::apply(res, arg, view, listBuffer);
-    }
-
-    template <typename Op, typename ColT>
-    static void exec(ColumnVector<std::string_view>* res,
-                     const ColT* arg,
-                     const GraphView view,
-                     StringBuffer* stringBuffer) {
-        using DecayColT = TypeUtils::decay_col_t<ColT>;
-        using InternalT = InnerTypeHelper<DecayColT>::type;
-
-        FunctionExecutor<Op, std::string_view, InternalT>::apply(res, arg, view, stringBuffer);
-    }
-
-    template <typename Op, typename ColW, typename ColT>
-    static void exec(ColW* res, const ColT* arg) {
-        using DecayColW = TypeUtils::decay_col_t<ColW>;
-        using InternalW = InnerTypeHelper<DecayColW>::type;
-
-        using DecayColT = TypeUtils::decay_col_t<ColT>;
-        using InternalT = InnerTypeHelper<DecayColT>::type;
-
-        FunctionExecutor<Op, InternalW, InternalT>::apply(res, arg);
-    }
-};
-
-/// Generic Column projection and manipulation
-struct ColumnOperators {
-    template <typename T>
-    static void copyChunk(typename ColumnVector<T>::ConstIterator srcStart,
-                          typename ColumnVector<T>::ConstIterator srcEnd,
-                          ColumnVector<T>* dst) {
-        const size_t count = std::distance(srcStart, srcEnd);
-        dst->resize(count);
-        std::copy(srcStart, srcEnd, dst->begin());
-    }
-
-    template <typename T>
-    static void copyTransformedChunk(const ColumnVector<size_t>* transform,
-                                     const ColumnVector<T>* src,
-                                     ColumnVector<T>* dst) {
-        const auto& srcd = src->getRaw();
-        const auto& transformd = transform->getRaw();
-        const size_t count = transform->size();
-        dst->resize(count);
-
-        auto& dstd = dst->getRaw();
-        for (size_t i = 0; i < count; i++) {
-            dstd[i] = srcd[transformd[i]];
-        }
     }
 };
 

@@ -44,14 +44,8 @@ struct TypeUtils {
     template <typename T>
     using unwrap_optional_t = typename unwrap_optional<std::remove_cvref_t<T>>::underlying_type;
 
-    template <typename ColT>
-    using unwrap_inner_t = unwrap_optional_t<typename InnerTypeHelper<ColT>::type>;
-
     template <typename T>
     using wrap_optional_t = std::conditional_t<is_optional_v<T>, T, std::optional<T>>;
-
-    template <typename T, typename U>
-    static constexpr bool neither_optional = !is_optional_v<T> && !is_optional_v<U>;
 
     template <typename Func, typename... Args>
     using optional_invoke_result =
