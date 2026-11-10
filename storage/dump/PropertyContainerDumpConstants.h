@@ -12,17 +12,17 @@
 
 namespace db {
 
-// The dumpers bulk-write property IDs and string limits as raw object bytes,
-// while the loaders read them back as fixed-width fields. Pin the layouts the
+// The dumpers write property IDs, values and string limits as raw object bytes,
+// and the loaders copy those bytes back into the objects. Pin the layouts the
 // on-disk format depends on.
 static_assert(sizeof(EntityID) == sizeof(EntityID::Type), "Dump format writes EntityID object bytes as plain uint64 values");
 static_assert(std::is_trivially_copyable_v<EntityID>, "Dump format writes EntityID object bytes as plain uint64 values");
 static_assert(sizeof(StringBucket::StringLimits) == 2 * sizeof(uint32_t), "Dump format writes StringLimits object bytes as packed uint32 pairs");
-static_assert(offsetof(StringBucket::StringLimits, _offset) == 0, "Loaders read StringLimits as offset then count");
-static_assert(offsetof(StringBucket::StringLimits, _count) == sizeof(uint32_t), "Loaders read StringLimits as offset then count");
+static_assert(offsetof(StringBucket::StringLimits, _offset) == 0, "Dump format stores StringLimits as offset then count");
+static_assert(offsetof(StringBucket::StringLimits, _count) == sizeof(uint32_t), "Dump format stores StringLimits as offset then count");
 static_assert(sizeof(Point) == 4 * sizeof(double), "Dump format writes a Point as x, y, z, then its CRS ordinal and padding");
 static_assert(std::is_trivially_copyable_v<Point>, "Dump format writes Point object bytes");
-static_assert(std::is_trivially_default_constructible_v<Point>, "Loaders read Point values straight out of the mapped page");
+static_assert(std::is_trivially_default_constructible_v<Point>, "Loaders copy Point bytes into value-initialised Points");
 
 template <SupportedType T>
 class TrivialPropertyContainerDumpConstants {

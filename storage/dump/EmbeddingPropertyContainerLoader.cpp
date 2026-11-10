@@ -42,82 +42,70 @@ DumpResult<std::unique_ptr<PropertyContainer>> EmbeddingPropertyContainerLoader:
     const uint64_t nullCount = it.get<uint64_t>();
     const uint64_t nullPageCount = it.get<uint64_t>();
 
-    auto* container = new TypedPropertyContainer<types::Embedding>(dimension);
+    const size_t floatsPerPage = GraphDumpHelper::getCountPerPage<float>();
+
+    uint64_t floatCount = 0;
+    const bool floatCountOverflows = __builtin_mul_overflow(propCount, dimension, &floatCount);
+    const bool headerInvalid = (dimension == 0)
+                            || floatCountOverflows
+                            || (GraphDumpHelper::getPageCountForItems(floatCount, floatsPerPage) != floatPageCount);
+    if (headerInvalid) {
+        return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
+    }
+
+    std::unique_ptr<TypedPropertyContainer<types::Embedding>> container = std::make_unique<TypedPropertyContainer<types::Embedding>>(dimension);
     container->_ids.resize(propCount);
 
-    // Loading IDs
-    size_t offset = 0;
-    for (size_t i = 0; i < idPageCount; i++) {
-        _reader.nextPage();
-
-        if (_reader.errorOccured()) {
-            return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS, _reader.error().value());
-        }
-
-        it = _reader.begin();
-
-        if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
-            return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
-        }
-
-        const size_t countInPage = it.get<uint64_t>();
-        for (size_t j = 0; j < countInPage; j++) {
-            container->_ids[j + offset] = it.get<EntityID::Type>();
-        }
-        offset += countInPage;
+    if (auto res = GraphDumpHelper::loadPages(_reader, idPageCount, std::span {container->_ids}, DumpErrorType::COULD_NOT_READ_PROPS); !res) {
+        return res.get_unexpected();
     }
 
-    // Loading float data — read flat floats and alloc into the container
-    std::vector<float> embeddingBuffer(dimension);
-    size_t floatOffset = 0;
+    std::vector<float> pageFloats(floatsPerPage);
+    std::vector<float> partialEmbedding(dimension);
+    size_t partialCount = 0;
+    size_t embeddingCount = 0;
 
     for (size_t i = 0; i < floatPageCount; i++) {
-        _reader.nextPage();
-
-        if (_reader.errorOccured()) {
-            return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS, _reader.error().value());
+        size_t countInPage = 0;
+        if (auto res = GraphDumpHelper::loadPage(_reader, std::span {pageFloats}, countInPage, DumpErrorType::COULD_NOT_READ_PROPS); !res) {
+            return res.get_unexpected();
         }
 
-        it = _reader.begin();
-
-        if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
-            return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
-        }
-
-        const size_t countInPage = it.get<uint64_t>();
-        for (size_t j = 0; j < countInPage; j++) {
-            const size_t bufIdx = floatOffset % dimension;
-            embeddingBuffer[bufIdx] = it.get<float>();
-            floatOffset++;
-
-            if (bufIdx == dimension - 1) {
-                container->_values.alloc(embeddingBuffer);
+        std::span<const float> remaining = std::span<const float> {pageFloats}.first(countInPage);
+        while (!remaining.empty()) {
+            if (embeddingCount == propCount) {
+                return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
             }
+
+            const size_t taken = std::min<size_t>(dimension - partialCount, remaining.size());
+            const bool wholeInPage = (partialCount == 0 && taken == dimension);
+
+            if (wholeInPage) {
+                container->_values.alloc(remaining.first(dimension));
+                embeddingCount++;
+            } else {
+                std::copy_n(remaining.begin(), taken, partialEmbedding.begin() + partialCount);
+                partialCount += taken;
+
+                if (partialCount == dimension) {
+                    container->_values.alloc(partialEmbedding);
+                    partialCount = 0;
+                    embeddingCount++;
+                }
+            }
+
+            remaining = remaining.subspan(taken);
         }
     }
 
-    // Loading null ids
+    if (embeddingCount != propCount) {
+        return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
+    }
+
     container->_nullIds.resize(nullCount);
-    offset = 0;
 
-    for (size_t i = 0; i < nullPageCount; i++) {
-        _reader.nextPage();
-
-        if (_reader.errorOccured()) {
-            return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS, _reader.error().value());
-        }
-
-        it = _reader.begin();
-
-        if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
-            return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
-        }
-
-        const size_t countInPage = it.get<uint64_t>();
-        for (size_t j = 0; j < countInPage; j++) {
-            container->_nullIds[j + offset] = it.get<EntityID::Type>();
-        }
-        offset += countInPage;
+    if (auto res = GraphDumpHelper::loadPages(_reader, nullPageCount, std::span {container->_nullIds}, DumpErrorType::COULD_NOT_READ_PROPS); !res) {
+        return res.get_unexpected();
     }
 
     // Reconstruct the entity ID -> index map. Nulls go in after the values, as sort()
@@ -136,5 +124,5 @@ DumpResult<std::unique_ptr<PropertyContainer>> EmbeddingPropertyContainerLoader:
 
     container->_sorted = std::is_sorted(ids.begin(), ids.end());
 
-    return {std::unique_ptr<PropertyContainer> {container}};
+    return {std::unique_ptr<PropertyContainer> {container.release()}};
 }

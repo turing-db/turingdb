@@ -15,8 +15,6 @@ namespace db {
 template <SupportedType T>
 class TrivialPropertyContainerLoader {
 public:
-    using Constants = TrivialPropertyContainerDumpConstants<T>;
-
     explicit TrivialPropertyContainerLoader(fs::FilePageReader& reader)
         : _reader(reader)
     {
@@ -51,87 +49,22 @@ public:
         const uint64_t nullCount = it.get<uint64_t>();
         const uint64_t nullPageCount = it.get<uint64_t>();
 
-        auto* container = new TypedPropertyContainer<T>;
+        std::unique_ptr<TypedPropertyContainer<T>> container = std::make_unique<TypedPropertyContainer<T>>();
         container->_ids.resize(propCount);
         container->_values.resize(propCount);
 
-        // Loading ids
-        size_t offset = 0;
-
-        for (size_t i = 0; i < idPageCount; i++) {
-            _reader.nextPage();
-
-            if (_reader.errorOccured()) {
-                return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS, _reader.error().value());
-            }
-
-            it = _reader.begin();
-
-            // Check that we read a whole page
-            if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
-                return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
-            }
-
-            const size_t countInPage = it.get<uint64_t>();
-
-            for (size_t j = 0; j < countInPage; j++) {
-                container->_ids[j + offset] = it.get<EntityID::Type>();
-            }
-
-            offset += countInPage;
+        if (auto res = GraphDumpHelper::loadPages(_reader, idPageCount, std::span {container->_ids}, DumpErrorType::COULD_NOT_READ_PROPS); !res) {
+            return res.get_unexpected();
         }
 
-        // Loading values
-        offset = 0;
-
-        for (size_t i = 0; i < valuePageCount; i++) {
-            _reader.nextPage();
-
-            if (_reader.errorOccured()) {
-                return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS, _reader.error().value());
-            }
-
-            it = _reader.begin();
-
-            // Check that we read a whole page
-            if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
-                return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
-            }
-
-            const size_t countInPage = it.get<uint64_t>();
-
-            for (size_t j = 0; j < countInPage; j++) {
-                container->_values[j + offset] = it.get<typename T::Primitive>();
-            }
-
-            offset += countInPage;
+        if (auto res = GraphDumpHelper::loadPages(_reader, valuePageCount, std::span {container->_values}, DumpErrorType::COULD_NOT_READ_PROPS); !res) {
+            return res.get_unexpected();
         }
 
-        // Loading null ids
         container->_nullIds.resize(nullCount);
-        offset = 0;
 
-        for (size_t i = 0; i < nullPageCount; i++) {
-            _reader.nextPage();
-
-            if (_reader.errorOccured()) {
-                return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS, _reader.error().value());
-            }
-
-            it = _reader.begin();
-
-            // Check that we read a whole page
-            if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
-                return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
-            }
-
-            const size_t countInPage = it.get<uint64_t>();
-
-            for (size_t j = 0; j < countInPage; j++) {
-                container->_nullIds[j + offset] = it.get<EntityID::Type>();
-            }
-
-            offset += countInPage;
+        if (auto res = GraphDumpHelper::loadPages(_reader, nullPageCount, std::span {container->_nullIds}, DumpErrorType::COULD_NOT_READ_PROPS); !res) {
+            return res.get_unexpected();
         }
 
         // Reconstruct the entity ID -> index map; it is not dumped. Nulls go in after the
@@ -150,7 +83,7 @@ public:
 
         container->_sorted = std::is_sorted(ids.begin(), ids.end());
 
-        return {std::unique_ptr<PropertyContainer> {container}};
+        return {std::unique_ptr<PropertyContainer> {container.release()}};
     }
 
 private:
@@ -196,7 +129,7 @@ public:
         const uint64_t nullCount = it.get<uint64_t>();
         const uint64_t nullPageCount = it.get<uint64_t>();
 
-        auto* container = new TypedPropertyContainer<types::String>;
+        std::unique_ptr<TypedPropertyContainer<types::String>> container = std::make_unique<TypedPropertyContainer<types::String>>();
         container->_ids.resize(propCount);
         auto& buckets = container->_values;
         buckets.clear();
@@ -204,30 +137,8 @@ public:
         std::vector<std::vector<char>> rawBuckets;
         std::vector<std::vector<StringBucket::StringLimits>> rawLimits;
 
-        // Loading ids
-        size_t offset = 0;
-
-        for (size_t i = 0; i < idPageCount; i++) {
-            _reader.nextPage();
-
-            if (_reader.errorOccured()) {
-                return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS, _reader.error().value());
-            }
-
-            it = _reader.begin();
-
-            // Check that we read a whole page
-            if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
-                return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
-            }
-
-            const size_t countInPage = it.get<uint64_t>();
-
-            for (size_t j = 0; j < countInPage; j++) {
-                container->_ids[j + offset] = it.get<EntityID::Type>();
-            }
-
-            offset += countInPage;
+        if (auto res = GraphDumpHelper::loadPages(_reader, idPageCount, std::span {container->_ids}, DumpErrorType::COULD_NOT_READ_PROPS); !res) {
+            return res.get_unexpected();
         }
 
         // Loading buckets
@@ -247,7 +158,7 @@ public:
 
             const size_t countInPage = it.get<uint64_t>();
 
-            if (countInPage * Constants::BUCKET_STRIDE > Constants::BUCKET_PAGE_AVAIL) {
+            if (countInPage > Constants::BUCKET_COUNT_PER_PAGE) {
                 return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
             }
 
@@ -280,10 +191,19 @@ public:
             const size_t blockCountInPage = it.get<uint64_t>();
 
             for (size_t j = 0; j < blockCountInPage; j++) {
+                if (it.remainingBytes() < Constants::LIMIT_BLOCK_HEADER_STRIDE) {
+                    return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
+                }
+
                 const uint64_t bucketIndex = it.get<uint64_t>();
                 const uint32_t blockStrCount = it.get<uint32_t>();
 
                 if (bucketIndex >= rawLimits.size()) {
+                    return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
+                }
+
+                const size_t blockBytes = blockStrCount * Constants::LIMIT_STRIDE;
+                if (blockBytes > it.remainingBytes()) {
                     return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
                 }
 
@@ -292,39 +212,15 @@ public:
                 const size_t prevSize = limits.size();
                 limits.resize(prevSize + blockStrCount);
 
-                for (size_t k = 0; k < blockStrCount; k++) {
-                    auto& lim = limits[k + prevSize];
-                    lim._offset = it.get<uint32_t>();
-                    lim._count = it.get<uint32_t>();
-                }
+                std::copy_n(it.data(), blockBytes, reinterpret_cast<uint8_t*>(limits.data() + prevSize));
+                it.advance(blockBytes);
             }
         }
 
-        // Loading null ids
         container->_nullIds.resize(nullCount);
-        offset = 0;
 
-        for (size_t i = 0; i < nullPageCount; i++) {
-            _reader.nextPage();
-
-            if (_reader.errorOccured()) {
-                return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS, _reader.error().value());
-            }
-
-            it = _reader.begin();
-
-            // Check that we read a whole page
-            if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
-                return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
-            }
-
-            const size_t countInPage = it.get<uint64_t>();
-
-            for (size_t j = 0; j < countInPage; j++) {
-                container->_nullIds[j + offset] = it.get<EntityID::Type>();
-            }
-
-            offset += countInPage;
+        if (auto res = GraphDumpHelper::loadPages(_reader, nullPageCount, std::span {container->_nullIds}, DumpErrorType::COULD_NOT_READ_PROPS); !res) {
+            return res.get_unexpected();
         }
 
         for (size_t i = 0; i < rawBuckets.size(); i++) {
@@ -349,7 +245,7 @@ public:
 
         container->_sorted = std::is_sorted(ids.begin(), ids.end());
 
-        return {std::unique_ptr<PropertyContainer> {container}};
+        return {std::unique_ptr<PropertyContainer> {container.release()}};
     }
 
 private:

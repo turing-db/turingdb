@@ -45,51 +45,17 @@ DumpResult<std::unique_ptr<PropertyContainer>> MapPropertyContainerLoader::load(
     const uint64_t nullCount = it.get<uint64_t>();
     const uint64_t nullPageCount = it.get<uint64_t>();
 
-    auto* container = new TypedPropertyContainer<types::Map>;
+    std::unique_ptr<TypedPropertyContainer<types::Map>> container = std::make_unique<TypedPropertyContainer<types::Map>>();
     container->_ids.resize(propCount);
 
-    size_t offset = 0;
-    for (size_t i = 0; i < idPageCount; i++) {
-        _reader.nextPage();
-
-        if (_reader.errorOccured()) {
-            return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS, _reader.error().value());
-        }
-
-        it = _reader.begin();
-
-        if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
-            return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
-        }
-
-        const size_t countInPage = it.get<uint64_t>();
-        for (size_t j = 0; j < countInPage; j++) {
-            container->_ids[j + offset] = it.get<EntityID::Type>();
-        }
-        offset += countInPage;
+    if (auto res = GraphDumpHelper::loadPages(_reader, idPageCount, std::span {container->_ids}, DumpErrorType::COULD_NOT_READ_PROPS); !res) {
+        return res.get_unexpected();
     }
 
     std::vector<std::byte> stream(totalBytes);
-    size_t byteOffset = 0;
 
-    for (size_t i = 0; i < bytePageCount; i++) {
-        _reader.nextPage();
-
-        if (_reader.errorOccured()) {
-            return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS, _reader.error().value());
-        }
-
-        it = _reader.begin();
-
-        if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
-            return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
-        }
-
-        const size_t countInPage = it.get<uint64_t>();
-        for (size_t j = 0; j < countInPage; j++) {
-            stream[byteOffset + j] = std::byte {it.get<uint8_t>()};
-        }
-        byteOffset += countInPage;
+    if (auto res = GraphDumpHelper::loadPages(_reader, bytePageCount, std::span {stream}, DumpErrorType::COULD_NOT_READ_PROPS); !res) {
+        return res.get_unexpected();
     }
 
     MapContainer& values = container->_values;
@@ -115,28 +81,9 @@ DumpResult<std::unique_ptr<PropertyContainer>> MapPropertyContainerLoader::load(
     }
 
     container->_nullIds.resize(nullCount);
-    offset = 0;
 
-    for (size_t i = 0; i < nullPageCount; i++) {
-        _reader.nextPage();
-
-        if (_reader.errorOccured()) {
-            return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS, _reader.error().value());
-        }
-
-        it = _reader.begin();
-
-        if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
-            return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
-        }
-
-        const size_t countInPage = it.get<uint64_t>();
-
-        for (size_t j = 0; j < countInPage; j++) {
-            container->_nullIds[j + offset] = it.get<EntityID::Type>();
-        }
-
-        offset += countInPage;
+    if (auto res = GraphDumpHelper::loadPages(_reader, nullPageCount, std::span {container->_nullIds}, DumpErrorType::COULD_NOT_READ_PROPS); !res) {
+        return res.get_unexpected();
     }
 
     // Reconstruct the entity ID -> index map; it is not dumped. Nulls go in after the
@@ -155,5 +102,5 @@ DumpResult<std::unique_ptr<PropertyContainer>> MapPropertyContainerLoader::load(
 
     container->_sorted = std::is_sorted(ids.begin(), ids.end());
 
-    return {std::unique_ptr<PropertyContainer> {container}};
+    return {std::unique_ptr<PropertyContainer> {container.release()}};
 }
