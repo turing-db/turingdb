@@ -81,6 +81,8 @@ add_call_v3_test(test_query_ir_explore_edge_type_disjunction ExploreEdgeTypeDisj
 
 add_call_v3_test(test_query_ir_explore_list_predicate ExploreListPredicateTest.cpp)
 
+add_call_v3_test(test_query_ir_explore_list_predicate_later_constant ExploreListPredicateLaterConstantTest.cpp)
+
 add_call_v3_test(test_query_ir_named_path NamedPathTest.cpp)
 
 add_call_v3_test(test_query_ir_named_path_functions NamedPathFunctionsTest.cpp)

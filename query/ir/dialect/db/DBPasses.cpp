@@ -6265,6 +6265,43 @@ void addHopTest(const ExploreListPredicate& match, size_t step, mlir::RewriterBa
     joinHopTest(hopYield, hopTest, predicate.getLoc(), rewriter);
 }
 
+// Moves the ops after @param anchor in its block that compute what @param region reads from
+// above to just before @param anchor. A hop test reads only constants from above, which a
+// WITH after the walk may bind, and the ops computing a constant read only constants.
+void hoistRegionReadsAhead(Region& region, Operation* anchor, mlir::RewriterBase& rewriter) {
+    Block* const block = anchor->getBlock();
+
+    llvm::SetVector<Value> regionReads;
+    mlir::getUsedValuesDefinedAbove(region, regionReads);
+
+    llvm::SmallVector<Value> pending(regionReads.begin(), regionReads.end());
+    llvm::SmallPtrSet<Operation*, 8> visited;
+    llvm::SmallVector<Operation*> hoisted;
+    while (!pending.empty()) {
+        const Value value = pending.pop_back_val();
+        Operation* const def = value.getDefiningOp();
+        const bool computedAfter = def && def->getBlock() == block && anchor->isBeforeInBlock(def);
+        if (!computedAfter || !visited.insert(def).second) {
+            continue;
+        }
+
+        hoisted.push_back(def);
+        llvm::append_range(pending, def->getOperands());
+
+        llvm::SetVector<Value> readFromAbove;
+        mlir::getUsedValuesDefinedAbove(def->getRegions(), readFromAbove);
+        llvm::append_range(pending, readFromAbove);
+    }
+
+    llvm::sort(hoisted, [](Operation* lhs, Operation* rhs) {
+        return lhs->isBeforeInBlock(rhs);
+    });
+
+    for (Operation* const op : hoisted) {
+        rewriter.moveOpBefore(op, anchor);
+    }
+}
+
 // A list over one step of the body is tested on that step's hops alone, a list over every
 // hop on the hops of every step
 void fuseExploreListPredicate(ExploreListPredicate& match, mlir::RewriterBase& rewriter) {
@@ -6272,6 +6309,8 @@ void fuseExploreListPredicate(ExploreListPredicate& match, mlir::RewriterBase& r
     ExplorePaths exploration = match._exploration;
     ListPredicate predicate = match._predicate;
     ExpandPath expansion = match._expansion;
+
+    hoistRegionReadsAhead(predicate.getBody(), exploration, rewriter);
 
     const std::optional<uint64_t> expandedStep = expansion.getStep();
     const size_t stepCount = exploration.getStepCount();
