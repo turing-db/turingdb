@@ -245,6 +245,55 @@ bool holdsOnlyIntegers(Value column) {
     return ::db::holdsOnlyNullOr(column, {::db::CellTag::Int, ::db::CellTag::UInt});
 }
 
+bool isNullOr(Attribute literal, ::db::CellTag tag) {
+    const ::db::CellTag held = ::db::literalTag(literal);
+    return held == ::db::CellTag::Null || held == tag;
+}
+
+// A list or a map holds a null as a unit
+Attribute heldLiteral(Attribute literal) {
+    return ::db::literalTag(literal) == ::db::CellTag::Null ? UnitAttr::get(literal.getContext()) : literal;
+}
+
+// Null where @param keyed holds null or a map without @param key. None where it holds no map,
+// which a read of a key raises on
+Attribute keyOfLiteral(Attribute keyed, StringRef key) {
+    const DictionaryAttr map = dyn_cast<DictionaryAttr>(keyed);
+
+    if (::db::literalTag(keyed) == ::db::CellTag::Null) {
+        return UnitAttr::get(keyed.getContext());
+    } else if (!map) {
+        return {};
+    }
+
+    const Attribute entry = map.get(key);
+
+    return entry ? entry : UnitAttr::get(keyed.getContext());
+}
+
+// Null where @param list holds null or no element at @param position. None where it holds no
+// list, which a read of a position raises on
+Attribute elementOfLiteral(Attribute list, int64_t position) {
+    const ArrayAttr elements = dyn_cast<ArrayAttr>(list);
+
+    if (::db::literalTag(list) == ::db::CellTag::Null) {
+        return UnitAttr::get(list.getContext());
+    } else if (!elements) {
+        return {};
+    }
+
+    size_t index = 0;
+    if (!::db::listPositionIndex(elements.size(), position, index)) {
+        return UnitAttr::get(list.getContext());
+    }
+
+    return elements[index];
+}
+
+int64_t positionLiteral(Attribute position) {
+    return cast<IntegerAttr>(position).getValue().getSExtValue();
+}
+
 // What a filter reads as a mask: a boolean column, a boolean literal, one whose values may be
 // null, a property read whose type lowering resolves, or the untyped null an expression over a
 // property no row carries evaluates to
@@ -2485,6 +2534,19 @@ LogicalResult MakeList::verify() {
     return success();
 }
 
+OpFoldResult MakeList::fold(FoldAdaptor adaptor) {
+    llvm::SmallVector<Attribute> elements;
+    for (const Attribute element : adaptor.getElements()) {
+        if (!element) {
+            return {};
+        }
+
+        elements.push_back(heldLiteral(element));
+    }
+
+    return ArrayAttr::get(getContext(), elements);
+}
+
 LogicalResult MakeMap::verify() {
     const size_t valueCount = getValues().size();
     if (valueCount == 0) {
@@ -2504,6 +2566,23 @@ LogicalResult MakeMap::verify() {
     }
 
     return success();
+}
+
+OpFoldResult MakeMap::fold(FoldAdaptor adaptor) {
+    const ArrayRef<Attribute> values = adaptor.getValues();
+    const ArrayAttr keys = getKeys();
+
+    NamedAttrList entries;
+    for (size_t valueIndex = 0; valueIndex < values.size(); valueIndex++) {
+        const Attribute value = values[valueIndex];
+        if (!value) {
+            return {};
+        }
+
+        entries.append(cast<StringAttr>(keys[valueIndex]), heldLiteral(value));
+    }
+
+    return entries.getDictionary(getContext());
 }
 
 // A tagged cell may hold a map, and a column whose type lowering resolves may be one
@@ -3323,6 +3402,80 @@ Speculation::Speculatability ContainerIndex::getSpeculatability() {
     const bool readsAKey = ::db::holdsOnlyKeyedValues(base) && ::db::holdsOnlyNullOr(index, {::db::CellTag::String});
 
     return speculatableWhen(readsAnElement || readsAKey);
+}
+
+OpFoldResult StaticMapKey::fold(FoldAdaptor adaptor) {
+    const Attribute map = adaptor.getMap();
+
+    return map ? keyOfLiteral(map, getKey()) : Attribute();
+}
+
+OpFoldResult DynamicMapKey::fold(FoldAdaptor adaptor) {
+    const Attribute map = adaptor.getMap();
+    const Attribute key = adaptor.getKey();
+    if (!map || !key) {
+        return {};
+    }
+
+    const ::db::CellTag keyTag = ::db::literalTag(key);
+    if (keyTag == ::db::CellTag::String) {
+        return keyOfLiteral(map, cast<StringAttr>(key).getValue());
+    } else if (keyTag == ::db::CellTag::Null && isNullOr(map, ::db::CellTag::MapView)) {
+        return UnitAttr::get(getContext());
+    }
+
+    return {};
+}
+
+OpFoldResult ListIndex::fold(FoldAdaptor adaptor) {
+    const Attribute list = adaptor.getLhs();
+    const Attribute position = adaptor.getRhs();
+    if (!list || !position) {
+        return {};
+    }
+
+    const ::db::CellTag positionTag = ::db::literalTag(position);
+    if (positionTag == ::db::CellTag::Int) {
+        return elementOfLiteral(list, positionLiteral(position));
+    } else if (positionTag == ::db::CellTag::Null && isNullOr(list, ::db::CellTag::ListView)) {
+        return UnitAttr::get(getContext());
+    }
+
+    return {};
+}
+
+OpFoldResult ContainerIndex::fold(FoldAdaptor adaptor) {
+    const Attribute base = adaptor.getBase();
+    const Attribute index = adaptor.getIndex();
+    if (!base || !index) {
+        return {};
+    }
+
+    const ::db::CellTag indexTag = ::db::literalTag(index);
+    const bool readsNullOffAContainer = indexTag == ::db::CellTag::Null
+                                     && (isNullOr(base, ::db::CellTag::ListView) || isNullOr(base, ::db::CellTag::MapView));
+
+    if (indexTag == ::db::CellTag::String) {
+        return keyOfLiteral(base, cast<StringAttr>(index).getValue());
+    } else if (indexTag == ::db::CellTag::Int) {
+        return elementOfLiteral(base, positionLiteral(index));
+    } else if (readsNullOffAContainer) {
+        return UnitAttr::get(getContext());
+    }
+
+    return {};
+}
+
+OpFoldResult Head::fold(FoldAdaptor adaptor) {
+    const Attribute list = adaptor.getInput();
+
+    return list ? elementOfLiteral(list, 0) : Attribute();
+}
+
+OpFoldResult Last::fold(FoldAdaptor adaptor) {
+    const Attribute list = adaptor.getInput();
+
+    return list ? elementOfLiteral(list, -1) : Attribute();
 }
 
 // The window raises as the slice it was folded from does, on a type-erased bound holding no

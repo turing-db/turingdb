@@ -7558,20 +7558,97 @@ Value sameValueSource(Value column) {
     return carrier ? carrier.getRowSource(result) : Value();
 }
 
-StringAttr stringLiteralOf(Value column) {
-    Value source = column;
-    while (source) {
-        if (ConstantOp constant = source.getDefiningOp<ConstantOp>()) {
-            const StringAttr literal = dyn_cast<StringAttr>(constant.getValue());
-            const bool holdsAString = literal && isa<storage::StringType>(literal.getType());
-
-            return holdsAString ? literal : StringAttr();
-        }
-
-        source = sameValueSource(source);
+// The column an op makes, or the argument nothing carries in, whose value each row of
+// @param column holds
+Value madeColumnOf(Value column) {
+    Value made = column;
+    while (const Value source = sameValueSource(made)) {
+        made = source;
     }
 
-    return {};
+    return made;
+}
+
+// The literal every row of @param column holds: a db.constant's, or the one the op making it
+// folds to over the literals of its operands. Null where the rows may hold different values,
+// and where the op raises on those literals
+Attribute literalOf(Value column) {
+    llvm::DenseMap<Value, Attribute> literals;
+    llvm::SmallVector<Attribute> operandLiterals;
+    llvm::SmallVector<mlir::OpFoldResult> folded;
+
+    const Value root = madeColumnOf(column);
+    llvm::SmallVector<Value> worklist {root};
+
+    while (!worklist.empty()) {
+        const Value made = worklist.back();
+        Operation* const maker = made.getDefiningOp();
+        ConstantOp constant = dyn_cast_or_null<ConstantOp>(maker);
+        const bool foldsOverOperands = maker && maker->hasTrait<OpTrait::ConstantThroughOperands>();
+
+        if (literals.contains(made)) {
+            worklist.pop_back();
+            continue;
+        } else if (constant || !foldsOverOperands) {
+            literals[made] = constant ? constant.getValue() : Attribute();
+            worklist.pop_back();
+            continue;
+        }
+
+        const size_t pendingFrom = worklist.size();
+        operandLiterals.clear();
+
+        for (const Value operand : maker->getOperands()) {
+            const Value operandMade = madeColumnOf(operand);
+            const auto literalIt = literals.find(operandMade);
+            if (literalIt == literals.end()) {
+                worklist.push_back(operandMade);
+            } else {
+                operandLiterals.push_back(literalIt->second);
+            }
+        }
+
+        if (worklist.size() > pendingFrom) {
+            continue;
+        }
+
+        folded.clear();
+        const bool folds = succeeded(maker->fold(operandLiterals, folded)) && folded.size() == maker->getNumResults();
+        const size_t resultNumber = cast<OpResult>(made).getResultNumber();
+
+        literals[made] = folds ? dyn_cast_if_present<Attribute>(folded[resultNumber]) : Attribute();
+        worklist.pop_back();
+    }
+
+    return literals.lookup(root);
+}
+
+StringAttr stringLiteralOf(Value column) {
+    const Attribute literal = literalOf(column);
+    const bool holdsAString = literal && ::db::literalTag(literal) == ::db::CellTag::String;
+
+    return holdsAString ? cast<StringAttr>(literal) : StringAttr();
+}
+
+// Erases the op making @param column and the ops it reads, as far as nothing else reads them
+// and none of them may raise
+void eraseUnreadCone(Value column, mlir::RewriterBase& rewriter) {
+    llvm::SmallVector<Operation*> worklist {column.getDefiningOp()};
+    llvm::SmallPtrSet<Operation*, 8> erased;
+
+    while (!worklist.empty()) {
+        Operation* const op = worklist.pop_back_val();
+        if (!op || erased.contains(op) || !mlir::isOpTriviallyDead(op)) {
+            continue;
+        }
+
+        for (const Value operand : op->getOperands()) {
+            worklist.push_back(operand.getDefiningOp());
+        }
+
+        erased.insert(op);
+        rewriter.eraseOp(op);
+    }
 }
 
 // On a datetime or a duration m.year reads a component m['year'] raises on, and on any other
@@ -7588,13 +7665,10 @@ struct FoldConstantMapKey : public mlir::OpRewritePattern<DynamicMapKey> {
             return failure();
         }
 
-        ConstantOp keyConstant = keyColumn.getDefiningOp<ConstantOp>();
         const StringAttr keyName = rewriter.getStringAttr(key.getValue());
         rewriter.replaceOpWithNewOp<StaticMapKey>(mapKey, mapKey.getResult().getType(), map, keyName);
 
-        if (keyConstant) {
-            eraseIfUnused(keyConstant.getOperation(), rewriter);
-        }
+        eraseUnreadCone(keyColumn, rewriter);
 
         return success();
     }

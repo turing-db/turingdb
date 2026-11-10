@@ -13,6 +13,7 @@
 
 #include "DBColumnElement.h"
 #include "DBOps.h"
+#include "IRLiteralList.h"
 #include "NullLiteralType.h"
 #include "StorageTypes.h"
 
@@ -66,26 +67,6 @@ CellTag elementTag(mlir::Type element) {
         return CellTag::Point;
     } else if (mlir::isa<storage::EmbeddingType>(element)) {
         return CellTag::Embedding;
-    }
-
-    return CellTag::INVALID;
-}
-
-// INVALID for a literal no cell holds
-CellTag literalTag(mlir::Attribute literal) {
-    if (mlir::isa<mlir::UnitAttr>(literal)) {
-        return CellTag::Null;
-    } else if (mlir::isa<mlir::DictionaryAttr>(literal)) {
-        return CellTag::MapView;
-    } else if (mlir::isa<mlir::ArrayAttr>(literal)) {
-        return CellTag::ListView;
-    } else if (mlir::isa<mlir::StringAttr>(literal)) {
-        return CellTag::String;
-    } else if (const mlir::IntegerAttr integer = mlir::dyn_cast<mlir::IntegerAttr>(literal)) {
-        const mlir::IntegerType integerType = mlir::dyn_cast<mlir::IntegerType>(integer.getType());
-        return integerType ? integerTag(integerType) : CellTag::INVALID;
-    } else if (mlir::isa<mlir::FloatAttr>(literal)) {
-        return CellTag::Double;
     }
 
     return CellTag::INVALID;
@@ -202,12 +183,9 @@ private:
             return;
         }
 
-        const int64_t count = static_cast<int64_t>(elements.size());
-        const int64_t position = step._position.getValue().getSExtValue();
-        const int64_t fromStart = position < 0 ? count + position : position;
-
-        if (fromStart >= 0 && fromStart < count) {
-            reach(elements[static_cast<size_t>(fromStart)], step._rest);
+        size_t index = 0;
+        if (listPositionIndex(elements.size(), step._position.getValue().getSExtValue(), index)) {
+            reach(elements[index], step._rest);
         }
     }
 
@@ -437,4 +415,27 @@ bool db::holdsOnlyNullOr(mlir::Value column, std::initializer_list<CellTag> tags
 
 bool db::holdsOnlyKeyedValues(mlir::Value column) {
     return holdsOnlyNullOr(column, {CellTag::MapView, CellTag::NodeID, CellTag::EdgeID});
+}
+
+// A list or a map holds a null as a unit, and a db.constant the null literal as an empty string
+// of the null literal's type
+CellTag db::literalTag(mlir::Attribute literal) {
+    const mlir::TypedAttr typed = mlir::dyn_cast<mlir::TypedAttr>(literal);
+
+    if (mlir::isa<mlir::UnitAttr>(literal) || (typed && mlir::isNullLiteralType(typed.getType()))) {
+        return CellTag::Null;
+    } else if (mlir::isa<mlir::DictionaryAttr>(literal)) {
+        return CellTag::MapView;
+    } else if (mlir::isa<mlir::ArrayAttr>(literal)) {
+        return CellTag::ListView;
+    } else if (mlir::isa<mlir::StringAttr>(literal)) {
+        return CellTag::String;
+    } else if (const mlir::IntegerAttr integer = mlir::dyn_cast<mlir::IntegerAttr>(literal)) {
+        const mlir::IntegerType integerType = mlir::dyn_cast<mlir::IntegerType>(integer.getType());
+        return integerType ? integerTag(integerType) : CellTag::INVALID;
+    } else if (mlir::isa<mlir::FloatAttr>(literal)) {
+        return CellTag::Double;
+    }
+
+    return CellTag::INVALID;
 }

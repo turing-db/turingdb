@@ -520,6 +520,7 @@ def MakeList : TuringOp<"make_list", [Pure, ConstantThroughOperands]> {
   let arguments = (ins Variadic<Column>:$elements);
   let results   = (outs Column:$result);
   let hasVerifier = 1;
+  let hasFolder = 1;
 
   // The element columns print inside the parens, as db.collect's columns do; the operand
   // and result types follow as a function type, so the list is spelled beside the columns
@@ -549,6 +550,7 @@ def MakeMap : TuringOp<"make_map", [Pure, ConstantThroughOperands]> {
   let arguments = (ins Variadic<Column>:$values, StrArrayAttr:$keys);
   let results   = (outs ColumnMaps:$result);
   let hasVerifier = 1;
+  let hasFolder = 1;
 
   let assemblyFormat = [{
     `(` $values `)` `keys` $keys attr-dict `:` type($values)
@@ -608,6 +610,7 @@ def StaticMapKey : TuringOp<"static_map_key", [MayRaise, ConstantThroughOperands
 
   let arguments = (ins Column:$map, StrAttr:$key);
   let results   = (outs ColumnCells:$result);
+  let hasFolder = 1;
 
   let assemblyFormat = "$map `key` $key attr-dict `:` functional-type(operands, results)";
 }
@@ -3095,8 +3098,15 @@ def ElementID : TypedUnaryFunctionOp<"element_id", "::mlir::storage::NodeIDType,
 def Size : TypedUnaryFunctionOp<"size", "::mlir::storage::StringType, ::mlir::storage::ListType">;
 def IsEmpty : TypedUnaryFunctionOp<"is_empty", "::mlir::storage::StringType, ::mlir::storage::ListType, ::mlir::storage::MapType">;
 def CharLength : TextFunctionOp<"char_length">;
-def Head : ListFunctionOp<"head">;
-def Last : ListFunctionOp<"last">;
+
+def Head : ListFunctionOp<"head"> {
+  let hasFolder = 1;
+}
+
+def Last : ListFunctionOp<"last"> {
+  let hasFolder = 1;
+}
+
 def Tail : ListFunctionOp<"tail">;
 
 def Abs : NumberFunctionOp<"abs">;
@@ -3522,6 +3532,7 @@ def ListIndex : BinaryOp<"list_index", [MayRaise, DeclareOpInterfaceMethods<Cond
 
   let arguments = (ins Column:$lhs, Column:$rhs);
   let results   = (outs Column:$result);
+  let hasFolder = 1;
 
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
@@ -3564,6 +3575,7 @@ def DynamicMapKey : BinaryOp<"dynamic_map_key", [MayRaise, DeclareOpInterfaceMet
 
   let arguments = (ins Column:$map, Column:$key);
   let results   = (outs ColumnCells:$result);
+  let hasFolder = 1;
 
   let assemblyFormat = "$map`,` $key attr-dict `:` functional-type(operands, results)";
 }
@@ -3590,6 +3602,7 @@ def ContainerIndex : BinaryOp<"container_index", [MayRaise, DeclareOpInterfaceMe
 
   let arguments = (ins Column:$base, Column:$index);
   let results   = (outs Column:$result);
+  let hasFolder = 1;
 
   let assemblyFormat = "$base `,` $index attr-dict `:` functional-type(operands, results)";
 }

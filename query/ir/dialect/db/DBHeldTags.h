@@ -5,6 +5,7 @@
 #include "CellTag.h"
 
 namespace mlir {
+class Attribute;
 class Value;
 }
 
@@ -17,5 +18,8 @@ bool holdsOnlyNullOr(mlir::Value column, std::initializer_list<CellTag> tags);
 
 // Whether every row of @param column holds null, a map, a node or an edge: a value a key reads
 bool holdsOnlyKeyedValues(mlir::Value column);
+
+// The tag of the cell holding @param literal; INVALID for a literal no cell holds
+CellTag literalTag(mlir::Attribute literal);
 
 }

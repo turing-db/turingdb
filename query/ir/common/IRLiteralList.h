@@ -1,5 +1,8 @@
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -42,6 +45,20 @@ inline mlir::Type sharedLiteralElementType(mlir::ArrayAttr elements) {
     }
 
     return sharedType;
+}
+
+// Sets @param index to the element a list of @param count elements holds at @param position,
+// which counts from the end where it is negative. False past either end, where it reads null.
+inline bool listPositionIndex(size_t count, int64_t position, size_t& index) {
+    const int64_t signedCount = static_cast<int64_t>(count);
+    const int64_t fromStart = position < 0 ? signedCount + position : position;
+
+    if (fromStart < 0 || fromStart >= signedCount) {
+        return false;
+    }
+
+    index = static_cast<size_t>(fromStart);
+    return true;
 }
 
 }
