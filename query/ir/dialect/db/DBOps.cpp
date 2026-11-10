@@ -237,10 +237,6 @@ void collectBranchYields(Value value, MutableArrayRef<Region> branches, llvm::Sm
     }
 }
 
-bool holdsOnlyLists(Value column) {
-    return ::db::holdsOnlyNullOr(column, {::db::CellTag::ListView});
-}
-
 bool holdsOnlyIntegers(Value column) {
     return ::db::holdsOnlyNullOr(column, {::db::CellTag::Int, ::db::CellTag::UInt});
 }
@@ -3379,11 +3375,11 @@ Speculation::Speculatability ListSlice::getSpeculatability() {
     const Value to = getTo();
     const bool readsIntegerBounds = (!from || holdsOnlyIntegers(from)) && (!to || holdsOnlyIntegers(to));
 
-    return speculatableWhen(holdsOnlyLists(getList()) && readsIntegerBounds);
+    return speculatableWhen(::db::holdsOnlyLists(getList()) && readsIntegerBounds);
 }
 
 Speculation::Speculatability ListIndex::getSpeculatability() {
-    return speculatableWhen(holdsOnlyLists(getLhs()));
+    return speculatableWhen(::db::holdsOnlyLists(getLhs()));
 }
 
 Speculation::Speculatability StaticMapKey::getSpeculatability() {
@@ -3398,7 +3394,7 @@ Speculation::Speculatability ContainerIndex::getSpeculatability() {
     const Value base = getBase();
     const Value index = getIndex();
 
-    const bool readsAnElement = holdsOnlyLists(base) && holdsOnlyIntegers(index);
+    const bool readsAnElement = ::db::holdsOnlyLists(base) && holdsOnlyIntegers(index);
     const bool readsAKey = ::db::holdsOnlyKeyedValues(base) && ::db::holdsOnlyNullOr(index, {::db::CellTag::String});
 
     return speculatableWhen(readsAnElement || readsAKey);

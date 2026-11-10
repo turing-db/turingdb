@@ -218,7 +218,7 @@ def CanonicalizeCoalesce : Pass<"canonicalize_coalesce"> {
 }
 
 def FoldConstantMapKeys : Pass<"fold_constant_map_keys"> {
-    let summary = "Fold a dynamic_map_key whose key column holds one string in every row into the static_map_key of that string, where every row of its map holds a map, a node, an edge or null";
+    let summary = "Fold a dynamic_map_key or a container_index whose key column holds one string in every row into the static_map_key of that string, where every row of its map holds a map, a node, an edge or null, and a container_index whose index holds one integer in every row into the list_index of that integer, where every row of its base holds a list or null";
     let dependentDialects = ["mlir::db::DB"];
 }
 

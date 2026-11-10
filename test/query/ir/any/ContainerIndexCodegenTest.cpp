@@ -152,21 +152,21 @@ TEST_F(ContainerIndexCodegenTest, readsNoContainerByANullIndex) {
 }
 
 TEST_F(ContainerIndexCodegenTest, lowersAReadOfATypedListToItsElementType) {
-    expectLoweredResult("WITH [1, 'a'][0] AS i RETURN [10, 20, 30][i]", "!nl.chunk<!storage.nullable<i64>>");
-    expectLoweredResult("WITH [1, 'a'][0] AS i RETURN ['x', 'y'][i]", "!nl.chunk<!storage.nullable<!storage.string>>");
+    expectLoweredResult("UNWIND [1, 'a'] AS i RETURN [10, 20, 30][i]", "!nl.chunk<!storage.nullable<i64>>");
+    expectLoweredResult("UNWIND [1, 'a'] AS i RETURN ['x', 'y'][i]", "!nl.chunk<!storage.nullable<!storage.string>>");
 }
 
 TEST_F(ContainerIndexCodegenTest, lowersAReadOfAListOfNodesToTheNodeColumn) {
-    expectLoweredResult("MATCH (p:Person) WITH collect(p) AS l WITH l, [0, 'a'][0] AS i RETURN l[i]",
+    expectLoweredResult("MATCH (p:Person) WITH collect(p) AS l UNWIND [0, 'a'] AS i RETURN l[i]",
                         "!nl.chunk<!storage.node_id>");
 }
 
 TEST_F(ContainerIndexCodegenTest, lowersAReadOfAMixedListAsAListIndexDoes) {
-    expectLoweredResult("WITH [1, 'a'][0] AS i RETURN [1, 'a'][i]", "!nl.chunk<!storage.nullable<!storage.any>>");
+    expectLoweredResult("UNWIND [1, 'a'] AS i RETURN [1, 'a'][i]", "!nl.chunk<!storage.nullable<!storage.any>>");
 }
 
 TEST_F(ContainerIndexCodegenTest, lowersAReadOfAMapOrACellToATaggedCell) {
-    expectLoweredResult("WITH ['a', 1][0] AS k, {a: 1} AS m RETURN m[k]", "!nl.chunk<!storage.any>");
+    expectLoweredResult("UNWIND ['a', 1] AS k WITH k, {a: 1} AS m RETURN m[k]", "!nl.chunk<!storage.any>");
     expectLoweredResult("UNWIND [[[10, 20], 1], [{a: 'x'}, 'a']] AS p RETURN p[0][p[1]]", "!nl.chunk<!storage.any>");
 }
 

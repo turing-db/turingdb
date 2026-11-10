@@ -417,6 +417,10 @@ bool db::holdsOnlyKeyedValues(mlir::Value column) {
     return holdsOnlyNullOr(column, {CellTag::MapView, CellTag::NodeID, CellTag::EdgeID});
 }
 
+bool db::holdsOnlyLists(mlir::Value column) {
+    return holdsOnlyNullOr(column, {CellTag::ListView});
+}
+
 // A list or a map holds a null as a unit, and a db.constant the null literal as an empty string
 // of the null literal's type
 CellTag db::literalTag(mlir::Attribute literal) {

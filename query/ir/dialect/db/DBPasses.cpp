@@ -7674,12 +7674,45 @@ struct FoldConstantMapKey : public mlir::OpRewritePattern<DynamicMapKey> {
     }
 };
 
+// The op reading what the index reads keeps its untyped column, which the ops carrying the
+// column were typed by
+struct FoldConstantContainerIndex : public mlir::OpRewritePattern<ContainerIndex> {
+    using OpRewritePattern::OpRewritePattern;
+
+    LogicalResult matchAndRewrite(ContainerIndex index, mlir::PatternRewriter& rewriter) const override {
+        const Value indexColumn = index.getIndex();
+        const Value base = index.getBase();
+        const Type resultType = index.getResult().getType();
+
+        const Attribute literal = literalOf(indexColumn);
+        const ::db::CellTag indexTag = literal ? ::db::literalTag(literal) : ::db::CellTag::INVALID;
+
+        const bool readsAKey = indexTag == ::db::CellTag::String && ::db::holdsOnlyKeyedValues(base);
+        const bool readsAnElement = indexTag == ::db::CellTag::Int && ::db::holdsOnlyLists(base);
+
+        if (readsAKey) {
+            const StringAttr key = rewriter.getStringAttr(cast<StringAttr>(literal).getValue());
+            rewriter.replaceOpWithNewOp<StaticMapKey>(index, resultType, base, key);
+        } else if (readsAnElement) {
+            const int64_t position = cast<IntegerAttr>(literal).getValue().getSExtValue();
+            ConstantOp positionColumn = rewriter.create<ConstantOp>(index.getLoc(), rewriter.getI64IntegerAttr(position));
+            rewriter.replaceOpWithNewOp<ListIndex>(index, resultType, base, positionColumn.getResult());
+        } else {
+            return failure();
+        }
+
+        eraseUnreadCone(indexColumn, rewriter);
+
+        return success();
+    }
+};
+
 struct FoldConstantMapKeys : public impl::FoldConstantMapKeysBase<FoldConstantMapKeys> {
     void runOnOperation() override {
         MLIRContext* const context = &getContext();
 
         mlir::RewritePatternSet patterns(context);
-        patterns.add<FoldConstantMapKey>(context);
+        patterns.add<FoldConstantMapKey, FoldConstantContainerIndex>(context);
         const mlir::FrozenRewritePatternSet frozenPatterns(std::move(patterns));
 
         mlir::GreedyRewriteConfig config;
@@ -7692,12 +7725,14 @@ struct FoldConstantMapKeys : public impl::FoldConstantMapKeysBase<FoldConstantMa
         // its result directly: a read carried from a folded one is tried in the next round
         bool folded = true;
         while (folded) {
-            llvm::SmallVector<Operation*> mapKeys;
-            getOperation()->walk([&mapKeys](DynamicMapKey mapKey) {
-                mapKeys.push_back(mapKey.getOperation());
+            llvm::SmallVector<Operation*> dynamicReads;
+            getOperation()->walk([&dynamicReads](Operation* op) {
+                if (isa<DynamicMapKey, ContainerIndex>(op)) {
+                    dynamicReads.push_back(op);
+                }
             });
 
-            if (failed(mlir::applyOpPatternsGreedily(mapKeys, frozenPatterns, config, &folded))) {
+            if (failed(mlir::applyOpPatternsGreedily(dynamicReads, frozenPatterns, config, &folded))) {
                 signalPassFailure();
                 return;
             }

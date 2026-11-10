@@ -19,6 +19,9 @@ bool holdsOnlyNullOr(mlir::Value column, std::initializer_list<CellTag> tags);
 // Whether every row of @param column holds null, a map, a node or an edge: a value a key reads
 bool holdsOnlyKeyedValues(mlir::Value column);
 
+// Whether every row of @param column holds null or a list: a value a position reads
+bool holdsOnlyLists(mlir::Value column);
+
 // The tag of the cell holding @param literal; INVALID for a literal no cell holds
 CellTag literalTag(mlir::Attribute literal);
 

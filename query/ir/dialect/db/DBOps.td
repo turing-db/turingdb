@@ -606,10 +606,13 @@ def StaticMapKey : TuringOp<"static_map_key", [MayRaise, ConstantThroughOperands
     with no such component, raises. A column of nodes or edges reads each entity's
     property under the key, which is how a property whose type the program decides as it
     runs - one only a write of tagged cells creates - is read.
+
+    Codegen types the result a column of tagged cells. One folded from a db.container_index
+    keeps the untyped column the index read had, which the ops carrying it are typed by.
   }];
 
   let arguments = (ins Column:$map, StrAttr:$key);
-  let results   = (outs ColumnCells:$result);
+  let results   = (outs Column:$result);
   let hasFolder = 1;
 
   let assemblyFormat = "$map `key` $key attr-dict `:` functional-type(operands, results)";

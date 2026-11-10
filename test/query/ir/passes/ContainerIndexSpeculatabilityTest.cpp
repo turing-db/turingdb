@@ -197,21 +197,21 @@ TEST_F(ContainerIndexSpeculatabilityTest, readsAnIndexHeldAtTheHeadOrTheLastOfAL
 }
 
 TEST_F(ContainerIndexSpeculatabilityTest, computesAPositionHeldByAListOnce) {
-    const std::string_view query = "UNWIND [1, 2, 3] AS r RETURN r, [10, 20, 30][[1, 'a'][0]]";
+    const std::string_view query = "UNWIND [1, 2, 3] AS r RETURN r, [10, 20, 30][[toInteger('1'), 'a'][0]]";
 
     expectComputedOnce(query);
     expectRows(query, {{"1", "20"}, {"2", "20"}, {"3", "20"}});
 }
 
 TEST_F(ContainerIndexSpeculatabilityTest, computesAKeyHeldByAListOnce) {
-    const std::string_view query = "UNWIND [1, 2] AS r RETURN r, {a: 5}[['a', 0][0]]";
+    const std::string_view query = "UNWIND [1, 2] AS r RETURN r, {a: 5}[[toString('a'), 0][0]]";
 
     expectComputedOnce(query);
     expectRows(query, {{"1", "5"}, {"2", "5"}});
 }
 
 TEST_F(ContainerIndexSpeculatabilityTest, computesTheLastOfAListOnce) {
-    const std::string_view query = "UNWIND [1, 2] AS r RETURN r, [10, 20, 30][last(['a', 2])]";
+    const std::string_view query = "UNWIND [1, 2] AS r RETURN r, [10, 20, 30][last(['a', toInteger('2')])]";
 
     expectComputedOnce(query);
     expectRows(query, {{"1", "30"}, {"2", "30"}});
