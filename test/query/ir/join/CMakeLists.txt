@@ -71,3 +71,5 @@ add_ir_tests(test_query_ir_hash_join_limit_past_aggregate HashJoinLimitPastAggre
 
 # A LIMIT 0 behind a SKIP stops the product before its first pair, as a LIMIT 0 alone does.
 add_ir_tests(test_query_ir_hash_join_zero_limit_past_a_skip HashJoinZeroLimitPastASkipTest.cpp)
+
+add_call_v3_test(test_query_ir_place_in_factors_later_constant PlaceInFactorsLaterConstantTest.cpp)
