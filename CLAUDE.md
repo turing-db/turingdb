@@ -397,6 +397,30 @@ source read back was garbage, and `sameRowSource` segfaulted on it in 9 runs of 
 (`CarriedColumnRowSourceTest`). The first version of the scrub in `DBLowering::eraseOp` erased
 from `_valueMap` while iterating it and kept one of two entries holding a freed value.
 
+## A null range: ask why the caller holds one
+
+**When UBSan reports a `memcpy` given a null pointer, find out why the caller holds a null range
+before changing the copy.** There are two cases, and only one is a bug in the caller.
+- A null handled as a value: the caller copies the payload of something that is null. Fix the
+  caller. Write the Null tag, or skip the payload after `isNull()`, as the other nullable
+  readers do. A copy that accepts the null range leaves the caller wrong.
+- A valid empty value whose pointer is null: MLIR spells `''` as a null `StringRef`, and a
+  `std::vector` that never allocated has a null `data()`. `std::span`, `std::string_view` and
+  `std::copy` all allow `(nullptr, 0)`; only C's `memcpy` does not. The byte sinks accept it
+  through `std::copy_n`: `SpanBuffer`, `StringBuffer`, `TuringProtoInBuf`, `TuringProtoOutBuf`
+  and `NLSerializedKey`.
+- To list the callers, put the sink back on `memcpy` and run the tests with
+  `UBSAN_OPTIONS=print_stacktrace=1`. Each test stops at its first report, so rerun the
+  failures after each fix.
+
+Worked example: the CI Sanitizers nightly of 2026-11-10. A `count(DISTINCT p)` over a missed
+OPTIONAL MATCH keyed the null path, an empty `GraphPath`, as a path with zero IDs, and appended
+its IDs: `memcpy(dst, nullptr, 0)`. The first fix made `NLSerializedKey::append` accept that.
+The cause was the key serializing a null as a value: #1434 keys it as `CellTag::Null`, and #1435
+stops the wire decoders reading the null path's IDs. With the sinks on `memcpy`, 27 of 1243
+tests failed: 2 from null paths, and 25 from MLIR's empty string, which is a valid value. So the
+sinks stay tolerant.
+
 ## C++ Coding Style
 
 Please read `CODING_STYLE.md` for guidelines before any new work.
