@@ -1,8 +1,8 @@
 #pragma once
 
 #include <stddef.h>
-#include <string.h>
 
+#include <algorithm>
 #include <memory>
 #include <string_view>
 
@@ -21,7 +21,7 @@ public:
             grow(size);
         }
 
-        memcpy(_bytes.get() + _size, bytes, size);
+        std::copy_n(bytes, size, _bytes.get() + _size);
         _size += size;
     }
 

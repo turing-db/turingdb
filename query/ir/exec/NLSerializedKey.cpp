@@ -1,5 +1,7 @@
 #include "NLSerializedKey.h"
 
+#include <string.h>
+
 #include <algorithm>
 
 using namespace db;
