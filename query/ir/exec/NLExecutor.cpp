@@ -3197,10 +3197,17 @@ void distinctKeyAppendMapColumn(const Column* column, size_t row, NLSerializedKe
     distinctAppendMapBytes(key, raw[row]);
 }
 
-// The null path has no ID, so it keys as count 0, apart from every path.
 void distinctKeyAppendPathColumn(const Column* column, size_t row, NLSerializedKey& key) {
     const std::vector<GraphPath>& raw = static_cast<const ColumnVector<GraphPath>*>(column)->getRaw();
-    distinctAppendPathBytes(key, raw[row].getIDs());
+    const GraphPath& path = raw[row];
+
+    if (path.isNull()) {
+        key.push_back(static_cast<char>(CellTag::Null));
+        return;
+    }
+
+    key.push_back(static_cast<char>(CellTag::Path));
+    distinctAppendPathBytes(key, path.getIDs());
 }
 
 void distinctKeyAppendOptListColumn(const Column* column, size_t row, NLSerializedKey& key) {
