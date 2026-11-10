@@ -975,8 +975,9 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     const EvaluatedType baseType = base->getType();
     const bool indexesAList = baseType == EvaluatedType::List;
     const bool indexesAMap = baseType == EvaluatedType::Map;
-    const bool indexesAnEntity = baseType == EvaluatedType::NodePattern
-                              || baseType == EvaluatedType::EdgePattern;
+    const bool indexesANode = baseType == EvaluatedType::NodePattern;
+    const bool indexesARelationship = baseType == EvaluatedType::EdgePattern;
+    const bool indexesAnEntity = indexesANode || indexesARelationship;
     const bool indexesACSVRow = baseType == EvaluatedType::StringTable;
 
     const bool indexesATaggedCell = baseType == EvaluatedType::Any;
@@ -1006,9 +1007,9 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
         return;
     }
 
-    if (!indexesAList && !indexesAMap && !indexesATaggedCell && !indexesACSVRow
+    if (!indexesAList && !indexesAMap && !indexesAnEntity && !indexesATaggedCell && !indexesACSVRow
         && !indexesANullValue) {
-        throwError(fmt::format("Index operator [] can only be applied to a list, a map or a CSV row, not '{}'",
+        throwError(fmt::format("Index operator [] can only be applied to a list, a map, a node, a relationship or a CSV row, not '{}'",
                                EvaluatedTypeName::value(baseType)), expr);
     }
 
@@ -1042,6 +1043,12 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     // A tagged cell takes either kind, since only its row says which it holds
     if (indexesAMap && !indexesByKey && !indexesByATaggedCell) {
         throwError(fmt::format("A map is indexed by a string key, not by '{}'",
+                               EvaluatedTypeName::value(indexType)), expr);
+    } else if (indexesANode && !indexesByKey && !indexesByATaggedCell) {
+        throwError(fmt::format("A node is indexed by a string key, not by '{}'",
+                               EvaluatedTypeName::value(indexType)), expr);
+    } else if (indexesARelationship && !indexesByKey && !indexesByATaggedCell) {
+        throwError(fmt::format("A relationship is indexed by a string key, not by '{}'",
                                EvaluatedTypeName::value(indexType)), expr);
     } else if (indexesAList && !indexesByPosition && !indexesByATaggedCell) {
         throwError(fmt::format("A list index expression must be an integer, not '{}'",

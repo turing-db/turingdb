@@ -69,18 +69,25 @@ key as a constant, the op `m[k]` emits for a key computed per row. That read rai
 or a duration, where `m.key` reads the component. A map literal is read by a key computed per row
 the same way: `UNWIND ['a', 'b', 'c'] AS k RETURN {a: 1, b: 'x'}[k]` is 1, x and null.
 
+A node or a relationship is read by a key computed per row the same way, openCypher's dynamic
+property access: `UNWIND ['name', 'age'] AS k MATCH (n:Person {name: 'Remy'}) RETURN n[k]` is
+Remy and 32. `db.dynamic_map_key` reads the node column itself, with no cell in between. A null
+key, a property the node lacks and a node an OPTIONAL MATCH missed read null. The key is a
+string: `n[0]` is rejected with `A node is indexed by a string key, not by 'Integer'`, and a
+tagged cell holding 0 raises the same.
+
 An index held in a tagged cell can be a position on one row and a key on the next, so `c[i]` with
-such an `i` emits `db.container_index` where `c` is a list, a map or a tagged cell. Neo4j's
-ContainerIndex expression reads it the same way. A row whose base holds a list and whose index
-holds an integer reads the element, as `db.list_index` does. A row whose base holds a map, a node
-or an edge and whose index holds a string reads the value under that key, as `db.dynamic_map_key`
-does. A null base or a null index reads null, and any other pair raises: `UNWIND [1, 'a'] AS b
-RETURN [1, 2, 3][b]` raises on the row holding `'a'`. The error names the index the base takes and
-the type the row held, as the analyzer words it: `A list index expression must be an integer, not
-'String'` there, and `A map is indexed by a string key, not by 'Integer'` for `UNWIND [1, 'k'] AS b
-RETURN {k: 1}[b]`. A base holding 1 raises `Index operator [] can only be applied to a list, a
-map, a node or a relationship, not 'Integer'`. An integer, a string or a null index keeps the op it
-emitted before.
+such an `i` emits `db.container_index` where `c` is a list, a map, a node, a relationship or a
+tagged cell. Neo4j's ContainerIndex expression reads it the same way. A row whose base holds a list
+and whose index holds an integer reads the element, as `db.list_index` does. A row whose base holds
+a map, a node or an edge and whose index holds a string reads the value under that key, as
+`db.dynamic_map_key` does. A null base or a null index reads null, and any other pair raises:
+`UNWIND [1, 'a'] AS b RETURN [1, 2, 3][b]` raises on the row holding `'a'`. The error names the
+index the base takes and the type the row held, as the analyzer words it: `A list index expression
+must be an integer, not 'String'` there, and `A map is indexed by a string key, not by 'Integer'`
+for `UNWIND [1, 'k'] AS b RETURN {k: 1}[b]`. A base holding 1 raises `Index operator [] can only be
+applied to a list, a map, a node or a relationship, not 'Integer'`. An integer, a string or a null
+index keeps the op it emitted before.
 
 # Reading through a nested value
 
@@ -107,9 +114,10 @@ to the literal, `db.make_map` or `db.make_list` it reads. So `row.s.name` in
 `UNWIND [{s: {name: 'Remy'}}, {s: null}] AS row MATCH (a {name: row.s.name})` can still be sunk
 into its factor as a hash join key, and so can `row.src` after `WITH row ORDER BY row.src`.
 
-A key read takes a cell column wherever it takes a map column: `holdsAMapPerRow` says so in
-`DBLowering` and in the two nl verifiers, and `NLExecutor::selectMapRead` takes the `MapView`
-out of the tag. An index takes a cell column the same way, and the result is the
+A key read takes a cell column wherever it takes a map column, and a column of nodes or edges
+too: `holdsAKeyedValuePerRow` says so in `DBLowering` and in the nl verifiers, and
+`NLExecutor::selectKeyedRead` takes the `MapView`, the node or the edge out of the tag, or the ID
+out of the entity column. An index takes a cell column the same way, and the result is the
 `nullable<any>` every index gives.
 
 A map held in a list reads through those same two paths, since `xs[0]` hands back a

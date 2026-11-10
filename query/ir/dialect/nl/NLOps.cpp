@@ -56,8 +56,8 @@ Type getNullableChunkType(MLIRContext* context, Type valueType) {
     return ChunkType::get(context, storage::NullableType::get(context, valueType));
 }
 
-// Whether a key read can be answered over this chunk: a chunk of maps, or one of tagged
-// cells, which a read of a nested container hands back and whose row says what it holds
+// A chunk of maps, or one of tagged cells, which a read of a nested container hands back
+// and whose row says what it holds
 bool holdsAMapPerRow(Type chunkType) {
     const auto chunk = dyn_cast<ChunkType>(chunkType);
     if (!chunk) {
@@ -74,6 +74,13 @@ bool writesAMapPerRow(Type chunkType) {
     const auto chunk = dyn_cast<ChunkType>(chunkType);
 
     return holdsAMapPerRow(chunkType) || (chunk && isNullLiteralType(chunk.getElementType()));
+}
+
+bool holdsAKeyedValuePerRow(Type chunkType) {
+    const auto chunk = dyn_cast<ChunkType>(chunkType);
+    const bool holdsAnEntity = chunk && isa<storage::NodeIDType, storage::EdgeIDType>(chunk.getElementType());
+
+    return holdsAnEntity || holdsAMapPerRow(chunkType);
 }
 
 // The value type an aggregate reduces: the T in a !nl.chunk<!storage.nullable<T>>.
@@ -933,8 +940,8 @@ LogicalResult MakeList::verify() {
 }
 
 LogicalResult StaticMapKey::verify() {
-    if (!holdsAMapPerRow(getMap().getType())) {
-        return emitOpError("reads a chunk of maps or of tagged cells, optionally nullable");
+    if (!holdsAKeyedValuePerRow(getMap().getType())) {
+        return emitOpError("reads a chunk of nodes, of edges, or of maps or tagged cells, optionally nullable");
     }
 
     if (getKey().empty()) {
@@ -945,8 +952,8 @@ LogicalResult StaticMapKey::verify() {
 }
 
 LogicalResult DynamicMapKey::verify() {
-    if (!holdsAMapPerRow(getMap().getType())) {
-        return emitOpError("reads a chunk of maps or of tagged cells, optionally nullable");
+    if (!holdsAKeyedValuePerRow(getMap().getType())) {
+        return emitOpError("reads a chunk of nodes, of edges, or of maps or tagged cells, optionally nullable");
     }
 
     const Type keyElement = llvm::cast<ChunkType>(getKey().getType()).getElementType();
@@ -964,9 +971,10 @@ LogicalResult DynamicMapKey::verify() {
 }
 
 LogicalResult ContainerIndex::verify() {
-    const Type base = valueElementOf(getBase().getType());
-    if (!isa<storage::ListType, storage::MapType, storage::AnyType>(base)) {
-        return emitOpError("reads a chunk of lists, of maps or of tagged cells, optionally nullable");
+    const Type baseChunk = getBase().getType();
+    const Type base = valueElementOf(baseChunk);
+    if (!isa<storage::ListType>(base) && !holdsAKeyedValuePerRow(baseChunk)) {
+        return emitOpError("reads a chunk of lists, of nodes, of edges, of maps or of tagged cells, the lists, maps and cells optionally nullable");
     }
 
     if (!isa<storage::AnyType>(valueElementOf(getIndex().getType()))) {

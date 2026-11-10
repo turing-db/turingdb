@@ -5471,6 +5471,18 @@ NLKeyedValue mapRead(const Column* input, size_t row) {
     return *map;
 }
 
+// An entity an OPTIONAL MATCH did not match is an invalid ID, which reads as null, as
+// validIDItem reads it
+template <typename IDType>
+NLKeyedValue entityRead(const Column* input, size_t row) {
+    const IDType id = (*static_cast<const ColumnVector<IDType>*>(input))[row];
+    if (!id.isValid()) {
+        return std::monostate {};
+    }
+
+    return id;
+}
+
 NLKeyedValue readKeyedCell(const CellView cell) {
     const CellTag tag = cell.getTag();
 
@@ -5828,6 +5840,11 @@ NLContainer listContainer(const Column* input, size_t row) {
 template <typename ColumnT>
 NLContainer mapContainer(const Column* input, size_t row) {
     return NLContainer {._keyed = mapRead<ColumnT>(input, row)};
+}
+
+template <typename IDType>
+NLContainer entityContainer(const Column* input, size_t row) {
+    return NLContainer {._keyed = entityRead<IDType>(input, row)};
 }
 
 template <typename ColumnT>
@@ -10333,9 +10350,13 @@ NLKeyedReadFunction NLExecutor::selectKeyedRead(const Column* input) {
         return &readTaggedKeyed<ColumnConst<CellView>>;
     } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
         return &readTaggedKeyed<ColumnConst<std::optional<CellView>>>;
+    } else if (kind == ColumnVector<NodeID>::staticKind()) {
+        return &entityRead<NodeID>;
+    } else if (kind == ColumnVector<EdgeID>::staticKind()) {
+        return &entityRead<EdgeID>;
     }
 
-    throw IRException("a map key read reads a map column, or a column of tagged cells");
+    throw IRException("a map key read reads a map column, a column of tagged cells, or a column of nodes or edges");
 }
 
 NLStringReadFunction NLExecutor::selectStringRead(const Column* input) {
@@ -10618,9 +10639,13 @@ NLContainerReadFunction NLExecutor::selectContainerRead(const Column* input) {
         return &cellContainer<ColumnConst<CellView>>;
     } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
         return &cellContainer<ColumnConst<std::optional<CellView>>>;
+    } else if (kind == ColumnVector<NodeID>::staticKind()) {
+        return &entityContainer<NodeID>;
+    } else if (kind == ColumnVector<EdgeID>::staticKind()) {
+        return &entityContainer<EdgeID>;
     }
 
-    throw IRException("a container index reads a list column, a map column or a column of tagged cells");
+    throw IRException("a container index reads a list column, a map column, a column of nodes or edges, or a column of tagged cells");
 }
 
 NLSubscriptReadFunction NLExecutor::selectSubscriptRead(const Column* input) {

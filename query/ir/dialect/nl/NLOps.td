@@ -440,9 +440,11 @@ def StaticMapKey : NLOp<"static_map_key", [Pure, ConstantThroughOperands, RowAli
     was itself read out of a list or a map. A cell holding a node or an edge reads that
     entity's property, and one holding a datetime or a duration the component the key
     names, written into the step's map buffer as an entry of its own. A cell holding any
-    other value raises, and so does a datetime or a duration with no such component. The
-    result is never nullable: a cell carries its null in its own tag, so a missing key and
-    a null row both read back as a Null-tagged cell rather than as an absent optional.
+    other value raises, and so does a datetime or a duration with no such component. A
+    chunk of nodes or edges reads each entity's property the same way, and an invalid ID,
+    the entity an OPTIONAL MATCH missed, reads as a null row. The result is never
+    nullable: a cell carries its null in its own tag, so a missing key and a null row both
+    read back as a Null-tagged cell rather than as an absent optional.
   }];
 
   let arguments = (ins NLChunk:$map, StrAttr:$key);
@@ -2714,9 +2716,10 @@ def DynamicMapKey : NLOp<"dynamic_map_key", [Pure, ConstantThroughOperands, RowA
     built it, so both spellings are accepted on both. The map operand is a chunk of tagged
     cells where the map was itself read out of a list or a map, and a cell holding a node or
     an edge reads that entity's property under the key. A cell holding any other value
-    raises. The result is never nullable: a cell carries its null in its own tag, so a map
-    holding no such key, a null row and a row holding no key all read back as a
-    Null-tagged cell.
+    raises. A chunk of nodes or edges reads each entity's property under the row's key, and
+    an invalid ID reads as a null row. The result is never nullable: a cell carries its null
+    in its own tag, so a map holding no such key, a null row and a row holding no key all
+    read back as a Null-tagged cell.
   }];
 
   let arguments = (ins NLChunk:$map, NLChunk:$key);
@@ -2739,10 +2742,11 @@ def ContainerIndex : NLOp<"container_index", [Pure, RowAlignedThroughOperands]> 
       %v = nl.container_index %c, %i
              : (!nl.chunk<!storage.any>, !nl.chunk<!storage.any>) -> !nl.chunk<!storage.any>
 
-    The base is a chunk of lists, of maps or of tagged cells, and the index a chunk of tagged
-    cells, each optionally nullable. A null base or a null index reads null. A position on a
-    value that is no list, a key on a value that is no map, node or edge, and an index that is
-    neither a position nor a key raise.
+    The base is a chunk of lists, of maps, of nodes, of edges or of tagged cells, and the
+    index a chunk of tagged cells, the lists, maps and cells optionally nullable. A null base,
+    an invalid ID and a null index read null. A position on a value that is no list, a key on
+    a value that is no map, node or edge, and an index that is neither a position nor a key
+    raise.
   }];
 
   let arguments = (ins NLChunk:$base, NLChunk:$index);

@@ -59,6 +59,12 @@ TEST_F(ContainerIndexVerifierTest, acceptsTaggedCellsOverAMapOrACell) {
     EXPECT_TRUE(verifies("!storage.any", "!storage.nullable<!storage.any>", "!storage.any"));
 }
 
+TEST_F(ContainerIndexVerifierTest, acceptsTaggedCellsOverANodeOrAnEdge) {
+    EXPECT_TRUE(verifies("!storage.node_id", "!storage.any", "!storage.any"));
+    EXPECT_TRUE(verifies("!storage.edge_id", "!storage.nullable<!storage.any>", "!storage.any"));
+    EXPECT_FALSE(verifies("!storage.node_id", "!storage.any", "!storage.nullable<i64>"));
+}
+
 TEST_F(ContainerIndexVerifierTest, rejectsAListElementAnsweredAsAPlainValue) {
     EXPECT_FALSE(verifies("!storage.list<i64>", "!storage.any", "i64"));
 }

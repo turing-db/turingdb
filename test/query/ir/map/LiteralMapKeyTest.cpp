@@ -143,11 +143,11 @@ TEST_F(LiteralMapKeyTest, raisesOnAKeyOfADatetimeACellHolds) {
 
 TEST_F(LiteralMapKeyTest, rejectsAKeyOfAValueWithoutKeys) {
     expectError("WITH datetime('2020-03-04T00:00:00Z') AS d RETURN d['year']",
-                "Index operator [] can only be applied to a list, a map or a CSV row, not 'DateTime'");
+                "Index operator [] can only be applied to a list, a map, a node, a relationship or a CSV row, not 'DateTime'");
     expectError("MATCH (n:Person) RETURN n.name['x']",
-                "Index operator [] can only be applied to a list, a map or a CSV row, not 'String'");
+                "Index operator [] can only be applied to a list, a map, a node, a relationship or a CSV row, not 'String'");
     expectError("WITH [1] AS xs RETURN xs[0]['a']",
-                "Index operator [] can only be applied to a list, a map or a CSV row, not 'Integer'");
+                "Index operator [] can only be applied to a list, a map, a node, a relationship or a CSV row, not 'Integer'");
     expectError("WITH [1] AS xs RETURN xs['a']", "A list index expression must be an integer, not 'String'");
 }
 

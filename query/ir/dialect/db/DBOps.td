@@ -3560,8 +3560,9 @@ def DynamicMapKey : BinaryOp<"dynamic_map_key", [MayRaise, DeclareOpInterfaceMet
   let summary = "Row-wise read of one value of a map column, by a key computed per row";
 
   let description = [{
-    `m[k]`. The key is an expression rather than a name spelled in the query, so it rides a
-    column rather than the attribute db.static_map_key carries:
+    `m[k]`, or `n[k]` on a node or an edge. The key is an expression rather than a name
+    spelled in the query, so it rides a column rather than the attribute db.static_map_key
+    carries:
 
       %v = db.dynamic_map_key %m, %k : (!db.column<none>, !db.column<none>) -> !db.column<any>
 
@@ -3570,7 +3571,8 @@ def DynamicMapKey : BinaryOp<"dynamic_map_key", [MayRaise, DeclareOpInterfaceMet
     db.static_map_key's does. The map column is a column of tagged cells where the map was
     itself read out of a list or a map, and a cell holding a node or an edge reads that
     entity's property under the key. A cell holding any other value raises: a datetime and
-    a duration have components, which only `d.year` reads.
+    a duration have components, which only `d.year` reads. A column of nodes or edges reads
+    each entity's property under the row's key.
   }];
 
   let arguments = (ins Column:$map, Column:$key);
@@ -3589,9 +3591,10 @@ def ContainerIndex : BinaryOp<"container_index", [MayRaise, DeclareOpInterfaceMe
 
       %e = db.container_index %c, %i : (!db.column<none>, !db.column<!storage.any>) -> !db.column<none>
 
-    Row r reads what db.list_index reads where row r's base holds a list and its index an
-    integer, and what db.dynamic_map_key reads where the base holds a map, a node or an edge
-    and the index a string. A null base or a null index reads null. Any other pair raises,
+    The base is a column of lists, of maps, of nodes, of edges or of tagged cells. Row r reads
+    what db.list_index reads where row r's base holds a list and its index an integer, and
+    what db.dynamic_map_key reads where the base holds a map, a node or an edge and the index
+    a string. A null base or a null index reads null. Any other pair raises,
     so the op is speculatable only where the base holds nothing but lists and the index
     nothing but integers, or the base nothing but maps, nodes and edges and the index
     nothing but strings, nulls aside.

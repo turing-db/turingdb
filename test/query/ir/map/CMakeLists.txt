@@ -73,6 +73,8 @@ add_call_v3_test(test_query_ir_map_holding_a_node MapHoldingANodeTest.cpp)
 
 add_call_v3_test(test_query_ir_map_holding_a_path MapHoldingAPathTest.cpp)
 
+add_call_v3_test(test_query_ir_entity_dynamic_property EntityDynamicPropertyTest.cpp)
+
 # A map projection: the properties of a node or an edge, picked by name, as a map.
 add_ir_tests(test_query_ir_map_projection MapProjectionTest.cpp)
 
