@@ -112,9 +112,9 @@ private:
 
 }
 
-// A procedure writes a BOOLEAN return value into a plain boolean column, the column a
-// comparison between values also produces, and the ops that carry it on - the sort, the
-// dedup, the collect - keep that column: it is a value, not a mask.
+// A procedure writes a BOOLEAN return value into a plain boolean column, and the ops that
+// carry it on - the sort, the dedup, the collect - keep that column: it is a value, not a
+// mask.
 class CallYieldedBoolTest : public TuringTest {
 protected:
     void initialize() override {
@@ -237,6 +237,17 @@ TEST_F(CallYieldedBoolTest, filtersOnTheYieldedFlags) {
 TEST_F(CallYieldedBoolTest, testsTheYieldedFlagsForNull) {
     expectRows("CALL test.flags() YIELD flag RETURN flag IS NULL",
                {{"false"}, {"false"}, {"false"}, {"false"}});
+}
+
+TEST_F(CallYieldedBoolTest, meetsAMaskWithTheYieldedFlags) {
+    expectRows("CALL test.flags() YIELD flag "
+               "RETURN flag AND flag IS NOT NULL, flag IS NOT NULL OR flag, flag = (flag IS NULL), NOT flag",
+               {
+                   {"true", "true", "false", "false"},
+                   {"false", "true", "true", "true"},
+                   {"false", "true", "true", "true"},
+                   {"true", "true", "false", "false"},
+               });
 }
 
 int main(int argc, char** argv) {

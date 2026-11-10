@@ -580,43 +580,6 @@ struct BinaryPredicateExecutor {
         }
     }
 
-    /// Specialisations when filtering IDs by literals, e.g. n = 1
-    static void apply(ColumnVector<CustomBool>* res,
-                      const ColumnVector<CustomBool>* lhs,
-                      const ColumnMask* rhs) {
-        bioassert(lhs->size() == rhs->size(), "Misshapen ColumnMasks.");
-
-        const size_t size = lhs->size();
-
-        res->resize(size);
-        auto& resd = res->getRaw();
-        const auto& lhsd = lhs->getRaw();
-        const auto& rhsd = rhs->getRaw();
-
-        auto op = Op {};
-        for (size_t i = 0; i < size; i++) {
-            resd[i] = op(lhsd[i], rhsd[i]);
-       }
-    }
-
-    static void apply(ColumnVector<CustomBool>* res,
-                      const ColumnMask* lhs,
-                      const ColumnVector<CustomBool>* rhs) {
-        bioassert(lhs->size() == rhs->size(), "Misshapen ColumnMasks.");
-
-        const size_t size = lhs->size();
-
-        res->resize(size);
-        auto& resd = res->getRaw();
-        const auto& lhsd = lhs->getRaw();
-        const auto& rhsd = rhs->getRaw();
-
-        auto op = Op {};
-        for (size_t i = 0; i < size; i++) {
-            resd[i] = op(lhsd[i], rhsd[i]);
-       }
-    }
-
     static void apply(ColumnMask* res,
                       const ColumnConst<T>* lhs,
                       const ColumnMask* rhs) {

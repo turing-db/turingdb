@@ -17,7 +17,6 @@
 #include "ID.h"
 #include "metadata/PropertyType.h"
 #include "columns/Column.h"
-#include "columns/ColumnVector.h"
 
 namespace db {
 class Dataframe;
@@ -75,19 +74,6 @@ PyObj toPy(const std::optional<T>& v) {
     return toPy(*v);
 }
 
-// Bulk-appends rows [offset, offset + rowCount) of one ColumnVector<T> onto
-// another. Used by the streaming query sink to gather chunks into one buffered
-// result. vector::insert with random-access iterators is specialized in the
-// stdlib to memcpy for trivially-copyable T, so this works for plain
-// numerics, IDs, and std::string alike with no per-call-site special casing.
-template <typename T>
-void copyColumnVector(const db::Column* col, db::Column* newCol, size_t offset, size_t rowCount) {
-    const auto& castedVec = static_cast<const db::ColumnVector<T>*>(col)->getRaw();
-    auto& castedNewVec = static_cast<db::ColumnVector<T>*>(newCol)->getRaw();
-
-    castedNewVec.insert(castedNewVec.end(), castedVec.begin() + offset, castedVec.begin() + offset + rowCount);
-}
-
 // Moves the source std::vector onto the heap and lets numpy own it. The
 // storage pointer (`vec->data()`) stays valid because the heap-allocated
 // vector itself isn't destroyed — only its contents were moved out of the
@@ -142,11 +128,6 @@ void allocColumns(const db::Dataframe* incomingDf,
                   db::DataframeManager* dfMan,
                   db::LocalMemory* localMem,
                   std::vector<std::string>* nameStorage);
-
-// Runtime dispatcher that appends rows [offset, offset + rowCount) of a single
-// column of unknown kind onto its destination. Wraps copyColumnVector with a
-// switch over the column-kind enum.
-void addToColumn(const db::Column* col, db::Column* newCol, size_t offset, size_t rowCount);
 
 // Appends every column of src onto the corresponding column of dst, skipping
 // ColumnConst columns (already handled by allocColumns).

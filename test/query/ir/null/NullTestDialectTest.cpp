@@ -46,7 +46,21 @@ func.func @main(%x: !db.column<!storage.nullable<i64>>, %n: !db.column<!storage.
 
 constexpr std::string_view NL_NULL_TESTS = R"mlir(
 func.func @main(%x: !nl.chunk<!storage.nullable<i64>>, %p: !nl.chunk<!storage.path>) {
+  %a = nl.is_null %x : (!nl.chunk<!storage.nullable<i64>>) -> !nl.chunk<!storage.bool>
+  %b = nl.is_not_null %p : (!nl.chunk<!storage.path>) -> !nl.chunk<!storage.bool>
+  return
+}
+)mlir";
+
+constexpr std::string_view NL_NULL_TEST_AS_PLAIN_BOOLEANS = R"mlir(
+func.func @main(%x: !nl.chunk<!storage.nullable<i64>>) {
   %a = nl.is_null %x : (!nl.chunk<!storage.nullable<i64>>) -> !nl.chunk<i1>
+  return
+}
+)mlir";
+
+constexpr std::string_view NL_NOT_NULL_TEST_AS_PLAIN_BOOLEANS = R"mlir(
+func.func @main(%p: !nl.chunk<!storage.path>) {
   %b = nl.is_not_null %p : (!nl.chunk<!storage.path>) -> !nl.chunk<i1>
   return
 }
@@ -78,6 +92,15 @@ func.func @main(%x: !nl.chunk<!storage.nullable<i64>>, %null: !nl.chunk<!storage
 TEST_F(NullTestDialectTest, parsesTheNullTests) {
     EXPECT_TRUE(parses(DB_NULL_TESTS));
     EXPECT_TRUE(parses(NL_NULL_TESTS));
+}
+
+TEST_F(NullTestDialectTest, rejectsANullTestTypedAsPlainBooleans) {
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+
+    EXPECT_FALSE(parses(NL_NULL_TEST_AS_PLAIN_BOOLEANS));
+    EXPECT_FALSE(parses(NL_NOT_NULL_TEST_AS_PLAIN_BOOLEANS));
 }
 
 TEST_F(NullTestDialectTest, rejectsAnEqualityAgainstTheNullLiteral) {

@@ -6358,8 +6358,6 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
     switch (kind) {
         case BinaryResultKind::Boolean:
         case BinaryResultKind::Comparison: {
-            const mlir::Type boolElement = _builder.getI1Type();
-
             // List and map comparison always nullable; either holding a null => null
             const bool comparesTwoLists = isListChunk(lhsType) && isListChunk(rhsType);
             const bool comparesTwoMaps = isMapChunk(lhsType) && isMapChunk(rhsType);
@@ -6384,8 +6382,11 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
                                      || comparesAnEntity
                                      || comparesTwoPaths;
 
-            return alwaysNullable ? storage::NullableType::get(ctx, boolElement)
-                                  : boolElement;
+            if (alwaysNullable) {
+                return storage::NullableType::get(ctx, _builder.getI1Type());
+            }
+
+            return storage::BoolType::get(ctx);
         }
         break;
 
@@ -7011,15 +7012,9 @@ void DBLowering::lowerNot(mlir::db::NotOp notOp) {
 
     mlir::MLIRContext* bldCtxt = _builder.getContext();
 
-    // A mask stays a mask through the negation - what nl.merge and the constraint checks
-    // produce - while a predicate over values keeps the i1 element they carry
-    const bool operandIsMask = isa<storage::BoolType>(mlir::cast<nl::ChunkType>(operandType).getElementType());
-    const mlir::Type boolElement = operandIsMask ? storage::BoolType::get(bldCtxt)
-                                                 : mlir::Type(_builder.getI1Type());
-
-    mlir::Type resultElement = boolElement;
+    mlir::Type resultElement = storage::BoolType::get(bldCtxt);
     if (resultNull) {
-        resultElement = storage::NullableType::get(bldCtxt, boolElement);
+        resultElement = storage::NullableType::get(bldCtxt, _builder.getI1Type());
     }
 
     // NOT of an unknown truth value is unknown, and an untyped null names no boolean
@@ -7039,7 +7034,9 @@ void DBLowering::lowerNot(mlir::db::NotOp notOp) {
 template <typename NLOp>
 void DBLowering::lowerNullTest(mlir::Value operand, mlir::Value result) {
     const mlir::Value operandChunk = mapValue(operand);
-    const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), _builder.getI1Type());
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const nl::ChunkType resultType = nl::ChunkType::get(context, storage::BoolType::get(context));
 
     setInsertionForUnaryOp(operandChunk);
 

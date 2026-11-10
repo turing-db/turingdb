@@ -99,6 +99,7 @@ set(storage_sources
 
         columns/Block.cpp
         columns/Column.cpp
+        columns/ColumnAppend.cpp
         columns/ColumnConst.cpp
         columns/ColumnStringTable.cpp
         columns/Functions.cpp

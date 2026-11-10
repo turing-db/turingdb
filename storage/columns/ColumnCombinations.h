@@ -43,7 +43,7 @@ class ColumnCombinationImpl;
 
 /*
  * @brief Mask Operations
- * @detail Resultant type is always the type of the non-mask operand
+ * @detail Resultant type is the type of the non-mask operand
  */
 template <typename Op>
 class ColumnCombinationImpl<Op, ColumnMask, ColumnMask> {
@@ -61,6 +61,20 @@ template <typename Op, typename T>
 class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnMask> {
 public:
     using ResultColumnType = ColumnVector<T>;
+};
+
+/// A predicate over two booleans that hold no null answers a mask, whether each is a mask
+/// or a plain boolean column
+template <typename Op>
+class ColumnCombinationImpl<Op, ColumnMask, ColumnVector<CustomBool>> {
+public:
+    using ResultColumnType = ColumnMask;
+};
+
+template <typename Op>
+class ColumnCombinationImpl<Op, ColumnVector<CustomBool>, ColumnMask> {
+public:
+    using ResultColumnType = ColumnMask;
 };
 
 /// A type-erased cell holds no truth value of its own, so comparing a mask against one

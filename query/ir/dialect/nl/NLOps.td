@@ -2861,11 +2861,11 @@ def IsNull : NLOp<"is_null", [Pure, ConstantThroughOperands, RowAlignedThroughOp
       Imperative counterpart of db.is_null, over any chunk as it stands: an absent value, an
       invalid ID, the null path and a cell holding null are null, and the result never is.
 
-      %r = nl.is_null %x : (!nl.chunk<!storage.nullable<i64>>) -> !nl.chunk<i1>
+      %r = nl.is_null %x : (!nl.chunk<!storage.nullable<i64>>) -> !nl.chunk<!storage.bool>
   }];
 
   let arguments = (ins NLChunk:$operand);
-  let results   = (outs NLChunk:$result);
+  let results   = (outs NLBoolChunk:$result);
 
   let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
 }
@@ -2875,11 +2875,11 @@ def IsNotNull : NLOp<"is_not_null", [Pure, ConstantThroughOperands, RowAlignedTh
   let description = [{
       Imperative counterpart of db.is_not_null, the negation of nl.is_null.
 
-      %r = nl.is_not_null %x : (!nl.chunk<!storage.node_id>) -> !nl.chunk<i1>
+      %r = nl.is_not_null %x : (!nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.bool>
   }];
 
   let arguments = (ins NLChunk:$operand);
-  let results   = (outs NLChunk:$result);
+  let results   = (outs NLBoolChunk:$result);
 
   let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
 }
@@ -3040,7 +3040,7 @@ def Not : NLOp<"not", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]
       Three-valued logic: NOT null is null, so the result is nullable when the
       operand is.
 
-      %r = nl.not %x : (!nl.chunk<i1>) -> !nl.chunk<i1>
+      %r = nl.not %x : (!nl.chunk<i1>) -> !nl.chunk<!storage.bool>
   }];
 
   let arguments = (ins NLChunk:$operand);

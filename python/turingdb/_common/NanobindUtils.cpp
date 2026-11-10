@@ -15,6 +15,7 @@
 #include "dataframe/NamedColumn.h"
 #include "columns/AllowedKinds.h"
 #include "columns/Column.h"
+#include "columns/ColumnAppend.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/ColumnOptVector.h"
@@ -58,28 +59,6 @@ void allocColumns(const db::Dataframe* incomingDf,
     }
 }
 
-void addToColumn(const db::Column* col, db::Column* newCol, size_t offset, size_t rowCount) {
-    // ColumnConst columns are handled once in allocColumns via assign() and
-    // skipped in appendDfs, so only ColumnVector kinds reach here. Const/Set/Mask
-    // containers are excluded from the dispatcher below, so any non-vector column
-    // hits the dispatcher's unsupported() path and throws a FatalException — an
-    // unsupported column type still produces a clear failure.
-    const auto appendCol = [newCol, offset, rowCount](const auto* typedCol) {
-        using T = typename std::decay_t<decltype(*typedCol)>::ValueType;
-        copyColumnVector<T>(typedCol, newCol, offset, rowCount);
-    };
-
-    using ExcludedNonVector = db::ExcludedContainers<
-        db::ContainerKind::code<db::ColumnConst>(),
-        db::ContainerKind::code<db::ColumnSet>(),
-        db::ContainerKind::code<db::ColumnMask>()>;
-    using Dispatcher = db::ColumnSingleDispatcher<db::OutputtedTypes::Allowed,
-                                                  decltype(appendCol),
-                                                  ExcludedNonVector>;
-
-    Dispatcher::dispatch(col, appendCol);
-}
-
 void appendDfs(const db::Dataframe* src, db::Dataframe* dst) {
     const auto& srcCols = src->cols();
     const auto& dstCols = dst->cols();
@@ -97,7 +76,7 @@ void appendDfs(const db::Dataframe* src, db::Dataframe* dst) {
         }
 
         const db::Column* srcCol = srcCols[i]->getColumn();
-        addToColumn(srcCol, dstCol, 0, srcCol->size());
+        db::appendColumnRows(srcCol, dstCol, 0, srcCol->size());
     }
 }
 
@@ -138,7 +117,7 @@ void appendChunkColumns(std::span<const db::Column* const> chunks,
             continue;
         }
 
-        addToColumn(srcCol, dstCol, offset, rowCount);
+        db::appendColumnRows(srcCol, dstCol, offset, rowCount);
     }
 }
 

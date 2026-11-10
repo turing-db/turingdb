@@ -3878,9 +3878,9 @@ void NLTranslator::translateBinaryOp(OpType op, NLStmtContainer* body) {
     const Column* rhs = getColumn(op.getRhs());
 
     if constexpr (Op == OP_IN) {
-        lhs = searchedValueColumn(lhs, body);
+        lhs = searchedValueColumn(lhs, op.getLhs().getType(), body);
     } else if constexpr (Op == OP_INDEX_OF) {
-        rhs = searchedValueColumn(rhs, body);
+        rhs = searchedValueColumn(rhs, op.getRhs().getType(), body);
     }
 
     Column* result = nullptr;
@@ -3891,8 +3891,10 @@ void NLTranslator::translateBinaryOp(OpType op, NLStmtContainer* body) {
     body->emplaceStmt(&NLExecutor::runBinary, data);
 }
 
-const Column* NLTranslator::searchedValueColumn(const Column* column, NLStmtContainer* body) {
-    if (column->getKind() != ColumnMask::staticKind()) {
+const Column* NLTranslator::searchedValueColumn(const Column* column, mlir::Type chunkType, NLStmtContainer* body) {
+    const mlir::Type element = mlir::cast<nl::ChunkType>(chunkType).getElementType();
+
+    if (!isMaskElementType(element) || isConstantColumn(column)) {
         return column;
     }
 
@@ -7327,16 +7329,13 @@ NLUnaryFn NLTranslator::selectRowConstantForChunkType(mlir::Type chunkType, cons
     const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
     const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
 
-    // nl.is_null declares an i1 chunk, but its kernel writes a mask
-    const bool readsAMask = isMaskElementType(elementType) || row->getKind() == ColumnMask::staticKind();
-
     if (isNullableAny(elementType)) {
         return NLExecutor::selectCellRowConstant(true, row, _memory, result);
     } else if (nullableType) {
         return NLExecutor::selectOptRowConstant(chunkKindFromNullableValue(nullableType.getValueType()), row, _memory, result);
     } else if (mlir::isa<storage::AnyType>(elementType)) {
         return NLExecutor::selectCellRowConstant(false, row, _memory, result);
-    } else if (readsAMask) {
+    } else if (isMaskElementType(elementType)) {
         return NLExecutor::selectMaskRowConstant(row, _memory, result);
     }
 
@@ -7736,7 +7735,11 @@ void NLTranslator::bindKernelResult(mlir::Value resultValue, Column* result) {
     const mlir::Type resultType = resultValue.getType();
     const bool declaredNullable = isNullableChunk(resultType);
 
-    if (declaredNullable != columnHoldsNulls(result)) {
+    const bool declaredMask = isMaskElementType(mlir::cast<nl::ChunkType>(resultType).getElementType());
+    const bool writesMask = result->getKind() == ColumnMask::staticKind();
+    const bool masksAgree = writesMask ? declaredMask : (!declaredMask || isConstantColumn(result));
+
+    if (declaredNullable != columnHoldsNulls(result) || !masksAgree) {
         std::string declaredType;
         llvm::raw_string_ostream stream(declaredType);
         resultType.print(stream);
