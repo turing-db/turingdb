@@ -94,7 +94,8 @@ TEST_F(EntityDynamicPropertyTest, plansAKeyAVariableHoldsAsAKeyNamedByTheQuery) 
     std::string program;
     programOf("db", "MATCH (n:Person) WITH n, 'name' AS k RETURN n[k]", program);
 
-    EXPECT_TRUE(contains(program, "db.static_map_key")) << program;
+    EXPECT_TRUE(contains(program, "db.get_node_properties(%")) << program;
+    EXPECT_FALSE(contains(program, "db.static_map_key")) << program;
     EXPECT_FALSE(contains(program, "db.dynamic_map_key")) << program;
 }
 

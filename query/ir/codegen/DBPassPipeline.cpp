@@ -15,15 +15,16 @@ constexpr size_t DB_PASS_COUNT = 55;
 // The optimisation pipeline every query runs through, in order. An EXPLAIN prefix
 // reporting on a pass walks the same table one pass at a time, which is what keeps the
 // pipeline it reports on and the pipeline that runs the same one. Every factory is handed
-// the context; only the cost models and the metadata count read it, the rewrites beside
-// them answering off the IR alone.
+// the context; only the cost models, the metadata count and the property types a key read
+// of a node or an edge is typed by read it, the rewrites beside them answering off the IR
+// alone.
 const std::array<DBPassFactory, DB_PASS_COUNT> dbPassPipeline = {
     [](const mlir::db::DBPassContext*) { return mlir::db::createCanonicalizeCoalesce(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createHoistUnconditionalRegions(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createCanonicalizeCoalesce(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createReuseLabelAndTypeReads(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createUnnestUnwindComprehension(); },
-    [](const mlir::db::DBPassContext*) { return mlir::db::createFoldConstantMapKeys(); },
+    [](const mlir::db::DBPassContext* context) { return mlir::db::createFoldConstantMapKeys(context); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createHoistHopConjuncts(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createSinkMakePath(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createSinkIntoOptionalMatch(); },
@@ -34,7 +35,7 @@ const std::array<DBPassFactory, DB_PASS_COUNT> dbPassPipeline = {
     [](const mlir::db::DBPassContext*) { return mlir::db::createTrimUnreadColumns(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createRerootPatternAtSeed(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseUnwindEquality(); },
-    [](const mlir::db::DBPassContext*) { return mlir::db::createFoldConstantMapKeys(); },
+    [](const mlir::db::DBPassContext* context) { return mlir::db::createFoldConstantMapKeys(context); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseScanByNodeIDs(); },
     [](const mlir::db::DBPassContext* context) { return mlir::db::createRerootPatternAtCheapestNode(context); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createMergeFilters(); },

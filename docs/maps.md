@@ -76,6 +76,14 @@ key, a property the node lacks and a node an OPTIONAL MATCH missed read null. Th
 string: `n[0]` is rejected with `A node is indexed by a string key, not by 'Integer'`, and a
 tagged cell holding 0 raises the same.
 
+A key holding one string in every row reads the property as the dotted form does, where the graph
+types that name. `fold_constant_map_keys` reads `MATCH (n:Person) WITH n, 'name' AS k RETURN n[k]`
+with `db.get_node_properties(%n, "name")`, and `db.to_any` hands the typed column to the readers
+of the tagged cell the read by name made. A comparison with a value of the same kind, two numbers
+or two strings, booleans, datetimes or durations, compares the typed column itself, so
+`WHERE n[k] = 'Remy'` plans the `db.scan_nodes_by_property_value` that `WHERE n.name = 'Remy'`
+plans. A name the graph does not type, one only the query creates included, stays a read by name.
+
 An index held in a tagged cell can be a position on one row and a key on the next, so `c[i]` with
 such an `i` emits `db.container_index` where `c` is a list, a map, a node, a relationship or a
 tagged cell. Neo4j's ContainerIndex expression reads it the same way. A row whose base holds a list

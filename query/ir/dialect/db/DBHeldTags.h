@@ -6,6 +6,7 @@
 
 namespace mlir {
 class Attribute;
+class Type;
 class Value;
 }
 
@@ -21,6 +22,9 @@ bool holdsOnlyKeyedValues(mlir::Value column);
 
 // Whether every row of @param column holds null or a list: a value a position reads
 bool holdsOnlyLists(mlir::Value column);
+
+// The tag of the cell holding a value of @param element; INVALID for an element no cell holds
+CellTag elementTag(mlir::Type element);
 
 // The tag of the cell holding @param literal; INVALID for a literal no cell holds
 CellTag literalTag(mlir::Attribute literal);

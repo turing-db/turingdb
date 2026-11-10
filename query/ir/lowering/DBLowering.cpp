@@ -1727,6 +1727,8 @@ void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
         lowerRowConstant(rowConstant);
     } else if (mlir::db::ToNullable toNullable = mlir::dyn_cast<mlir::db::ToNullable>(operation)) {
         lowerToNullable(toNullable);
+    } else if (mlir::db::ToAny toAny = mlir::dyn_cast<mlir::db::ToAny>(operation)) {
+        lowerToAny(toAny);
     } else if (mlir::db::CheckedCast checkedCast = mlir::dyn_cast<mlir::db::CheckedCast>(operation)) {
         lowerCheckedCast(checkedCast);
     } else if (mlir::isa<mlir::db::AddOp>(operation)) {
@@ -6368,6 +6370,14 @@ void DBLowering::lowerToNullable(mlir::db::ToNullable toNullable) {
     const mlir::Type element = mlir::cast<nl::ChunkType>(chunk.getType()).getElementType();
 
     _valueMap[toNullable.getResult()] = toNullableChunk(chunk, element);
+}
+
+void DBLowering::lowerToAny(mlir::db::ToAny toAny) {
+    const mlir::Value chunk = mapValue(toAny.getOperand());
+    const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(),
+                                                        storage::AnyType::get(_builder.getContext()));
+
+    _valueMap[toAny.getResult()] = toAnyChunk(chunk, resultType);
 }
 
 void DBLowering::lowerCheckedCast(mlir::db::CheckedCast checkedCast) {

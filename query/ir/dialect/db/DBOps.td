@@ -3390,6 +3390,27 @@ def ToNullable : TuringOp<"to_nullable", [Pure, ConstantThroughOperands, Declare
   let hasVerifier = 1;
 }
 
+def ToAny : TuringOp<"to_any", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns"]>]> {
+  let summary = "Read a typed column as a column of tagged cells, each holding its row's value";
+  let description = [{
+    What a rewrite answering a column of tagged cells with a typed one wraps it in, so that
+    every reader of the column keeps the type it was built against. A null row reads as a
+    Null-tagged cell:
+
+      %v = db.to_any %name : (!db.column<!storage.nullable<!storage.string>>) -> !db.column<!storage.any>
+
+    The result is a column of tagged cells, or the untyped column the readers were built
+    against, which lowering resolves to tagged cells.
+  }];
+
+  let arguments = (ins Column:$operand);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
+
+  let hasVerifier = 1;
+}
+
 def CheckedCast : TuringOp<"checked_cast", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Read the node or the relationship each row's value holds";
   let description = [{

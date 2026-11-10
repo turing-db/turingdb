@@ -26,6 +26,8 @@ namespace mlir::db {
 // fuse_scan_edges_by_endpoint_label reads the graph to walk the index of the end with fewer nodes.
 // reroot_pattern_at_cheapest_node reads it to start a pattern from the node making the fewest rows,
 // and to choose where the walk crosses in the rows a filter joins it to.
+// fold_constant_map_keys reads the type the graph gives a property, to read a key of a node or an
+// edge as that typed property.
 struct DBPassContext {
     const ::db::GraphView* _view {nullptr};
     bool _forcesHashJoin {false};
@@ -36,6 +38,7 @@ struct DBPassContext {
 std::unique_ptr<Pass> createFuseScanEdgesByEndpointLabel(const DBPassContext* context);
 std::unique_ptr<Pass> createFuseHashJoin(const DBPassContext* context);
 std::unique_ptr<Pass> createCountFromMetadata(const DBPassContext* context);
+std::unique_ptr<Pass> createFoldConstantMapKeys(const DBPassContext* context);
 std::unique_ptr<Pass> createRerootPatternAtCheapestNode(const DBPassContext* context);
 
 }

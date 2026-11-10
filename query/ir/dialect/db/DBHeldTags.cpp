@@ -41,37 +41,6 @@ CellTag integerTag(mlir::IntegerType integer) {
     return CellTag::Int;
 }
 
-// INVALID for an element no cell holds
-CellTag elementTag(mlir::Type element) {
-    if (mlir::isa<storage::MapType>(element)) {
-        return CellTag::MapView;
-    } else if (mlir::isa<storage::ListType>(element)) {
-        return CellTag::ListView;
-    } else if (mlir::isa<storage::NodeIDType>(element)) {
-        return CellTag::NodeID;
-    } else if (mlir::isa<storage::EdgeIDType>(element)) {
-        return CellTag::EdgeID;
-    } else if (mlir::isa<storage::StringType>(element)) {
-        return CellTag::String;
-    } else if (mlir::isa<storage::BoolType>(element)) {
-        return CellTag::Bool;
-    } else if (const mlir::IntegerType integer = mlir::dyn_cast<mlir::IntegerType>(element)) {
-        return integerTag(integer);
-    } else if (mlir::isa<mlir::FloatType>(element)) {
-        return CellTag::Double;
-    } else if (mlir::isa<storage::DateTimeType>(element)) {
-        return CellTag::DateTime;
-    } else if (mlir::isa<storage::DurationType>(element)) {
-        return CellTag::Duration;
-    } else if (mlir::isa<storage::PointType>(element)) {
-        return CellTag::Point;
-    } else if (mlir::isa<storage::EmbeddingType>(element)) {
-        return CellTag::Embedding;
-    }
-
-    return CellTag::INVALID;
-}
-
 mlir::Type stripNullable(mlir::Type element) {
     const storage::NullableType nullable = mlir::dyn_cast<storage::NullableType>(element);
     return nullable ? nullable.getValueType() : element;
@@ -419,6 +388,36 @@ bool db::holdsOnlyKeyedValues(mlir::Value column) {
 
 bool db::holdsOnlyLists(mlir::Value column) {
     return holdsOnlyNullOr(column, {CellTag::ListView});
+}
+
+CellTag db::elementTag(mlir::Type element) {
+    if (mlir::isa<storage::MapType>(element)) {
+        return CellTag::MapView;
+    } else if (mlir::isa<storage::ListType>(element)) {
+        return CellTag::ListView;
+    } else if (mlir::isa<storage::NodeIDType>(element)) {
+        return CellTag::NodeID;
+    } else if (mlir::isa<storage::EdgeIDType>(element)) {
+        return CellTag::EdgeID;
+    } else if (mlir::isa<storage::StringType>(element)) {
+        return CellTag::String;
+    } else if (mlir::isa<storage::BoolType>(element)) {
+        return CellTag::Bool;
+    } else if (const mlir::IntegerType integer = mlir::dyn_cast<mlir::IntegerType>(element)) {
+        return integerTag(integer);
+    } else if (mlir::isa<mlir::FloatType>(element)) {
+        return CellTag::Double;
+    } else if (mlir::isa<storage::DateTimeType>(element)) {
+        return CellTag::DateTime;
+    } else if (mlir::isa<storage::DurationType>(element)) {
+        return CellTag::Duration;
+    } else if (mlir::isa<storage::PointType>(element)) {
+        return CellTag::Point;
+    } else if (mlir::isa<storage::EmbeddingType>(element)) {
+        return CellTag::Embedding;
+    }
+
+    return CellTag::INVALID;
 }
 
 // A list or a map holds a null as a unit, and a db.constant the null literal as an empty string

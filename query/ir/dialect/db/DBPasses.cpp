@@ -36,6 +36,7 @@
 
 #include "IRConstantColumn.h"
 #include "IRRaiseEffect.h"
+#include "IRValueTypes.h"
 #include "DBColumnElement.h"
 #include "DBHeldTags.h"
 #include "StorageAttributes.h"
@@ -7707,12 +7708,142 @@ struct FoldConstantContainerIndex : public mlir::OpRewritePattern<ContainerIndex
     }
 };
 
+// The readers of the key read were built over its tagged cell, which the typed column is read
+// as. A name the graph does not type, one only the query creates included, stays a read by name.
+struct ReadTypedEntityProperty : public mlir::OpRewritePattern<StaticMapKey> {
+    ReadTypedEntityProperty(MLIRContext* context, const ::db::GraphView* view)
+        : OpRewritePattern(context),
+        _view(view)
+    {
+    }
+
+    LogicalResult matchAndRewrite(StaticMapKey keyRead, mlir::PatternRewriter& rewriter) const override {
+        const Value map = keyRead.getMap();
+
+        const bool readsNodes = ::db::holdsOnlyNullOr(map, {::db::CellTag::NodeID});
+        const bool readsEdges = !readsNodes && ::db::holdsOnlyNullOr(map, {::db::CellTag::EdgeID});
+        if (!readsNodes && !readsEdges) {
+            return failure();
+        }
+
+        const StringAttr property = keyRead.getKeyAttr();
+        const llvm::StringRef name = property.getValue();
+        const ::db::PropertyTypeMap& propertyTypes = _view->metadata().propTypes();
+
+        const std::optional<::db::PropertyType> propertyType = propertyTypes.get(std::string_view(name.data(), name.size()));
+        if (!propertyType) {
+            return failure();
+        }
+
+        MLIRContext* const context = rewriter.getContext();
+        const mlir::Location loc = keyRead.getLoc();
+
+        const Type entityElement = readsNodes ? Type(storage::NodeIDType::get(context)) : Type(storage::EdgeIDType::get(context));
+        Value entities = map;
+        if (::db::declaredColumnElement(map) != entityElement) {
+            entities = rewriter.create<CheckedCast>(loc, ColumnType::get(context, entityElement), map).getResult();
+        }
+
+        const Type valueElement = ::db::valueTypeToElementType(rewriter, propertyType->_valueType);
+        const ColumnType valueColumn = ColumnType::get(context, storage::NullableType::get(context, valueElement));
+
+        Value values;
+        if (readsNodes) {
+            values = rewriter.create<GetNodeProperties>(loc, valueColumn, entities, property, Value(), false).getResult();
+        } else {
+            values = rewriter.create<GetEdgeProperties>(loc, valueColumn, entities, property, Value(), false).getResult();
+        }
+
+        rewriter.replaceOpWithNewOp<ToAny>(keyRead, keyRead.getResult().getType(), values);
+
+        return success();
+    }
+
+private:
+    const ::db::GraphView* _view {nullptr};
+};
+
+bool isNumberTag(::db::CellTag tag) {
+    return tag == ::db::CellTag::Int || tag == ::db::CellTag::UInt || tag == ::db::CellTag::Double;
+}
+
+// Two numbers, or two strings, booleans, datetimes or durations: the pairs a comparison of the
+// typed columns answers as the comparison of their cells does
+bool comparesAsOneKind(Type lhs, Type rhs) {
+    const ::db::CellTag lhsTag = ::db::elementTag(lhs);
+    const ::db::CellTag rhsTag = ::db::elementTag(rhs);
+
+    const bool comparesScalarsOfOneType = lhsTag == rhsTag
+                                       && (lhsTag == ::db::CellTag::String
+                                           || lhsTag == ::db::CellTag::Bool
+                                           || lhsTag == ::db::CellTag::DateTime
+                                           || lhsTag == ::db::CellTag::Duration);
+
+    return comparesScalarsOfOneType || (isNumberTag(lhsTag) && isNumberTag(rhsTag));
+}
+
+Value typedComparand(Value operand) {
+    ToAny widened = operand.getDefiningOp<ToAny>();
+    return widened ? widened.getOperand() : operand;
+}
+
+// A comparison of a typed column read as tagged cells compares the typed column, as the
+// comparison of the dotted read does
+template <typename Comparison>
+struct CompareTypedColumns : public mlir::OpRewritePattern<Comparison> {
+    using mlir::OpRewritePattern<Comparison>::OpRewritePattern;
+
+    LogicalResult matchAndRewrite(Comparison comparison, mlir::PatternRewriter& rewriter) const override {
+        const Value lhs = comparison.getLhs();
+        const Value rhs = comparison.getRhs();
+        const Value typedLhs = typedComparand(lhs);
+        const Value typedRhs = typedComparand(rhs);
+
+        const bool readsAWidenedColumn = typedLhs != lhs || typedRhs != rhs;
+        const bool comparesOneKind = comparesAsOneKind(::db::declaredColumnElement(typedLhs),
+                                                       ::db::declaredColumnElement(typedRhs));
+        if (!readsAWidenedColumn || !comparesOneKind) {
+            return failure();
+        }
+
+        rewriter.modifyOpInPlace(comparison, [&comparison, typedLhs, typedRhs] {
+            comparison.getLhsMutable().assign(typedLhs);
+            comparison.getRhsMutable().assign(typedRhs);
+        });
+
+        eraseUnreadCone(lhs, rewriter);
+        if (rhs != lhs) {
+            eraseUnreadCone(rhs, rewriter);
+        }
+
+        return success();
+    }
+};
+
 struct FoldConstantMapKeys : public impl::FoldConstantMapKeysBase<FoldConstantMapKeys> {
+    FoldConstantMapKeys() {}
+
+    FoldConstantMapKeys(const DBPassContext* context)
+        : _context(context)
+    {
+    }
+
     void runOnOperation() override {
         MLIRContext* const context = &getContext();
 
         mlir::RewritePatternSet patterns(context);
         patterns.add<FoldConstantMapKey, FoldConstantContainerIndex>(context);
+        patterns.add<CompareTypedColumns<EqOp>,
+                     CompareTypedColumns<NeqOp>,
+                     CompareTypedColumns<LtOp>,
+                     CompareTypedColumns<GtOp>,
+                     CompareTypedColumns<LteOp>,
+                     CompareTypedColumns<GteOp>>(context);
+
+        if (const ::db::GraphView* view = _context->_view) {
+            patterns.add<ReadTypedEntityProperty>(context, view);
+        }
+
         const mlir::FrozenRewritePatternSet frozenPatterns(std::move(patterns));
 
         mlir::GreedyRewriteConfig config;
@@ -7725,19 +7856,22 @@ struct FoldConstantMapKeys : public impl::FoldConstantMapKeysBase<FoldConstantMa
         // its result directly: a read carried from a folded one is tried in the next round
         bool folded = true;
         while (folded) {
-            llvm::SmallVector<Operation*> dynamicReads;
-            getOperation()->walk([&dynamicReads](Operation* op) {
-                if (isa<DynamicMapKey, ContainerIndex>(op)) {
-                    dynamicReads.push_back(op);
+            llvm::SmallVector<Operation*> reads;
+            getOperation()->walk([&reads](Operation* op) {
+                if (isa<DynamicMapKey, ContainerIndex, StaticMapKey, EqOp, NeqOp, LtOp, GtOp, LteOp, GteOp>(op)) {
+                    reads.push_back(op);
                 }
             });
 
-            if (failed(mlir::applyOpPatternsGreedily(dynamicReads, frozenPatterns, config, &folded))) {
+            if (failed(mlir::applyOpPatternsGreedily(reads, frozenPatterns, config, &folded))) {
                 signalPassFailure();
                 return;
             }
         }
     }
+
+private:
+    const DBPassContext* _context {&defaultPassContext};
 };
 
 // A CASE's first condition and a coalesce's first argument see every row the op receives;
@@ -11064,7 +11198,7 @@ struct FuseFetchNodes : public impl::FuseFetchNodesBase<FuseFetchNodes> {
 
 // A row-wise op a re-rooted pattern recomputes over its new rows rather than carrying
 bool computesPerRow(Operation* op) {
-    return isRowWiseOp(op) || isa<ListIndex, ContainerIndex, ToNullable, GetEdgeTypes>(op);
+    return isRowWiseOp(op) || isa<ListIndex, ContainerIndex, ToNullable, ToAny, GetEdgeTypes>(op);
 }
 
 bool isHop(Operation* op) {
@@ -13193,6 +13327,10 @@ std::unique_ptr<Pass> createFuseHashJoin(const DBPassContext* context) {
 
 std::unique_ptr<Pass> createCountFromMetadata(const DBPassContext* context) {
     return std::make_unique<CountFromMetadata>(context);
+}
+
+std::unique_ptr<Pass> createFoldConstantMapKeys(const DBPassContext* context) {
+    return std::make_unique<FoldConstantMapKeys>(context);
 }
 
 std::unique_ptr<Pass> createRerootPatternAtCheapestNode(const DBPassContext* context) {

@@ -2029,6 +2029,19 @@ LogicalResult ToNullable::verify() {
     return success();
 }
 
+LogicalResult ToAny::verify() {
+    const Type operandType = cast<ColumnType>(getOperand().getType()).getType();
+    const Type resultType = cast<ColumnType>(getResult().getType()).getType();
+
+    if (!isa<storage::AnyType, NoneType>(resultType)) {
+        return emitOpError("must produce a column of tagged cells, or one whose type lowering resolves");
+    } else if (isa<storage::AnyType, NoneType>(operandType)) {
+        return emitOpError("reads a column of a declared type other than tagged cells");
+    }
+
+    return success();
+}
+
 LogicalResult CheckedCast::verify() {
     const Type resultElement = cast<ColumnType>(getResult().getType()).getType();
     if (!isa<storage::NodeIDType, storage::EdgeIDType>(resultElement)) {
@@ -3302,6 +3315,10 @@ void RowConstant::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value
 }
 
 void ToNullable::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+    carried.push_back(getOperand());
+}
+
+void ToAny::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
     carried.push_back(getOperand());
 }
 

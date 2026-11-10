@@ -57,6 +57,18 @@ protected:
         EXPECT_TRUE(contains(program, keyRead)) << program;
     }
 
+    void expectReadsAPropertyOffTheBase(std::string_view query, std::string_view read, std::string_view property) {
+        std::string program;
+        dbProgram(query, program);
+
+        const std::string propertyRead = std::string(read) + "(%";
+        const std::string propertyName = "\"" + std::string(property) + "\")";
+
+        EXPECT_FALSE(contains(program, "db.container_index")) << program;
+        EXPECT_TRUE(contains(program, propertyRead)) << program;
+        EXPECT_TRUE(contains(program, propertyName)) << program;
+    }
+
     void expectKeepsTheContainerIndex(std::string_view query) {
         std::string program;
         dbProgram(query, program);
@@ -122,7 +134,7 @@ TEST_F(FoldContainerIndexOverConstantsTest, joinsOnAValueReadByAKeyOutOfAConstan
 TEST_F(FoldContainerIndexOverConstantsTest, readsAPropertyOfANode) {
     const std::string_view query = "MATCH (n:Person {name: 'Remy'}) WITH n, {k: 'name'} AS m RETURN n[m.k] AS v";
 
-    expectReadsAKeyOffTheBase(query, "name");
+    expectReadsAPropertyOffTheBase(query, "db.get_node_properties", "name");
     expectSortedRows(query, {{"Remy"}});
 }
 
@@ -130,7 +142,7 @@ TEST_F(FoldContainerIndexOverConstantsTest, readsAPropertyOfAnEdge) {
     const std::string_view query = "MATCH (:Person {name: 'Remy'})-[e:KNOWS_WELL]->() "
                                    "WITH e, {k: 'name'} AS m RETURN e[m.k] AS v";
 
-    expectReadsAKeyOffTheBase(query, "name");
+    expectReadsAPropertyOffTheBase(query, "db.get_edge_properties", "name");
     expectSortedRows(query, {{"Remy -> Adam"}});
 }
 
@@ -138,7 +150,7 @@ TEST_F(FoldContainerIndexOverConstantsTest, readsNullOffANodeAnOptionalMatchMiss
     const std::string_view query = "OPTIONAL MATCH (n:Person {name: 'Nobody'}) "
                                    "WITH n, {k: 'name'} AS m RETURN n[m.k] AS v";
 
-    expectReadsAKeyOffTheBase(query, "name");
+    expectReadsAPropertyOffTheBase(query, "db.get_node_properties", "name");
     expectSortedRows(query, {{"null"}});
 }
 
