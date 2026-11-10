@@ -397,7 +397,15 @@ source read back was garbage, and `sameRowSource` segfaulted on it in 9 runs of 
 (`CarriedColumnRowSourceTest`). The first version of the scrub in `DBLowering::eraseOp` erased
 from `_valueMap` while iterating it and kept one of two entries holding a freed value.
 
-## A null range: ask why the caller holds one
+## Undefined behaviour the sanitizers have found
+
+**These are the kinds of undefined behaviour that the CI Sanitizers nightly has caught in this
+code, each with the rule that keeps it out.** The nightly (`ci_sanitizers.yml`) runs every unit
+test 10 times, shuffled, under ASan and UBSan. A native run of these bugs mostly passes, so a
+passing test proves nothing about them. Check a change that touches one of these patterns with
+the sanitizer build, `cmake -DTURING_SANITIZE="address;undefined" ..`.
+
+### A null range: ask why the caller holds one
 
 **When UBSan reports a `memcpy` given a null pointer, find out why the caller holds a null range
 before changing the copy.** There are two cases, and only one is a bug in the caller.
@@ -420,6 +428,37 @@ The cause was the key serializing a null as a value: #1434 keys it as `CellTag::
 stops the wire decoders reading the null path's IDs. With the sinks on `memcpy`, 27 of 1243
 tests failed: 2 from null paths, and 25 from MLIR's empty string, which is a valid value. So the
 sinks stay tolerant.
+
+### A scalar read from bytes is copied out, not dereferenced
+
+**Never read a `T` through `reinterpret_cast<const T*>` of a byte buffer, and never hand out a
+`std::span<const T>` over one, unless the bytes sit at an `alignof(T)` address.** An offset in a
+file, a page, a wire packet, or an encoded list or map can be at any address. UBSan reports the
+access as misaligned.
+- Read one scalar by copying it into a local: `T value; memcpy(&value, bytes, sizeof(T));`. GCC
+  compiles that to a single load. `ByteBufferIterator`, `AlignedBuffer` and `FileRegion` read
+  this way (d0870f656).
+- Copy a run of elements into aligned storage before viewing it as `T`, with
+  `SpanBuffer::insertBytes`. `EncodedList` and `EncodedMap` decode embeddings and paths this way
+  (b30b1e127).
+- Writing an object out through a byte pointer is fine, since any object may be read as bytes.
+
+### A shift count stays below the width of its type
+
+**`x << n` and `x >> n` are undefined when `n` is negative, or at least the bit width of `x`'s
+promoted type.** Reduce the count, or test it, before the shift. `LabelSetTest` shifted a 64-bit
+1 by 297 (e6fe49894).
+
+### A registration does not outlive its owner
+
+**An object that registers itself in a process-wide registry, such as spdlog's logger, a signal
+handler or a global callback, removes itself in its destructor.** Otherwise the registry calls
+into freed memory. `LineNoiseHandle` installed a sink in spdlog's global logger, and the sink
+read the handle's `atomic<bool>`. Once the handle was destroyed, the next log line read a dead
+stack frame. The destructor now detaches the sink (be6eff03d).
+- ASan reports a dead stack frame only with `detect_stack_use_after_return=1`, which the nightly
+  sets.
+- The 10 shuffled runs caught this one. A single pass did not.
 
 ## C++ Coding Style
 
