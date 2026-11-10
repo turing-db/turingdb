@@ -332,7 +332,18 @@ and left EXISTS, COLLECT, CALL, OPTIONAL MATCH, pattern comprehensions and cross
 Instead the layout moved onto the ops: 14 ops implement one or both methods, and the pass
 walks into and out of all of them with one generic step each way.
 
-## Maps keyed by IR objects forget what is erased
+## Undefined behaviour found in this code
+
+**These are the kinds of undefined behaviour found in this code, each with the rule that keeps
+it out.** A native run of these bugs mostly passes, so a passing test proves nothing about them.
+- Maps keyed by MLIR objects, and `llvm::DenseMap` in general, need care in every pass and in
+  lowering, because ops are erased there. A key left behind by an erased op is not an invalid
+  access, so no sanitizer reports it. It shows as a crash that changes between runs.
+- The CI Sanitizers nightly (`ci_sanitizers.yml`) found the others. It runs every unit test 10
+  times, shuffled, under ASan and UBSan. Check a change that touches one of these patterns with
+  the sanitizer build, `cmake -DTURING_SANITIZE="address;undefined" ..`.
+
+### Maps keyed by IR objects forget what is erased
 
 **A map keyed by `mlir::Value` or `mlir::Operation*` drops an op's entries when the op is
 erased, and every erase goes through the one function that does it.** MLIR puts a new op
@@ -350,6 +361,8 @@ changes between runs of one binary, and so does the bug.
   `undefined symbol: _ZTIN4mlir12RewriterBaseE`.
 - Iterating such a map is non-deterministic too. Use `InsertionOrderedMap` when the order
   reaches the IR (#1316).
+- Dropping an op's entries is itself an erase from the map. On a `DenseMap`, use `remove_if`,
+  never an erase while iterating it (next section).
 
 Finding a bug of this class:
 - An intermittent crash in a test that runs fixed queries is non-determinism until shown
@@ -371,7 +384,7 @@ full column. The crash was in the translator, but making `to_any` accept a const
 have left lowering non-deterministic. The fix routed all 13 erases in lowering through
 `eraseOp`.
 
-## DenseMap moves its entries on erase and on growth
+### DenseMap moves its entries on erase and on growth
 
 **No iterator, reference or pointer into an `llvm::DenseMap` or `llvm::DenseSet` survives an
 erase from it or an insert into it.** Both move entries. A stale reference reads whatever the
@@ -396,14 +409,6 @@ across a hop put the `nl.fill_nulls` at that entry. Once glibc reused the freed 
 source read back was garbage, and `sameRowSource` segfaulted on it in 9 runs of 10
 (`CarriedColumnRowSourceTest`). The first version of the scrub in `DBLowering::eraseOp` erased
 from `_valueMap` while iterating it and kept one of two entries holding a freed value.
-
-## Undefined behaviour the sanitizers have found
-
-**These are the kinds of undefined behaviour that the CI Sanitizers nightly has caught in this
-code, each with the rule that keeps it out.** The nightly (`ci_sanitizers.yml`) runs every unit
-test 10 times, shuffled, under ASan and UBSan. A native run of these bugs mostly passes, so a
-passing test proves nothing about them. Check a change that touches one of these patterns with
-the sanitizer build, `cmake -DTURING_SANITIZE="address;undefined" ..`.
 
 ### A null range: ask why the caller holds one
 
