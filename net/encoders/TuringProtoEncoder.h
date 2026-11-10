@@ -373,6 +373,11 @@ private:
 
         const WireSize nodeCount = static_cast<WireSize>(path.getNodeCount());
         _outBuf->copyFixedLenData(&nodeCount, sizeof(nodeCount));
+
+        if (path.isNull()) {
+            return;
+        }
+
         _outBuf->copyVarLenData(ids.data(), ids.size_bytes());
     }
 };

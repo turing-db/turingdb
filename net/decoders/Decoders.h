@@ -226,6 +226,10 @@ struct VectorColumnDecoder<db::GraphPath, Sink> {
             db::GraphPath& path = (*typedColumn)[context->_rowIndex + i];
             readPathNodeCount(context, path);
 
+            if (path.isNull()) {
+                continue;
+            }
+
             const std::span<uint64_t> ids = path.getIDs();
             if (!readVarLenPayload(context, reinterpret_cast<char*>(ids.data()), ids.size_bytes())) {
                 context->_rowIndex += i + 1;
@@ -678,6 +682,12 @@ struct ConstColumnDecoder<db::GraphPath, Sink> {
 
         db::GraphPath path;
         readPathNodeCount(context, path);
+
+        if (path.isNull()) {
+            typedColumn->set(std::move(path));
+            return true;
+        }
+
         const std::span<uint64_t> ids = path.getIDs();
         typedColumn->set(std::move(path));
 
