@@ -15,6 +15,8 @@ add_ir_tests(test_query_ir_kernel_result_nullability KernelResultNullabilityTest
 
 add_ir_tests(test_query_ir_kernel_result_mask KernelResultMaskTest.cpp)
 
+add_ir_tests(test_query_ir_boolean_column_class BooleanColumnClassTest.cpp)
+
 # The reduced-row output tests read the single row a reduction collapsed to from another
 # block, against the shared SimpleGraph fixture.
 add_ir_tests(test_query_ir_reduced_row_output ReducedRowOutputTest.cpp)

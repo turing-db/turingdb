@@ -98,6 +98,18 @@ enum class NLChunkKind {
     PathRef,
 };
 
+// The column a chunk read as a truth value is held in, as its element type names it: a
+// mask (!storage.bool), plain booleans (i1), nullable booleans (!storage.nullable<i1>),
+// tagged cells (!storage.any) or nullable ones, or the null literal
+enum class NLTruthColumnKind {
+    Mask,
+    Booleans,
+    NullableBooleans,
+    TaggedCells,
+    NullableTaggedCells,
+    UntypedNull,
+};
+
 // Invoke handler with the column element type a chunk kind stands for, so the families of
 // per-element-type handlers are selected in one place rather than through a switch
 // repeated in each selector. handler is a template lambda - [&]<typename ElementType>(){}

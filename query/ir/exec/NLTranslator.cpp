@@ -892,6 +892,24 @@ bool isNullableMap(mlir::Type elementType) {
     return nullableType && mlir::isa<storage::MapType>(nullableType.getValueType());
 }
 
+NLTruthColumnKind truthColumnKindFromChunkType(mlir::Type chunkType) {
+    const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
+
+    if (isUntypedNullChunk(chunkType)) {
+        return NLTruthColumnKind::UntypedNull;
+    } else if (isNullableAny(elementType)) {
+        return NLTruthColumnKind::NullableTaggedCells;
+    } else if (mlir::isa<storage::AnyType>(elementType)) {
+        return NLTruthColumnKind::TaggedCells;
+    } else if (mlir::isa<storage::NullableType>(elementType)) {
+        return NLTruthColumnKind::NullableBooleans;
+    } else if (mlir::isa<storage::BoolType>(elementType)) {
+        return NLTruthColumnKind::Mask;
+    }
+
+    return NLTruthColumnKind::Booleans;
+}
+
 // The property value type a chunk writes, which is not quite the shape it holds: a mask
 // writes a Bool property, so it is recognised here and not in valueTypeFromElementType,
 // which answers what nullable value column a chunk needs.
@@ -974,6 +992,58 @@ void appendMergeNodeSignature(const LabelSet& labels,
 
 bool isConstantColumn(const Column* column) {
     return column->getContainerKind() == ContainerKind::code<ColumnConst>();
+}
+
+// A truth value is held in the rows its kind names, or in the constant standing for every
+// row. The null literal is read by no kernel, whatever column holds it.
+bool holdsTruthColumn(NLTruthColumnKind kind, const Column* column) {
+    const ColumnKind::Code columnKind = column->getKind();
+
+    switch (kind) {
+        case NLTruthColumnKind::Mask:
+            return columnKind == ColumnMask::staticKind() || columnKind == ColumnConst<CustomBool>::staticKind();
+        break;
+
+        case NLTruthColumnKind::Booleans:
+            return columnKind == ColumnVector<CustomBool>::staticKind() || columnKind == ColumnConst<CustomBool>::staticKind();
+        break;
+
+        case NLTruthColumnKind::NullableBooleans:
+            return columnKind == ColumnOptMask::staticKind() || columnKind == ColumnConst<std::optional<CustomBool>>::staticKind();
+        break;
+
+        case NLTruthColumnKind::TaggedCells:
+            return columnKind == ColumnVector<CellView>::staticKind() || columnKind == ColumnConst<CellView>::staticKind();
+        break;
+
+        case NLTruthColumnKind::NullableTaggedCells:
+            return columnKind == ColumnOptVector<CellView>::staticKind() || columnKind == ColumnConst<std::optional<CellView>>::staticKind();
+        break;
+
+        case NLTruthColumnKind::UntypedNull:
+            return true;
+        break;
+    }
+
+    return false;
+}
+
+// A chunk read as a truth value is read by the kernel its type names, so the column bound
+// to it must be the one that type names
+NLTruthColumnKind truthColumnKindOf(mlir::Type chunkType, const Column* column) {
+    const NLTruthColumnKind kind = truthColumnKindFromChunkType(chunkType);
+
+    if (!holdsTruthColumn(kind, column)) {
+        std::string chunkTypeText;
+        llvm::raw_string_ostream stream(chunkTypeText);
+        chunkType.print(stream);
+
+        throw IRException(fmt::format("A {} truth value is read out of a {}, not the column its type names",
+                                      chunkTypeText,
+                                      column->getTypeName()));
+    }
+
+    return kind;
 }
 
 template <size_t... Indices>
@@ -2892,14 +2962,9 @@ void NLTranslator::translateExploreStep(nl::ExplorePaths explorePaths,
 
     nl::Yield yield = mlir::cast<nl::Yield>(hopBlock.getTerminator());
     const mlir::Value mask = yield.getColumns().front();
-    const auto maskChunk = mlir::cast<nl::ChunkType>(mask.getType());
-    const bool maskNullable = mlir::isa<storage::NullableType>(maskChunk.getElementType());
-    const bool maskIsUntypedNull = isUntypedNullChunk(mask.getType());
+    const Column* maskColumn = getColumn(mask);
 
-    exploreStep->setHopFilter(getColumn(mask),
-                              NLExecutor::selectMaskSurvivorFunction(maskNullable,
-                                                                     maskIsUntypedNull,
-                                                                     isAnyChunk(mask.getType())));
+    exploreStep->setHopFilter(maskColumn, NLExecutor::selectMaskSurvivorFunction(truthColumnKindOf(mask.getType(), maskColumn)));
 }
 
 void NLTranslator::translateExpandPath(nl::ExpandPath expand, NLStmtContainer* body) {
@@ -3943,10 +4008,13 @@ void NLTranslator::translateListIndex(nl::ListIndex index, NLStmtContainer* body
 }
 
 void NLTranslator::translateNot(nl::Not notOp, NLStmtContainer* body) {
-    const Column* operand = getColumn(notOp.getOperand());
+    const mlir::Value operandValue = notOp.getOperand();
+    const Column* operand = getColumn(operandValue);
+    const NLTruthColumnKind truthKind = truthColumnKindOf(operandValue.getType(), operand);
 
     Column* result = nullptr;
-    const NLUnaryFn fn = NLExecutor::selectNot(operand, _memory, result);
+    const NLUnaryFn fn = isConstantColumn(operand) ? NLExecutor::selectConstantNot(truthKind, _memory, result)
+                                                   : NLExecutor::selectNot(truthKind, _memory, result);
     bindKernelResult(notOp.getResult(), result);
 
     NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
@@ -4556,10 +4624,7 @@ void NLTranslator::translateListPredicate(nl::ListPredicate predicate, NLStmtCon
     NLListPredicateData* data = allocElementData<NLListPredicateData>(predicate, listPredicateKind(predicate.getKind()));
 
     const mlir::Value valueValue = translateElementBody(predicate, data);
-
-    const mlir::Type valueType = valueValue.getType();
-    const bool nullable = mlir::isa<storage::NullableType>(mlir::cast<nl::ChunkType>(valueType).getElementType());
-    data->setTruthRead(NLExecutor::selectTruthRead(nullable, isUntypedNullChunk(valueType), isAnyChunk(valueType)));
+    data->setTruthRead(NLExecutor::selectTruthRead(truthColumnKindOf(valueValue.getType(), getColumn(valueValue))));
 
     body->emplaceStmt(&NLExecutor::runListPredicate, data);
 }
@@ -4680,10 +4745,8 @@ void NLTranslator::translateAllReduce(nl::AllReduce allReduce, NLStmtContainer* 
     translateBlock(predicateBlock, data->getPredicateStmts());
 
     const mlir::Value holdsValue = mlir::cast<nl::AllReduceYield>(predicateBlock.getTerminator()).getHolds();
-    const mlir::Type holdsType = holdsValue.getType();
-    const bool nullable = mlir::isa<storage::NullableType>(mlir::cast<nl::ChunkType>(holdsType).getElementType());
-    data->setHolds(getColumn(holdsValue),
-                   NLExecutor::selectTruthRead(nullable, isUntypedNullChunk(holdsType), isAnyChunk(holdsType)));
+    const Column* holds = getColumn(holdsValue);
+    data->setHolds(holds, NLExecutor::selectTruthRead(truthColumnKindOf(holdsValue.getType(), holds)));
 
     body->emplaceStmt(&NLExecutor::runAllReduce, data);
 }
@@ -4706,15 +4769,13 @@ void NLTranslator::translateCase(CaseOp caseOp, NLHandlerFunction run, NLStmtCon
                                                                _program->allocStepBuffers());
 
     for (size_t branchIndex = 0; branchIndex < conditions.size(); branchIndex++) {
-        const mlir::Type conditionType = conditions[branchIndex].getType();
+        const mlir::Value condition = conditions[branchIndex];
         const mlir::Type valueChunkType = values[branchIndex].getType();
 
         NLCaseData::Branch branch;
-        branch._condition = getColumn(conditions[branchIndex]);
+        branch._condition = getColumn(condition);
         branch._value = getColumn(values[branchIndex]);
-        branch._test = NLExecutor::selectCaseTest(branch._condition,
-                                                  isNullableChunk(conditionType),
-                                                  isUntypedNullChunk(conditionType));
+        branch._test = NLExecutor::selectCaseTest(truthColumnKindOf(condition.getType(), branch._condition));
         branch._write = selectCellWriteForChunkType(resultChunkType, branch._value, valueChunkType);
 
         data->addBranch(branch);
@@ -4761,10 +4822,7 @@ void NLTranslator::translateIsNotTrue(nl::IsNotTrue isNotTrue, NLStmtContainer* 
     const Column* operand = getColumn(operandValue);
 
     Column* result = nullptr;
-    const NLUnaryFn fn = NLExecutor::selectIsNotTrue(operand,
-                                                     isUntypedNullChunk(operandValue.getType()),
-                                                     _memory,
-                                                     result);
+    const NLUnaryFn fn = NLExecutor::selectIsNotTrue(truthColumnKindOf(operandValue.getType(), operand), _memory, result);
 
     bindKernelResult(isNotTrue.getResult(), result);
 
@@ -4902,14 +4960,7 @@ void NLTranslator::translateBinaryFunction(mlir::Operation* op, NLStmtContainer*
 void NLTranslator::translateFilter(nl::Filter filter, NLStmtContainer* body) {
     const mlir::Value maskValue = filter.getMask();
     const Column* mask = getColumn(maskValue);
-
-    const mlir::Type maskType = maskValue.getType();
-    const auto maskChunk = mlir::cast<nl::ChunkType>(maskType);
-    const bool maskNullable = mlir::isa<storage::NullableType>(maskChunk.getElementType());
-    const bool maskIsUntypedNull = isUntypedNullChunk(maskType);
-    const bool maskHoldsTaggedCells = isAnyChunk(maskType);
-    const NLMaskSurvivorFunction filterFunction =
-        NLExecutor::selectMaskSurvivorFunction(maskNullable, maskIsUntypedNull, maskHoldsTaggedCells);
+    const NLMaskSurvivorFunction filterFunction = NLExecutor::selectMaskSurvivorFunction(truthColumnKindOf(maskValue.getType(), mask));
 
     NLFilterData* data = _program->allocFunctionData<NLFilterData>(mask, filterFunction);
 
@@ -6298,6 +6349,8 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
                 aggregate._fold = NLExecutor::selectGroupCountDistinctOptFold(chunkKindFromNullableValue(distinctValueType));
             } else if (mlir::isa<storage::AnyType>(distinctElementType)) {
                 aggregate._fold = NLExecutor::selectGroupCountDistinctCellFold();
+            } else if (isMaskElementType(distinctElementType)) {
+                aggregate._fold = NLExecutor::selectMaskGroupCountDistinctFold();
             } else {
                 aggregate._fold = NLExecutor::selectGroupCountDistinctChunkFold(getChunkKind(chunkType));
             }
@@ -6471,7 +6524,7 @@ void NLTranslator::translateGroupAggregateLoop(const IteratorConfig& config,
     for (size_t keyIndex = 0; keyIndex < keyCount; keyIndex++) {
         const mlir::Value loopVariable = loopBody.getArgument(static_cast<unsigned>(keyIndex));
 
-        Column* output = allocColumnForResultChunkType(loopVariable.getType());
+        Column* output = allocColumnForChunkType(loopVariable.getType());
         _valueSlots[loopVariable] = output;
         keyColumns[keyIndex]._output = output;
     }
@@ -6479,7 +6532,7 @@ void NLTranslator::translateGroupAggregateLoop(const IteratorConfig& config,
     for (size_t aggregateIndex = 0; aggregateIndex < aggregateCount; aggregateIndex++) {
         const mlir::Value loopVariable = loopBody.getArgument(static_cast<unsigned>(keyCount + aggregateIndex));
 
-        Column* output = allocColumnForResultChunkType(loopVariable.getType());
+        Column* output = allocColumnForChunkType(loopVariable.getType());
         _valueSlots[loopVariable] = output;
         aggregates[aggregateIndex]._output = output;
     }
@@ -6850,14 +6903,14 @@ void NLTranslator::translateUnwindCollectLoop(const IteratorConfig& config,
     for (size_t keyIndex = 0; keyIndex < keyCount; keyIndex++) {
         const mlir::Value loopVariable = loopBody.getArgument(static_cast<unsigned>(keyIndex));
 
-        Column* output = allocColumnForResultChunkType(loopVariable.getType());
+        Column* output = allocColumnForChunkType(loopVariable.getType());
         _valueSlots[loopVariable] = output;
         keyColumns[keyIndex]._output = output;
     }
 
     // The last loop variable is the unwound element value (a nullable value chunk).
     const mlir::Value valueVariable = loopBody.getArgument(static_cast<unsigned>(keyCount));
-    Column* valueOutput = allocColumnForResultChunkType(valueVariable.getType());
+    Column* valueOutput = allocColumnForChunkType(valueVariable.getType());
     _valueSlots[valueVariable] = valueOutput;
     unwound._output = valueOutput;
 
@@ -6893,7 +6946,7 @@ void NLTranslator::translateCollectLoop(const IteratorConfig& config,
     for (size_t keyIndex = 0; keyIndex < keyCount; keyIndex++) {
         const mlir::Value loopVariable = loopBody.getArgument(static_cast<unsigned>(keyIndex));
 
-        Column* output = allocColumnForResultChunkType(loopVariable.getType());
+        Column* output = allocColumnForChunkType(loopVariable.getType());
         _valueSlots[loopVariable] = output;
         keyColumns[keyIndex]._output = output;
     }
@@ -6902,7 +6955,7 @@ void NLTranslator::translateCollectLoop(const IteratorConfig& config,
     for (size_t valueIndex = 0; valueIndex < valueColumns.size(); valueIndex++) {
         const mlir::Value listVariable = loopBody.getArgument(static_cast<unsigned>(keyCount + valueIndex));
 
-        Column* listOutput = allocColumnForResultChunkType(listVariable.getType());
+        Column* listOutput = allocColumnForChunkType(listVariable.getType());
         _valueSlots[listVariable] = listOutput;
         valueColumns[valueIndex]._output = listOutput;
     }
@@ -6913,7 +6966,7 @@ void NLTranslator::translateCollectLoop(const IteratorConfig& config,
         const unsigned argumentIndex = static_cast<unsigned>(keyCount + valueColumns.size() + aggregateIndex);
         const mlir::Value loopVariable = loopBody.getArgument(argumentIndex);
 
-        Column* output = allocColumnForResultChunkType(loopVariable.getType());
+        Column* output = allocColumnForChunkType(loopVariable.getType());
         _valueSlots[loopVariable] = output;
         aggregates[aggregateIndex]._output = output;
     }
@@ -7550,28 +7603,6 @@ NLCopyFunction NLTranslator::selectCopyForChunkType(mlir::Type chunkType) {
     return NLExecutor::selectCopyFunction(chunkKindFromElementType(elementType));
 }
 
-// A !storage.nullable<...> chunk (a key or a sum/min/max/avg result) allocates a
-// ColumnOptVector on the kind it wraps, and any other chunk (a grouping key, a count
-// result) a column of its own kind.
-Column* NLTranslator::allocColumnForResultChunkType(mlir::Type chunkType) {
-    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
-    const mlir::Type elementType = chunk.getElementType();
-
-    if (isNullableList(elementType)) {
-        return allocOptListColumn();
-    } else if (isNullableAny(elementType)) {
-        return allocOptCellColumn();
-    }
-
-    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        return allocOptColumnForKind(chunkKindFromNullableValue(nullableType.getValueType()));
-    } else if (mlir::isa<storage::AnyType>(elementType)) {
-        return allocCellColumn();
-    }
-
-    return allocColumnForKind(chunkKindFromElementType(elementType));
-}
-
 void NLTranslator::translateEachRowLoop(const IteratorConfig& config,
                                         mlir::Block& loopBody,
                                         NLLimitState* limit,
@@ -7904,8 +7935,6 @@ NLChunkKind NLTranslator::chunkKindFromElementType(mlir::Type elementType) {
         return NLChunkKind::Point;
     } else if (mlir::isa<storage::PathRefType>(elementType)) {
         return NLChunkKind::PathRef;
-    } else if (mlir::isa<storage::BoolType>(elementType)) {
-        return NLChunkKind::Bool;
     } else if (mlir::isa<mlir::Float64Type>(elementType)) {
         return NLChunkKind::Double;
     } else if (const auto intType = mlir::dyn_cast<mlir::IntegerType>(elementType)) {

@@ -929,12 +929,6 @@ private:
     // writes through, so it mirrors the pipeline engine's allocReturnValues exactly.
     Column* allocColumnForProcedureType(const NamedProcedureType& returnValue);
 
-    // Allocate an emit output column for a group-aggregate output chunk type: an ID
-    // column for an ID chunk (a grouping key), a nullable value column for a
-    // !storage.nullable<...> chunk (a key or a sum/min/max/avg result), or a
-    // ColumnVector<uint64_t> for a ui64 chunk (a count result).
-    Column* allocColumnForResultChunkType(mlir::Type chunkType);
-
     // The key gather-append / range emit-copy for a group-aggregate key column of
     // this chunk type - by chunk kind for an ID chunk, by value type for a nullable
     // value chunk. Used to grow the key buffers and to slice them at emit.

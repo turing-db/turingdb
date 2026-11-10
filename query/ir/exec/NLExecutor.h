@@ -381,7 +381,8 @@ public:
     static void runUnary(NLExecutionContext* context, NLFunctionData* data);
     static void runFillNull(NLExecutionContext* context, NLFunctionData* data);
 
-    static NLUnaryFn selectNot(const Column* operand, LocalMemory* memory, Column*& result);
+    static NLUnaryFn selectNot(NLTruthColumnKind kind, LocalMemory* memory, Column*& result);
+    static NLUnaryFn selectConstantNot(NLTruthColumnKind kind, LocalMemory* memory, Column*& result);
 
     // Whether each row of a column holds no value (nl.is_null) or one (nl.is_not_null), as a
     // mask; a constant column gives a constant answer
@@ -389,7 +390,7 @@ public:
     static NLUnaryFn selectNullTest(const Column* operand, LocalMemory* memory, Column*& result);
 
     // Whether each row of a CASE condition is false or null (nl.is_not_true), as a mask
-    static NLUnaryFn selectIsNotTrue(const Column* operand, bool untypedNull, LocalMemory* memory, Column*& result);
+    static NLUnaryFn selectIsNotTrue(NLTruthColumnKind kind, LocalMemory* memory, Column*& result);
     // Read a node or edge column as a nullable column of its IDs' integers, an invalid ID -
     // what an OPTIONAL MATCH leaves - reading as the null. The entity sibling of
     // selectToNullable, which reads a scalar value column.
@@ -501,14 +502,14 @@ public:
     // Read one element's predicate: a mask, a nullable mask - where a null row is unknown
     // -, a type-erased cell holding a boolean or a null, or the null literal, which is
     // unknown for every row
-    static NLTruthReadFunction selectTruthRead(bool nullable, bool untypedNull, bool taggedCells);
+    static NLTruthReadFunction selectTruthRead(NLTruthColumnKind kind);
 
     // Size the CASE result to the step's rows, all absent
     static NLCaseResetFn selectCaseReset(NLChunkKind kind);
 
     // Read one branch's condition column: a mask, a nullable mask - where a null row is
     // not a match - or the null literal, which matches no row at all
-    static NLCaseTestFn selectCaseTest(const Column* condition, bool nullable, bool untypedNull);
+    static NLCaseTestFn selectCaseTest(NLTruthColumnKind kind);
 
     // Copy one branch's value column into the result, which lowering resolved to the one
     // nullable column every branch promotes into. A branch of null writes nothing: the
@@ -592,6 +593,7 @@ public:
     static NLBroadcastFunction selectMaskTile();
     static NLKeyAppendFunction selectMaskMergeKeyAppend(ValueType keyType);
     static NLUnaryFn selectMaskToNullable(LocalMemory* memory, Column*& result);
+    static NLGroupAggregateFoldFunction selectMaskGroupCountDistinctFold();
 
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);
 
@@ -616,7 +618,7 @@ public:
     // The mask survivor collector for an nl.filter, chosen by the mask chunk's shape: a
     // nullable mask drops null rows as well as false ones, a mask that is null itself
     // keeps nothing, and a type-erased cell keeps its row where it holds true.
-    static NLMaskSurvivorFunction selectMaskSurvivorFunction(bool nullable, bool untypedNull, bool taggedCells);
+    static NLMaskSurvivorFunction selectMaskSurvivorFunction(NLTruthColumnKind kind);
 
     // The fetch for an nl.fetch_nodes reading its IDs out of nodes, integers or tagged cells
     static NLFetchNodesFunction selectNodeFetchFunction();

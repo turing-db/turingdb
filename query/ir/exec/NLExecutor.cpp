@@ -1452,9 +1452,9 @@ void fillNullColumn(Column* output, size_t rowCount) {
     typedOutput->getRaw().assign(rowCount, ElementType {});
 }
 
-void collectMaskSurvivors(const Column* mask, ColumnVector<size_t>* indices) {
-    const ColumnMask* typedMask = static_cast<const ColumnMask*>(mask);
-    const std::vector<ColumnMask::Bool_t>& maskRaw = typedMask->getRaw();
+template <typename BooleanColumn>
+void collectBooleanSurvivors(const Column* mask, ColumnVector<size_t>* indices) {
+    const std::vector<typename BooleanColumn::ValueType>& maskRaw = static_cast<const BooleanColumn*>(mask)->getRaw();
     std::vector<size_t>& survivingRaw = indices->getRaw();
 
     for (size_t row = 0; row < maskRaw.size(); row++) {
@@ -1589,9 +1589,17 @@ bool isMaskConstant(const Column* mask) {
     return mask->getKind() == ColumnConst<CustomBool>::staticKind();
 }
 
-void applyNotOnMask(Column* result, const Column* operand) {
-    UnaryPredicateExecutor<Not, ColumnMask::Bool_t>::apply(static_cast<ColumnMask*>(result),
-                                                          static_cast<const ColumnMask*>(operand));
+template <typename BooleanColumn>
+void applyNotOnBooleans(Column* result, const Column* operand) {
+    using Boolean = typename BooleanColumn::ValueType;
+
+    const std::vector<Boolean>& operandRaw = static_cast<const BooleanColumn*>(operand)->getRaw();
+    std::vector<ColumnMask::Bool_t>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
+
+    resultRaw.resize(operandRaw.size());
+    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](Boolean value) {
+        return ColumnMask::Bool_t {!value};
+    });
 }
 
 void applyNotOnOptMask(Column* result, const Column* operand) {
@@ -2177,8 +2185,9 @@ struct NullTestSelector {
     }
 };
 
-std::optional<bool> readMaskTruth(const Column* mask, size_t row) {
-    return static_cast<bool>(static_cast<const ColumnMask*>(mask)->getRaw()[row]);
+template <typename BooleanColumn>
+std::optional<bool> readBooleanTruth(const Column* mask, size_t row) {
+    return static_cast<bool>(static_cast<const BooleanColumn*>(mask)->getRaw()[row]);
 }
 
 std::optional<bool> readOptMaskTruth(const Column* mask, size_t row) {
@@ -4767,7 +4776,7 @@ bool presentChunkRow(const GraphPath& path) {
 // Tally each group's distinct present values of a chunk. The tally keys a row the way a
 // whole-row DISTINCT keys it, so two rows count once exactly when DISTINCT would fold
 // them together.
-template <typename ElementType>
+template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
 void groupFoldCountDistinctChunk(NLGroupStatePlaces places,
                                  const Column* input,
                                  const std::vector<size_t>& groups,
@@ -4775,7 +4784,7 @@ void groupFoldCountDistinctChunk(NLGroupStatePlaces places,
                                  size_t endRow,
                                  const NLGroupDistinctTally* distinct,
                                  NLValueStore& values) {
-    const std::vector<ElementType>& inputRaw = static_cast<const ColumnVector<ElementType>*>(input)->getRaw();
+    const std::vector<ElementType>& inputRaw = static_cast<const ColumnType*>(input)->getRaw();
 
     for (size_t row = beginRow; row < endRow; row++) {
         if (!presentChunkRow(inputRaw[row])) {
@@ -10896,32 +10905,64 @@ NLCaseResetFn NLExecutor::selectCaseReset(NLChunkKind kind) {
     return reset;
 }
 
-NLTruthReadFunction NLExecutor::selectTruthRead(bool nullable, bool untypedNull, bool taggedCells) {
-    if (untypedNull) {
-        return &readNullTruth;
-    } else if (taggedCells) {
-        return nullable ? &readOptTaggedCellTruth : &readTaggedCellTruth;
-    } else if (nullable) {
-        return &readOptMaskTruth;
+NLTruthReadFunction NLExecutor::selectTruthRead(NLTruthColumnKind kind) {
+    switch (kind) {
+        case NLTruthColumnKind::Mask:
+            return &readBooleanTruth<ColumnMask>;
+        break;
+
+        case NLTruthColumnKind::Booleans:
+            return &readBooleanTruth<ColumnVector<types::Bool::Primitive>>;
+        break;
+
+        case NLTruthColumnKind::NullableBooleans:
+            return &readOptMaskTruth;
+        break;
+
+        case NLTruthColumnKind::TaggedCells:
+            return &readTaggedCellTruth;
+        break;
+
+        case NLTruthColumnKind::NullableTaggedCells:
+            return &readOptTaggedCellTruth;
+        break;
+
+        case NLTruthColumnKind::UntypedNull:
+            return &readNullTruth;
+        break;
     }
 
-    return &readMaskTruth;
+    throw IRException("Unhandled truth column kind");
 }
 
-NLCaseTestFn NLExecutor::selectCaseTest(const Column* condition, bool nullable, bool untypedNull) {
-    const ColumnKind::Code kind = condition->getKind();
+NLCaseTestFn NLExecutor::selectCaseTest(NLTruthColumnKind kind) {
+    switch (kind) {
+        case NLTruthColumnKind::Mask:
+            return &caseTestMask;
+        break;
 
-    if (untypedNull) {
-        return &caseTestNever;
-    } else if (condition->getContainerKind() == ContainerKind::code<ColumnMask>()) {
-        return &caseTestMask;
-    } else if (kind == ColumnVector<CellView>::staticKind()) {
-        return &caseTestTaggedCell;
-    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
-        return &caseTestOptTaggedCell;
+        case NLTruthColumnKind::Booleans:
+            return &caseTestBoolColumn;
+        break;
+
+        case NLTruthColumnKind::NullableBooleans:
+            return &caseTestOptMask;
+        break;
+
+        case NLTruthColumnKind::TaggedCells:
+            return &caseTestTaggedCell;
+        break;
+
+        case NLTruthColumnKind::NullableTaggedCells:
+            return &caseTestOptTaggedCell;
+        break;
+
+        case NLTruthColumnKind::UntypedNull:
+            return &caseTestNever;
+        break;
     }
 
-    return nullable ? &caseTestOptMask : &caseTestBoolColumn;
+    throw IRException("Unhandled truth column kind");
 }
 
 template <bool TESTS_NULL>
@@ -10933,24 +10974,36 @@ NLUnaryFn NLExecutor::selectNullTest(const Column* operand, LocalMemory* memory,
     return selector._fn;
 }
 
-NLUnaryFn NLExecutor::selectIsNotTrue(const Column* operand, bool untypedNull, LocalMemory* memory, Column*& result) {
+NLUnaryFn NLExecutor::selectIsNotTrue(NLTruthColumnKind kind, LocalMemory* memory, Column*& result) {
     result = memory->alloc<ColumnMask>();
 
-    const ColumnKind::Code kind = operand->getKind();
+    switch (kind) {
+        case NLTruthColumnKind::Mask:
+            return &applyIsNotTrueOnMask;
+        break;
 
-    if (untypedNull) {
-        return &applyIsNotTrueOnNull;
-    } else if (kind == ColumnMask::staticKind()) {
-        return &applyIsNotTrueOnMask;
-    } else if (kind == ColumnOptMask::staticKind()) {
-        return &applyIsNotTrueOnOptMask;
-    } else if (kind == ColumnVector<CellView>::staticKind()) {
-        return &applyIsNotTrueOnTaggedCells;
-    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
-        return &applyIsNotTrueOnOptTaggedCells;
+        case NLTruthColumnKind::Booleans:
+            return &applyIsNotTrueOnBoolColumn;
+        break;
+
+        case NLTruthColumnKind::NullableBooleans:
+            return &applyIsNotTrueOnOptMask;
+        break;
+
+        case NLTruthColumnKind::TaggedCells:
+            return &applyIsNotTrueOnTaggedCells;
+        break;
+
+        case NLTruthColumnKind::NullableTaggedCells:
+            return &applyIsNotTrueOnOptTaggedCells;
+        break;
+
+        case NLTruthColumnKind::UntypedNull:
+            return &applyIsNotTrueOnNull;
+        break;
     }
 
-    return &applyIsNotTrueOnBoolColumn;
+    throw IRException("Unhandled truth column kind");
 }
 
 NLCaseResetFn NLExecutor::selectOwnNullCaseReset(NLChunkKind kind) {
@@ -11022,37 +11075,71 @@ NLCaseWriteFn NLExecutor::selectCaseWrite(NLChunkKind kind,
     return write;
 }
 
-NLUnaryFn NLExecutor::selectNot(const Column* operand, LocalMemory* memory, Column*& result) {
-    const ColumnKind::Code kind = operand->getKind();
+NLUnaryFn NLExecutor::selectNot(NLTruthColumnKind kind, LocalMemory* memory, Column*& result) {
+    switch (kind) {
+        case NLTruthColumnKind::Mask:
+            result = memory->alloc<ColumnMask>();
+            return &applyNotOnBooleans<ColumnMask>;
+        break;
 
-    if (kind == ColumnConst<PropertyNull>::staticKind()) {
-        result = memory->alloc<ColumnConst<PropertyNull>>();
-        return &applyNotOnNullConst;
-    } else if (kind == ColumnConst<CustomBool>::staticKind()) {
-        result = memory->alloc<ColumnConst<CustomBool>>();
-        return &applyNotOnConst;
-    } else if (kind == ColumnConst<std::optional<CustomBool>>::staticKind()) {
-        result = memory->alloc<ColumnConst<std::optional<CustomBool>>>();
-        return &applyNotOnOptConst;
-    } else if (kind == ColumnOptMask::staticKind()) {
-        result = memory->alloc<ColumnOptMask>();
-        return &applyNotOnOptMask;
-    } else if (kind == ColumnVector<CellView>::staticKind()) {
-        result = memory->alloc<ColumnOptMask>();
-        return &applyNotOnTaggedCells;
-    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
-        result = memory->alloc<ColumnOptMask>();
-        return &applyNotOnOptTaggedCells;
-    } else if (kind == ColumnConst<CellView>::staticKind()) {
-        result = memory->alloc<ColumnConst<std::optional<CustomBool>>>();
-        return &applyNotOnConstTaggedCell;
-    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
-        result = memory->alloc<ColumnConst<std::optional<CustomBool>>>();
-        return &applyNotOnOptConstTaggedCell;
+        case NLTruthColumnKind::Booleans:
+            result = memory->alloc<ColumnMask>();
+            return &applyNotOnBooleans<ColumnVector<types::Bool::Primitive>>;
+        break;
+
+        case NLTruthColumnKind::NullableBooleans:
+            result = memory->alloc<ColumnOptMask>();
+            return &applyNotOnOptMask;
+        break;
+
+        case NLTruthColumnKind::TaggedCells:
+            result = memory->alloc<ColumnOptMask>();
+            return &applyNotOnTaggedCells;
+        break;
+
+        case NLTruthColumnKind::NullableTaggedCells:
+            result = memory->alloc<ColumnOptMask>();
+            return &applyNotOnOptTaggedCells;
+        break;
+
+        case NLTruthColumnKind::UntypedNull:
+            throw IRException("nl.not reads the null literal only as a constant: rows of null are laid out as nullable booleans");
+        break;
     }
 
-    result = memory->alloc<ColumnMask>();
-    return &applyNotOnMask;
+    throw IRException("Unhandled truth column kind");
+}
+
+NLUnaryFn NLExecutor::selectConstantNot(NLTruthColumnKind kind, LocalMemory* memory, Column*& result) {
+    switch (kind) {
+        case NLTruthColumnKind::Mask:
+        case NLTruthColumnKind::Booleans:
+            result = memory->alloc<ColumnConst<CustomBool>>();
+            return &applyNotOnConst;
+        break;
+
+        case NLTruthColumnKind::NullableBooleans:
+            result = memory->alloc<ColumnConst<std::optional<CustomBool>>>();
+            return &applyNotOnOptConst;
+        break;
+
+        case NLTruthColumnKind::TaggedCells:
+            result = memory->alloc<ColumnConst<std::optional<CustomBool>>>();
+            return &applyNotOnConstTaggedCell;
+        break;
+
+        case NLTruthColumnKind::NullableTaggedCells:
+            result = memory->alloc<ColumnConst<std::optional<CustomBool>>>();
+            return &applyNotOnOptConstTaggedCell;
+        break;
+
+        case NLTruthColumnKind::UntypedNull:
+            result = memory->alloc<ColumnConst<PropertyNull>>();
+            return &applyNotOnNullConst;
+        break;
+    }
+
+    throw IRException("Unhandled truth column kind");
 }
 
 NLUnaryFn NLExecutor::selectEntityToNullable(NLChunkKind kind, LocalMemory* memory, Column*& result) {
@@ -12628,16 +12715,34 @@ NLGatherFunction NLExecutor::selectCountGatherFunction() {
     return &gatherColumn<uint64_t>;
 }
 
-NLMaskSurvivorFunction NLExecutor::selectMaskSurvivorFunction(bool nullable, bool untypedNull, bool taggedCells) {
-    if (untypedNull) {
-        return &collectNoSurvivors;
-    } else if (taggedCells) {
-        return nullable ? &collectOptTaggedCellSurvivors : &collectTaggedCellSurvivors;
-    } else if (nullable) {
-        return &collectOptMaskSurvivors;
+NLMaskSurvivorFunction NLExecutor::selectMaskSurvivorFunction(NLTruthColumnKind kind) {
+    switch (kind) {
+        case NLTruthColumnKind::Mask:
+            return &collectBooleanSurvivors<ColumnMask>;
+        break;
+
+        case NLTruthColumnKind::Booleans:
+            return &collectBooleanSurvivors<ColumnVector<types::Bool::Primitive>>;
+        break;
+
+        case NLTruthColumnKind::NullableBooleans:
+            return &collectOptMaskSurvivors;
+        break;
+
+        case NLTruthColumnKind::TaggedCells:
+            return &collectTaggedCellSurvivors;
+        break;
+
+        case NLTruthColumnKind::NullableTaggedCells:
+            return &collectOptTaggedCellSurvivors;
+        break;
+
+        case NLTruthColumnKind::UntypedNull:
+            return &collectNoSurvivors;
+        break;
     }
 
-    return &collectMaskSurvivors;
+    throw IRException("Unhandled truth column kind");
 }
 
 NLFetchNodesFunction NLExecutor::selectNodeFetchFunction() {
@@ -12995,6 +13100,10 @@ NLKeyAppendFunction NLExecutor::selectMaskMergeKeyAppend(ValueType keyType) {
 NLUnaryFn NLExecutor::selectMaskToNullable(LocalMemory* memory, Column*& result) {
     result = memory->alloc<ColumnOptMask>();
     return &toNullableColumn<types::Bool::Primitive, ColumnMask>;
+}
+
+NLGroupAggregateFoldFunction NLExecutor::selectMaskGroupCountDistinctFold() {
+    return &groupFoldCountDistinctChunk<ColumnMask::Bool_t, ColumnMask>;
 }
 
 // A nullable chunk is a ColumnOptVector<Element> - that is,
