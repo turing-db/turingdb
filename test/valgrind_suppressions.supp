@@ -1,0 +1,12 @@
+# Errors memcheck reports in code outside TuringDB, in valgrind's suppression format.
+
+# mimalloc, which Arrow bundles as its allocator: at load time it reads the transparent huge
+# page setting into a stack buffer, then scans the buffer past the bytes the read filled.
+{
+   mimalloc-scans-the-huge-page-setting-past-the-read
+   Memcheck:Cond
+   fun:_mi_strnstr
+   fun:_mi_prim_mem_init
+   fun:mi_process_init*
+   fun:_mi_auto_process_init
+}
