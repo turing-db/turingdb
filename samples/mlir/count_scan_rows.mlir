@@ -15,10 +15,10 @@ module {
     // db.count_scan_rows([[]]). A label absent from the schema matches no node, so its
     // factor counts 0 and the whole product is 0.
     //
-    // It lowers to a single nl.count_scan_rows hoisted to the top of the entry block -
-    // it reads no column, so it is loop-invariant the way a constant is - which
-    // materializes the single tally row as an unsigned i64 (!nl.chunk<ui64>) for a
-    // function-scope nl.output to emit. No loop, no accumulator, no emit step.
+    // It lowers to a single nl.count_scan_rows hoisted to the top of the root block, here
+    // the entry block, which materializes the single tally row as an unsigned i64
+    // (!nl.chunk<ui64>) for a function-scope nl.output to emit. No loop, no accumulator,
+    // no emit step.
     //
     // The property form narrows one scan to the nodes holding a property, which the graph
     // indexes by the label set of its holders - MATCH (a:Person) RETURN count(a.name), the

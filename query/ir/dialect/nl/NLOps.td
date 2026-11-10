@@ -2444,8 +2444,8 @@ def CountScanRows : NLOp<"count_scan_rows", [Pure, InferTypeOpAdaptor]> {
 
     Unlike a count it opens no loop and reads no chunk: the counts come from the
     graph's own per-label node counts, so there is no relation to walk and nothing
-    to accumulate. It produces the chunk in place at function scope, where nl.output
-    consumes it.
+    to accumulate. It produces the chunk in place at the top of its dataflow's root: at
+    function scope, or in the loop body of a body run once per row.
 
     `property`, when given, narrows the scan `propertyScan` names to the nodes holding
     that property - the count(a.name) form, answered off the index the graph keeps of

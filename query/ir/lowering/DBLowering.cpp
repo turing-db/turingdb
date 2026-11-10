@@ -4981,16 +4981,15 @@ void DBLowering::lowerCount(mlir::db::Count count) {
 }
 
 void DBLowering::lowerCountScanRows(mlir::db::CountScanRows countScanRows) {
-    // The tally comes from the graph's node counts rather than from a relation, so the op
-    // reads no column and is loop-invariant: hoist it the way lowerConstant hoists a
-    // constant, where it dominates every loop a later op may emit from.
-    setInsertionAfterHoisted();
+    // The tally reads no column, but it is the rows in flight, so it goes at the top of the
+    // root and not of the entry block: in a body run once per row, the ops over its row run
+    // once per run.
+    _builder.setInsertionPointToStart(_rootBlock);
 
     nl::CountScanRows rows = _builder.create<nl::CountScanRows>(_builder.getUnknownLoc(),
                                                                 countScanRows.getLabelsAttr(),
                                                                 countScanRows.getPropertyAttr(),
                                                                 countScanRows.getPropertyScanAttr());
-    _lastHoisted = rows.getOperation();
 
     _valueMap[countScanRows.getResult()] = rows.getResult();
     _innermostCardinality = rows.getResult();

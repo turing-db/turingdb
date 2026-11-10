@@ -299,3 +299,6 @@ add_turing_test(test_query_ir_call_body_case_over_bound_constant CallBodyCaseOve
 add_turing_test(test_query_ir_per_run_import_schema_id PerRunImportSchemaIDTest.cpp)
 target_sources(test_query_ir_per_run_import_schema_id PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
 target_include_directories(test_query_ir_per_run_import_schema_id PRIVATE ${IR_TEST_DIR})
+
+# A body run once per row returns its import beside a count the graph's node counts answer: TUR-444.
+add_turing_test(test_query_ir_per_run_import_beside_scan_count PerRunImportBesideScanCountTest.cpp)
