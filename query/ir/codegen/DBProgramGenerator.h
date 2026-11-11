@@ -1441,6 +1441,10 @@ private:
     void translateListElements(const ListLiteral* list,
                                llvm::SmallVectorImpl<mlir::Attribute>& elements);
 
+    // Fills the elements a literal UNWIND argument spreads into: a list's own, none for
+    // null, and any other value as the one element of the list holding it
+    void translateUnwoundElements(const UnwindStmt* unwind, llvm::SmallVectorImpl<mlir::Attribute>& elements);
+
     // The attribute a literal rides on: a typed attribute for a scalar, a unit attribute
     // for a null, a dense array for an embedding, a nested array attribute for a list -
     // and a null attribute for a literal kind no attribute carries
@@ -1477,8 +1481,8 @@ private:
     // from the graph's nodes
     void addUnwindConst(const VariableDependency* var, const UnwindStmt* unwind);
 
-    // Opens a dataflow from the nodes an UNWIND's literal list names, for a variable a
-    // pattern uses as a node: the list seeds the traversal instead of feeding it values
+    // Opens a dataflow from the nodes an UNWIND's literal elements name, for a variable a
+    // pattern uses as a node: the elements seed the traversal instead of feeding it values
     void addConstScanNodes(const VariableDependency* var, const UnwindStmt* unwind);
 
     // Expands the rows in flight through an UNWIND whose expression is evaluated per row,

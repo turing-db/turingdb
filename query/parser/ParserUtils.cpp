@@ -414,6 +414,7 @@ CallSubqueryStmt* ParserUtils::createForeach(CypherAST* ast,
     SourceManager* sourceManager = ast->getSourceManager();
 
     UnwindStmt* unwind = UnwindStmt::create(ast, list, variable);
+    unwind->setIsForeach(true);
     sourceManager->setLocation(unwind, location);
 
     StmtContainer* stmts = StmtContainer::create(ast);

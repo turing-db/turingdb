@@ -16,15 +16,8 @@ bool isLiteralTreeExpr(const Expr* expr) {
     }
 
     const Literal* literal = static_cast<const LiteralExpr*>(expr)->getLiteral();
-    const Literal::Kind kind = literal->getKind();
 
-    if (kind == Literal::Kind::LIST) {
-        return static_cast<const ListLiteral*>(literal)->isLiteralTree();
-    } else if (kind == Literal::Kind::MAP) {
-        return static_cast<const MapLiteral*>(literal)->isLiteralTree();
-    }
-
-    return true;
+    return literal->isLiteralTree();
 }
 
 bool isHexDigit(char c) {
@@ -134,6 +127,10 @@ void unescapeString(std::string_view raw, HybridString& out) {
 }
 
 } // anonymous namespace
+
+bool Literal::isLiteralTree() const {
+    return true;
+}
 
 NullLiteral* NullLiteral::create(CypherAST* ast) {
     NullLiteral* literal = new NullLiteral();

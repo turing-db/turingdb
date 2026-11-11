@@ -102,10 +102,9 @@ private:
     // by every statement that yields, since what a yield binds is what the predicate reads.
     void analyzeYieldFilter(const YieldItems* yieldItems);
 
-    // Rejects a literal UNWIND argument that is no list: a literal carries its type at
-    // plan time, so anything but a list - null aside, which unwinds into no row - is a
-    // type error rather than a value to spread over rows
-    void throwOnNonListLiteral(const Expr* arg) const;
+    // Rejects a FOREACH over a literal that is no list, which Neo4j types as an error
+    // where UNWIND spreads the value into one row. A null iterates no row.
+    void throwOnNonListForeachLiteral(const Expr* arg) const;
 
     VarDecl* resolveShortestPathEndpoint(const Symbol* endpoint, const ShortestPathStmt* spSt) const;
 

@@ -574,9 +574,6 @@ const std::unordered_map<std::string_view, BinaryFunctionEmitter> binaryFunction
     {"coll.indexOf", &emitBinaryFunction<mlir::db::IndexOf>},
 };
 
-// The list a literal UNWIND spreads, null for the one literal that is no list and still
-// analyzes - `UNWIND null`, which spreads into no row. Anything else here is a statement
-// the analyzer let through and neither of the sources built from one can lower.
 // The type a list of @param shape is read under, as a literal of that shape infers it: the
 // leaf's own type, none for a leaf no element names, any where the elements share none,
 // under one list per level
@@ -600,25 +597,6 @@ mlir::Type listShapeType(mlir::OpBuilder& builder, const ListShape& shape) {
     }
 
     return element;
-}
-
-const ListLiteral* literalUnwindList(const DiagnosticsManager* diagnostics, const UnwindStmt* unwind) {
-    const LiteralExpr* literalExpr = dynamic_cast<const LiteralExpr*>(unwind->arg());
-    if (!literalExpr) {
-        diagnostics->throwError("Non-literal UNWIND expressions are not yet supported.", unwind);
-    }
-
-    const Literal* literal = literalExpr->getLiteral();
-    if (literal->getKind() == Literal::Kind::NULL_LITERAL) {
-        return nullptr;
-    }
-
-    const ListLiteral* list = dynamic_cast<const ListLiteral*>(literal);
-    if (!list) {
-        diagnostics->throwError("Non-list arguments to UNWIND are not yet supported.", unwind);
-    }
-
-    return list;
 }
 
 // True when a value is one of `columns` or is computed from one.
@@ -1145,12 +1123,8 @@ void DBProgramGenerator::addYieldedColumn(const VariableDependency* var, mlir::V
 void DBProgramGenerator::addConstScanNodes(const VariableDependency* var, const UnwindStmt* unwind) {
     bioassert(!_part._varMap.contains(var), "ConstScanNodes for registered variable");
 
-    const ListLiteral* list = literalUnwindList(_ast->getDiagnosticsManager(), unwind);
-
     llvm::SmallVector<mlir::Attribute> elements;
-    if (list) {
-        translateListElements(list, elements);
-    }
+    translateUnwoundElements(unwind, elements);
 
     llvm::SmallVector<int64_t> nodeIDs;
     nodeIDs.reserve(elements.size());
@@ -1177,12 +1151,8 @@ void DBProgramGenerator::addConstScanNodes(const VariableDependency* var, const 
 void DBProgramGenerator::addUnwindConst(const VariableDependency* var, const UnwindStmt* unwind) {
     bioassert(!_part._varMap.contains(var), "UnwindConst for registered variable");
 
-    const ListLiteral* list = literalUnwindList(_ast->getDiagnosticsManager(), unwind);
-
     llvm::SmallVector<mlir::Attribute> elements;
-    if (list) {
-        translateListElements(list, elements);
-    }
+    translateUnwoundElements(unwind, elements);
 
     const mlir::ArrayAttr elementsAttr = _opBuilder.getArrayAttr(elements);
 
@@ -1211,6 +1181,23 @@ void DBProgramGenerator::translateListElements(const ListLiteral* list,
         }
 
         elements.push_back(listElementAttr(literalExpr->getLiteral()));
+    }
+}
+
+void DBProgramGenerator::translateUnwoundElements(const UnwindStmt* unwind,
+                                                  llvm::SmallVectorImpl<mlir::Attribute>& elements) {
+    const LiteralExpr* literalExpr = dynamic_cast<const LiteralExpr*>(unwind->arg());
+    if (!literalExpr) {
+        throwError("Non-literal UNWIND expressions are not yet supported.", unwind);
+    }
+
+    const Literal* literal = literalExpr->getLiteral();
+    const Literal::Kind kind = literal->getKind();
+
+    if (kind == Literal::Kind::LIST) {
+        translateListElements(static_cast<const ListLiteral*>(literal), elements);
+    } else if (kind != Literal::Kind::NULL_LITERAL) {
+        elements.push_back(listElementAttr(literal));
     }
 }
 

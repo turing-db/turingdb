@@ -4,11 +4,10 @@
   "graph": "simpledb",
   "query": "UNWIND 5 AS x RETURN x",
   "expect": {
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | UNWIND 5 AS x RETURN x\n       |        ^\n-------* UNWIND requires a list, not 'Integer'",
-    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | UNWIND 5 AS x RETURN x\\n       |        ^\\n-------* UNWIND requires a list, not 'Integer'\"}"
+    "result": "x\n5",
+    "resultJson": "{\"header\":{\"column_names\":[\"x\"],\"column_types\":[\"Int64\"]},\"data\":[[[5]]]}"
   },
   "tags": [
-    "errors",
     "unwind",
     "lists"
   ],

@@ -19,11 +19,8 @@ bool UnwindStmt::unwindsLiteral() const {
     }
 
     const Literal* literal = static_cast<const LiteralExpr*>(_arg)->getLiteral();
-    if (literal->getKind() != Literal::Kind::LIST) {
-        return true;
-    }
 
-    return static_cast<const ListLiteral*>(literal)->isLiteralTree();
+    return literal->isLiteralTree();
 }
 
 UnwindStmt* UnwindStmt::create(CypherAST* ast, Expr* expr, Symbol* sym) {

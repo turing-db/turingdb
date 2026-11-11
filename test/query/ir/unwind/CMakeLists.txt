@@ -64,3 +64,5 @@ add_turing_test(test_query_ir_unwind_computed_codegen UnwindComputedCodegenTest.
 target_include_directories(test_query_ir_unwind_computed_codegen PRIVATE ${IR_TEST_DIR})
 
 add_call_v3_test(test_query_ir_unwind_typed_list UnwindTypedListTest.cpp)
+
+add_call_v3_test(test_query_ir_unwind_non_list UnwindNonListTest.cpp)

@@ -813,7 +813,9 @@ void ReadStmtAnalyzer::analyze(UnwindStmt* unwind) {
         throwError("Invalid use of aggregate expression in this context", unwind);
     }
 
-    throwOnNonListLiteral(arg);
+    if (unwind->isForeach()) {
+        throwOnNonListForeachLiteral(arg);
+    }
 
     const Symbol* symbol = unwind->symbol();
     bioassert(symbol, "Invalid symbol.");
@@ -836,20 +838,19 @@ void ReadStmtAnalyzer::analyze(UnwindStmt* unwind) {
     itemDecl->setListShape(arg->getListShape().unwound());
 }
 
-void ReadStmtAnalyzer::throwOnNonListLiteral(const Expr* arg) const {
+void ReadStmtAnalyzer::throwOnNonListForeachLiteral(const Expr* arg) const {
     if (arg->getKind() != Expr::Kind::LITERAL) {
         return;
     }
 
-    const Literal::Kind literalKind = static_cast<const LiteralExpr*>(arg)->getLiteral()->getKind();
-    const bool unwindsAList = literalKind == Literal::Kind::LIST;
+    const Literal* literal = static_cast<const LiteralExpr*>(arg)->getLiteral();
+    const Literal::Kind literalKind = literal->getKind();
 
-    // Unwinding null yields no row rather than a type error, so it is the one literal
-    // that is no list and still passes
-    const bool unwindsNull = literalKind == Literal::Kind::NULL_LITERAL;
+    const bool iteratesAList = literalKind == Literal::Kind::LIST;
+    const bool iteratesNull = literalKind == Literal::Kind::NULL_LITERAL;
 
-    if (!unwindsAList && !unwindsNull) {
-        throwError(fmt::format("UNWIND requires a list, not '{}'",
+    if (!iteratesAList && !iteratesNull) {
+        throwError(fmt::format("FOREACH requires a list, not '{}'",
                                EvaluatedTypeName::value(arg->getType())),
                    arg);
     }

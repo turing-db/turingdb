@@ -139,23 +139,21 @@ protected:
     Graph* _graph {nullptr};
 };
 
-TEST_F(CypherUnwindExprTest, rejectsAScalarLiteral) {
-    expectRejected("UNWIND 5 AS x RETURN x", "UNWIND requires a list");
+TEST_F(CypherUnwindExprTest, unwindsAScalarLiteralToOneRow) {
+    expectRows("UNWIND 5 AS x RETURN x", {{"5"}});
 }
 
-TEST_F(CypherUnwindExprTest, rejectsEachScalarLiteralKind) {
-    expectRejected("UNWIND 'text' AS x RETURN x", "UNWIND requires a list, not 'String'");
-    expectRejected("UNWIND true AS x RETURN x", "UNWIND requires a list, not 'Bool'");
-    expectRejected("UNWIND 2.5 AS x RETURN x", "UNWIND requires a list, not 'Double'");
+TEST_F(CypherUnwindExprTest, unwindsEachScalarLiteralKindToOneRow) {
+    expectRows("UNWIND 'text' AS x RETURN x", {{"text"}});
+    expectRows("UNWIND true AS x RETURN x", {{"true"}});
+    expectRows("UNWIND 2.5 AS x RETURN x", {{"2.500000"}});
 }
 
-TEST_F(CypherUnwindExprTest, rejectsAScalarLiteralBesideAMatch) {
-    expectRejected("MATCH (n:Person) WHERE n.name = 'Remy' UNWIND 7 AS x RETURN n.name, x",
-                   "UNWIND requires a list");
+TEST_F(CypherUnwindExprTest, unwindsAScalarLiteralBesideAMatch) {
+    expectRows("MATCH (n:Person) WHERE n.name = 'Remy' UNWIND 7 AS x RETURN n.name, x",
+               {{"Remy", "7"}});
 }
 
-// Unwinding null is the one literal that is no list and still analyzes: Cypher spreads it
-// into no row rather than calling it a type error.
 TEST_F(CypherUnwindExprTest, unwindsNullToNoRow) {
     expectRows("UNWIND null AS x RETURN x", {});
 }
@@ -164,8 +162,6 @@ TEST_F(CypherUnwindExprTest, unwindsNullBesideAMatchToNoRow) {
     expectRows("MATCH (n:Person) WHERE n.name = 'Remy' UNWIND null AS x RETURN n.name, x", {});
 }
 
-// Only a literal is typed at plan time, so the rule reaches no further: an expression
-// evaluating to a scalar still spreads to the single row that value is.
 TEST_F(CypherUnwindExprTest, unwindsAConstantExpressionToOneRow) {
     expectRows("UNWIND 2 + 3 AS x RETURN x", {{"5"}});
 }
@@ -794,10 +790,8 @@ TEST_F(CypherUnwindExprTest, rejectsAnUnwoundVariableThatIsAlreadyDeclared) {
     expectRejected("MATCH (n) UNWIND n.age AS n RETURN n", "already declared");
 }
 
-// The argument is not a list here, so what is rejected is the argument itself: a message
-// about the elements of a list would send the reader looking for a list they never wrote
-TEST_F(CypherUnwindExprTest, rejectsAnUnrepresentableUnwindArgumentAsTheArgument) {
-    expectRejected("UNWIND {a: 1} AS x RETURN x", "UNWIND requires a list, not 'Map'");
+TEST_F(CypherUnwindExprTest, unwindsAMapLiteralToOneRow) {
+    expectRows("UNWIND {a: 1} AS x RETURN x.a", {{"1"}});
 }
 
 // An aggregate folds the rows a projection groups, so it names no value an UNWIND could

@@ -40,6 +40,8 @@ public:
 
     virtual EvaluatedType getType() const = 0;
 
+    virtual bool isLiteralTree() const;
+
 protected:
     Literal() = default;
     virtual ~Literal() = default;
@@ -176,7 +178,7 @@ public:
     /// Whether every item is a literal, at any depth - what makes the whole list a value
     /// known without reading a row, rather than one built per row out of what its items
     /// read.
-    bool isLiteralTree() const;
+    bool isLiteralTree() const override;
 
     bool empty() const { return _items.empty(); }
     size_t size() const { return _items.size(); }
@@ -209,7 +211,7 @@ public:
     /// Whether every value the map holds is a literal, at any depth - what makes the whole
     /// map a value known without reading a row, rather than one built per row out of what
     /// its values read.
-    bool isLiteralTree() const;
+    bool isLiteralTree() const override;
 
     bool empty() const { return _entries.empty(); }
     size_t size() const { return _entries.size(); }

@@ -61,8 +61,10 @@ drops them too.
 Beyond that and `keys()` / `properties()` below, a map value is passed through and rendered.
 Ordering by one, deduplicating on one, doing arithmetic on one and writing one back with `SET` are
 all rejected, `ORDER BY` and `DISTINCT` by the chunk-kind selectors rather than by the analyzer,
-so they read as `Unsupported chunk element type`. So is unwinding one: `UNWIND m.l AS x` is turned
-away with `UNWIND requires a list, not 'MapValue'`, whatever the entry's tag holds.
+so they read as `Unsupported chunk element type`. Unwinding a map gives the one row holding it:
+`UNWIND {a: 1} AS x RETURN x.a` is 1. Unwinding an entry reads the value its tag holds:
+`UNWIND m.l AS x` gives one row per element where `m.l` is a list, one row where it is any other
+value, and no row where it is null.
 
 The bracket form reads a key too. Where `m` is a map, a node, a relationship or a loaded row,
 `m['key']` is analyzed as its dotted form `m.key` (`IndexExpr::getDottedForm`), and grouping and
