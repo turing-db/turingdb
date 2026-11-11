@@ -35,6 +35,12 @@ namespace storage = mlir::storage;
 
 namespace {
 
+constexpr double STORAGE_READ_ROW_COST = 10.0;
+constexpr double STRING_TEST_ROW_COST = 3.0;
+constexpr double MEMBERSHIP_TEST_ROW_COST = 5.0;
+constexpr double CONTAINER_BUILD_ROW_COST = 15.0;
+constexpr double VECTOR_FUNCTION_ROW_COST = 40.0;
+
 Type columnElement(Value column) {
     return ::db::inferredColumnElement(column);
 }
@@ -3473,4 +3479,52 @@ Speculation::Speculatability ModOp::getSpeculatability() {
 
 Speculation::Speculatability PowOp::getSpeculatability() {
     return speculatableOverNumbers(getOperation());
+}
+
+double GetNodeLabelSet::getRowCost() {
+    return STORAGE_READ_ROW_COST;
+}
+
+double GetEdgeTypes::getRowCost() {
+    return STORAGE_READ_ROW_COST;
+}
+
+double GetNodeProperties::getRowCost() {
+    return STORAGE_READ_ROW_COST;
+}
+
+double GetEdgeProperties::getRowCost() {
+    return STORAGE_READ_ROW_COST;
+}
+
+double StartsWithOp::getRowCost() {
+    return STRING_TEST_ROW_COST;
+}
+
+double EndsWithOp::getRowCost() {
+    return STRING_TEST_ROW_COST;
+}
+
+double ContainsOp::getRowCost() {
+    return STRING_TEST_ROW_COST;
+}
+
+double InOp::getRowCost() {
+    return MEMBERSHIP_TEST_ROW_COST;
+}
+
+double MakeList::getRowCost() {
+    return CONTAINER_BUILD_ROW_COST;
+}
+
+double MakeMap::getRowCost() {
+    return CONTAINER_BUILD_ROW_COST;
+}
+
+double CosineSimilarity::getRowCost() {
+    return VECTOR_FUNCTION_ROW_COST;
+}
+
+double EuclideanDistance::getRowCost() {
+    return VECTOR_FUNCTION_ROW_COST;
 }

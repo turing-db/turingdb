@@ -64,6 +64,22 @@ def ColumnCarrierOpInterface : OpInterface<"ColumnCarrierOpInterface"> {
   ];
 }
 
+def RowCostOpInterface : OpInterface<"RowCostOpInterface"> {
+  let cppNamespace = "::mlir::db";
+
+  let description = [{
+    An op computing a row of its result at a cost other than a comparison of two scalar
+    columns, which is 1 on this scale and the cost of every op without the interface. A
+    random read of node or edge storage costs about 10.
+  }];
+
+  let methods = [
+    InterfaceMethod<
+      "The cost of computing one row of the op's result",
+      "double", "getRowCost", (ins)>
+  ];
+}
+
 def EdgeTypesOutputOpInterface : OpInterface<"EdgeTypesOutputOpInterface"> {
   let cppNamespace = "::mlir::db";
 
