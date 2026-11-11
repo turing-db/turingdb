@@ -1239,7 +1239,8 @@ func.func @main() {
 // and $ids a list of mixed values
 const char* const boundConstScanNodesProgram = R"mlir(
 func.func @main(%id: !db.column<f64>, %ids: !db.column<!storage.list<!storage.any>>) {
-  %a = db.const_scan_nodes([3], %id, %ids : !db.column<f64>, !db.column<!storage.list<!storage.any>>) : !db.column<!storage.node_id>
+  %m = db.node_id_of(%id) : (!db.column<f64>) -> !db.column<!storage.node_id>
+  %a = db.const_scan_nodes([3], %m, %ids : !db.column<!storage.node_id>, !db.column<!storage.list<!storage.any>>) : !db.column<!storage.node_id>
   db.output(%a) : !db.column<!storage.node_id>
   return
 }
@@ -1640,7 +1641,7 @@ TEST_F(DBDialectTest, constScanNodesWithoutNodeIDsIsValid) {
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*module)));
 }
 
-TEST_F(DBDialectTest, constScanNodesReadsBoundNumbersAndLists) {
+TEST_F(DBDialectTest, constScanNodesReadsBoundNodesAndLists) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(boundConstScanNodesProgram);
     ASSERT_TRUE(module);
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*module)));

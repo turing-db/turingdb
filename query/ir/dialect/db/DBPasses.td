@@ -218,7 +218,7 @@ def CountPathRows : Pass<"count_path_rows"> {
 }
 
 def CanonicalizeNodeIDEqualities : Pass<"canonicalize_node_id_equalities"> {
-    let summary = "Compare a node to an integer rather than its id() to it, so the passes that look a node up by its ID match one shape";
+    let summary = "Compare a node to the node a value names, node_id_of(x), rather than its id() to x where a filter tests the comparison, so the passes that look a node up by its ID match one shape";
     let dependentDialects = ["mlir::db::DB"];
 }
 

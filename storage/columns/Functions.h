@@ -175,6 +175,48 @@ public:
     ResultType operator()(const IDT id) const { return static_cast<types::Int64::Primitive>(id.getValue()); }
 };
 
+// The node n for which id(n) = value holds: an integer, or a double holding one, in range and
+// not negative, names the node of that ID. Any other value names none, which a node column
+// spells as the invalid ID.
+template <typename NumberType>
+class NodeIDOfNumberFunction {
+public:
+    using ArgType = NumberType;
+    using ResultType = NodeID;
+
+    static constexpr bool ReadsNullsItself = true;
+
+    ResultType operator()(const ArgType number) const;
+    ResultType operator()(const std::optional<ArgType>& number) const;
+};
+
+class TaggedNodeIDOfFunction {
+public:
+    using ArgType = CellView;
+    using ResultType = NodeID;
+
+    static constexpr bool ReadsNullsItself = true;
+
+    ResultType operator()(const ArgType cell) const;
+    ResultType operator()(const std::optional<ArgType>& cell) const;
+};
+
+class NodeIDOfNodeFunction {
+public:
+    using ArgType = NodeID;
+    using ResultType = NodeID;
+
+    ResultType operator()(const NodeID node) const { return node; }
+};
+
+class NodeIDOfEdgeFunction {
+public:
+    using ArgType = EdgeID;
+    using ResultType = NodeID;
+
+    ResultType operator()(const EdgeID edge) const { return NodeID(edge.getValue()); }
+};
+
 // What a conversion over a type-erased cell answers for a value it has no rule for
 enum class UnconvertibleCell {
     Null,

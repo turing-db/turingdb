@@ -205,6 +205,7 @@ const std::unordered_map<std::string_view, ElementRule> elementRules = {
     {"db.to_boolean_list",    &convertedListElement<&booleanElement>},
     {"db.to_string_list",     &convertedListElement<&stringElement>},
     {"db.element_id",         &integerElement},
+    {"db.node_id_of",         &nodeIDElement},
     {"db.size",               &sizeElement},
     {"db.is_empty",           &isEmptyElement},
     {"db.char_length",        &integerElement},

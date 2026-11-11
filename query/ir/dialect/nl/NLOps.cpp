@@ -295,8 +295,22 @@ LogicalResult ConstScanNodes::verify() {
     for (const Value bound : getBoundIDs()) {
         const Type element = valueElementOf(bound.getType());
         if (!storage::isBoundNodeIDsType(element)) {
-            return emitOpError("requires bound IDs of type i64, f64 or !storage.list, got ") << element;
+            return emitOpError("requires bound IDs of type i64, !storage.node_id or !storage.list, got ") << element;
         }
+    }
+
+    return success();
+}
+
+LogicalResult NodeIDOf::verify() {
+    const Type input = valueElementOf(getOperand().getType());
+    if (!storage::isNodeIDOfInputType(input)) {
+        return emitOpError("requires a value, a node or an edge, not a path, got ") << input;
+    }
+
+    const Type result = cast<ChunkType>(getResult().getType()).getElementType();
+    if (!isa<storage::NodeIDType>(result)) {
+        return emitOpError("requires a node result, got ") << result;
     }
 
     return success();

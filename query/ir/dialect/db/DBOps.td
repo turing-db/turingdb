@@ -83,13 +83,14 @@ def ConstScanNodes : TuringOp<"const_scan_nodes", [Pure]> {
     op is Pure.
 
     `nodeIDs` lists the IDs the query spells. `boundIDs` are the IDs bound when the
-    query runs, each a column holding one value for the whole run: a number, or a
-    list whose numbers are the IDs. A parameter is one, and so is a value ops that
-    cannot raise compute from parameters and literals alone, as `$id + 1`, whose
-    column may leave its number for lowering to type. `id(n) = $id OR id(n) IN $ids`
-    scans
+    query runs, each a column holding one value for the whole run: a node, an
+    integer, or a list whose numbers are the IDs. A parameter is one, and so is a
+    value ops that cannot raise compute from parameters and literals alone, as
+    `$id + 1`, whose column may leave its number for lowering to type.
+    `id(n) = $id OR id(n) IN $ids` scans
 
-      %a = db.const_scan_nodes([], %id, %ids : !db.column<f64>, !db.column<!storage.list<!storage.any>>)
+      %m = db.node_id_of(%id) : (!db.column<f64>) -> !db.column<!storage.node_id>
+      %a = db.const_scan_nodes([], %m, %ids : !db.column<!storage.node_id>, !db.column<!storage.list<!storage.any>>)
         : !db.column<!storage.node_id>
 
     The scan reads the bound IDs when it starts, so the program does not depend on
@@ -100,9 +101,9 @@ def ConstScanNodes : TuringOp<"const_scan_nodes", [Pure]> {
     the index list db.sort carries; each entry is a storage NodeID once lowered.
     An ID that names no node in the graph matches nothing, so it is dropped and the
     scan yields only the nodes that exist - the same set-membership semantics as
-    the WHERE id(n) IN ... it models. A bound value names the node whose ID it
-    equals, as id(n) = value compares them: an integer, or a double holding one.
-    Any other value - a null, a negative or fractional number, a string, a list
+    the WHERE id(n) IN ... it models. A bound integer names the node whose ID it
+    equals, and so does a number of a bound list, an integer or a double holding
+    one. Any other value - a null, a negative or fractional number, a string, a list
     inside the list - names no node. No ID at all yields no row - not an error,
     matching that same set-membership.
   }];
@@ -3197,6 +3198,42 @@ def CurrentDateTime : TuringOp<"current_datetime", [Pure, ConstantThroughOperand
 // The ID of a node, an edge, or the entity a type-erased cell holds, as an integer.
 def ElementID : TypedUnaryFunctionOp<"element_id", "::mlir::storage::NodeIDType, ::mlir::storage::EdgeIDType">;
 
+def NodeIDOf : TuringOp<"node_id_of", [Pure, ConstantThroughOperands]> {
+  let summary = "The node each value names by its ID";
+
+  let description = [{
+    The converse of db.element_id over nodes: for each row, the node n for which
+    `id(n) = value` holds, or null where there is none.
+
+      %m = db.node_id_of(%x) : (!db.column<!storage.any>) -> !db.column<!storage.node_id>
+
+    A number names the node whose ID it equals: an integer, or a double holding one,
+    in range and not negative, so 3 and 3.0 name node 3. A node names itself, and an
+    edge the node whose ID is its own number, since `=` compares an integer to an edge
+    by its ID. Any other value - a null, a string, a boolean, a list, a map, a
+    fractional or negative number, or a node or an edge a type-erased cell holds, which
+    `=` tells from a number - names none, which the node column spells as its own null,
+    the invalid ID. Whether the graph holds the node is for the op reading the column
+    to decide, as db.fetch_nodes does.
+
+    It is what canonicalize_node_id_equalities compares a node to in place of its
+    id(): `WHERE id(n) = x` becomes `WHERE n = node_id_of(x)`, which every node lookup
+    reads. It cannot raise, so it holds one value for the run where its operand does.
+
+    A path has no ID, and the verifier rejects it.
+  }];
+
+  let arguments = (ins Column:$input);
+  let results   = (outs ColumnNodeIDs:$result);
+
+  let hasVerifier = 1;
+  let hasFolder = 1;
+
+  let assemblyFormat = [{
+    `(` $input `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
 def Size : TypedUnaryFunctionOp<"size", "::mlir::storage::StringType, ::mlir::storage::ListType">;
 def IsEmpty : TypedUnaryFunctionOp<"is_empty", "::mlir::storage::StringType, ::mlir::storage::ListType, ::mlir::storage::MapType">;
 def CharLength : TextFunctionOp<"char_length">;
@@ -3396,6 +3433,8 @@ def ConstantOp : TuringOp<"constant", [Pure, ConstantLike, DeclareOpInterfaceMet
   // verdict over the elements for the list - which is why a list needs no separate op.
   let arguments = (ins AnyAttrOf<[TypedAttrInterface, DenseF32ArrayAttr, ArrayAttr, DictionaryAttr]>: $value);
   let results = (outs Column : $result);
+
+  let hasFolder = 1;
 
   let assemblyFormat = "`(` $value `)` attr-dict";
 }

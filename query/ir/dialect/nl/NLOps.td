@@ -3277,6 +3277,12 @@ def CurrentDateTime : NLOp<"current_datetime", [Pure, ConstantThroughOperands, R
 // db.element_id lowers to this, and carries its operand's constancy as the list family does.
 def ElementID : NLUnaryFunctionOp<"element_id", [ConstantThroughOperands]>;
 
+// db.node_id_of lowers to this: the node chunk naming, row for row, the node each value of
+// its operand names by its ID, the invalid ID where it names none
+def NodeIDOf : NLUnaryFunctionOp<"node_id_of", [ConstantThroughOperands]> {
+  let hasVerifier = 1;
+}
+
 def Size : NLUnaryFunctionOp<"size", [ConstantThroughOperands]>;
 def IsEmpty : NLUnaryFunctionOp<"is_empty", [ConstantThroughOperands]>;
 def CharLength : NLUnaryFunctionOp<"char_length", [ConstantThroughOperands]>;

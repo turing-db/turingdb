@@ -854,6 +854,16 @@ NLUnaryFunctionKernel selectTaggedCellFunction(const Column* input, bool inputNu
     return &functionVectorKernel<Functor>;
 }
 
+// A column holding no number names no node on any row
+void namesNoNodeKernel(NLExecutionContext* context, Column* result, const Column* input, NLStepBuffers* memory) {
+    std::vector<NodeID>& resultRaw = static_cast<ColumnVector<NodeID>*>(result)->getRaw();
+    resultRaw.assign(input->size(), NodeID {});
+}
+
+void namesNoNodeConstKernel(NLExecutionContext* context, Column* result, const Column* input, NLStepBuffers* memory) {
+    static_cast<ColumnConst<NodeID>*>(result)->set(NodeID {});
+}
+
 // A node or edge an OPTIONAL MATCH did not match is an invalid ID, so a function reading
 // one produces a null rather than reading the graph at an ID that is not in it. The
 // entity sibling of functionOptKernel: the input is a plain ID column, which carries its
@@ -1482,23 +1492,23 @@ void appendBoundNodeIDs(const NLConstScanLoopData& loopData, const ScannedNodes&
 
     for (const Column* bound : loopData.getBoundIDs()) {
         std::optional<types::Int64::Primitive> integer;
-        std::optional<types::Double::Primitive> real;
         std::optional<ListView> list;
 
-        if (readBoundConstant(bound, integer)) {
+        if (bound->getKind() == ColumnConst<NodeID>::staticKind()) {
+            const NodeID node = static_cast<const ColumnConst<NodeID>*>(bound)->getRaw();
+            if (scanned.contains(node)) {
+                listed.push_back(node);
+            }
+        } else if (readBoundConstant(bound, integer)) {
             if (integer) {
                 appendNodeID(*integer);
-            }
-        } else if (readBoundConstant(bound, real)) {
-            if (real) {
-                appendNodeID(*real);
             }
         } else if (readBoundConstant(bound, list)) {
             if (list) {
                 appendListedNodeIDs(*list);
             }
         } else {
-            bioassert(false, "Bound node IDs hold one number or one list for the run");
+            bioassert(false, "Bound node IDs hold one node, one integer or one list for the run");
         }
     }
 }
@@ -11730,6 +11740,28 @@ NLUnaryFunctionKernel NLExecutor::selectId(const Column* input, bool inputNullab
     }
 
     return selectFunction<TaggedIdFunction>(input, inputNullable, memory, result);
+}
+
+NLUnaryFunctionKernel NLExecutor::selectNodeIDOf(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    if (columnHoldsElement<NodeID>(input)) {
+        return selectFunction<NodeIDOfNodeFunction>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<EdgeID>(input)) {
+        return selectFunction<NodeIDOfEdgeFunction>(input, inputNullable, memory, result);
+    } else if (readsTaggedCells(input)) {
+        return selectTaggedCellFunction<TaggedNodeIDOfFunction>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::Int64::Primitive>(input)) {
+        return selectTaggedCellFunction<NodeIDOfNumberFunction<types::Int64::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::UInt64::Primitive>(input)) {
+        return selectTaggedCellFunction<NodeIDOfNumberFunction<types::UInt64::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::Double::Primitive>(input)) {
+        return selectTaggedCellFunction<NodeIDOfNumberFunction<types::Double::Primitive>>(input, inputNullable, memory, result);
+    } else if (input->getContainerKind() == ContainerKind::code<ColumnConst>()) {
+        result = memory->alloc<ColumnConst<NodeID>>();
+        return &namesNoNodeConstKernel;
+    }
+
+    result = memory->alloc<ColumnVector<NodeID>>();
+    return &namesNoNodeKernel;
 }
 
 NLUnaryFunctionKernel NLExecutor::selectReverse(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {

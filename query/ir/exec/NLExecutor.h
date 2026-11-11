@@ -567,6 +567,7 @@ public:
     static NLUnaryFunctionKernel selectIsEmpty(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
     static NLUnaryFunctionKernel selectId(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+    static NLUnaryFunctionKernel selectNodeIDOf(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
     static NLUnaryFunctionKernel selectReverse(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 

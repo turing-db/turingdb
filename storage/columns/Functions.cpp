@@ -18,6 +18,7 @@
 #include "reader/GraphReader.h"
 #include "versioning/CommitWriteBuffer.h"
 #include "views/GraphView.h"
+#include "NodeIDOfNumber.h"
 
 #include "BioAssert.h"
 
@@ -1175,6 +1176,54 @@ TaggedIdFunction::ResultType TaggedIdFunction::operator()(const ArgType cell) co
     }
 
     throw TuringException(fmt::format("id() and elementId() read a node or an edge, not '{}'", queryTypeName(tag)));
+}
+
+template <typename NumberType>
+NodeID NodeIDOfNumberFunction<NumberType>::operator()(const ArgType number) const {
+    int64_t nodeID = 0;
+    if (!nodeIDOfNumber(number, nodeID)) {
+        return NodeID {};
+    }
+
+    return NodeID(static_cast<uint64_t>(nodeID));
+}
+
+template <typename NumberType>
+NodeID NodeIDOfNumberFunction<NumberType>::operator()(const std::optional<ArgType>& number) const {
+    if (!number.has_value()) {
+        return NodeID {};
+    }
+
+    return (*this)(*number);
+}
+
+template class db::NodeIDOfNumberFunction<types::Int64::Primitive>;
+template class db::NodeIDOfNumberFunction<types::UInt64::Primitive>;
+template class db::NodeIDOfNumberFunction<types::Double::Primitive>;
+
+NodeID TaggedNodeIDOfFunction::operator()(const ArgType cell) const {
+    switch (cell.getTag()) {
+        case CellTag::Int:
+            return NodeIDOfNumberFunction<types::Int64::Primitive> {}(cell.getAs<types::Int64::Primitive>());
+        break;
+        case CellTag::UInt:
+            return NodeIDOfNumberFunction<types::UInt64::Primitive> {}(cell.getAs<types::UInt64::Primitive>());
+        break;
+        case CellTag::Double:
+            return NodeIDOfNumberFunction<types::Double::Primitive> {}(cell.getAs<types::Double::Primitive>());
+        break;
+        default:
+            return NodeID {};
+        break;
+    }
+}
+
+NodeID TaggedNodeIDOfFunction::operator()(const std::optional<ArgType>& cell) const {
+    if (!cell.has_value()) {
+        return NodeID {};
+    }
+
+    return (*this)(*cell);
 }
 
 void ToBoolFunction::strToLower(std::string& lower, std::string_view src) {

@@ -335,6 +335,7 @@ const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionL
     {"db.to_boolean_list",    {&emitNLUnaryFunction<nl::ToBooleanList>, ResultNullability::FollowsInput}},
     {"db.to_string_list",     {&emitNLUnaryFunction<nl::ToStringList>, ResultNullability::FollowsInput}},
     {"db.element_id", {&emitNLUnaryFunction<nl::ElementID>, ResultNullability::AlwaysNullable}},
+    {"db.node_id_of", {&emitNLUnaryFunction<nl::NodeIDOf>, ResultNullability::NeverNullable}},
     {"db.size",       {&emitNLUnaryFunction<nl::Size>, ResultNullability::FollowsInput}},
     {"db.is_empty",   {&emitNLUnaryFunction<nl::IsEmpty>, ResultNullability::FollowsInput}},
     {"db.char_length", {&emitNLUnaryFunction<nl::CharLength>, ResultNullability::FollowsInput}},
@@ -1161,9 +1162,15 @@ bool dropsRows(mlir::Operation* operation) {
 }
 
 // A walk's end set is one relation every seed shares, consumed in full before the walk
-// runs: no column of the rows in flight, though a pass binds it ahead of the function
-bool readsASharedRelation(mlir::OpOperand& operand) {
-    mlir::db::ExplorePaths exploration = mlir::dyn_cast<mlir::db::ExplorePaths>(operand.getOwner());
+// runs, and a scan's bound values hold one value for the run, read when it starts: no
+// column of the rows in flight, though a pass binds it ahead of the function
+bool readsAheadOfTheRows(mlir::OpOperand& operand) {
+    mlir::Operation* const owner = operand.getOwner();
+    if (mlir::isa<mlir::db::ConstScanNodes, mlir::db::ScanNodesByPropertyValue>(owner)) {
+        return true;
+    }
+
+    mlir::db::ExplorePaths exploration = mlir::dyn_cast<mlir::db::ExplorePaths>(owner);
     if (!exploration) {
         return false;
     }
@@ -1384,7 +1391,7 @@ bool DBLowering::isConstantReadAsRows(mlir::Value chunk) {
 bool DBLowering::readsConstantsAsRows(mlir::Operation& operation) {
     return llvm::any_of(operation.getOpOperands(), [this](mlir::OpOperand& operand) {
         const mlir::Value chunk = _valueMap.lookup(operand.get());
-        return chunk && !readsASharedRelation(operand) && isConstantReadAsRows(chunk);
+        return chunk && !readsAheadOfTheRows(operand) && isConstantReadAsRows(chunk);
     });
 }
 
@@ -1392,7 +1399,7 @@ mlir::Value DBLowering::rowsReadBy(mlir::Operation& operation) {
     llvm::SmallVector<mlir::Value, 4> chunks;
     for (mlir::OpOperand& operand : operation.getOpOperands()) {
         const mlir::Value chunk = _valueMap.lookup(operand.get());
-        if (chunk && !readsASharedRelation(operand)) {
+        if (chunk && !readsAheadOfTheRows(operand)) {
             chunks.push_back(chunk);
         }
     }
@@ -1421,7 +1428,7 @@ void DBLowering::lowerWithConstantsLaidOut(mlir::Operation& operation,
     for (mlir::OpOperand& use : operation.getOpOperands()) {
         const mlir::Value operand = use.get();
         const mlir::Value chunk = _valueMap.lookup(operand);
-        if (!chunk || readsASharedRelation(use) || !laysOut(chunk)) {
+        if (!chunk || readsAheadOfTheRows(use) || !laysOut(chunk)) {
             continue;
         }
 
@@ -4636,7 +4643,7 @@ void DBLowering::collectRowColumnsReadByBranches(mlir::db::Conditional condition
             mlir::Value operand = use.get();
             const bool readFromAbove = !holder->isAncestor(operand.getParentRegion()->getParentOp());
             const bool isColumn = mlir::isa<mlir::db::ColumnType>(operand.getType());
-            if (!readFromAbove || !isColumn || readsASharedRelation(use) || seen.contains(operand)) {
+            if (!readFromAbove || !isColumn || readsAheadOfTheRows(use) || seen.contains(operand)) {
                 continue;
             }
 

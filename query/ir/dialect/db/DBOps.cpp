@@ -1820,11 +1820,36 @@ LogicalResult ConstScanNodes::verify() {
     for (const Value bound : getBoundIDs()) {
         const Type element = columnElement(bound);
         if (!storage::isBoundNodeIDsType(element)) {
-            return emitOpError("requires bound IDs of type i64, f64 or !storage.list, got ") << element;
+            return emitOpError("requires bound IDs of type i64, !storage.node_id or !storage.list, got ") << element;
         }
     }
 
     return success();
+}
+
+LogicalResult NodeIDOf::verify() {
+    const Type element = columnElement(getInput());
+    if (!storage::isNodeIDOfInputType(element)) {
+        return emitOpError("requires a value, a node or an edge, not a path, got ") << element;
+    }
+
+    return success();
+}
+
+OpFoldResult NodeIDOf::fold(FoldAdaptor adaptor) {
+    const Value input = getInput();
+    const Type resultType = getType();
+
+    if (input.getType() == resultType) {
+        return input;
+    }
+
+    ElementID id = input.getDefiningOp<ElementID>();
+    if (id && id.getInput().getType() == resultType) {
+        return id.getInput();
+    }
+
+    return {};
 }
 
 LogicalResult ScanNodesByPropertyValue::verify() {
@@ -2140,6 +2165,10 @@ LogicalResult CallProcedure::verify() {
     }
 
     return success();
+}
+
+OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
+    return getValue();
 }
 
 // Allows inline declaration of a constant type

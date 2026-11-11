@@ -428,6 +428,7 @@ const std::unordered_map<std::string_view, NLUnaryFunctionSelector> unaryFunctio
     {"nl.point_srid",      &NLExecutor::selectFunction<PointComponentFunction<PointPart::SRID>>},
 
     {"nl.element_id", &NLExecutor::selectId},
+    {"nl.node_id_of", &NLExecutor::selectNodeIDOf},
     {"nl.size",       &NLExecutor::selectSize},
     {"nl.is_empty",   &NLExecutor::selectIsEmpty},
     {"nl.char_length", &NLExecutor::selectFunction<CharLengthFunction>},

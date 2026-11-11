@@ -42,6 +42,7 @@
 #include "DBColumnElement.h"
 #include "StorageAttributes.h"
 #include "PropertyScanLiteral.h"
+#include "BoundNodeIDs.h"
 #include "PathHopArguments.h"
 #include "NullLiteralType.h"
 #include "DBOps.h"
@@ -759,32 +760,45 @@ struct NodeIDList {
     llvm::SmallVector<Value, 2> _bound;
 };
 
-bool matchBoundNodeIDs(Value side, bool listsIDs, bool comparesTheID, NodeIDList& nodeIDs) {
-    if (!::db::isRunInvariant(side)) {
+void addBoundNodeIDs(Value bound, NodeIDList& nodeIDs) {
+    if (!llvm::is_contained(nodeIDs._bound, bound)) {
+        nodeIDs._bound.push_back(bound);
+    }
+}
+
+// A value bound when the query runs that a node equals by its ID: a node, or an integer
+bool matchBoundNodeID(Value value, NodeIDList& nodeIDs) {
+    if (!::db::isRunInvariant(value)) {
         return false;
     }
 
-    const Type element = ::db::inferredColumnElement(side);
-    const storage::ListType list = dyn_cast<storage::ListType>(element);
-
-    const bool holdsANumber = !listsIDs && (element.isSignlessInteger(64) || element.isF64());
-    const bool holdsAList = listsIDs && list;
-    if (!holdsANumber && !holdsAList) {
+    const Type element = ::db::inferredColumnElement(value);
+    if (!element.isSignlessInteger(64) && !isa<storage::NodeIDType>(element)) {
         return false;
     }
 
-    const Type value = list ? list.getElementType() : element;
-    if (!comparesTheID && mayHoldADouble(value)) {
-        return false;
-    }
-
-    if (!llvm::is_contained(nodeIDs._bound, side)) {
-        nodeIDs._bound.push_back(side);
-    }
+    addBoundNodeIDs(value, nodeIDs);
 
     return true;
 }
 
+bool matchBoundNodeIDList(Value list, bool comparesTheID, NodeIDList& nodeIDs) {
+    if (!::db::isRunInvariant(list)) {
+        return false;
+    }
+
+    const storage::ListType listType = dyn_cast<storage::ListType>(::db::inferredColumnElement(list));
+    if (!listType || (!comparesTheID && mayHoldADouble(listType.getElementType()))) {
+        return false;
+    }
+
+    addBoundNodeIDs(list, nodeIDs);
+
+    return true;
+}
+
+// A node equals an integer literal by its ID and no other literal: a double it would equal
+// through id() was canonicalized to the integer
 bool matchNodeIDEquality(Value mask, Value scanColumn, NodeIDList& nodeIDs) {
     EqOp equality = mask.getDefiningOp<EqOp>();
     if (!equality) {
@@ -794,32 +808,23 @@ bool matchNodeIDEquality(Value mask, Value scanColumn, NodeIDList& nodeIDs) {
     const Value lhs = equality.getLhs();
     const Value rhs = equality.getRhs();
 
-    Value nodeSide;
-    Value constantSide;
-    if (comparedNodeColumn(lhs) == scanColumn) {
-        nodeSide = lhs;
-        constantSide = rhs;
-    } else if (comparedNodeColumn(rhs) == scanColumn) {
-        nodeSide = rhs;
-        constantSide = lhs;
+    Value value;
+    if (lhs == scanColumn) {
+        value = rhs;
+    } else if (rhs == scanColumn) {
+        value = lhs;
     } else {
         return false;
     }
 
-    const bool comparesTheID = static_cast<bool>(nodeSide.getDefiningOp<ElementID>());
-
-    ConstantOp constant = constantSide.getDefiningOp<ConstantOp>();
+    ConstantOp constant = value.getDefiningOp<ConstantOp>();
     if (!constant) {
-        return matchBoundNodeIDs(constantSide, false, comparesTheID, nodeIDs);
+        return matchBoundNodeID(value, nodeIDs);
     }
 
-    const Attribute literal = constant.getValue();
-    if (!comparesTheID && isa<FloatAttr>(literal)) {
-        return false;
-    }
-
+    const IntegerAttr integer = dyn_cast<IntegerAttr>(constant.getValue());
     int64_t nodeID = 0;
-    if (nodeIDOfLiteral(literal, nodeID)) {
+    if (integer && nodeIDOfLiteral(integer, nodeID)) {
         nodeIDs._literals.push_back(nodeID);
     }
 
@@ -837,7 +842,7 @@ bool matchNodeIDMembership(Value mask, Value scanColumn, NodeIDList& nodeIDs) {
     const Value list = membership.getRhs();
     ConstantOp constant = list.getDefiningOp<ConstantOp>();
     if (!constant) {
-        return matchBoundNodeIDs(list, true, comparesTheID, nodeIDs);
+        return matchBoundNodeIDList(list, comparesTheID, nodeIDs);
     }
 
     const ArrayAttr elements = dyn_cast<ArrayAttr>(constant.getValue());
@@ -905,37 +910,103 @@ bool collectNodeIDDisjunction(Value mask, Value scanColumn, NodeIDList& nodeIDs)
     return true;
 }
 
-// A node equals an integer by the ID it carries, so it stands in for its id() compared to
-// one. It does not against a double: id(n) = 2.0 holds of node 2, n = 2.0 of none.
-bool matchNodeIDComparedToAnInteger(EqOp equality, unsigned& idOperand) {
+// Whether a row the predicate holds null on is dropped as one it holds false on: it is the
+// mask of a filter, or what an AND or an OR combines into one
+bool isTestedAsAFilter(Value predicate) {
+    llvm::SmallVector<Value> worklist {predicate};
+    llvm::DenseSet<Value> visited {predicate};
+
+    while (!worklist.empty()) {
+        const Value current = worklist.pop_back_val();
+
+        for (OpOperand& use : current.getUses()) {
+            Operation* const user = use.getOwner();
+            FilterOp filter = dyn_cast<FilterOp>(user);
+
+            if (filter && &use == &filter.getMaskMutable()) {
+                continue;
+            } else if (!isa<AndOp, OrOp>(user)) {
+                return false;
+            }
+
+            const Value combined = user->getResult(0);
+            if (visited.insert(combined).second) {
+                worklist.push_back(combined);
+            }
+        }
+    }
+
+    return true;
+}
+
+// id(n) = value over a node column, which holds where n = node_id_of(value) does. Where the
+// value names no node, the first is false and the second null, so it is rewritten only
+// where a filter drops both
+struct IDComparison {
+    EqOp _equality;
+    ElementID _id;
+    Value _value;
+};
+
+bool matchIDComparison(EqOp equality, IDComparison& comparison) {
     for (unsigned operand = 0; operand < 2; operand++) {
         ElementID id = equality->getOperand(operand).getDefiningOp<ElementID>();
-        const Value other = equality->getOperand(1 - operand);
-
-        const bool readsANodeID = id && isNodeColumn(id.getInput());
-        if (readsANodeID && ::db::inferredColumnElement(other).isSignlessInteger(64)) {
-            idOperand = operand;
-            return true;
+        if (!id || !isNodeColumn(id.getInput())) {
+            continue;
         }
+
+        const Value value = equality->getOperand(1 - operand);
+        if (!storage::isNodeIDOfInputType(::db::inferredColumnElement(value))) {
+            return false;
+        }
+
+        comparison = IDComparison {._equality = equality, ._id = id, ._value = value};
+
+        return isTestedAsAFilter(equality.getResult());
     }
 
     return false;
 }
 
+void canonicalizeIDComparison(const IDComparison& comparison, mlir::OpBuilder& builder) {
+    EqOp equality = comparison._equality;
+    ElementID id = comparison._id;
+    const Value nodes = id.getInput();
+    const Location loc = equality.getLoc();
+
+    builder.setInsertionPoint(equality);
+
+    ConstantOp literal = comparison._value.getDefiningOp<ConstantOp>();
+    int64_t nodeID = 0;
+
+    Value nodeIDs;
+    if (literal && nodeIDOfLiteral(literal.getValue(), nodeID)) {
+        nodeIDs = builder.create<ConstantOp>(loc, builder.getI64IntegerAttr(nodeID)).getResult();
+    } else {
+        nodeIDs = builder.createOrFold<NodeIDOf>(loc, nodes.getType(), comparison._value);
+    }
+
+    equality->setOperands({nodes, nodeIDs});
+
+    eraseIfUnused(id);
+    if (Operation* const valueOp = comparison._value.getDefiningOp()) {
+        eraseIfUnused(valueOp);
+    }
+}
+
 struct CanonicalizeNodeIDEqualities : public impl::CanonicalizeNodeIDEqualitiesBase<CanonicalizeNodeIDEqualities> {
     void runOnOperation() override {
-        llvm::SmallVector<std::pair<EqOp, unsigned>> equalities;
-        getOperation()->walk([&equalities](EqOp equality) {
-            unsigned idOperand = 0;
-            if (matchNodeIDComparedToAnInteger(equality, idOperand)) {
-                equalities.emplace_back(equality, idOperand);
+        llvm::SmallVector<IDComparison> comparisons;
+        getOperation()->walk([&comparisons](EqOp equality) {
+            IDComparison comparison;
+            if (matchIDComparison(equality, comparison)) {
+                comparisons.push_back(comparison);
             }
         });
 
-        for (const auto& [equality, operand] : equalities) {
-            ElementID id = equality->getOperand(operand).getDefiningOp<ElementID>();
-            equality->setOperand(operand, id.getInput());
-            eraseIfUnused(id);
+        mlir::OpBuilder builder(&getContext());
+        for (const IDComparison& comparison : comparisons) {
+            canonicalizeIDComparison(comparison, builder);
         }
     }
 };
@@ -988,10 +1059,10 @@ struct UnwindEqualityCross {
     Region* _relationFactor {nullptr};
     bool _unwindOnTheLeft {false};
     bool _readsTheIDs {false};
-    bool _readsTheIntegers {false};
     bool _readsTheElement {false};
     Value _unwoundColumn;
     Value _comparedColumn;
+    NodeIDOf _converted {nullptr};
     EqOp _equality {nullptr};
     FilterOp _filter {nullptr};
 };
@@ -1053,6 +1124,31 @@ bool elementsCompareDistinctly(UnwindConst unwind) {
     return literalElements && !holdsEqualElements(elements);
 }
 
+// Whether no two elements name one node, and one at least names a node: an element naming
+// none matches no row, and two naming one node would emit its rows once each
+bool namesDistinctNodes(UnwindConst unwind) {
+    llvm::SmallDenseSet<int64_t, 8> named;
+
+    for (const Attribute element : unwind.getElements()) {
+        int64_t nodeID = 0;
+        if (nodeIDOfLiteral(element, nodeID) && !named.insert(nodeID).second) {
+            return false;
+        }
+    }
+
+    return !named.empty();
+}
+
+NodeIDOf findNodeIDOfElements(Value unwoundColumn) {
+    for (Operation* const user : unwoundColumn.getUsers()) {
+        if (NodeIDOf converted = dyn_cast<NodeIDOf>(user)) {
+            return converted;
+        }
+    }
+
+    return nullptr;
+}
+
 // On every row the filter keeps, the elements hold the value of the column they were
 // compared to. A node or an edge equals an integer by the ID it carries, so a projection
 // reads the elements back through id() of an entity column, never through the entity.
@@ -1108,11 +1204,14 @@ bool onlyOutputsRead(Value column) {
     });
 }
 
-// The one equality among the users of @param unwoundColumn, provided nothing else reads it
-// but the filter that equality masks - so dropping the unwind leaves no other reader behind.
-EqOp matchSoleEquality(Value unwoundColumn, FilterOp& filter) {
+// The one equality the elements reach, as themselves or as the nodes @param converted names,
+// provided nothing else reads them but the filter that equality masks - so dropping the
+// unwind leaves no other reader behind.
+EqOp matchSoleEquality(Value unwoundColumn, NodeIDOf converted, FilterOp& filter) {
+    const Value compared = converted ? converted.getResult() : unwoundColumn;
+
     EqOp equality;
-    for (Operation* const user : unwoundColumn.getUsers()) {
+    for (Operation* const user : compared.getUsers()) {
         const EqOp candidate = dyn_cast<EqOp>(user);
         if (!candidate) {
             continue;
@@ -1132,10 +1231,13 @@ EqOp matchSoleEquality(Value unwoundColumn, FilterOp& filter) {
     filter = dyn_cast<FilterOp>(*equality.getResult().getUsers().begin());
     if (!filter || filter.getMask() != equality.getResult()) {
         return nullptr;
+    } else if (converted && !compared.hasOneUse()) {
+        return nullptr;
     }
 
+    Operation* const tester = converted ? converted.getOperation() : equality.getOperation();
     for (Operation* const user : unwoundColumn.getUsers()) {
-        const bool testsTheColumn = user == equality.getOperation();
+        const bool testsTheColumn = user == tester;
         const bool carriesTheColumn = user == filter.getOperation();
 
         if (!testsTheColumn && !carriesTheColumn) {
@@ -1163,22 +1265,26 @@ bool matchUnwindEqualityCross(CrossProduct product, UnwindEqualityCross& match) 
     match._relationFactor = leftUnwind ? &rightFactor : &leftFactor;
     match._unwindOnTheLeft = static_cast<bool>(leftUnwind);
 
-    if (!elementsCompareDistinctly(match._unwind)) {
-        return false;
-    }
-
     // The results are the left factor's yielded columns followed by the right factor's, so
     // an unwind on the left contributes the first and one on the right the last.
     const size_t unwoundIndex = match._unwindOnTheLeft ? 0 : product.getResults().size() - 1;
     match._unwoundColumn = product.getResult(unwoundIndex);
+    match._converted = findNodeIDOfElements(match._unwoundColumn);
 
-    match._equality = matchSoleEquality(match._unwoundColumn, match._filter);
+    NodeIDOf converted = match._converted;
+    const bool distinct = converted ? namesDistinctNodes(match._unwind) : elementsCompareDistinctly(match._unwind);
+    if (!distinct) {
+        return false;
+    }
+
+    match._equality = matchSoleEquality(match._unwoundColumn, converted, match._filter);
     if (!match._equality) {
         return false;
     }
 
+    const Value compared = converted ? converted.getResult() : match._unwoundColumn;
     const Value lhs = match._equality.getLhs();
-    match._comparedColumn = lhs == match._unwoundColumn ? match._equality.getRhs() : lhs;
+    match._comparedColumn = lhs == compared ? match._equality.getRhs() : lhs;
 
     // The compared column has to be one the rows still carry once the product is gone:
     // a column the relation yields, or a value computed from one. A column defined inside
@@ -1194,9 +1300,9 @@ bool matchUnwindEqualityCross(CrossProduct product, UnwindEqualityCross& match) 
     // The disjunction is tested on every row of the relation, which only pays where it is a
     // lookup: node IDs, which fuse_scan_by_node_ids scans directly, or one element, a single
     // equality. A longer list of keys is a cut fuse_hash_join indexes.
-    const bool comparesNodeIDs = static_cast<bool>(comparedNodeColumn(match._comparedColumn));
+    const bool comparesNodeIDs = isNodeColumn(match._comparedColumn);
     const bool unwindsOneElement = match._unwind.getElements().size() == 1;
-    if (!comparesNodeIDs && !unwindsOneElement) {
+    if (!comparesNodeIDs && (converted || !unwindsOneElement)) {
         return false;
     }
 
@@ -1212,8 +1318,7 @@ bool matchUnwindEqualityCross(CrossProduct product, UnwindEqualityCross& match) 
 
     // One element is what every row the filter keeps was compared equal to, whatever the
     // compared column holds, so it is read back as itself where no column stands for it.
-    // Several are compared to a node's ID, and are read back as that ID, typed as the
-    // elements, where something other than an output reads them.
+    // Several integers compared to a node are read back as its ID, typed as the elements.
     size_t survivingColumns = 0;
     for (size_t index = 0; index < carried.size(); index++) {
         const bool holdsTheElements = carried[index] == match._unwoundColumn;
@@ -1223,22 +1328,22 @@ bool matchUnwindEqualityCross(CrossProduct product, UnwindEqualityCross& match) 
             const bool readsTheValues = !onlyCountsRows(elements);
             const bool sameType = elements.getType() == match._comparedColumn.getType();
             const bool acceptsTheComparedType = sameType || onlyOutputsRead(elements);
-            const bool readsTheIDs = entityCompared && readsTheValues;
             const bool readsTheComparedColumn = !entityCompared && standsForTheElements && acceptsTheComparedType;
-            const bool convertsTheStandIn = readsTheValues && !readsTheIDs && !readsTheComparedColumn;
-            const bool readsTheElement = convertsTheStandIn && unwindsOneElement;
-            const bool readsTheIntegers = convertsTheStandIn && comparesNodeIDs && !unwindsOneElement && standsForTheElements && integerElements;
+            const bool readsTheElement = readsTheValues
+                                      && !readsTheComparedColumn
+                                      && unwindsOneElement
+                                      && (converted || !entityCompared);
+            const bool readsTheIDs = readsTheValues && entityCompared && !readsTheElement;
 
             if (elements.use_empty()) {
                 continue;
             } else if (readsTheIDs && !integerElements) {
                 return false;
-            } else if (convertsTheStandIn && !readsTheElement && !readsTheIntegers) {
+            } else if (readsTheValues && !readsTheIDs && !readsTheComparedColumn && !readsTheElement) {
                 return false;
             }
 
             match._readsTheIDs = match._readsTheIDs || readsTheIDs;
-            match._readsTheIntegers = match._readsTheIntegers || readsTheIntegers;
             match._readsTheElement = match._readsTheElement || readsTheElement;
         }
 
@@ -1285,7 +1390,14 @@ Value buildElementDisjunction(UnwindEqualityCross& match, mlir::OpBuilder& build
 
     Value mask;
     for (const Attribute element : match._unwind.getElements()) {
-        ConstantOp constant = builder.create<ConstantOp>(loc, element);
+        int64_t nodeID = 0;
+        const bool namesANode = match._converted && nodeIDOfLiteral(element, nodeID);
+        if (match._converted && !namesANode) {
+            continue;
+        }
+
+        const Attribute value = namesANode ? Attribute(builder.getI64IntegerAttr(nodeID)) : element;
+        ConstantOp constant = builder.create<ConstantOp>(loc, value);
         EqOp equality = builder.create<EqOp>(loc, boolColumnType, match._comparedColumn, constant.getResult());
 
         if (!mask) {
@@ -1304,8 +1416,9 @@ void fuseUnwindEquality(UnwindEqualityCross& match, mlir::OpBuilder& builder) {
 
     // Inlining rewired every use of the columns the relation contributed, the equality's
     // own operand among them, so the compared column is read back rather than remembered.
+    const Value compared = match._converted ? match._converted.getResult() : match._unwoundColumn;
     const Value lhs = match._equality.getLhs();
-    match._comparedColumn = lhs == match._unwoundColumn ? match._equality.getRhs() : lhs;
+    match._comparedColumn = lhs == compared ? match._equality.getRhs() : lhs;
 
     const Value mask = buildElementDisjunction(match, builder);
 
@@ -1315,7 +1428,7 @@ void fuseUnwindEquality(UnwindEqualityCross& match, mlir::OpBuilder& builder) {
     const Operation::operand_range carried = match._filter.getColumnsToFilter();
     const ResultRange filtered = match._filter.getFilteredColumns();
 
-    const bool convertsTheStandIn = match._readsTheIDs || match._readsTheIntegers || match._readsTheElement;
+    const bool convertsTheStandIn = match._readsTheIDs || match._readsTheElement;
 
     llvm::SmallVector<Value> columns;
     llvm::SmallVector<Type> resultTypes;
@@ -1337,7 +1450,7 @@ void fuseUnwindEquality(UnwindEqualityCross& match, mlir::OpBuilder& builder) {
         keptColumns.push_back(index);
     }
 
-    const Value standInSource = match._readsTheIntegers ? comparedNodeColumn(match._comparedColumn) : match._comparedColumn;
+    const Value standInSource = match._comparedColumn;
     const size_t standInIndex = llvm::find(columns, standInSource) - columns.begin();
     if (convertsTheStandIn && standInIndex == columns.size()) {
         columns.push_back(standInSource);
@@ -1359,7 +1472,7 @@ void fuseUnwindEquality(UnwindEqualityCross& match, mlir::OpBuilder& builder) {
         const Value standIn = fused.getResult(standInIndex);
 
         Value elements;
-        if (match._readsTheIDs || match._readsTheIntegers) {
+        if (match._readsTheIDs) {
             elements = builder.create<ElementID>(loc, elementsType, standIn).getResult();
         } else {
             ConstantOp element = builder.create<ConstantOp>(loc, match._unwind.getElements()[0]);
@@ -1373,6 +1486,9 @@ void fuseUnwindEquality(UnwindEqualityCross& match, mlir::OpBuilder& builder) {
 
     match._filter.erase();
     match._equality.erase();
+    if (match._converted) {
+        match._converted.erase();
+    }
     match._product.erase();
 }
 
@@ -3149,8 +3265,16 @@ Value disjunctionColumn(Value mask) {
         } else if (InOp membership = disjunct.getDefiningOp<InOp>()) {
             return comparedNodeColumn(membership.getLhs());
         } else if (EqOp equality = disjunct.getDefiningOp<EqOp>()) {
-            const Value lhsColumn = comparedNodeColumn(equality.getLhs());
-            return lhsColumn ? lhsColumn : comparedNodeColumn(equality.getRhs());
+            const Value lhs = equality.getLhs();
+            const Value rhs = equality.getRhs();
+
+            if (isNodeColumn(lhs)) {
+                return lhs;
+            } else if (isNodeColumn(rhs)) {
+                return rhs;
+            }
+
+            return {};
         } else if (!isNeverTrue(disjunct)) {
             return {};
         }
