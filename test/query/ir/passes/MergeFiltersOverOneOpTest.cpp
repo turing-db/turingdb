@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include <algorithm>
 #include <string>
@@ -89,6 +90,15 @@ protected:
         module.print(stream, flags);
     }
 
+    // A join key as the op its factor yields it from: the place it takes in the yield follows
+    // the order the reads of the factor were placed in
+    static void describeJoinKey(mlir::Region& factor, uint64_t key, llvm::raw_ostream& stream) {
+        mlir::Operation* const yield = factor.front().getTerminator();
+        mlir::Operation* const keyOp = yield->getOperand(static_cast<unsigned>(key)).getDefiningOp();
+
+        stream << " " << keyOp->getName().getStringRef() << " " << keyOp->getAttrDictionary();
+    }
+
     // Each op of the program as its name and attributes, sorted, so two programs that differ
     // only in the order of their conjuncts read the same
     static void describePlan(mlir::ModuleOp module, Plan& plan) {
@@ -99,7 +109,15 @@ protected:
 
             std::string entry;
             llvm::raw_string_ostream stream(entry);
-            stream << op->getName().getStringRef() << " " << op->getAttrDictionary();
+            stream << op->getName().getStringRef();
+
+            if (mlir::db::HashJoin join = mlir::dyn_cast<mlir::db::HashJoin>(op)) {
+                describeJoinKey(join.getLeftFactor(), join.getLeftKey(), stream);
+                describeJoinKey(join.getRightFactor(), join.getRightKey(), stream);
+            } else {
+                stream << " " << op->getAttrDictionary();
+            }
+
             plan.push_back(entry);
         });
 

@@ -519,7 +519,7 @@ TEST_F(RegionBodyEffectsTest, canonicalizeCoalesceKeepsABodyThatMayRaise) {
 
 // The count is the same for every element, so it is computed once per row, unless its body
 // may raise: a row whose list is empty would then raise where it did not
-TEST_F(RegionBodyEffectsTest, hoistRepeatedRegionInvariantOpsKeepsABodyThatMayRaise) {
+TEST_F(RegionBodyEffectsTest, placeRowInvariantOpsKeepsABodyThatMayRaise) {
     const std::string_view counted = R"mlir(
   %xs = db.constant([1, 2])
   %l = db.list_comprehension(%xs, {%n}) {
@@ -547,11 +547,11 @@ TEST_F(RegionBodyEffectsTest, hoistRepeatedRegionInvariantOpsKeepsABodyThatMayRa
     };
 
     ASSERT_TRUE(parse(counted, RAISING_DIVISION));
-    ASSERT_TRUE(runPass(mlir::db::createHoistRepeatedRegionInvariantOps));
+    ASSERT_TRUE(runPass(mlir::db::createPlaceRowInvariantOps));
     EXPECT_EQ(countHoisted(), 0u);
 
     ASSERT_TRUE(parse(counted, SAFE_DIVISION));
-    ASSERT_TRUE(runPass(mlir::db::createHoistRepeatedRegionInvariantOps));
+    ASSERT_TRUE(runPass(mlir::db::createPlaceRowInvariantOps));
     EXPECT_EQ(countHoisted(), 1u);
 }
 

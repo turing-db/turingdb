@@ -9,12 +9,14 @@ namespace mlir::db {
 
 // _count operands from _operandOffset, each coming back as the result at the same position
 // from _resultOffset. An op that _repeatsRows may give one operand row several result rows,
-// as a hop gives one per edge.
+// as a hop gives one per edge, and one that _filtersRows keeps some operand rows and drops the
+// others, as a WHERE or a LIMIT does.
 struct CarrySet {
     size_t _operandOffset {0};
     size_t _resultOffset {0};
     size_t _count {0};
     bool _repeatsRows {false};
+    bool _filtersRows {false};
 };
 
 // _count operands from _operandOffset, each coming into a region as the argument at the same

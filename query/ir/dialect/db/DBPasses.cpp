@@ -97,7 +97,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_CANONICALIZECOALESCE
 #define GEN_PASS_DEF_FOLDCONSTANTMAPKEYS
 #define GEN_PASS_DEF_HOISTUNCONDITIONALREGIONS
-#define GEN_PASS_DEF_HOISTREPEATEDREGIONINVARIANTOPS
+#define GEN_PASS_DEF_PLACEROWINVARIANTOPS
 #include "DBPasses.h.inc"
 
 namespace {
@@ -9815,15 +9815,28 @@ struct CarryLabelAndTypeReads : public impl::CarryLabelAndTypeReadsBase<CarryLab
     }
 };
 
-// The ops inside @param region computing @param constants, each after the ones it reads. False
-// where one reads an argument of a block inside @param region: a run constant read off it holds
-// one value per run of its body, not one for every row in front of the op holding the region.
-bool collectConstantCone(llvm::ArrayRef<Value> constants, Region& region, llvm::SmallVectorImpl<Operation*>& cone) {
+// Whether @param value is defined where @param op can read it: in a block holding the op, in front
+// of the op or the one holding it there
+bool standsBefore(Value value, Operation* op) {
+    Operation* const ancestor = value.getParentBlock()->findAncestorOpInBlock(*op);
+    if (!ancestor) {
+        return false;
+    }
+
+    Operation* const definer = value.getDefiningOp();
+
+    return !definer || definer->isBeforeInBlock(ancestor);
+}
+
+// The ops computing @param constants that do not stand before @param destination, each after the
+// ones it reads. False where one reads an argument of a block not holding @param destination: a
+// run constant read off it holds one value per run of its body, not one for every row there.
+bool collectConstantCone(llvm::ArrayRef<Value> constants, Operation* destination, llvm::SmallVectorImpl<Operation*>& cone) {
     llvm::SmallPtrSet<Operation*, 8> visited;
     llvm::SmallVector<std::pair<Operation*, bool>> pending;
 
-    const auto pushDefiner = [&region, &visited, &pending](Value value) {
-        if (!region.isAncestor(value.getParentRegion())) {
+    const auto pushDefiner = [destination, &visited, &pending](Value value) {
+        if (standsBefore(value, destination)) {
             return true;
         }
 
@@ -9871,20 +9884,39 @@ bool repeatsRows(Operation* op) {
     return matchCarrySet(op, carrySet) && carrySet._repeatsRows;
 }
 
+bool filtersRows(Operation* op) {
+    CarrySet carrySet;
+    return matchCarrySet(op, carrySet) && carrySet._filtersRows;
+}
+
 bool readsColumnsFromAbove(Region& region) {
     ColumnCarrierOpInterface carrier = dyn_cast_or_null<ColumnCarrierOpInterface>(region.getParentOp());
     return carrier && carrier.readsColumnsFromAbove(region);
 }
 
+// What a step from the rows an op reads toward the rows above them may do to a row above
+enum class StepRows {
+    KeepsEach,
+    Repeats,
+    Filters,
+};
+
 // A step from the rows an op reads toward the rows of the region it climbs out of: an op mapping
 // rows through, a run constant read off an argument, or the yield of a region reading the columns
-// above it. Sets @param repeats where the step may give a row more than one.
-bool matchClimbStep(OpResult result, RowsStep& step, bool& repeats) {
+// above it
+bool matchClimbStep(OpResult result, RowsStep& step, StepRows& rows) {
     if (matchMapsRowsStep(result, step)) {
-        repeats = repeatsRows(step._op);
+        if (repeatsRows(step._op)) {
+            rows = StepRows::Repeats;
+        } else if (filtersRows(step._op)) {
+            rows = StepRows::Filters;
+        } else {
+            rows = StepRows::KeepsEach;
+        }
+
         return true;
     } else if (matchRowConstantStep(result, step)) {
-        repeats = false;
+        rows = StepRows::KeepsEach;
         return true;
     } else if (!matchOutOfRegionStep(result, step)) {
         return false;
@@ -9892,202 +9924,392 @@ bool matchClimbStep(OpResult result, RowsStep& step, bool& repeats) {
 
     Region& region = *step._body->getParent();
     ColumnCarrierOpInterface carrier = cast<ColumnCarrierOpInterface>(region.getParentOp());
-    repeats = carrier.repeatsYieldedRows(region);
+    rows = carrier.repeatsYieldedRows(region) ? StepRows::Repeats : StepRows::KeepsEach;
 
     return carrier.readsColumnsFromAbove(region);
 }
 
-// The column in front of the op holding @param region whose rows @param rows holds: the one the
-// argument @param carried of the region carries in, or for a region reading the columns above
-// it, one it reads there. @param steps lead from it down to @param rows, nearest them first, and
-// @param repeats is set where one of them may give a row more than one. False for an element, an
-// accumulator, a row tag and what is computed from them.
-bool matchOuterRows(Value rows, Region& region, Value& outer, BlockArgument& carried, llvm::SmallVectorImpl<RowsStep>& steps, bool& repeats) {
-    Value column = rows;
-    while (true) {
-        if (!region.isAncestor(column.getParentRegion())) {
-            outer = column;
-            return readsColumnsFromAbove(region);
-        } else if (BlockArgument argument = dyn_cast<BlockArgument>(column)) {
-            carried = argument;
-            outer = carriedColumnOf(argument);
-            return argument.getParentRegion() == &region && outer;
-        }
+bool leadAlongTheSameRows(const RowsStep& step, const RowsStep& other) {
+    return step._kind == other._kind
+        && step._op == other._op
+        && step._body == other._body
+        && step._rows.getDefiningOp() == other._rows.getDefiningOp();
+}
 
-        RowsStep step;
-        bool stepRepeats = false;
-        if (!matchClimbStep(cast<OpResult>(column), step, stepRepeats)) {
+// One step of each of @param columns, all holding the rows of one op, toward the top of their
+// region, along the same rows. @param outerRows are the columns they step to.
+bool matchClimbStepOfAll(llvm::ArrayRef<Value> columns, RowsStep& step, StepRows& rows, llvm::SmallVectorImpl<Value>& outerRows) {
+    for (const Value column : columns) {
+        const OpResult result = dyn_cast<OpResult>(column);
+        if (!result) {
             return false;
-        } else if (step._kind == RowsStepKind::ReadsRowConstant) {
-            layOutRunConstant(steps);
         }
 
-        steps.push_back(step);
-        repeats = repeats || stepRepeats;
-        column = step._outerRows;
+        RowsStep columnStep;
+        StepRows columnRows = StepRows::KeepsEach;
+        if (!matchClimbStep(result, columnStep, columnRows)) {
+            return false;
+        } else if (!outerRows.empty() && !leadAlongTheSameRows(step, columnStep)) {
+            return false;
+        }
+
+        if (outerRows.empty()) {
+            step = columnStep;
+            rows = columnRows;
+        }
+
+        outerRows.push_back(columnStep._outerRows);
     }
+
+    return true;
 }
 
-// Whether two columns lead down to the rows an op reads along the same rows: their steps pass
-// the same ops and bodies, whichever of their columns they take
-bool leadAlongTheSameRows(llvm::ArrayRef<RowsStep> steps, llvm::ArrayRef<RowsStep> otherSteps) {
-    const auto sameRows = [](const RowsStep& step, const RowsStep& other) {
-        return step._kind == other._kind
-            && step._op == other._op
-            && step._body == other._body
-            && step._rows.getDefiningOp() == other._rows.getDefiningOp();
-    };
+// The column in front of the op holding @param region whose rows @param column holds, where it
+// stands at the top of the region: the one the argument @param carried carries in, or for a
+// region reading the columns above it, the column itself
+bool matchRegionTop(Value column, Region& region, Value& outer, BlockArgument& carried) {
+    if (!region.isAncestor(column.getParentRegion())) {
+        outer = column;
+        return readsColumnsFromAbove(region);
+    }
 
-    return llvm::equal(steps, otherSteps, sameRows);
+    BlockArgument argument = dyn_cast<BlockArgument>(column);
+    if (!argument || argument.getParentRegion() != &region) {
+        return false;
+    }
+
+    carried = argument;
+    outer = carriedColumnOf(argument);
+
+    return static_cast<bool>(outer);
 }
 
-// One region an op climbs out of, the steps within it from the rows of the columns it takes
-// down to the rows the op reads, nearest the op first, and where it _carriesIn its columns as
-// arguments, the position in its carry set of a column they lead from
+bool matchRegionTopOfAll(llvm::ArrayRef<Value> columns, Region& region, llvm::SmallVectorImpl<Value>& outers, BlockArgument& carried) {
+    for (const Value column : columns) {
+        Value outer;
+        if (!matchRegionTop(column, region, outer, carried)) {
+            outers.clear();
+            return false;
+        }
+
+        outers.push_back(outer);
+    }
+
+    return true;
+}
+
+// One region the rows an op reads climb through, and the steps within it, nearest the op first.
+// A climb that _exits the region takes the op in front of the op holding it, and one that also
+// _carriesIn carries the columns back in at the position _rowsIndex of the rows. Otherwise the
+// op goes in front of the op the last step crosses.
 struct HoistLevel {
     Region* _region {nullptr};
     llvm::SmallVector<RowsStep> _steps;
+    bool _exits {false};
     bool _carriesIn {false};
     size_t _rowsIndex {0};
 };
 
-// An op computing one value per row out of the columns carried into the regions it sits in,
-// and constants. _levels are the regions it climbs out of, innermost first, _operands its
-// operands in front of the op holding the last one, and _constants the ops of that region
-// computing the constants it reads, each after the ones it reads.
-struct RowInvariantOp {
+// The climb from the rows _op reads: whether a step on the way _repeats them, and whether one
+// _filtersFirst, dropping rows before any repeats them, above which a climb that _seeksARepeat
+// looks for one. Where the op _hoists, it goes through the _levels, innermost first, to take
+// _operands, with _constants the ops it moves along, each after the ones it reads.
+struct RowsClimb {
     Operation* _op {nullptr};
     llvm::SmallVector<Value> _operands;
     llvm::SmallVector<HoistLevel> _levels;
     llvm::SmallVector<Operation*> _constants;
+    bool _seeksARepeat {false};
+    bool _repeats {false};
+    bool _filtersFirst {false};
+    bool _hoists {false};
 };
 
+// A constant laid out over rows reads no value of them
 bool computesOneValuePerRow(Operation* op) {
-    return computesAValuePerRow(op) && op->getNumResults() == 1;
+    return computesAValuePerRow(op) && op->getNumResults() == 1 && !op->hasTrait<OpTrait::ReadsNoRowsInFlight>();
 }
 
-// Climbs from @param block out of the regions the columns @param operands reads come into,
-// along the steps within each, until a region runs more than once for a row of the op holding
-// it or a step on the way repeats rows. A region whose op has an effect besides raising, or
-// cannot yield a column back beside the one it reads, stops the climb.
-bool matchHoistLevels(Block* block, llvm::SmallVectorImpl<Value>& operands, llvm::SmallVectorImpl<Value>& constants, llvm::SmallVectorImpl<HoistLevel>& levels) {
+// Whether @param column stands at the top of @param region or a climb step leads up from it
+bool mayClimb(Value column, Region& region) {
+    Value outer;
+    BlockArgument carried;
+    if (matchRegionTop(column, region, outer, carried)) {
+        return true;
+    }
+
+    const OpResult result = dyn_cast<OpResult>(column);
+    RowsStep step;
+    StepRows rows = StepRows::KeepsEach;
+
+    return result && matchClimbStep(result, step, rows);
+}
+
+void collectRowOperands(llvm::ArrayRef<Value> operands, Region& region, bool carriesIn, llvm::SmallVectorImpl<size_t>& rowOperands, llvm::SmallVectorImpl<Value>& columns) {
+    for (size_t operandIndex = 0; operandIndex < operands.size(); operandIndex++) {
+        Value operand = operands[operandIndex];
+        const bool alreadyOuter = carriesIn && !region.isAncestor(operand.getParentRegion());
+        if (alreadyOuter || ::db::yieldsConstantColumn(operand)) {
+            continue;
+        }
+
+        rowOperands.push_back(operandIndex);
+        columns.push_back(operand);
+    }
+}
+
+// Ends @param climb in the region of @param level, in front of the op its last step crosses, the
+// operands at @param rowOperands taking @param columns. A run constant holds its argument's value
+// for one run of the body only, so the climb does not end on one.
+void endClimbInRegion(HoistLevel& level, llvm::ArrayRef<size_t> rowOperands, llvm::ArrayRef<Value> columns, RowsClimb& climb) {
+    const bool endsOnArgument = level._steps.empty() || level._steps.back()._kind == RowsStepKind::ReadsRowConstant;
+    if (endsOnArgument) {
+        return;
+    }
+
+    for (size_t columnIndex = 0; columnIndex < rowOperands.size(); columnIndex++) {
+        climb._operands[rowOperands[columnIndex]] = columns[columnIndex];
+    }
+
+    climb._levels.push_back(level);
+    climb._hoists = true;
+}
+
+// Whether a step above @param rows, columns of the rows of one op in @param region, repeats them,
+// climbing past filters and out of regions
+bool repeatsAbove(llvm::ArrayRef<Value> rows, Region& region) {
+    llvm::SmallVector<Value> columns(rows.begin(), rows.end());
+    Region* climbed = &region;
+
+    while (true) {
+        llvm::SmallVector<Value> outers;
+        BlockArgument carried;
+        while (!matchRegionTopOfAll(columns, *climbed, outers, carried)) {
+            RowsStep step;
+            StepRows stepRows = StepRows::KeepsEach;
+            llvm::SmallVector<Value> stepped;
+            if (!matchClimbStepOfAll(columns, step, stepRows, stepped)) {
+                return false;
+            } else if (stepRows == StepRows::Repeats) {
+                return true;
+            }
+
+            columns = stepped;
+        }
+
+        RegionCarrySet carrySet;
+        if (matchRegionCarrySet(*climbed, carrySet) && carrySet._repeatsRows) {
+            return true;
+        }
+
+        columns = outers;
+        climbed = climbed->getParentOp()->getParentRegion();
+    }
+}
+
+// Climbs step by step and region by region from the rows @param op reads, recording where the op
+// can go: past the first step repeating rows, then on until a step it cannot take, the top of a
+// region, or a filter with a repeat above it, after which the op's uses all come. A filter before
+// any repeat ends the climb, past which one that seeks a repeat looks for one above.
+void climbRows(Operation* op, RowsClimb& climb) {
+    climb._op = op;
+    climb._operands.assign(op->operand_begin(), op->operand_end());
+
+    Block* block = op->getBlock();
+
     while (true) {
         Region& region = *block->getParent();
         Operation* const holder = region.getParentOp();
 
+        const bool climbsAnOperand = llvm::any_of(climb._operands, [&region](Value operand) {
+            return mayClimb(operand, region);
+        });
+        if (!climbsAnOperand) {
+            return;
+        }
+
         RegionCarrySet carrySet;
         const bool carriesIn = matchRegionCarrySet(region, carrySet);
-        if (!carriesIn && !readsColumnsFromAbove(region)) {
-            return false;
-        } else if (!::db::hasNoEffectButRaising(holder)) {
-            return false;
+
+        llvm::SmallVector<size_t> rowOperands;
+        llvm::SmallVector<Value> columns;
+        collectRowOperands(climb._operands, region, carriesIn, rowOperands, columns);
+        if (rowOperands.empty()) {
+            return;
         }
 
         HoistLevel level {._region = &region, ._carriesIn = carriesIn};
-        bool repeats = carriesIn && carrySet._repeatsRows;
-        bool readsARow = false;
+        llvm::SmallVector<Value> outers;
+        BlockArgument carried;
 
-        for (Value& operand : operands) {
-            if (::db::yieldsConstantColumn(operand)) {
-                constants.push_back(operand);
-                continue;
-            } else if (carriesIn && !region.isAncestor(operand.getParentRegion())) {
-                continue;
+        while (!matchRegionTopOfAll(columns, region, outers, carried)) {
+            RowsStep step;
+            StepRows rows = StepRows::KeepsEach;
+            llvm::SmallVector<Value> stepped;
+            if (!matchClimbStepOfAll(columns, step, rows, stepped)) {
+                break;
             }
 
-            Value outer;
-            BlockArgument carried;
-            llvm::SmallVector<RowsStep> steps;
-            if (!matchOuterRows(operand, region, outer, carried, steps, repeats)) {
-                return false;
-            } else if (readsARow && !leadAlongTheSameRows(steps, level._steps)) {
-                return false;
+            if (rows == StepRows::Filters && !climb._repeats) {
+                climb._filtersFirst = true;
+                climb._repeats = climb._seeksARepeat && repeatsAbove(stepped, region);
+                return;
+            } else if (rows == StepRows::Filters && repeatsAbove(stepped, region)) {
+                break;
+            } else if (rows == StepRows::Repeats) {
+                climb._repeats = true;
             }
 
-            if (carriesIn) {
-                matchCarriedIndex(carried, level._rowsIndex);
+            if (step._kind == RowsStepKind::ReadsRowConstant) {
+                layOutRunConstant(level._steps);
             }
 
-            level._steps = steps;
-            operand = outer;
-            readsARow = true;
+            level._steps.push_back(step);
+            columns = stepped;
         }
 
-        if (!readsARow) {
-            return false;
-        } else if (carriesIn && !handsBackAlong(*block, carrySet, level._rowsIndex)) {
-            return false;
+        if (outers.empty()) {
+            if (climb._repeats) {
+                endClimbInRegion(level, rowOperands, columns, climb);
+            }
+
+            return;
         }
 
-        levels.push_back(level);
-        if (repeats) {
-            return true;
+        if (carriesIn) {
+            matchCarriedIndex(carried, level._rowsIndex);
+        }
+
+        const bool canExit = ::db::hasNoEffectButRaising(holder)
+                          && (!carriesIn || handsBackAlong(region.front(), carrySet, level._rowsIndex));
+        if (!canExit && climb._repeats) {
+            endClimbInRegion(level, rowOperands, columns, climb);
+            return;
+        } else if (!canExit) {
+            climb._repeats = climb._seeksARepeat && repeatsAbove(columns, region);
+            return;
+        }
+
+        level._exits = true;
+        climb._levels.push_back(level);
+
+        for (size_t columnIndex = 0; columnIndex < rowOperands.size(); columnIndex++) {
+            climb._operands[rowOperands[columnIndex]] = outers[columnIndex];
+        }
+
+        if (carriesIn && carrySet._repeatsRows) {
+            climb._repeats = true;
+        }
+
+        if (climb._repeats) {
+            climb._hoists = true;
+            return;
         }
 
         block = holder->getBlock();
     }
 }
 
-// In front of a region an op also runs on the rows the region would not have run it on, so
-// one that may raise there or has an effect stays where it is
-bool matchRowInvariantOp(Operation* op, RowInvariantOp& invariant) {
-    if (op->use_empty() || !mlir::isPure(op)) {
-        return false;
+Operation* hoistDestinationOf(const RowsClimb& climb) {
+    const HoistLevel& outerLevel = climb._levels.back();
+    if (outerLevel._exits) {
+        return outerLevel._region->getParentOp();
     }
 
-    llvm::SmallVector<Value> operands(op->getOperands());
-    llvm::SmallVector<Value> constants;
-    if (!matchHoistLevels(op->getBlock(), operands, constants, invariant._levels)) {
-        return false;
-    }
+    return outerUseSite(outerLevel._steps.back());
+}
 
-    Region& outerRegion = *invariant._levels.back()._region;
-
+// The values the regions of @param op read from above, each standing before @param destination
+// or holding one value
+bool collectRegionReads(Operation* op, Operation* destination, llvm::SmallVectorImpl<Value>& constants) {
     llvm::SetVector<Value> readAbove;
     mlir::getUsedValuesDefinedAbove(op->getRegions(), readAbove);
-    for (Value value : readAbove) {
-        if (outerRegion.isAncestor(value.getParentRegion()) && !::db::yieldsConstantColumn(value)) {
+
+    for (const Value value : readAbove) {
+        if (!standsBefore(value, destination) && !::db::yieldsConstantColumn(value)) {
             return false;
         }
 
         constants.push_back(value);
     }
 
-    if (!collectConstantCone(constants, outerRegion, invariant._constants)) {
-        return false;
-    }
+    return true;
+}
 
-    invariant._op = op;
-    invariant._operands = operands;
+// Whether every op from @param first up to @param last, which it stands before in its block,
+// has no effect but raising, so that a pure op can move across them
+bool crossesNoEffect(Operation* first, Operation* last) {
+    for (Operation* crossed = first; crossed != last; crossed = crossed->getNextNode()) {
+        if (!::db::hasNoEffectButRaising(crossed)) {
+            return false;
+        }
+    }
 
     return true;
 }
 
-void hoistRowInvariantOp(const RowInvariantOp& invariant, mlir::RewriterBase& rewriter) {
-    Operation* const op = invariant._op;
-    Operation* const holder = invariant._levels.back()._region->getParentOp();
-    const llvm::SmallPtrSet<Operation*, 4> readers(op->user_begin(), op->user_end());
-
-    for (Operation* const constant : invariant._constants) {
-        rewriter.moveOpBefore(constant, holder);
+// Whether @param op can move in front of @param destination, an op before it, without reading
+// what an op between writes
+bool movesUpAcrossNoEffect(Operation* op, Operation* destination) {
+    Block* block = destination->getBlock();
+    while (!block->findAncestorOpInBlock(*op)) {
+        block = block->getParentOp()->getBlock();
     }
 
-    rewriter.moveOpBefore(op, holder);
-    rewriter.modifyOpInPlace(op, [op, &invariant] {
-        op->setOperands(invariant._operands);
+    return crossesNoEffect(block->findAncestorOpInBlock(*destination), block->findAncestorOpInBlock(*op));
+}
+
+bool matchHoist(RowsClimb& climb) {
+    if (!climb._hoists) {
+        return false;
+    }
+
+    Operation* const op = climb._op;
+    Operation* const destination = hoistDestinationOf(climb);
+    if (!movesUpAcrossNoEffect(op, destination)) {
+        return false;
+    }
+
+    llvm::SmallVector<Value> constants;
+    for (const Value operand : climb._operands) {
+        if (::db::yieldsConstantColumn(operand)) {
+            constants.push_back(operand);
+        }
+    }
+
+    if (!collectRegionReads(op, destination, constants)) {
+        return false;
+    }
+
+    return collectConstantCone(constants, destination, climb._constants);
+}
+
+void hoistRowInvariantOp(const RowsClimb& climb, mlir::RewriterBase& rewriter) {
+    Operation* const op = climb._op;
+    Operation* const destination = hoistDestinationOf(climb);
+    const llvm::SmallPtrSet<Operation*, 4> readers(op->user_begin(), op->user_end());
+
+    for (Operation* const constant : climb._constants) {
+        Operation* const anchor = constant->getBlock()->findAncestorOpInBlock(*destination);
+        rewriter.moveOpBefore(constant, anchor ? anchor : destination);
+    }
+
+    rewriter.moveOpBefore(op, destination);
+    rewriter.modifyOpInPlace(op, [op, &climb] {
+        op->setOperands(climb._operands);
     });
 
     const Value result = op->getResult(0);
-    const size_t levelCount = invariant._levels.size();
+    const size_t levelCount = climb._levels.size();
 
     HandBackCarry carry(rewriter, nullptr);
     llvm::SmallVector<size_t> carriedIndices(levelCount);
     Value column = result;
     for (size_t levelIndex = levelCount; levelIndex > 0; levelIndex--) {
-        const HoistLevel& level = invariant._levels[levelIndex - 1];
+        const HoistLevel& level = climb._levels[levelIndex - 1];
         Region& region = *level._region;
 
-        if (level._carriesIn) {
+        if (level._exits && level._carriesIn) {
             bool appended = false;
             carriedIndices[levelIndex - 1] = carryIntoRegions(region.getParentOp(), column, rewriter, appended);
             column = carriedArgument(region, carriedIndices[levelIndex - 1]);
@@ -10103,7 +10325,10 @@ void hoistRowInvariantOp(const RowInvariantOp& invariant, mlir::RewriterBase& re
     });
 
     for (size_t levelIndex = 0; levelIndex < levelCount; levelIndex++) {
-        const HoistLevel& level = invariant._levels[levelIndex];
+        const HoistLevel& level = climb._levels[levelIndex];
+        if (!level._exits || !level._carriesIn) {
+            continue;
+        }
 
         RegionCarrySet carrySet;
         matchRegionCarrySet(*level._region, carrySet);
@@ -10114,17 +10339,186 @@ void hoistRowInvariantOp(const RowInvariantOp& invariant, mlir::RewriterBase& re
     }
 }
 
-struct HoistRepeatedRegionInvariantOps : public impl::HoistRepeatedRegionInvariantOpsBase<HoistRepeatedRegionInvariantOps> {
-    void runOnOperation() override {
-        runWorklistOver(getOperation(), computesOneValuePerRow, [](Operation* op, mlir::RewriterBase& rewriter) {
-            RowInvariantOp invariant;
-            if (!matchRowInvariantOp(op, invariant)) {
-                return false;
-            }
+// The ops of the block of @param op that carry it on, each the column the one before hands it,
+// nearest it first: ops mapping rows through that do not read it. The chain ends at a column read
+// by anything else, or by more than one op.
+void collectCarryingChain(Operation* op, llvm::SmallVectorImpl<Operation*>& chain) {
+    Value column = op->getResult(0);
+    while (column.hasOneUse()) {
+        OpOperand& use = *column.use_begin();
+        Operation* const carrier = use.getOwner();
+        if (carrier->getBlock() != op->getBlock() || !mapsRowsThrough(carrier)) {
+            return;
+        }
 
-            hoistRowInvariantOp(invariant, rewriter);
-            return true;
-        });
+        CarrySet carrySet;
+        matchCarrySet(carrier, carrySet);
+
+        const size_t operandIndex = use.getOperandNumber();
+        const bool carried = operandIndex >= carrySet._operandOffset && operandIndex < carrySet._operandOffset + carrySet._count;
+        if (!carried) {
+            return;
+        }
+
+        const size_t carriedIndex = operandIndex - carrySet._operandOffset;
+
+        llvm::SmallBitVector read(carrySet._count);
+        keepRequiredColumns(carrier, read);
+        if (read[carriedIndex]) {
+            return;
+        }
+
+        chain.push_back(carrier);
+        column = carrier->getResult(static_cast<unsigned>(carrySet._resultOffset + carriedIndex));
+    }
+}
+
+// An op every use of which follows a filter, and the _chain of ops carrying it on up to the last
+// filter, past which it can be computed. Where an op of the chain _repeats rows, it computes the
+// op from the columns in front of a repeat.
+struct RowsSink {
+    Operation* _op {nullptr};
+    llvm::SmallVector<Operation*> _chain;
+    bool _repeats {false};
+};
+
+bool matchFilterChain(Operation* op, RowsSink& sink) {
+    collectCarryingChain(op, sink._chain);
+
+    const auto lastFilter = llvm::find_if(llvm::reverse(sink._chain), filtersRows);
+    if (lastFilter == sink._chain.rend()) {
+        return false;
+    }
+
+    sink._op = op;
+    sink._chain.erase(lastFilter.base(), sink._chain.end());
+    sink._repeats = llvm::any_of(sink._chain, repeatsRows);
+
+    return true;
+}
+
+// After the filters an op runs on the rows they keep, which its operands and the columns its
+// regions read are carried to, and after the ops between, which must not write what it reads
+bool canSink(const RowsSink& sink) {
+    Operation* const op = sink._op;
+    if (!crossesNoEffect(op->getNextNode(), sink._chain.back()->getNextNode())) {
+        return false;
+    }
+
+    for (const Value operand : op->getOperands()) {
+        const bool holdsRows = !::db::yieldsConstantColumn(operand);
+        if (holdsRows && !isa<ColumnType>(operand.getType())) {
+            return false;
+        }
+    }
+
+    llvm::SetVector<Value> readAbove;
+    mlir::getUsedValuesDefinedAbove(op->getRegions(), readAbove);
+
+    const bool readsRowsAbove = llvm::any_of(readAbove, [](Value value) {
+        return isa<ColumnType>(value.getType()) && !::db::yieldsConstantColumn(value);
+    });
+
+    return !readsRowsAbove;
+}
+
+// @param column carried through each op of @param chain, which it leaves rebuilt to carry it
+Value carryAlongChain(llvm::MutableArrayRef<Operation*> chain, Value column, mlir::RewriterBase& rewriter) {
+    Value carried = column;
+    for (Operation*& carrier : chain) {
+        carried = carryThrough(carrier, carried, rewriter);
+        carrier = carried.getDefiningOp();
+    }
+
+    return carried;
+}
+
+void sinkRowInvariantOp(RowsSink& sink, mlir::RewriterBase& rewriter) {
+    Operation* const op = sink._op;
+    llvm::SmallVector<Operation*>& chain = sink._chain;
+
+    llvm::SmallVector<size_t> rowOperands;
+    for (size_t operandIndex = 0; operandIndex < op->getNumOperands(); operandIndex++) {
+        if (!::db::yieldsConstantColumn(op->getOperand(static_cast<unsigned>(operandIndex)))) {
+            rowOperands.push_back(operandIndex);
+        }
+    }
+
+    for (const size_t operandIndex : rowOperands) {
+        carryAlongChain(chain, op->getOperand(static_cast<unsigned>(operandIndex)), rewriter);
+    }
+
+    llvm::SmallVector<Value> operands(op->getOperands());
+    for (const size_t operandIndex : rowOperands) {
+        operands[operandIndex] = carryAlongChain(chain, operands[operandIndex], rewriter);
+    }
+
+    const Value result = op->getResult(0);
+    Value carried = result;
+    for (Operation* const carrier : chain) {
+        CarrySet carrySet;
+        matchCarrySet(carrier, carrySet);
+
+        const OperandRange carriedColumns = carrier->getOperands().slice(carrySet._operandOffset, carrySet._count);
+        const size_t carriedIndex = static_cast<size_t>(llvm::find(carriedColumns, carried) - carriedColumns.begin());
+        carried = carrier->getResult(static_cast<unsigned>(carrySet._resultOffset + carriedIndex));
+    }
+
+    rewriter.setInsertionPointAfter(chain.back());
+    Operation* const sunk = rewriter.clone(*op);
+    rewriter.modifyOpInPlace(sunk, [sunk, &operands] {
+        sunk->setOperands(operands);
+    });
+
+    rewriter.replaceAllUsesWith(carried, sunk->getResult(0));
+
+    while (carried != result) {
+        const OpResult carriedResult = cast<OpResult>(carried);
+        Operation* const carrier = carriedResult.getOwner();
+
+        CarrySet carrySet;
+        matchCarrySet(carrier, carrySet);
+
+        const size_t resultIndex = carriedResult.getResultNumber();
+        carried = carrier->getOperand(static_cast<unsigned>(carrySet._operandOffset + resultIndex - carrySet._resultOffset));
+        dropCarriedColumn(carrier, resultIndex, rewriter);
+    }
+
+    rewriter.eraseOp(op);
+}
+
+// A value computed from the columns in front of an op repeating rows is computed once there when
+// a use of it comes before any filter after that op, and after the last filter all its uses follow
+// otherwise. Moved, an op runs on other rows than its own, so one that may raise stays where it is.
+bool placeRowInvariantOp(Operation* op, mlir::RewriterBase& rewriter) {
+    if (op->use_empty() || !mlir::isPure(op)) {
+        return false;
+    }
+
+    RowsSink sink;
+    const bool followsAFilter = matchFilterChain(op, sink);
+
+    RowsClimb climb;
+    climb._seeksARepeat = followsAFilter && !sink._repeats;
+    climbRows(op, climb);
+
+    const bool computedLate = followsAFilter && (sink._repeats || climb._repeats);
+    if (computedLate && !canSink(sink)) {
+        return false;
+    } else if (computedLate) {
+        sinkRowInvariantOp(sink, rewriter);
+        return true;
+    } else if (!matchHoist(climb)) {
+        return false;
+    }
+
+    hoistRowInvariantOp(climb, rewriter);
+    return true;
+}
+
+struct PlaceRowInvariantOps : public impl::PlaceRowInvariantOpsBase<PlaceRowInvariantOps> {
+    void runOnOperation() override {
+        runWorklistOver(getOperation(), computesOneValuePerRow, placeRowInvariantOp);
     }
 };
 
@@ -10254,10 +10648,11 @@ void keySideLabels(const JoinKeySide& side,
                    size_t factorFirstResult,
                    const ::db::GraphMetadata& metadata,
                    ::db::LabelSet& labels) {
-    Yield yield = cast<Yield>(side._factor->front().getTerminator());
+    Block& body = side._factor->front();
+    Yield yield = cast<Yield>(body.getTerminator());
     const size_t columnIndex = cast<OpResult>(side._column).getResultNumber() - factorFirstResult;
 
-    ScanNodesByLabel scan = yield.getColumns()[columnIndex].getDefiningOp<ScanNodesByLabel>();
+    ScanNodesByLabel scan = rowsOf(yield.getColumns()[columnIndex], body).getDefiningOp<ScanNodesByLabel>();
     if (!scan) {
         return;
     }

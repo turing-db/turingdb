@@ -2971,17 +2971,17 @@ Speculation::Speculatability CheckedCast::getSpeculatability() {
 }
 
 bool FilterOp::getCarrySet(CarrySet& carrySet) {
-    carrySet = CarrySet {._operandOffset = 1, ._count = getColumnsToFilter().size()};
+    carrySet = CarrySet {._operandOffset = 1, ._count = getColumnsToFilter().size(), ._filtersRows = true};
     return true;
 }
 
 bool Limit::getCarrySet(CarrySet& carrySet) {
-    carrySet = CarrySet {._count = getColumns().size()};
+    carrySet = CarrySet {._count = getColumns().size(), ._filtersRows = true};
     return true;
 }
 
 bool Skip::getCarrySet(CarrySet& carrySet) {
-    carrySet = CarrySet {._count = getColumns().size()};
+    carrySet = CarrySet {._count = getColumns().size(), ._filtersRows = true};
     return true;
 }
 

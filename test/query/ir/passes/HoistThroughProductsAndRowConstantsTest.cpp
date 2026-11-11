@@ -295,7 +295,7 @@ protected:
         ASSERT_TRUE(module);
 
         mlir::PassManager passManager(&_context);
-        passManager.addPass(mlir::db::createHoistRepeatedRegionInvariantOps());
+        passManager.addPass(mlir::db::createPlaceRowInvariantOps());
         ASSERT_TRUE(mlir::succeeded(passManager.run(*module)));
         ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
 

@@ -257,11 +257,11 @@ private:
 };
 
 // The age of n is read once per person and carried through the hop to each edge; the age of m
-// is read per edge, and the name of n once per person and carried to each match kept
+// is read per edge, and the name of n, used after the filter alone, for each match kept
 TEST_F(HoistRepeatedRegionInvariantOpsTest, readsTheOuterPropertiesOfAPatternComprehensionOncePerRow) {
     const std::string_view query = "MATCH (n:Person) RETURN [(n)-->(m) WHERE m.age > n.age | n.name]";
     expectNodePropertyReads(query, "age", 1, 2);
-    expectNodePropertyReads(query, "name", 0, 1);
+    expectNodePropertyReads(query, "name", 1, 1);
 
     expectRows("MATCH (n:Person) RETURN n.name, [(n)-->(m) WHERE m.name > n.name | n.name]",
                {{"Remy", "[]"}, {"Adam", "[Adam, Adam, Adam]"}, {"Maxime", "[Maxime]"}, {"Luc", "[]"},
@@ -271,7 +271,7 @@ TEST_F(HoistRepeatedRegionInvariantOpsTest, readsTheOuterPropertiesOfAPatternCom
 TEST_F(HoistRepeatedRegionInvariantOpsTest, readsTheOuterPropertiesOfAPatternComprehensionOverTwoHopsOncePerRow) {
     const std::string_view query = "MATCH (n:Person) RETURN [(n)-->(m)-->(k) WHERE k.age > n.age | n.name]";
     expectNodePropertyReads(query, "age", 1, 2);
-    expectNodePropertyReads(query, "name", 0, 1);
+    expectNodePropertyReads(query, "name", 1, 1);
 
     expectRows("MATCH (n:Person) RETURN n.name, [(n)-->(m)-->(k) WHERE k.age >= n.age | n.age]",
                {{"Remy", "[32, 32]"}, {"Adam", "[32]"}, {"Maxime", "[]"}, {"Luc", "[]"},
@@ -281,7 +281,7 @@ TEST_F(HoistRepeatedRegionInvariantOpsTest, readsTheOuterPropertiesOfAPatternCom
 TEST_F(HoistRepeatedRegionInvariantOpsTest, readsTheOuterPropertiesOfAPatternComprehensionOverAWalkOncePerRow) {
     const std::string_view query = "MATCH (n:Person) RETURN [(n)-[*1..2]->(m) WHERE m.age > n.age | n.name]";
     expectNodePropertyReads(query, "age", 1, 2);
-    expectNodePropertyReads(query, "name", 0, 1);
+    expectNodePropertyReads(query, "name", 1, 1);
 
     expectRows("MATCH (n:Person) RETURN n.name, [(n)-[*1..2]->(m) WHERE m.age >= n.age | n.name]",
                {{"Remy", "[Remy, Remy, Remy]"}, {"Adam", "[Adam, Adam]"}, {"Maxime", "[]"}, {"Luc", "[]"},
@@ -353,7 +353,7 @@ TEST_F(HoistRepeatedRegionInvariantOpsTest, hoistsOutOfNestedComprehensions) {
 
     const std::string_view patternQuery = "MATCH (n:Person) RETURN [x IN [1, 2] | [(n)-->(m) WHERE m.age > n.age | n.name]]";
     expectNodePropertyReads(patternQuery, "age", 1, 2);
-    expectNodePropertyReads(patternQuery, "name", 0, 1);
+    expectNodePropertyReads(patternQuery, "name", 1, 1);
 
     const std::string_view innerQuery = "MATCH (n:Person) RETURN n.name, [(n)-->(m) | [x IN [1, 2] | n.age]]";
     expectNodePropertyReads(innerQuery, "age", 0, 1);

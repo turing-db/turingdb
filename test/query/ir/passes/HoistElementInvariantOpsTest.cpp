@@ -175,10 +175,11 @@ private:
     mlir::MLIRContext _context;
 };
 
+// The name, used after the WHERE alone, is read for each element it keeps
 TEST_F(HoistElementInvariantOpsTest, readsTheOuterPropertiesOfAComprehensionOncePerRow) {
     const std::string_view query = "MATCH (n:Person) RETURN [x IN [1, 2] WHERE x > n.age | n.name]";
     expectNodePropertyReads(query, "age", 0, 1);
-    expectNodePropertyReads(query, "name", 0, 1);
+    expectNodePropertyReads(query, "name", 1, 1);
 
     expectRows("MATCH (n:Person) RETURN [x IN [30, 40] WHERE x > n.age | n.name]",
                {{"[Remy]"}, {"[Adam]"}, {"[]"}, {"[]"}, {"[]"}, {"[]"}, {"[]"}, {"[]"}});
@@ -269,11 +270,11 @@ TEST_F(HoistElementInvariantOpsTest, keepsAReadOfTheElementInTheBody) {
                        {"[Cyrus]"}, {"[Doruk]"}});
 }
 
-// Remy and Adam would divide by zero. The age is read once per row, but the division runs
-// only on the elements the WHERE keeps.
+// Remy and Adam would divide by zero. The division runs only on the elements the WHERE keeps,
+// and so does the read of the age it alone uses.
 TEST_F(HoistElementInvariantOpsTest, keepsADivisionThatMayRaiseInTheBody) {
     const std::string_view query = "MATCH (n:Person) RETURN n.name, [x IN [1, 2] WHERE x > 5 | 10 / (n.age - 32)]";
-    expectNodePropertyReads(query, "age", 0, 1);
+    expectNodePropertyReads(query, "age", 1, 1);
     expectOps<mlir::db::DivOp>(query, 1, 1);
 
     expectRows(query, {{"Remy", "[]"}, {"Adam", "[]"}, {"Maxime", "[]"}, {"Luc", "[]"},
