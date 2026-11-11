@@ -25,10 +25,10 @@
 using namespace db;
 using namespace turing::test;
 
-// No constant or value computed per row is left in the db program, or in the nl program it
-// lowers to, that nothing reads and that cannot raise. The queries are the shapes codegen and
-// the passes left one in, planned with the join forced and as the cost model plans them.
-class EraseUnreadValuesTest : public HashJoinQueryTest {
+// No op is left in the db program, or in the nl program it lowers to, that nothing reads and
+// that cannot raise. The queries are the shapes codegen and the passes left one in, planned
+// with the join forced and as the cost model plans them.
+class EraseUnreadOpsTest : public HashJoinQueryTest {
 protected:
     void expectNoUnreadOp(std::string_view query) {
         expectNoUnreadOp(query, true);
@@ -79,7 +79,7 @@ protected:
         EXPECT_THROW(runQuery(query, sink), TuringException) << "query: " << query;
     }
 
-    void eraseUnreadValues(std::string_view ops, std::string& erased) {
+    void eraseUnreadOps(std::string_view ops, std::string& erased) {
         std::string program = R"mlir(
 !nodes = !db.column<!storage.node_id>
 !strings = !db.column<!storage.string>
@@ -101,7 +101,7 @@ func.func @main() {
         ASSERT_TRUE(module) << ops;
 
         mlir::PassManager passManager(&_context);
-        passManager.addPass(mlir::db::createEraseUnreadValues());
+        passManager.addPass(mlir::db::createEraseUnreadOps());
 
         ASSERT_TRUE(mlir::succeeded(passManager.run(*module))) << ops;
         ASSERT_TRUE(mlir::succeeded(mlir::verify(*module))) << ops;
@@ -126,14 +126,14 @@ func.func @main() {
     }
 };
 
-TEST_F(EraseUnreadValuesTest, erasesTheNullCodegenLeavesBesideAFilterOverAConstant) {
+TEST_F(EraseUnreadOpsTest, erasesTheNullCodegenLeavesBesideAFilterOverAConstant) {
     const std::string_view query = "WITH 't' AS k WHERE k IS NOT NULL UNWIND [{s: {t: 1}}] AS row RETURN row.s.t";
 
     expectNoUnreadOp(query);
     expectSortedRows(query, {{"1"}});
 }
 
-TEST_F(EraseUnreadValuesTest, erasesTheConstantADroppedBroadcastRead) {
+TEST_F(EraseUnreadOpsTest, erasesTheConstantADroppedBroadcastRead) {
     const std::string_view query = "UNWIND ['Remy'] AS k MATCH (a:Person) WHERE a.name = k WITH a, k "
                                    "UNWIND [{Remy: 1}] AS row RETURN a.name, row[k]";
 
@@ -141,37 +141,37 @@ TEST_F(EraseUnreadValuesTest, erasesTheConstantADroppedBroadcastRead) {
     expectSortedRows(query, {{"Remy", "1"}});
 }
 
-TEST_F(EraseUnreadValuesTest, erasesTheConstantAnUnreadListHeld) {
+TEST_F(EraseUnreadOpsTest, erasesTheConstantAnUnreadListHeld) {
     const std::string_view query = "WITH 't' AS x WITH [x] AS l UNWIND [{t: 1}, {t: 2}] AS row RETURN row.t AS v";
 
     expectNoUnreadOp(query);
     expectSortedRows(query, {{"1"}, {"2"}});
 }
 
-TEST_F(EraseUnreadValuesTest, erasesAConstantAWithProjectsAndNothingReads) {
+TEST_F(EraseUnreadOpsTest, erasesAConstantAWithProjectsAndNothingReads) {
     const std::string_view query = "MATCH (n:Person) WITH n, 'age' AS k WHERE n.age = 32 RETURN n.name";
 
     expectNoUnreadOp(query);
     expectSortedRows(query, {{"Adam"}, {"Remy"}});
 }
 
-TEST_F(EraseUnreadValuesTest, erasesTheConstantAnUnreadChainOfValuesRead) {
+TEST_F(EraseUnreadOpsTest, erasesTheConstantAnUnreadChainOfValuesRead) {
     const std::string_view query = "MATCH (n:Person) WITH n, toUpper(n.name) + 'x' AS k RETURN n.name";
 
     expectNoUnreadOp(query);
     expectSortedRows(query, {{"Adam"}, {"Cyrus"}, {"Doruk"}, {"Luc"}, {"Martina"}, {"Maxime"}, {"Remy"}, {"Suhas"}});
 }
 
-TEST_F(EraseUnreadValuesTest, keepsAnUnreadValueThatRaises) {
+TEST_F(EraseUnreadOpsTest, keepsAnUnreadValueThatRaises) {
     expectRaises("WITH {k: 5}.k.j AS v RETURN 1 AS x");
     expectRaises("MATCH (n:Person) WITH n, n.name.j AS v RETURN n.name");
     expectRaises("MATCH (n:Person) WITH n, 1 / 0 AS v RETURN n.name");
     expectRaises("MATCH (n:Person) WITH n, [x IN [0] | 1 / x] AS v RETURN n.name");
 }
 
-// Nothing reads the scan once the unwind carries no column, but lowering lays the list out
-// over the scan's rows: 2 elements for each of the 8 people
-TEST_F(EraseUnreadValuesTest, keepsAnUnreadScanAConstantIsLaidOutOver) {
+// The unwind of a constant list carries a column of the rows it runs over, so the scan has a
+// reader: 2 elements for each of the 8 people
+TEST_F(EraseUnreadOpsTest, keepsTheScanAnUnwindOfAConstantRunsOver) {
     const StringRowSink::Row one {"1"};
     const StringRowSink::Row two {"2"};
 
@@ -181,16 +181,16 @@ TEST_F(EraseUnreadValuesTest, keepsAnUnreadScanAConstantIsLaidOutOver) {
     expectSortedRows("MATCH (n:Person) UNWIND {k: [1, 2]}.k AS x RETURN x", expected);
 }
 
-TEST_F(EraseUnreadValuesTest, erasesAnUnreadValueAndTheValuesOnlyItRead) {
+TEST_F(EraseUnreadOpsTest, erasesAnUnreadValueAndTheValuesOnlyItRead) {
     std::string erased;
-    ASSERT_NO_FATAL_FAILURE(eraseUnreadValues(R"mlir(
+    ASSERT_NO_FATAL_FAILURE(eraseUnreadOps(R"mlir(
   %n = db.scan_nodes() : !nodes
   %t = db.constant("t" : !storage.string)
   %upper = db.to_upper(%t) : (!strings) -> !strings
   %name = db.get_node_properties(%n, "name") : (!nodes) -> !db.column<!storage.nullable<!storage.string>>
   db.output(%n) : !nodes
 )mlir",
-                                              erased));
+                                           erased));
 
     EXPECT_FALSE(contains(erased, "db.to_upper")) << erased;
     EXPECT_FALSE(contains(erased, "db.constant")) << erased;
@@ -198,9 +198,9 @@ TEST_F(EraseUnreadValuesTest, erasesAnUnreadValueAndTheValuesOnlyItRead) {
     EXPECT_TRUE(contains(erased, "db.scan_nodes")) << erased;
 }
 
-TEST_F(EraseUnreadValuesTest, erasesAnUnreadBodyAndWhatItReadFromAbove) {
+TEST_F(EraseUnreadOpsTest, erasesAnUnreadBodyAndWhatItReadFromAbove) {
     std::string erased;
-    ASSERT_NO_FATAL_FAILURE(eraseUnreadValues(R"mlir(
+    ASSERT_NO_FATAL_FAILURE(eraseUnreadOps(R"mlir(
   %n = db.scan_nodes() : !nodes
   %xs = db.constant([1, 2])
   %t = db.constant("t" : !storage.string)
@@ -210,29 +210,29 @@ TEST_F(EraseUnreadValuesTest, erasesAnUnreadBodyAndWhatItReadFromAbove) {
   } : (!db.column<!storage.list<i64>>, !nodes) -> !unresolved
   db.output(%n) : !nodes
 )mlir",
-                                              erased));
+                                           erased));
 
     EXPECT_FALSE(contains(erased, "db.list_comprehension")) << erased;
     EXPECT_FALSE(contains(erased, "db.constant")) << erased;
 }
 
-TEST_F(EraseUnreadValuesTest, keepsAnUnreadReadThatMayRaise) {
+TEST_F(EraseUnreadOpsTest, keepsAnUnreadReadThatMayRaise) {
     std::string erased;
-    ASSERT_NO_FATAL_FAILURE(eraseUnreadValues(R"mlir(
+    ASSERT_NO_FATAL_FAILURE(eraseUnreadOps(R"mlir(
   %n = db.scan_nodes() : !nodes
   %five = db.constant(5 : i64) : !cells
   %read = db.static_map_key %five key "j" : (!cells) -> !cells
   db.output(%n) : !nodes
 )mlir",
-                                              erased));
+                                           erased));
 
     EXPECT_TRUE(contains(erased, "db.static_map_key")) << erased;
     EXPECT_TRUE(contains(erased, "db.constant(5 : i64)")) << erased;
 }
 
-TEST_F(EraseUnreadValuesTest, keepsAnUnreadBodyThatMayRaise) {
+TEST_F(EraseUnreadOpsTest, keepsAnUnreadBodyThatMayRaise) {
     std::string erased;
-    ASSERT_NO_FATAL_FAILURE(eraseUnreadValues(R"mlir(
+    ASSERT_NO_FATAL_FAILURE(eraseUnreadOps(R"mlir(
   %n = db.scan_nodes() : !nodes
   %xs = db.constant([0])
   %r = db.list_comprehension(%xs, {%n}) {
@@ -243,21 +243,23 @@ TEST_F(EraseUnreadValuesTest, keepsAnUnreadBodyThatMayRaise) {
   } : (!db.column<!storage.list<i64>>, !nodes) -> !unresolved
   db.output(%n) : !nodes
 )mlir",
-                                              erased));
+                                           erased));
 
     EXPECT_TRUE(contains(erased, "db.list_comprehension")) << erased;
     EXPECT_TRUE(contains(erased, "db.div")) << erased;
 }
 
-TEST_F(EraseUnreadValuesTest, keepsAnUnreadOpThatShapesTheRows) {
+TEST_F(EraseUnreadOpsTest, erasesAnOpShapingRowsNothingReads) {
     std::string erased;
-    ASSERT_NO_FATAL_FAILURE(eraseUnreadValues(R"mlir(
+    ASSERT_NO_FATAL_FAILURE(eraseUnreadOps(R"mlir(
   %n = db.scan_nodes() : !nodes
-  %xs = db.constant([1, 2]) : !cells
-  %element = db.unwind(%xs, {}) : (!cells) -> !cells
-  db.output(%element) : !cells
+  %source, %edge, %type, %target = db.get_out_edges(%n, {}) : (!nodes) -> (!nodes, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !nodes)
+  %people = db.scan_nodes_by_label(["Person"]) : !nodes
+  db.output(%people) : !nodes
 )mlir",
-                                              erased));
+                                           erased));
 
-    EXPECT_TRUE(contains(erased, "db.scan_nodes")) << erased;
+    EXPECT_FALSE(contains(erased, "db.get_out_edges")) << erased;
+    EXPECT_FALSE(contains(erased, "db.scan_nodes()")) << erased;
+    EXPECT_TRUE(contains(erased, "db.scan_nodes_by_label")) << erased;
 }

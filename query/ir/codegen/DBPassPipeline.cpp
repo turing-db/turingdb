@@ -74,7 +74,7 @@ const std::array<DBPassFactory, DB_PASS_COUNT> dbPassPipeline = {
     [](const mlir::db::DBPassContext* context) { return mlir::db::createCountFromMetadata(context); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseUnwindRange(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createSinkUnwindSource(); },
-    [](const mlir::db::DBPassContext*) { return mlir::db::createEraseUnreadValues(); },
+    [](const mlir::db::DBPassContext*) { return mlir::db::createEraseUnreadOps(); },
 };
 
 }

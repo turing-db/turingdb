@@ -171,8 +171,9 @@ func.func @main() {
   ^bb0(%pIn: !db.column<!storage.node_id>):
     %pc = db.row_constant %pIn : !db.column<!storage.node_id>
     %x = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+    %laidOut = db.broadcast_constant(%pc, %x) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
     %key = db.constant(true)
-    %g:2 = db.group_aggregate(%key, %pc) keys 1 aggregates [count] : (!db.column<i1>, !db.column<!storage.node_id>) -> (!db.column<i1>, !db.column<none>)
+    %g:2 = db.group_aggregate(%key, %laidOut) keys 1 aggregates [count] : (!db.column<i1>, !db.column<!storage.node_id>) -> (!db.column<i1>, !db.column<none>)
     db.subquery_yield {%g#1} : {!db.column<none>}
   } : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<none>)
   db.output(%r#1) : !db.column<none>
@@ -188,8 +189,9 @@ func.func @main() {
   ^bb0(%pIn: !db.column<!storage.node_id>):
     %pc = db.row_constant %pIn : !db.column<!storage.node_id>
     %x = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+    %laidOut = db.broadcast_constant(%pc, %x) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
     %key = db.constant(true)
-    %c:2 = db.collect(%key, %pc) keys 1 : (!db.column<i1>, !db.column<!storage.node_id>) -> (!db.column<i1>, !db.column<!storage.list<!storage.node_id>>)
+    %c:2 = db.collect(%key, %laidOut) keys 1 : (!db.column<i1>, !db.column<!storage.node_id>) -> (!db.column<i1>, !db.column<!storage.list<!storage.node_id>>)
     %size = db.size(%c#1) : (!db.column<!storage.list<!storage.node_id>>) -> !db.column<none>
     db.subquery_yield {%size} : {!db.column<none>}
   } : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<none>)

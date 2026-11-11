@@ -41,6 +41,7 @@ add_mlir_library(turing_db_ir_dbdialect_s
   DBOps.cpp
   DBTypes.cpp
   DBPasses.cpp
+  DBRowDependence.cpp
 
   DEPENDS
   DBDialectIncGen

@@ -39,6 +39,7 @@
 #include "IRValueTypes.h"
 #include "DBColumnElement.h"
 #include "DBHeldTags.h"
+#include "DBRowDependence.h"
 #include "StorageAttributes.h"
 #include "PropertyScanLiteral.h"
 #include "PathHopArguments.h"
@@ -91,7 +92,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSEEXPLOREDISTINCTENDS
 #define GEN_PASS_DEF_COUNTPATHROWS
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
-#define GEN_PASS_DEF_ERASEUNREADVALUES
+#define GEN_PASS_DEF_ERASEUNREADOPS
 #define GEN_PASS_DEF_COUNTFROMMETADATA
 #define GEN_PASS_DEF_CANONICALIZECOALESCE
 #define GEN_PASS_DEF_FOLDCONSTANTMAPKEYS
@@ -6794,6 +6795,23 @@ void keepRowCarryingColumn(ValueRange columns, size_t firstIndex, llvm::SmallBit
     }
 }
 
+// Whether an operand of @param op outside the run of @param count from @param offset holds
+// rows. An op reading none is laid out over the rows in flight, so a trim keeps a
+// row-carrying column of the run for it to run over.
+bool readsRowsOutsideRun(Operation* op, size_t offset, size_t count) {
+    for (OpOperand& operand : op->getOpOperands()) {
+        const size_t operandIndex = operand.getOperandNumber();
+        const bool inTheRun = operandIndex >= offset && operandIndex < offset + count;
+        const bool holdsRows = isa<ColumnType>(operand.get().getType()) && !::db::yieldsConstantColumn(operand.get());
+
+        if (!inTheRun && holdsRows) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void selectKeptCarriedColumns(Operation* op, const CarrySet& carrySet, llvm::SmallVectorImpl<size_t>& kept) {
     const size_t count = carrySet._count;
 
@@ -6807,7 +6825,7 @@ void selectKeptCarriedColumns(Operation* op, const CarrySet& carrySet, llvm::Sma
     keepRequiredColumns(op, keep);
 
     const bool standsForItsRows = carrySet._resultOffset == 0;
-    if (standsForItsRows) {
+    if (standsForItsRows || !readsRowsOutsideRun(op, carrySet._operandOffset, count)) {
         keepRowCarryingColumn(op->getOperands().slice(carrySet._operandOffset, count), 0, keep);
     }
 
@@ -7096,25 +7114,6 @@ void trimHashJoin(HashJoin join, mlir::OpBuilder& builder) {
     joinOp->erase();
 }
 
-// A CASE or a coalesce lays its rows out over a column it carries into its regions, and so do
-// a subquery, run once per row it carries in, and an op over the elements of a constant list,
-// so one row-carrying column stays for them
-bool sizesItsRowsByItsRegionCarrySet(Operation* op) {
-    if (isa<LazyCase, Coalesce, PatternComprehension, ExistsSubquery, CountSubquery, CollectSubquery, CallSubquery>(op)) {
-        return true;
-    } else if (ListComprehension comprehension = dyn_cast<ListComprehension>(op)) {
-        return ::db::yieldsConstantColumn(comprehension.getSource());
-    } else if (ListPredicate predicate = dyn_cast<ListPredicate>(op)) {
-        return ::db::yieldsConstantColumn(predicate.getSource());
-    } else if (Reduce reduce = dyn_cast<Reduce>(op)) {
-        return ::db::yieldsConstantColumn(reduce.getSource());
-    } else if (AllReduce allReduce = dyn_cast<AllReduce>(op)) {
-        return ::db::yieldsConstantColumn(allReduce.getSource());
-    } else {
-        return false;
-    }
-}
-
 // A column a region forwards that no region after it reads leaves its yield and the arguments
 // of every region after it
 void trimForwardedColumns(Operation* op) {
@@ -7250,7 +7249,7 @@ Operation* trimRegionCarrySet(Operation* op, mlir::OpBuilder& builder) {
         }
     }
 
-    if (sizesItsRowsByItsRegionCarrySet(op)) {
+    if (!readsRowsOutsideRun(op, operandRunOffset(carriedOperands), carried.size())) {
         keepRowCarryingColumn(carried, 0, keep);
     }
 
@@ -7557,10 +7556,9 @@ void trimUnreadColumnsOf(Operation* op, mlir::OpBuilder& builder, llvm::SmallPtr
     }
 }
 
-// Lowering runs every op it is handed, so an op @param erasable accepts that nothing reads
-// goes, and so do the ones only it read
-template <typename Erasable>
-bool eraseUnreadOpsUnder(Operation* root, Erasable erasable) {
+// An op laid out over the rows of another reads a column of them, so an op nothing reads
+// shapes no row, and lowering need not run it: it goes, and so do the ones only it read
+bool eraseUnreadOpsUnder(Operation* root) {
     llvm::SmallVector<Operation*> ops;
     root->walk([&ops](Operation* op) {
         ops.push_back(op);
@@ -7569,26 +7567,17 @@ bool eraseUnreadOpsUnder(Operation* root, Erasable erasable) {
     mlir::IRRewriter rewriter(root->getContext());
     llvm::SmallPtrSet<Operation*, 16> erased;
 
-    return eraseUnreadOps(ops, erasable, rewriter, erased);
-}
-
-// A constant holds one value for every row and an op computing a value per row one for each
-// row it reads. Unlike a filter or a hop nothing reads, neither shapes the rows lowering lays
-// a constant out over.
-bool shapesNoRows(Operation* op) {
-    const bool holdsOneValue = op->hasTrait<OpTrait::ConstantLike>() || op->hasTrait<OpTrait::ConstantResult>();
-
-    return holdsOneValue || computesAValuePerRow(op);
+    return eraseUnreadOps(ops, [](Operation*) { return true; }, rewriter, erased);
 }
 
 struct TrimUnreadColumns : public impl::TrimUnreadColumnsBase<TrimUnreadColumns> {
     void runOnOperation() override {
         mlir::OpBuilder builder(&getContext());
 
-        // A value erased as unread can be all that read a column a hop or a filter still
-        // carries, so the trim runs again until a round erases no value
-        bool erasedRowValues = true;
-        while (erasedRowValues) {
+        // An op erased as unread can be all that read a column a hop or a filter still
+        // carries, so the trim runs again until a round erases no op
+        bool erasedOps = true;
+        while (erasedOps) {
             llvm::SmallVector<Operation*> order;
             collectTrimOrder(getOperation(), order);
 
@@ -7599,14 +7588,14 @@ struct TrimUnreadColumns : public impl::TrimUnreadColumnsBase<TrimUnreadColumns>
                 }
             }
 
-            erasedRowValues = eraseUnreadOpsUnder(getOperation(), shapesNoRows);
+            erasedOps = eraseUnreadOpsUnder(getOperation());
         }
     }
 };
 
-struct EraseUnreadValues : public impl::EraseUnreadValuesBase<EraseUnreadValues> {
+struct EraseUnreadOps : public impl::EraseUnreadOpsBase<EraseUnreadOps> {
     void runOnOperation() override {
-        eraseUnreadOpsUnder(getOperation(), shapesNoRows);
+        eraseUnreadOpsUnder(getOperation());
     }
 };
 
@@ -8043,18 +8032,58 @@ void carryForwardedColumns(Region& region, mlir::RewriterBase& rewriter) {
     }
 }
 
+// An op of the region reading no column of rows was laid out over the rows the region is
+// entered with, so out of it its constants are laid out over a column of those rows, which
+// the first row-carrying column @param selection carries is
+void layOutOverTheRegionRows(llvm::ArrayRef<Operation*> moved, Operation* selection, mlir::RewriterBase& rewriter) {
+    RegionCarrySet carrySet;
+    matchRegionCarrySet(unconditionalRegion(selection), carrySet);
+
+    const OperandRange carried = selection->getOperands().slice(carrySet._operandOffset, carrySet._count);
+    const auto rowColumnIt = llvm::find_if(carried, [](Value column) {
+        return !::db::yieldsConstantColumn(column);
+    });
+
+    if (rowColumnIt == carried.end()) {
+        return;
+    }
+
+    const Value rows = *rowColumnIt;
+    for (Operation* const op : moved) {
+        if (!readsTheRowsInFlight(op)) {
+            continue;
+        }
+
+        rewriter.setInsertionPoint(op);
+        for (OpOperand& operand : op->getOpOperands()) {
+            if (!isa<ColumnType>(operand.get().getType())) {
+                continue;
+            }
+
+            const Value laidOut = rewriter.create<BroadcastConstant>(op->getLoc(), operand.get(), rows).getResult();
+            rewriter.modifyOpInPlace(op, [&operand, laidOut] {
+                operand.set(laidOut);
+            });
+        }
+    }
+}
+
 void hoistUnconditionalRegion(Operation* selection, mlir::RewriterBase& rewriter) {
     Region& region = unconditionalRegion(selection);
     Block& body = region.front();
     Operation* const yield = body.getTerminator();
 
+    llvm::SmallVector<Operation*> moved;
     for (Operation& op : llvm::make_early_inc_range(body.without_terminator())) {
         rewriter.moveOpBefore(&op, selection);
+        moved.push_back(&op);
     }
 
     for (const BlockArgument argument : body.getArguments()) {
         rewriter.replaceAllUsesWith(argument, carriedColumnOf(argument));
     }
+
+    layOutOverTheRegionRows(moved, selection, rewriter);
 
     carryForwardedColumns(region, rewriter);
 

@@ -23,6 +23,7 @@
 #include "NLOps.h"
 
 #include "DBColumnElement.h"
+#include "DBRowDependence.h"
 #include "IRConstantColumn.h"
 #include "IRRaiseEffect.h"
 #include "IRRowAlignment.h"
@@ -1202,6 +1203,10 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
         throw IRException("db function failed MLIR verification");
     }
 
+    if (mlir::failed(mlir::db::verifyRowDependence(dbFunction))) {
+        throw IRException("db function breaks the row dependence");
+    }
+
     mlir::Region& dbBody = dbFunction->getRegion(0);
     if (!dbBody.hasOneBlock()) {
         throw IRException("DBLowering expects a db function with a single block");
@@ -1328,17 +1333,8 @@ void DBLowering::hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock
         mlir::Operation* const limitOp = limit.getOperation();
         _producerWalkVisits.clear();
 
-        bool producedByALoop = false;
         for (const mlir::Value column : limit.getColumns()) {
-            producedByALoop |= assignProducerLoops(column, limitOp, /*rowsDroppedBeforeTheCut=*/false, holder);
-        }
-
-        // A cut over constants alone walks back to no loop at all - the constants are
-        // bound above the nest - so the handle goes to the relation driving the
-        // projection instead. Without it the nest runs to its end and the budget only
-        // stops the output, producing every row to throw all but k away.
-        if (!producedByALoop) {
-            assignCardinalityDriverLoop(limit, holder);
+            assignProducerLoops(column, limitOp, /*rowsDroppedBeforeTheCut=*/false, holder);
         }
 
         assignOptionalMatchLimits(limit);
@@ -3539,12 +3535,16 @@ void DBLowering::lowerCallSubquery(mlir::db::CallSubquery call) {
     lowerSubqueryBody(call, stepBlock, inputChunks, yieldedChunks, yieldedTag);
 
     // A unit body leaves the rows in flight as they were, so what follows the op reads the
-    // step's own chunks again. A body carrying its scope hands the rows on: its yielded
+    // step's own chunks again, and the single row where it read none, as one run per row
+    // does. A body carrying its scope hands the rows on: its yielded
     // chunks are the results, bound in the body's innermost loop, which is where the rest
     // of the query goes on from - unless the body opened no loop and the step is still the
     // relation in flight.
     const bool bodyOpenedALoop = _innermostLoopBody != nullptr;
-    if (!returning || !bodyOpenedALoop) {
+    if (!returning && inputChunks.empty()) {
+        _innermostLoopBody = nullptr;
+        _innermostCardinality = mlir::Value();
+    } else if (!returning || !bodyOpenedALoop) {
         _innermostLoopBody = previousInnermostLoopBody;
         _innermostCardinality = previousInnermostCardinality;
     }
@@ -5553,13 +5553,12 @@ const Procedure* DBLowering::procedureFor(llvm::StringRef name) const {
     return procedure;
 }
 
-bool DBLowering::assignProducerLoops(mlir::Value column,
+void DBLowering::assignProducerLoops(mlir::Value column,
                                      mlir::Operation* limitOwner,
                                      bool rowsDroppedBeforeTheCut,
                                      mlir::Operation* holder) {
-    bool reachedALoop = false;
-    if (findCoveringProducerVisit(column, rowsDroppedBeforeTheCut, reachedALoop)) {
-        return reachedALoop;
+    if (findCoveringProducerVisit(column, rowsDroppedBeforeTheCut)) {
+        return;
     }
 
     llvm::SmallVector<ProducerWalkFrame> frames;
@@ -5574,9 +5573,7 @@ bool DBLowering::assignProducerLoops(mlir::Value column,
             const bool operandRowsDropped = frame._operandsRowsDropped;
             frame._nextOperand++;
 
-            bool operandReachedALoop = false;
-            if (findCoveringProducerVisit(operand, operandRowsDropped, operandReachedALoop)) {
-                frame._reachedALoop = frame._reachedALoop || operandReachedALoop;
+            if (findCoveringProducerVisit(operand, operandRowsDropped)) {
                 continue;
             }
 
@@ -5585,30 +5582,22 @@ bool DBLowering::assignProducerLoops(mlir::Value column,
             continue;
         }
 
-        _producerWalkVisits[frame._column] = ProducerWalkVisit {frame._reachedALoop, frame._rowsDroppedBeforeTheCut};
-        const bool frameReachedALoop = frame._reachedALoop;
+        _producerWalkVisits[frame._column] = ProducerWalkVisit {frame._rowsDroppedBeforeTheCut};
         frames.pop_back();
 
         if (frames.empty()) {
-            return frameReachedALoop;
+            return;
         }
-
-        ProducerWalkFrame& parent = frames.back();
-        parent._reachedALoop = parent._reachedALoop || frameReachedALoop;
     }
 }
 
 // A visit with rows dropped claims a subset of what one without claims, and reaches the
 // same loops, so only a visit without them can add to one made with them
-bool DBLowering::findCoveringProducerVisit(mlir::Value column, bool rowsDroppedBeforeTheCut, bool& reachedALoop) const {
+bool DBLowering::findCoveringProducerVisit(mlir::Value column, bool rowsDroppedBeforeTheCut) const {
     const auto visitIt = _producerWalkVisits.find(column);
     const bool wasVisited = visitIt != _producerWalkVisits.end();
-    const bool isCovered = wasVisited && (rowsDroppedBeforeTheCut || !visitIt->second._rowsDroppedBeforeTheCut);
-    if (isCovered) {
-        reachedALoop = visitIt->second._reachedALoop;
-    }
 
-    return isCovered;
+    return wasVisited && (rowsDroppedBeforeTheCut || !visitIt->second._rowsDroppedBeforeTheCut);
 }
 
 void DBLowering::visitProducer(mlir::Value column,
@@ -5661,16 +5650,12 @@ void DBLowering::visitProducer(mlir::Value column,
                                      || mlir::isa<mlir::db::Materialize>(definingOp);
     const bool breaksPipeline = accumulatesTheRelation || reducesToOneRow(definingOp);
 
-    frame._reachedALoop = opensLoop || isCrossProduct || isHashJoin || emitsThroughLoop;
-
     // A loop's budget only stops it from taking another step, so bounding one never trims
     // the step it is in. A cross product's or a hash join's budget cuts the rows it pairs,
     // which stands only while every row it makes reaches the output: an op below the cut
     // that drops rows - a filter, a skip, a dedup - would leave it discarding rows that
     // would have survived, and the cut short of its count. So either keeps the handle only
     // on a path that drops nothing; its factor loops take it either way.
-    // Declining the handle is not the same as reaching no loop: a cross product is still a
-    // producer the walk found, so reachedALoop stands and the cut keeps its nest.
     const bool boundsCrossProduct = isCrossProduct && !rowsDroppedBeforeTheCut;
     const bool boundsHashJoin = isHashJoin && !rowsDroppedBeforeTheCut;
     const bool takesTheHandle = opensLoop || boundsCrossProduct || boundsHashJoin || emitsThroughLoop;
@@ -5732,39 +5717,6 @@ void DBLowering::visitProducer(mlir::Value column,
             frame._operands.push_back(operand);
         }
     }
-}
-
-void DBLowering::assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Operation* holder) {
-    mlir::Operation* const limitOp = limit.getOperation();
-
-    // The relation driving the projection is the loop opened last before the cut: its rows
-    // are the ones nl.output emits the constants over, so they are the rows this budget
-    // cuts. A reduction in between leaves no such loop - it emits its one row at function
-    // scope, and the relation behind it had to be read in full to reduce it.
-    // A row-dropping op only matters once the driver is behind it: what it drops are the
-    // driver's rows, which is what bars a cross-product driver from the budget.
-    mlir::Operation* driver = nullptr;
-    bool rowsDropped = false;
-    for (mlir::Operation& operation : *limitOp->getBlock()) {
-        if (&operation == limitOp) {
-            break;
-        }
-
-        if (opensRowLoop(&operation)) {
-            driver = &operation;
-            rowsDropped = false;
-        } else if (reducesToOneRow(&operation)) {
-            driver = nullptr;
-        } else if (dropsRows(&operation)) {
-            rowsDropped = true;
-        }
-    }
-
-    if (!driver) {
-        return;
-    }
-
-    assignProducerLoops(driver->getResult(0), limitOp, rowsDropped, holder);
 }
 
 void DBLowering::assignOptionalMatchLimits(mlir::db::Limit limit) {
@@ -5905,6 +5857,17 @@ void DBLowering::foldSkipTruncatesIntoOutputs(mlir::func::FuncOp nlFunction) {
 }
 
 void DBLowering::foldBroadcastsIntoOutputs(mlir::func::FuncOp nlFunction) {
+    // An output emitting its constants against a chunk declares their own types rather than
+    // the types they are laid out as, which the other outputs of a UNION would not match
+    size_t outputCount = 0;
+    nlFunction.walk([&outputCount](nl::Output) {
+        outputCount++;
+    });
+
+    if (outputCount > 1) {
+        return;
+    }
+
     llvm::SmallVector<nl::Output, 4> foldable;
 
     nlFunction.walk([&foldable](nl::Output output) {

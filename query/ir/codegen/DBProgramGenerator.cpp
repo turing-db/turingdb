@@ -5365,6 +5365,12 @@ mlir::Value DBProgramGenerator::resolveColumnInScope(ColumnPredicate accept) con
         }
     }
 
+    for (const auto& [decl, written] : _part._createdEntities) {
+        if (holdsTheRowsInFlight(written._column) && accept(written._column)) {
+            return written._column;
+        }
+    }
+
     return mlir::Value {};
 }
 
@@ -5373,7 +5379,7 @@ mlir::Value DBProgramGenerator::readWalkEntities(const Expr* argExpr, mlir::Valu
         return column;
     }
 
-    return listColumnOf(argExpr->getExprVarDecl(), column);
+    return listColumnOf(argExpr->getExprVarDecl(), alignConstantToDriver(column));
 }
 
 mlir::Value DBProgramGenerator::translateAggregateInput(const Expr* argExpr,
@@ -5397,10 +5403,10 @@ mlir::Value DBProgramGenerator::translateAggregateInput(const Expr* argExpr,
 
     if (isEntity || namesAGroup) {
         if (variableColumns) {
-            return getOrTranslateExprColumn(*variableColumns, argExpr);
+            return alignConstantToDriver(getOrTranslateExprColumn(*variableColumns, argExpr));
         }
 
-        return getOrTranslateExprColumn(argExpr);
+        return alignConstantToDriver(getOrTranslateExprColumn(argExpr));
     } else if (argType != EvaluatedType::Wildcard) {
         translateExprOverRows(argExpr);
 
@@ -5444,6 +5450,15 @@ mlir::Value DBProgramGenerator::alignConstantToDriver(mlir::Value column) {
     }
 
     return _opBuilder.create<mlir::db::BroadcastConstant>(_opBuilder.getUnknownLoc(), column, driver).getResult();
+}
+
+mlir::Value DBProgramGenerator::alignConstantToReducedRows(mlir::Value column) {
+    const mlir::Value aligned = alignConstantToDriver(column);
+    if (!yieldsConstantColumn(aligned, _constantColumns)) {
+        return aligned;
+    }
+
+    return _opBuilder.create<mlir::db::BroadcastConstant>(_opBuilder.getUnknownLoc(), aligned, mlir::Value()).getResult();
 }
 
 void DBProgramGenerator::alignConstantOperandsToDriver(mlir::Block::iterator first, mlir::Block::iterator last) {
@@ -5631,7 +5646,10 @@ mlir::Value DBProgramGenerator::assignedColumn(const Expr* value, ValueType prop
 
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
-    return _opBuilder.create<mlir::db::ToFloat>(_opBuilder.getUnknownLoc(), noneType, column).getResult();
+    mlir::db::ToFloat converted = _opBuilder.create<mlir::db::ToFloat>(_opBuilder.getUnknownLoc(), noneType, column);
+    alignConstantOperandsToDriver(converted->getIterator(), _opBuilder.getInsertionPoint());
+
+    return converted.getResult();
 }
 
 void DBProgramGenerator::generateRemoveProperties(const RemoveStmt* removeStmt) {
@@ -8707,6 +8725,8 @@ void DBProgramGenerator::dropUnreadCarriedColumns(mlir::Operation* op, mlir::Ope
         return;
     }
 
+    keepARowCarryingColumn(op, carried, unread);
+
     for (mlir::Region& region : op->getRegions()) {
         mlir::Block& block = region.front();
         const size_t argumentOffset = block.getNumArguments() - carriedCount;
@@ -8726,6 +8746,31 @@ void DBProgramGenerator::dropUnreadCarriedColumns(mlir::Operation* op, mlir::Ope
     }
 
     op->eraseOperands(erasedOperands);
+}
+
+void DBProgramGenerator::keepARowCarryingColumn(mlir::Operation* op, mlir::OperandRange carried, llvm::BitVector& unread) {
+    const size_t operandOffset = carried.getBeginOperandIndex();
+    for (mlir::OpOperand& operand : op->getOpOperands()) {
+        const size_t operandIndex = operand.getOperandNumber();
+        const bool dropped = operandIndex >= operandOffset
+                          && operandIndex < operandOffset + carried.size()
+                          && unread.test(operandIndex - operandOffset);
+
+        if (!dropped && !yieldsConstantColumn(operand.get(), _constantColumns)) {
+            return;
+        }
+    }
+
+    if (mlir::isSpeculatable(op)) {
+        return;
+    }
+
+    for (const unsigned carriedIndex : unread.set_bits()) {
+        if (!yieldsConstantColumn(carried[carriedIndex], _constantColumns)) {
+            unread.reset(carriedIndex);
+            return;
+        }
+    }
 }
 
 void DBProgramGenerator::dropUnreadFilteredColumns(mlir::db::FilterOp filter) {
@@ -8838,7 +8883,12 @@ void DBProgramGenerator::translatePatternComprehensionExpr(const Expr* expr,
     bindCheckedCasts(patternStatements);
     generatePart(patternStatements);
 
-    const mlir::Value value = getOrTranslateExprColumn(comprehension->getProjection());
+    const Expr* const projection = comprehension->getProjection();
+    if (projection->getKind() != Expr::Kind::SYMBOL) {
+        translateExprOverRows(projection);
+    }
+
+    const mlir::Value value = getOrTranslateExprColumn(projection);
     const mlir::Value rowTags = tagsRows ? findVarOrThrow(_part._varMap, tagVariable) : mlir::Value {};
 
     _opBuilder.create<mlir::db::ComprehensionYield>(loc, rowTags, value);
@@ -10300,7 +10350,7 @@ void DBProgramGenerator::translateAggregateArguments(const FunctionInvocation* i
     bioassert(args && !args->empty(), "Aggregate function invocation with no arguments.");
 
     const Expr* argExpr = args->front();
-    arguments._values = readWalkEntities(argExpr, translateAggregateInput(argExpr, variableColumns));
+    arguments._values = alignConstantToReducedRows(readWalkEntities(argExpr, translateAggregateInput(argExpr, variableColumns)));
 
     arguments._rowPercentile = translateRowPercentile(invocation, arguments._values, variableColumns);
 }

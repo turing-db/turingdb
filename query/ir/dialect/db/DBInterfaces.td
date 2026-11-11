@@ -6,6 +6,15 @@ include "mlir/IR/OpBase.td"
 // An op keeping the rows at some positions of its input, which a filter cannot move across
 def KeepsRowsByPosition : NativeOpTrait<"KeepsRowsByPosition">;
 
+// An op whose results hold rows of their own rather than the rows of an operand: from it on,
+// they are the rows in flight of its block
+def OpensRows : NativeOpTrait<"OpensRows">;
+
+// An op laying nothing out over the rows in flight of its block: a source making its rows from
+// the graph or from what it holds, a constant laid out over a row of its own, a body run over
+// the inputs it names or once, or a terminator handing its parent the columns it names
+def ReadsNoRowsInFlight : NativeOpTrait<"ReadsNoRowsInFlight">;
+
 def ColumnCarrierOpInterface : OpInterface<"ColumnCarrierOpInterface"> {
   let cppNamespace = "::mlir::db";
 

@@ -200,9 +200,9 @@ TEST_F(TrimUnreadColumnsTest, trimsThroughAFilterIntoTheHopBeforeIt) {
     EXPECT_TRUE(firstHop.getEids().use_empty());
 }
 
-// MATCH (a)-->(b) WHERE b.age > 3 RETURN 1: nothing reads the filter, yet its rows are what
-// the constant is projected over.
-const char* const filterNothingReads = R"mlir(
+// MATCH (a)-->(b) WHERE b.age > 3 RETURN 1: the constant is laid out over the rows the
+// filter kept, through the one column of them it reads.
+const char* const filterAConstantIsLaidOutOver = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %s, %e, %et, %t = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
@@ -211,13 +211,14 @@ func.func @main() {
   %mask = db.gt %age, %lim : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %tf, %ef, %sf, %etf = db.filter(%mask, {%t, %e, %s, %et}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_type_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_type_id>)
   %one = db.constant(1 : i64)
-  db.output(%one) : !db.column<i64>
+  %laidOut = db.broadcast_constant(%one, %tf) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<i64>
+  db.output(%laidOut) : !db.column<i64>
   return
 }
 )mlir";
 
-TEST_F(TrimUnreadColumnsTest, keepsOneRowCarryingColumnInAFilterNothingReads) {
-    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(filterNothingReads);
+TEST_F(TrimUnreadColumnsTest, keepsTheFilterColumnAConstantIsLaidOutOver) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(filterAConstantIsLaidOutOver);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runTrim(*module));
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
@@ -238,23 +239,22 @@ TEST_F(TrimUnreadColumnsTest, keepsOneRowCarryingColumnInAFilterNothingReads) {
     EXPECT_TRUE(hop.getEtypes().use_empty());
 }
 
-// A filter carrying a constant ahead of a node column: the column kept is the one that
-// carries rows, not the first one.
-const char* const filterWithLeadingConstant = R"mlir(
+// A limit carrying a constant a reader past it reads, and a node column nothing reads: a
+// limit reading no column of rows would be laid out over the rows in flight, so the node
+// column stays beside the constant.
+const char* const limitHandingOnAConstant = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %s, %e, %et, %t = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
   %c = db.constant(3 : i64)
-  %age = db.get_node_properties(%t, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
-  %mask = db.gt %age, %c : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
-  %cf, %tf = db.filter(%mask, {%c, %t}) : (!db.column<!storage.bool>, !db.column<i64>, !db.column<!storage.node_id>) -> (!db.column<i64>, !db.column<!storage.node_id>)
-  db.output(%c) : !db.column<i64>
+  %lc, %lt = db.limit(%c, %t) count 3 : (!db.column<i64>, !db.column<!storage.node_id>) -> (!db.column<i64>, !db.column<!storage.node_id>)
+  db.output(%lc) : !db.column<i64>
   return
 }
 )mlir";
 
-TEST_F(TrimUnreadColumnsTest, prefersARowCarryingColumnWhenAFilterKeepsOne) {
-    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(filterWithLeadingConstant);
+TEST_F(TrimUnreadColumnsTest, keepsARowCarryingColumnBesideTheConstantALimitHandsOn) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(limitHandingOnAConstant);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runTrim(*module));
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
@@ -262,12 +262,13 @@ TEST_F(TrimUnreadColumnsTest, prefersARowCarryingColumnWhenAFilterKeepsOne) {
     llvm::SmallVector<mlir::db::GetOutEdges> hops = collect<mlir::db::GetOutEdges>(*module);
     ASSERT_EQ(hops.size(), 1u);
 
-    llvm::SmallVector<mlir::db::FilterOp> filters = collect<mlir::db::FilterOp>(*module);
-    ASSERT_EQ(filters.size(), 1u);
-    mlir::db::FilterOp filter = filters.front();
+    llvm::SmallVector<mlir::db::Limit> limits = collect<mlir::db::Limit>(*module);
+    ASSERT_EQ(limits.size(), 1u);
+    mlir::db::Limit limit = limits.front();
 
-    ASSERT_EQ(filter.getColumnsToFilter().size(), 1u);
-    EXPECT_EQ(filter.getColumnsToFilter().front(), hops.front().getTgtids());
+    ASSERT_EQ(limit.getColumns().size(), 2u);
+    EXPECT_TRUE(mlir::isa<mlir::db::ConstantOp>(limit.getColumns().front().getDefiningOp()));
+    EXPECT_EQ(limit.getColumns().back(), hops.front().getTgtids());
 }
 
 // MATCH (a)-->(b)-->(c) RETURN a, b, c
@@ -442,21 +443,22 @@ TEST_F(TrimUnreadColumnsTest, trimsASkipToTheColumnsReadAfterIt) {
     EXPECT_TRUE(hops[0].getSrcids().use_empty());
 }
 
-// MATCH (a)-->(b) WITH a, b LIMIT 3 RETURN 1: nothing reads the cut, yet its rows are what
-// the constant is projected over.
-const char* const limitNothingReads = R"mlir(
+// MATCH (a)-->(b) WITH a, b LIMIT 3 RETURN 1: the constant is laid out over the rows the cut
+// kept, through the one column of them it reads.
+const char* const limitAConstantIsLaidOutOver = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %s1, %e1, %et1, %t1 = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
   %la, %lb = db.limit(%s1, %t1) count 3 : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
   %one = db.constant(1 : i64)
-  db.output(%one) : !db.column<i64>
+  %laidOut = db.broadcast_constant(%one, %la) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<i64>
+  db.output(%laidOut) : !db.column<i64>
   return
 }
 )mlir";
 
-TEST_F(TrimUnreadColumnsTest, keepsOneRowCarryingColumnInALimitNothingReads) {
-    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(limitNothingReads);
+TEST_F(TrimUnreadColumnsTest, keepsTheLimitColumnAConstantIsLaidOutOver) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(limitAConstantIsLaidOutOver);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runTrim(*module));
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
@@ -596,8 +598,9 @@ TEST_F(TrimUnreadColumnsTest, trimsTheYieldsOfACrossProductToTheColumnsReadAfter
     EXPECT_EQ(outputs.front().getColumns()[1], product->getResult(1));
 }
 
-// MATCH (a), (b)-->(c) RETURN 1: nothing reads the product, yet each factor still sizes it.
-const char* const productNothingReads = R"mlir(
+// MATCH (a), (b)-->(c) RETURN 1: the constant is laid out over the product through a, and
+// nothing reads the other factor, which still sizes the product.
+const char* const productAConstantIsLaidOutOver = R"mlir(
 func.func @main() {
   %p:4 = db.cross_product factor {
     %a = db.scan_nodes() : !db.column<!storage.node_id>
@@ -608,13 +611,14 @@ func.func @main() {
     db.yield %s, %e, %t : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>
   }
   %one = db.constant(1 : i64)
-  db.output(%one) : !db.column<i64>
+  %laidOut = db.broadcast_constant(%one, %p#0) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<i64>
+  db.output(%laidOut) : !db.column<i64>
   return
 }
 )mlir";
 
-TEST_F(TrimUnreadColumnsTest, keepsOneRowCarryingYieldPerFactorOfAProductNothingReads) {
-    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(productNothingReads);
+TEST_F(TrimUnreadColumnsTest, keepsARowCarryingYieldOfAFactorNothingReads) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(productAConstantIsLaidOutOver);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runTrim(*module));
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
@@ -710,22 +714,23 @@ TEST_F(TrimUnreadColumnsTest, dropsTheUnreadAggregatesOfAGroupAggregate) {
     EXPECT_EQ(std::distance(scans.front().getResult().getUsers().begin(), scans.front().getResult().getUsers().end()), 2);
 }
 
-// MATCH (n) WITH n.name AS name, count(*) AS c, sum(n.age) AS s RETURN 1: the key groups the
-// rows whether or not it is read, and one aggregate has to remain.
-const char* const groupAggregateNothingReads = R"mlir(
+// MATCH (n) WITH n.name AS name, count(*) AS c, sum(n.age) AS s RETURN 1: the constant is
+// laid out over the groups through the key, and one aggregate has to remain.
+const char* const groupAggregateAConstantIsLaidOutOver = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
   %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
   %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %g:3 = db.group_aggregate(%name, %n, %age) keys 1 aggregates [count_rows, sum] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<none>, !db.column<none>)
   %one = db.constant(1 : i64)
-  db.output(%one) : !db.column<i64>
+  %laidOut = db.broadcast_constant(%one, %g#0) : (!db.column<i64>, !db.column<!storage.nullable<!storage.string>>) -> !db.column<i64>
+  db.output(%laidOut) : !db.column<i64>
   return
 }
 )mlir";
 
-TEST_F(TrimUnreadColumnsTest, keepsTheKeyAndOneAggregateOfAGroupAggregateNothingReads) {
-    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(groupAggregateNothingReads);
+TEST_F(TrimUnreadColumnsTest, keepsOneAggregateOfAGroupAggregateWhoseAggregatesNothingReads) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(groupAggregateAConstantIsLaidOutOver);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runTrim(*module));
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));

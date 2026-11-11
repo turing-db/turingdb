@@ -708,7 +708,8 @@ constexpr const char* constantLimitOverMatchProgram = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
   %c = db.constant(5 : i64)
-  %lc = db.limit(%c) count 3 : (!db.column<i64>) -> !db.column<i64>
+  %rows = db.broadcast_constant(%c, %n) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<i64>
+  %lc = db.limit(%rows) count 3 : (!db.column<i64>) -> !db.column<i64>
   db.output(%lc) : !db.column<i64>
   return
 }
@@ -742,7 +743,8 @@ func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
   %k = db.count(%n) : (!db.column<!storage.node_id>) -> !db.column<ui64>
   %c = db.constant(5 : i64)
-  %lc = db.limit(%c) count 3 : (!db.column<i64>) -> !db.column<i64>
+  %rows = db.broadcast_constant(%c, %k) : (!db.column<i64>, !db.column<ui64>) -> !db.column<i64>
+  %lc = db.limit(%rows) count 3 : (!db.column<i64>) -> !db.column<i64>
   db.output(%lc) : !db.column<i64>
   return
 }
@@ -4094,10 +4096,9 @@ TEST_F(DBLoweringTest, lowersLimitToHandleUpdateAndLoopOperands) {
     EXPECT_TRUE(mlir::isa<mlir::nl::For>(updateOp->getParentOp()));
 }
 
-// A cut over constants alone: the constants are bound above the nest, so no column of
-// the cut walks back to the scan. The handle still has to reach it - the rows the budget
-// cuts are the ones the scan makes - or the scan runs to its end and the budget only
-// stops the output, producing every node to emit three of them.
+// A cut over a constant laid out over the scan's rows: its column walks back through the
+// broadcast to the scan, whose loop has to take the handle - or the scan runs to its end and
+// the budget only stops the output, producing every node to emit three of them.
 TEST_F(DBLoweringTest, boundsTheDrivingLoopOfACutOverConstants) {
     auto graph = buildDiamondGraph();
     const FrozenCommitTx transaction = graph->openTransaction();
@@ -4256,8 +4257,8 @@ TEST_F(DBLoweringTest, keepsTheErasedElementTypeOfAConstList) {
 }
 
 // The same cut with a reduction between the scan and the cut: the count has to see every
-// node, so the scan is not the loop this budget may stop - a cut over constants finds no
-// driving loop past a reduction.
+// node, so the scan is not the loop this budget may stop - the walk from the cut ends at the
+// reduction.
 TEST_F(DBLoweringTest, leavesTheDrivingLoopUnboundedPastAReduction) {
     auto graph = buildDiamondGraph();
     const FrozenCommitTx transaction = graph->openTransaction();

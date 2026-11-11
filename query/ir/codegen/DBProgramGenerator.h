@@ -11,6 +11,7 @@
 
 #include "decl/PatternData.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
@@ -1190,6 +1191,11 @@ private:
     // which a collect in the same projection has already repointed at its own emit loop
     mlir::Value alignConstantToDriver(mlir::Value column);
 
+    // A reduction reads the rows it reduces: those of the driver, or the single row the
+    // projection is where none drives it. A constant it reads is laid out over them, or a
+    // reduction after another in the projection would reduce the one row the first left.
+    mlir::Value alignConstantToReducedRows(mlir::Value column);
+
     // An op that runs once per row, such as db.range, reads no row of its own when every
     // operand is a constant, so nothing ties it to the relation it runs over: a pass erasing
     // that relation's scan would leave it one row. Pins the constant operands of each such
@@ -1339,6 +1345,10 @@ private:
     // Drops from @param op's carry set every column none of its regions reads, so an op
     // whose regions read only constants is a constant itself
     void dropUnreadCarriedColumns(mlir::Operation* op, mlir::OperandRange carried);
+
+    // An op that may raise is computed over the rows reaching it rather than once, so where
+    // dropping @param unread would leave it reading no column of rows, one stays
+    void keepARowCarryingColumn(mlir::Operation* op, mlir::OperandRange carried, llvm::BitVector& unread);
 
     // Rebuilds @param filter without the columns nothing reads past it
     void dropUnreadFilteredColumns(mlir::db::FilterOp filter);

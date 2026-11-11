@@ -232,8 +232,10 @@ add_call_v3_test(test_query_ir_typed_entity_key_read TypedEntityKeyReadTest.cpp)
 
 add_ir_tests(test_query_ir_materialize_folded_constants MaterializeFoldedConstantsTest.cpp)
 
-add_ir_tests(test_query_ir_erase_unread_values EraseUnreadValuesTest.cpp)
+add_ir_tests(test_query_ir_erase_unread_ops EraseUnreadOpsTest.cpp)
 
 add_ir_tests(test_query_ir_trim_unread_subquery_inputs TrimUnreadSubqueryInputsTest.cpp)
 
 add_ir_tests(test_query_ir_region_body_effects RegionBodyEffectsTest.cpp)
+
+add_ir_tests(test_query_ir_explicit_row_dependence ExplicitRowDependenceTest.cpp)

@@ -116,14 +116,12 @@ private:
     using ChunkPredicate = llvm::function_ref<bool(mlir::Value)>;
 
     struct ProducerWalkVisit {
-        bool _reachedALoop {false};
         bool _rowsDroppedBeforeTheCut {false};
     };
 
     struct ProducerWalkFrame {
         mlir::Value _column;
         bool _rowsDroppedBeforeTheCut {false};
-        bool _reachedALoop {false};
         llvm::SmallVector<mlir::Value, 2> _operands;
         bool _operandsRowsDropped {false};
         size_t _nextOperand {0};
@@ -824,11 +822,9 @@ private:
     // A cross product's factors are regions, so the walk goes through their
     // db.yield operands; a property fetch opens no loop but is traversed to reach
     // its input chunk's loop. The first limit to claim a producer keeps it.
-    // Returns whether the walk reached a loop at all: a column computed from constants
-    // alone is produced by none, which is what sends the handle to the driving relation.
     // @param rowsDroppedBeforeTheCut is set once the walk has passed an op that
     // drops rows, which bars the handle from a cross product below it.
-    bool assignProducerLoops(mlir::Value column,
+    void assignProducerLoops(mlir::Value column,
                              mlir::Operation* limitOwner,
                              bool rowsDroppedBeforeTheCut,
                              mlir::Operation* holder);
@@ -841,12 +837,7 @@ private:
                        mlir::Operation* holder,
                        ProducerWalkFrame& frame);
 
-    bool findCoveringProducerVisit(mlir::Value column, bool rowsDroppedBeforeTheCut, bool& reachedALoop) const;
-
-    // Records that the loops producing the relation which drives @param limit's projection
-    // carry its handle, so a cut charged to constants alone stops its nest as any other
-    // cut does rather than letting it run to the end.
-    void assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Operation* holder);
+    bool findCoveringProducerVisit(mlir::Value column, bool rowsDroppedBeforeTheCut) const;
 
     // Records in _optionalMatchLimits the optional matches ahead of @param limit that
     // only ops keeping every row separate from it.

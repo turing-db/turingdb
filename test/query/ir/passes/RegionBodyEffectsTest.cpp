@@ -388,9 +388,9 @@ TEST_F(RegionBodyEffectsTest, everyOpReportingItsEffectsReportsItsRaise) {
 
 TEST_F(RegionBodyEffectsTest, eraseUnreadValuesKeepsABodyThatMayRaise) {
     for (const RegionOpProgram& regionOp : VALUE_REGION_OPS) {
-        EXPECT_EQ(countAfterPass(regionOp._ops, regionOp._opName, RAISING_DIVISION, mlir::db::createEraseUnreadValues), 1u)
+        EXPECT_EQ(countAfterPass(regionOp._ops, regionOp._opName, RAISING_DIVISION, mlir::db::createEraseUnreadOps), 1u)
             << regionOp._opName;
-        EXPECT_EQ(countAfterPass(regionOp._ops, regionOp._opName, SAFE_DIVISION, mlir::db::createEraseUnreadValues), 0u)
+        EXPECT_EQ(countAfterPass(regionOp._ops, regionOp._opName, SAFE_DIVISION, mlir::db::createEraseUnreadOps), 0u)
             << regionOp._opName;
     }
 }

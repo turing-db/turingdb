@@ -73,6 +73,14 @@ template <typename ConcreteType>
 class KeepsRowsByPosition : public TraitBase<ConcreteType, KeepsRowsByPosition> {
 };
 
+template <typename ConcreteType>
+class OpensRows : public TraitBase<ConcreteType, OpensRows> {
+};
+
+template <typename ConcreteType>
+class ReadsNoRowsInFlight : public TraitBase<ConcreteType, ReadsNoRowsInFlight> {
+};
+
 }
 
 #include "DBInterfaces.h.inc"
