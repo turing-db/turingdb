@@ -26,6 +26,8 @@ namespace mlir::db {
 // fuse_scan_edges_by_endpoint_label reads the graph to walk the index of the end with fewer nodes.
 // reroot_pattern_at_cheapest_node reads it to start a pattern from the node making the fewest rows,
 // and to choose where the walk crosses in the rows a filter joins it to.
+// stage_filter_conjuncts reads it for the share of rows each conjunct of a filter keeps, and with
+// no graph splits no filter.
 struct DBPassContext {
     const ::db::GraphView* _view {nullptr};
     bool _forcesHashJoin {false};
@@ -37,5 +39,6 @@ std::unique_ptr<Pass> createFuseScanEdgesByEndpointLabel(const DBPassContext* co
 std::unique_ptr<Pass> createFuseHashJoin(const DBPassContext* context);
 std::unique_ptr<Pass> createCountFromMetadata(const DBPassContext* context);
 std::unique_ptr<Pass> createRerootPatternAtCheapestNode(const DBPassContext* context);
+std::unique_ptr<Pass> createStageFilterConjuncts(const DBPassContext* context);
 
 }

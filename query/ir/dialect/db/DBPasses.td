@@ -23,6 +23,11 @@ def MergeFilters : Pass<"merge_filters"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def StageFilterConjuncts : Pass<"stage_filter_conjuncts"> {
+    let summary = "Split a filter into a chain, its cheap and selective conjuncts first, where computing a costly one over the rows they keep saves more than the extra filter costs";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FuseUnwindEquality : Pass<"fuse_unwind_equality"> {
     let summary = "Replace a constant unwind crossed into one equality by that equality's disjunction";
     let dependentDialects = ["mlir::db::DB"];

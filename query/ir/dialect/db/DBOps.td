@@ -488,7 +488,7 @@ def UnwindYield : TuringOp<"unwind_yield", [Pure, Terminator, HasParent<"UnwindC
 /**
 * MakeList
 */
-def MakeList : TuringOp<"make_list", [Pure, ConstantThroughOperands]> {
+def MakeList : TuringOp<"make_list", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<RowCostOpInterface>]> {
   let summary = "Build one list per row out of the row's cell in each element column";
 
   let description = [{
@@ -534,7 +534,7 @@ def MakeList : TuringOp<"make_list", [Pure, ConstantThroughOperands]> {
 /**
 * MakeMap
 */
-def MakeMap : TuringOp<"make_map", [Pure, ConstantThroughOperands]> {
+def MakeMap : TuringOp<"make_map", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<RowCostOpInterface>]> {
   let summary = "Build one map per row out of the row's cell in each value column";
 
   let description = [{
@@ -2012,7 +2012,7 @@ def PathElements : TuringOp<"path_elements", [NoMemoryEffect,
 /**
 * GetNodeProperties
 */
-def GetNodeProperties : TuringOp<"get_node_properties", [Pure, ConstantThroughOperands]> {
+def GetNodeProperties : TuringOp<"get_node_properties", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<RowCostOpInterface>]> {
   let summary = "Read one named property of each node as a column of values";
 
   let description = [{
@@ -2068,7 +2068,7 @@ def GetNodeProperties : TuringOp<"get_node_properties", [Pure, ConstantThroughOp
 /**
 * GetEdgeProperties
 */
-def GetEdgeProperties : TuringOp<"get_edge_properties", [Pure, ConstantThroughOperands]> {
+def GetEdgeProperties : TuringOp<"get_edge_properties", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<RowCostOpInterface>]> {
   let summary = "Read one named property of each edge as a column of values";
 
   let description = [{
@@ -2102,7 +2102,7 @@ def GetEdgeProperties : TuringOp<"get_edge_properties", [Pure, ConstantThroughOp
   }];
 }
 
-def GetNodeLabelSet : TuringOp<"get_node_label_set", [Pure]> {
+def GetNodeLabelSet : TuringOp<"get_node_label_set", [Pure, DeclareOpInterfaceMethods<RowCostOpInterface>]> {
   let summary = "Read the label-set ID of each node as a column";
 
   let description = [{
@@ -2120,7 +2120,7 @@ def GetNodeLabelSet : TuringOp<"get_node_label_set", [Pure]> {
   }];
 }
 
-def GetEdgeTypes : TuringOp<"get_edge_types", [Pure]> {
+def GetEdgeTypes : TuringOp<"get_edge_types", [Pure, DeclareOpInterfaceMethods<RowCostOpInterface>]> {
   let summary = "Read the type ID of each edge as a column";
 
   let description = [{
@@ -3306,7 +3306,7 @@ def PointWithinBBox : TuringOp<"point_within_bbox", [MayRaise, ConstantThroughOp
   }];
 }
 
-class BinaryFunctionOp<string mnemonic> : TuringOp<mnemonic, [Pure, ConstantThroughOperands]> {
+class BinaryFunctionOp<string mnemonic, list<Trait> traits = []> : TuringOp<mnemonic, !listconcat([Pure, ConstantThroughOperands], traits)> {
   let summary = "Apply a binary function row-wise to two value columns";
 
   let arguments = (ins Column:$lhs, Column:$rhs);
@@ -3317,8 +3317,8 @@ class BinaryFunctionOp<string mnemonic> : TuringOp<mnemonic, [Pure, ConstantThro
   }];
 }
 
-def CosineSimilarity : BinaryFunctionOp<"cosine_similarity">;
-def EuclideanDistance : BinaryFunctionOp<"euclidean_distance">;
+def CosineSimilarity : BinaryFunctionOp<"cosine_similarity", [DeclareOpInterfaceMethods<RowCostOpInterface>]>;
+def EuclideanDistance : BinaryFunctionOp<"euclidean_distance", [DeclareOpInterfaceMethods<RowCostOpInterface>]>;
 
 def ConstantOp : TuringOp<"constant", [Pure, ConstantLike, DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
   let summary = "Produces a constant value in a column";
@@ -3667,19 +3667,19 @@ def LteOp : PredicateOp<"lte", [Pure]> {
   let summary = "Row-wise less-than-or-equal comparison of two value columns";
 }
 
-def StartsWithOp : PredicateOp<"starts_with", [Pure]> {
+def StartsWithOp : PredicateOp<"starts_with", [Pure, DeclareOpInterfaceMethods<RowCostOpInterface>]> {
   let summary = "Row-wise test of whether each string column value starts with the given prefix";
 }
 
-def EndsWithOp : PredicateOp<"ends_with", [Pure]> {
+def EndsWithOp : PredicateOp<"ends_with", [Pure, DeclareOpInterfaceMethods<RowCostOpInterface>]> {
   let summary = "Row-wise test of whether each string column value ends with the given suffix";
 }
 
-def ContainsOp : PredicateOp<"contains", [Pure]> {
+def ContainsOp : PredicateOp<"contains", [Pure, DeclareOpInterfaceMethods<RowCostOpInterface>]> {
   let summary = "Row-wise test of whether each string column value contains the given substring";
 }
 
-def InOp : PredicateOp<"in", [Pure]> {
+def InOp : PredicateOp<"in", [Pure, DeclareOpInterfaceMethods<RowCostOpInterface>]> {
   let summary = "Row-wise test of whether each value is an element of the given list";
 
   let description = [{
