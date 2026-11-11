@@ -2167,7 +2167,7 @@ def CheckEdgeTypeConstraint : TuringOp<"check_edge_type_constraint", [Pure]> {
 /**
 * CrossProduct
 */
-def CrossProduct : TuringOp<"cross_product", [ReadsNoRowsInFlight, OpensRows, RecursivelyPure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRowSource", "getYieldedResultOffset"]>]> {
+def CrossProduct : TuringOp<"cross_product", [ReadsNoRowsInFlight, OpensRows, RecursivelyPure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRowSource", "getYieldedResultOffset", "repeatsYieldedRows", "readsColumnsFromAbove"]>]> {
   let summary = "Cross every row of one column dataflow with every row of another";
 
   let description = [{
@@ -2175,7 +2175,8 @@ def CrossProduct : TuringOp<"cross_product", [ReadsNoRowsInFlight, OpensRows, Re
     column dataflows that share no variable, whose result is the cartesian
     product of their rows. Each side is a self-contained db dataflow held in its
     own region - `leftFactor` and `rightFactor` - with no operands and no block
-    arguments, so the two factors share no SSA value.
+    arguments, so the two factors share no SSA value. A factor reads the columns
+    of the block holding the product where they stand.
 
       %a, %b = db.cross_product factor {
         %x = db.scan_nodes() : !db.column<!storage.node_id>
@@ -2222,7 +2223,7 @@ def CrossProduct : TuringOp<"cross_product", [ReadsNoRowsInFlight, OpensRows, Re
 /**
 * HashJoin
 */
-def HashJoin : TuringOp<"hash_join", [ReadsNoRowsInFlight, OpensRows, RecursivelyPure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRowSource", "getYieldedResultOffset"]>]> {
+def HashJoin : TuringOp<"hash_join", [ReadsNoRowsInFlight, OpensRows, RecursivelyPure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRowSource", "getYieldedResultOffset", "repeatsYieldedRows", "readsColumnsFromAbove"]>]> {
   let summary = "Cross two column dataflows, keeping the rows their key columns agree on";
 
   let description = [{
@@ -3368,7 +3369,7 @@ def BroadcastConstant : TuringOp<"broadcast_constant", [ReadsNoRowsInFlight, Pur
   }];
 }
 
-def RowConstant : TuringOp<"row_constant", [Pure, ConstantResult, SameOperandsAndResultType, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns"]>]> {
+def RowConstant : TuringOp<"row_constant", [Pure, ConstantResult, SameOperandsAndResultType, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRowSource", "collectCarriedColumns"]>]> {
   let summary = "Read an argument of a body run once per row as a constant";
   let description = [{
     A db.call_subquery, db.exists_subquery, db.count_subquery or db.collect_subquery

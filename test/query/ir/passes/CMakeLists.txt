@@ -241,3 +241,5 @@ add_ir_tests(test_query_ir_region_body_effects RegionBodyEffectsTest.cpp)
 add_ir_tests(test_query_ir_explicit_row_dependence ExplicitRowDependenceTest.cpp)
 
 add_ir_tests(test_query_ir_carry_through_hand_back_ops CarryThroughHandBackOpsTest.cpp)
+
+add_ir_tests(test_query_ir_hoist_through_products_and_row_constants HoistThroughProductsAndRowConstantsTest.cpp)

@@ -3167,12 +3167,28 @@ bool CrossProduct::getYieldedResultOffset(Region& region, size_t& resultOffset) 
     return true;
 }
 
+bool CrossProduct::repeatsYieldedRows(Region& region) {
+    return true;
+}
+
+bool CrossProduct::readsColumnsFromAbove(Region& region) {
+    return true;
+}
+
 Value HashJoin::getRowSource(OpResult result) {
     return yieldedFactorColumn(getLeftFactor(), getRightFactor(), result.getResultNumber());
 }
 
 bool HashJoin::getYieldedResultOffset(Region& region, size_t& resultOffset) {
     resultOffset = factorResultOffset(getLeftFactor(), region);
+    return true;
+}
+
+bool HashJoin::repeatsYieldedRows(Region& region) {
+    return true;
+}
+
+bool HashJoin::readsColumnsFromAbove(Region& region) {
     return true;
 }
 
@@ -3352,6 +3368,10 @@ void ScanMaterialized::collectCarriedColumns(Value value, llvm::SmallVectorImpl<
 
 void BroadcastConstant::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
     carried.push_back(getValue());
+}
+
+Value RowConstant::getRowSource(OpResult result) {
+    return getRow();
 }
 
 void RowConstant::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {

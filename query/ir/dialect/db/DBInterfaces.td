@@ -66,6 +66,16 @@ def ColumnCarrierOpInterface : OpInterface<"ColumnCarrierOpInterface"> {
       (ins "::mlir::Region&":$region, "size_t&":$resultOffset), [{}],
       [{ return false; }]>,
     InterfaceMethod<
+      "Whether a row `region` yields may come out as more than one row of the results, as the op pairs it with every row of another region",
+      "bool", "repeatsYieldedRows",
+      (ins "::mlir::Region&":$region), [{}],
+      [{ return false; }]>,
+    InterfaceMethod<
+      "Whether `region` reads the columns of the block holding the op where they stand, each with the rows it holds there, rather than taking them as arguments",
+      "bool", "readsColumnsFromAbove",
+      (ins "::mlir::Region&":$region), [{}],
+      [{ return false; }]>,
+    InterfaceMethod<
       "The operands of the carry set, as a range that keeps the operand segment holding them sized to match",
       "::mlir::MutableOperandRange", "getCarrySetMutable",
       (ins), [{}],

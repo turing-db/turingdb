@@ -121,22 +121,53 @@ bool mlir::db::matchRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
     return carrier && carrier.getRegionCarrySet(region, carrySet);
 }
 
+bool mlir::db::matchCarriedIndex(BlockArgument argument, size_t& carriedIndex) {
+    BlockArgument held = argument;
+    while (true) {
+        Region& region = *held.getParentRegion();
+
+        RegionCarrySet carrySet;
+        if (!matchRegionCarrySet(region, carrySet)) {
+            return false;
+        }
+
+        const size_t argumentIndex = held.getArgNumber();
+        const bool isCarried = argumentIndex >= carrySet._argumentOffset
+                            && argumentIndex < carrySet._argumentOffset + carrySet._count;
+        if (isCarried) {
+            carriedIndex = argumentIndex - carrySet._argumentOffset;
+            return true;
+        }
+
+        Region* source = nullptr;
+        size_t forwardIndex = 0;
+        if (!matchForwardedArgument(held, source, forwardIndex)) {
+            return false;
+        }
+
+        ColumnCarrierOpInterface carrier = cast<ColumnCarrierOpInterface>(region.getParentOp());
+        const MutableOperandRange forwarded = carrier.getForwardedColumnsMutable(*source);
+        BlockArgument sourceArgument = dyn_cast<BlockArgument>(forwarded[static_cast<unsigned>(forwardIndex)].get());
+        if (!sourceArgument || sourceArgument.getParentRegion() != source) {
+            return false;
+        }
+
+        held = sourceArgument;
+    }
+}
+
 Value mlir::db::carriedColumnOf(BlockArgument argument) {
+    size_t carriedIndex = 0;
+    if (!matchCarriedIndex(argument, carriedIndex)) {
+        return {};
+    }
+
     Region& region = *argument.getParentRegion();
 
     RegionCarrySet carrySet;
-    if (!matchRegionCarrySet(region, carrySet)) {
-        return {};
-    }
+    matchRegionCarrySet(region, carrySet);
 
-    const size_t argumentIndex = argument.getArgNumber();
-    const bool isCarried = argumentIndex >= carrySet._argumentOffset
-                        && argumentIndex < carrySet._argumentOffset + carrySet._count;
-    if (!isCarried) {
-        return {};
-    }
-
-    return region.getParentOp()->getOperand(carrySet._operandOffset + argumentIndex - carrySet._argumentOffset);
+    return region.getParentOp()->getOperand(carrySet._operandOffset + carriedIndex);
 }
 
 Value mlir::db::elementSourceOf(BlockArgument argument) {

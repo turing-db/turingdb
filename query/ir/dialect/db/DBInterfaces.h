@@ -57,8 +57,13 @@ bool matchForwardedArgument(BlockArgument argument, Region*& source, size_t& for
 
 bool matchRegionCarrySet(Region& region, RegionCarrySet& carrySet);
 
-// The operand @param argument is carried in from; null for an argument the op binds itself: a
-// list element, an accumulator or a row tag
+// Sets @param carriedIndex to the position in the region carry set of the column @param argument
+// holds: its own, or for a column a region before it forwards, that of the argument the region
+// forwards. False for a column a region computes and forwards, and for an argument the op binds
+// itself: a list element, an accumulator or a row tag.
+bool matchCarriedIndex(BlockArgument argument, size_t& carriedIndex);
+
+// The operand @param argument is carried in from, null where matchCarriedIndex finds none
 Value carriedColumnOf(BlockArgument argument);
 
 // The operand whose cells @param argument takes the elements of; null for an argument binding

@@ -228,7 +228,7 @@ def HoistUnconditionalRegions : Pass<"hoist_unconditional_regions"> {
 }
 
 def HoistRepeatedRegionInvariantOps : Pass<"hoist_repeated_region_invariant_ops"> {
-    let summary = "Compute an op that reads only the columns carried into a region running more than once per row - a body over the elements of a list, the hop of a walk, a body behind a hop - and that raises on no row and has no effect, once per row in front of the op holding the region, its column carried back in through the CASE branches, optional matches, CALLs and hops between";
+    let summary = "Compute an op that reads only the columns carried into a region running more than once per row - a body over the elements of a list, the hop of a walk, a body behind a hop or a product - and that raises on no row and has no effect, once per row in front of the op holding the region, its column carried back in through the CASE branches, optional matches, CALLs, run constants, factors and hops between";
     let dependentDialects = ["mlir::db::DB"];
 }
 
