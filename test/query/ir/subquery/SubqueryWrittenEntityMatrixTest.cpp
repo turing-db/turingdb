@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 #include <iterator>
+#include <ostream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -544,16 +545,25 @@ std::string_view consumerName(Consumer consumer) {
     return "";
 }
 
-std::string caseName(const testing::TestParamInfo<WrittenEntityCase>& info) {
-    const WrittenEntityCase& testCase = info.param;
-
-    std::string name {formName(testCase._form)};
+void buildCaseName(const WrittenEntityCase& testCase, std::string& name) {
+    name = formName(testCase._form);
     name += testCase._entity == Entity::NODE ? "_Node_" : "_Edge_";
     name += writeName(testCase._remyWrite);
     name += "_";
     name += writeName(testCase._otherWrite);
     name += testCase._optional ? "_Optional_" : "_";
     name += consumerName(testCase._consumer);
+}
+
+void PrintTo(const WrittenEntityCase& testCase, std::ostream* stream) {
+    std::string name;
+    buildCaseName(testCase, name);
+    *stream << name;
+}
+
+std::string caseName(const testing::TestParamInfo<WrittenEntityCase>& info) {
+    std::string name;
+    buildCaseName(info.param, name);
 
     return name;
 }
