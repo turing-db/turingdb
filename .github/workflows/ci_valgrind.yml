@@ -27,21 +27,13 @@ jobs:
     # RELDEBUG keeps the test binaries' symbols, which the suppressions match by name.
     # CMake reads it from the environment, so every cmake and ninja call needs it.
     env:
-      BUILD_JOBS: 4
-      CMAKE_BUILD_PARALLEL_LEVEL: 4
-      CTEST_PARALLEL_LEVEL: 4
+      BUILD_JOBS: 8
+      CMAKE_BUILD_PARALLEL_LEVEL: 8
+      CTEST_PARALLEL_LEVEL: 8
       PYTHON_VERSION: '3.14'
       RELDEBUG: 1
 
     steps:
-    - name: Use the host's build parallelism
-      run: |
-        if [ -n "${HOST_BUILD_JOBS:-}" ]; then
-          echo "BUILD_JOBS=$HOST_BUILD_JOBS" >> "$GITHUB_ENV"
-          echo "CMAKE_BUILD_PARALLEL_LEVEL=$HOST_BUILD_JOBS" >> "$GITHUB_ENV"
-          echo "CTEST_PARALLEL_LEVEL=$HOST_BUILD_JOBS" >> "$GITHUB_ENV"
-        fi
-
     - name: Install valgrind
       run: |
         if ! command -v valgrind > /dev/null; then
