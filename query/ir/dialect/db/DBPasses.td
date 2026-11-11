@@ -233,7 +233,7 @@ def HoistElementInvariantOps : Pass<"hoist_element_invariant_ops"> {
 }
 
 def TrimUnreadColumns : Pass<"trim_unread_columns"> {
-    let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products, grouping ops, calls, CASEs, optional matches and the ops over the elements of a list, and the values computed per row that nothing reads";
+    let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products, grouping ops, calls, CASEs, optional matches and the ops over the elements of a list, the inputs no region of a subquery, a CALL, a CASE or a list op reads, and the constants and values computed per row that nothing reads";
     let dependentDialects = ["mlir::db::DB"];
 }
 

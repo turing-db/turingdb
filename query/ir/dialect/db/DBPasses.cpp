@@ -6750,16 +6750,23 @@ void keepRequiredColumns(Operation* op, llvm::SmallBitVector& keep) {
     }
 }
 
-// An op standing for a relation is sized by a row-carrying column of it during lowering, so
-// one has to survive whenever the op had one.
+// An op standing for a relation is sized by a row-carrying column of it during lowering, a
+// subquery by the first of its inputs, so one has to survive whenever the op had one, ahead
+// of the constants kept where one stood ahead of them.
 void keepRowCarryingColumn(ValueRange columns, size_t firstIndex, llvm::SmallBitVector& keep) {
     std::optional<size_t> firstRowCarrying;
     for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+        const bool kept = keep[firstIndex + columnIndex];
+
         if (::db::yieldsConstantColumn(columns[columnIndex])) {
+            if (kept && firstRowCarrying) {
+                break;
+            }
+
             continue;
         }
 
-        if (keep[firstIndex + columnIndex]) {
+        if (kept) {
             return;
         }
 
@@ -7002,6 +7009,16 @@ size_t trimmedKeyColumn(const llvm::SmallBitVector& keep, size_t firstIndex, siz
     return trimmed;
 }
 
+void replaceKeptResults(Operation* op, Operation* trimmed, const llvm::SmallBitVector& keep) {
+    const Operation::result_range results = op->getResults();
+    size_t trimmedIndex = 0;
+    for (size_t resultIndex = 0; resultIndex < results.size(); resultIndex++) {
+        if (keep[resultIndex]) {
+            results[resultIndex].replaceAllUsesWith(trimmed->getResult(trimmedIndex++));
+        }
+    }
+}
+
 // Hands the two factors to the op built in its place, drops the columns their yields no
 // longer name, and rewires every kept result. Shared by the cross product and the hash
 // join, which differ only in the op the caller built.
@@ -7018,13 +7035,7 @@ void replaceWithTrimmedFactors(Operation* op,
     eraseUnkeptYields(leftYield, keep, 0);
     eraseUnkeptYields(rightYield, keep, leftCount);
 
-    const Operation::result_range results = op->getResults();
-    size_t trimmedIndex = 0;
-    for (size_t resultIndex = 0; resultIndex < results.size(); resultIndex++) {
-        if (keep[resultIndex]) {
-            results[resultIndex].replaceAllUsesWith(trimmed->getResult(trimmedIndex++));
-        }
-    }
+    replaceKeptResults(op, trimmed, keep);
 }
 
 // A product's results are the columns its two factors yield; a result nobody reads leaves
@@ -7073,10 +7084,11 @@ void trimHashJoin(HashJoin join, mlir::OpBuilder& builder) {
     joinOp->erase();
 }
 
-// A CASE or a coalesce lays its rows out over a column it carries into its regions, and so
-// does an op over the elements of a constant list, so one row-carrying column stays for them
+// A CASE or a coalesce lays its rows out over a column it carries into its regions, and so do
+// a subquery, run once per row it carries in, and an op over the elements of a constant list,
+// so one row-carrying column stays for them
 bool sizesItsRowsByItsRegionCarrySet(Operation* op) {
-    if (isa<LazyCase, Coalesce>(op)) {
+    if (isa<LazyCase, Coalesce, PatternComprehension, ExistsSubquery, CountSubquery, CollectSubquery, CallSubquery>(op)) {
         return true;
     } else if (ListComprehension comprehension = dyn_cast<ListComprehension>(op)) {
         return ::db::yieldsConstantColumn(comprehension.getSource());
@@ -7145,15 +7157,44 @@ void trimForwardedColumns(Operation* op) {
     }
 }
 
+// The op built in place of @param op, whose first results hand back the columns it carries
+// into its regions, without the results of the ones @param keep drops
+Operation* dropHandedBackResults(Operation* op, const llvm::SmallBitVector& keep, mlir::OpBuilder& builder) {
+    llvm::SmallBitVector keptResults(op->getNumResults(), true);
+    for (size_t carriedIndex = 0; carriedIndex < keep.size(); carriedIndex++) {
+        if (!keep[carriedIndex]) {
+            keptResults.reset(carriedIndex);
+        }
+    }
+
+    llvm::SmallVector<Type> keptTypes;
+    keptResultTypes(op, keptResults, keptTypes);
+
+    OperationState state(op->getLoc(), op->getName());
+    state.addOperands(op->getOperands());
+    state.addTypes(keptTypes);
+    state.addAttributes(op->getAttrs());
+
+    Operation* const rebuilt = rebuildOp(op, state, builder);
+    replaceKeptResults(op, rebuilt, keptResults);
+    op->erase();
+
+    return rebuilt;
+}
+
 // A column no region reads leaves the operands and the arguments of every region with a body
-// together. A column carried twice - the subject of `CASE t WHEN ...` beside the variable t -
-// is read through its first argument.
-void trimRegionCarrySet(Operation* op) {
+// together, unless the op hands it back to a reader. A column carried twice - the subject of
+// `CASE t WHEN ...` beside the variable t - is read through its first argument. Returns the
+// op standing in place of @param op.
+Operation* trimRegionCarrySet(Operation* op, mlir::OpBuilder& builder) {
     trimForwardedColumns(op);
 
     ColumnCarrierOpInterface carrier = cast<ColumnCarrierOpInterface>(op);
     MutableOperandRange carriedOperands = carrier.getRegionCarrySetMutable();
     const OperandRange carried = carriedOperands;
+
+    RegionCarrySet carrySet;
+    carrier.getRegionCarrySet(op->getRegion(0), carrySet);
 
     llvm::SmallVector<std::pair<Block*, size_t>, 4> bodies;
     for (Region& region : op->getRegions()) {
@@ -7161,11 +7202,11 @@ void trimRegionCarrySet(Operation* op) {
             continue;
         }
 
-        RegionCarrySet carrySet;
-        const bool carries = carrier.getRegionCarrySet(region, carrySet);
+        RegionCarrySet regionCarrySet;
+        const bool carries = carrier.getRegionCarrySet(region, regionCarrySet);
         bioassert(carries, "An op carrying columns into a region carries them into all of them");
 
-        bodies.emplace_back(&region.front(), carrySet._argumentOffset);
+        bodies.emplace_back(&region.front(), regionCarrySet._argumentOffset);
     }
 
     for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
@@ -7189,12 +7230,20 @@ void trimRegionCarrySet(Operation* op) {
         }
     }
 
+    if (carrySet._handsBack) {
+        for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
+            if (!op->getResult(static_cast<unsigned>(carriedIndex)).use_empty()) {
+                keep.set(carriedIndex);
+            }
+        }
+    }
+
     if (sizesItsRowsByItsRegionCarrySet(op)) {
         keepRowCarryingColumn(carried, 0, keep);
     }
 
     if (keep.all()) {
-        return;
+        return op;
     }
 
     llvm::SmallVector<Value> keptColumns;
@@ -7216,6 +7265,12 @@ void trimRegionCarrySet(Operation* op) {
     }
 
     carriedOperands.assign(keptColumns);
+
+    if (!carrySet._handsBack) {
+        return op;
+    }
+
+    return dropHandedBackResults(op, keep, builder);
 }
 
 BlockArgument carriedArgument(Region& region, size_t carriedIndex) {
@@ -7319,8 +7374,16 @@ BlockArgument forwardColumn(Region& source, Value column, Region& target, mlir::
     return targetBody.getArgument(static_cast<unsigned>(forwardOffset + forwardIndex));
 }
 
+// A region yielding back the columns it is carried reads every one through its yield, so only
+// what reads the op's results trims them
 bool trimsItsRegionCarrySet(Operation* op) {
-    return isa<LazyCase, Coalesce, ListComprehension, ListPredicate, Reduce, AllReduce, ExplorePaths>(op);
+    if (op->getNumRegions() == 0) {
+        return false;
+    }
+
+    RegionCarrySet carrySet;
+
+    return matchRegionCarrySet(op->getRegion(0), carrySet) && !carrySet._yieldsBack;
 }
 
 struct TrimVisit {
@@ -7468,19 +7531,17 @@ void trimOptionalMatch(OptionalMatch optional, mlir::OpBuilder& builder, llvm::S
 }
 
 void trimUnreadColumnsOf(Operation* op, mlir::OpBuilder& builder, llvm::SmallPtrSetImpl<Operation*>& erased) {
-    if (trimsItsRegionCarrySet(op)) {
-        trimRegionCarrySet(op);
-    }
+    Operation* const trimmed = trimsItsRegionCarrySet(op) ? trimRegionCarrySet(op, builder) : op;
 
     CarrySet carrySet;
-    if (CrossProduct product = dyn_cast<CrossProduct>(op)) {
+    if (CrossProduct product = dyn_cast<CrossProduct>(trimmed)) {
         trimCrossProduct(product, builder);
-    } else if (HashJoin join = dyn_cast<HashJoin>(op)) {
+    } else if (HashJoin join = dyn_cast<HashJoin>(trimmed)) {
         trimHashJoin(join, builder);
-    } else if (OptionalMatch optional = dyn_cast<OptionalMatch>(op)) {
+    } else if (OptionalMatch optional = dyn_cast<OptionalMatch>(trimmed)) {
         trimOptionalMatch(optional, builder, erased);
-    } else if (matchTrimmedColumns(op, carrySet)) {
-        trimCarriedColumns(op, carrySet, builder);
+    } else if (matchTrimmedColumns(trimmed, carrySet)) {
+        trimCarriedColumns(trimmed, carrySet, builder);
     }
 }
 
@@ -7497,6 +7558,15 @@ bool eraseUnreadOpsUnder(Operation* root, Erasable erasable) {
     llvm::SmallPtrSet<Operation*, 16> erased;
 
     return eraseUnreadOps(ops, erasable, rewriter, erased);
+}
+
+// A constant holds one value for every row and an op computing a value per row one for each
+// row it reads. Unlike a filter or a hop nothing reads, neither shapes the rows lowering lays
+// a constant out over.
+bool shapesNoRows(Operation* op) {
+    const bool holdsOneValue = op->hasTrait<OpTrait::ConstantLike>() || op->hasTrait<OpTrait::ConstantResult>();
+
+    return holdsOneValue || computesAValuePerRow(op);
 }
 
 struct TrimUnreadColumns : public impl::TrimUnreadColumnsBase<TrimUnreadColumns> {
@@ -7517,19 +7587,10 @@ struct TrimUnreadColumns : public impl::TrimUnreadColumnsBase<TrimUnreadColumns>
                 }
             }
 
-            erasedRowValues = eraseUnreadOpsUnder(getOperation(), computesAValuePerRow);
+            erasedRowValues = eraseUnreadOpsUnder(getOperation(), shapesNoRows);
         }
     }
 };
-
-// A constant holds one value for every row and an op computing a value per row one for each
-// row it reads. Unlike a filter or a hop nothing reads, neither shapes the rows lowering lays
-// a constant out over.
-bool shapesNoRows(Operation* op) {
-    const bool holdsOneValue = op->hasTrait<OpTrait::ConstantLike>() || op->hasTrait<OpTrait::ConstantResult>();
-
-    return holdsOneValue || computesAValuePerRow(op);
-}
 
 struct EraseUnreadValues : public impl::EraseUnreadValuesBase<EraseUnreadValues> {
     void runOnOperation() override {
