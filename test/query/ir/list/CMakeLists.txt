@@ -168,6 +168,7 @@ add_turing_test(test_query_ir_slice_by_type_erased_bound SliceByTypeErasedBoundT
 add_call_v3_test(test_query_ir_list_of_paths ListOfPathsTest.cpp)
 
 add_call_v3_test(test_query_ir_coll_index_of CollIndexOfTest.cpp)
+add_call_v3_test(test_query_ir_coll_sort_multi CollSortMultiTest.cpp)
 
 add_turing_test(test_query_ir_index_or_slice_a_non_list_cell IndexOrSliceANonListCellTest.cpp)
 

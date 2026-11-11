@@ -172,13 +172,12 @@ TEST_F(JourneyParetoTest, collectsTheLegsAsMaps) {
 }
 
 // sortMulti sorts descending on a key, and ascending on one written with a ^.
-// Disabled: apoc.coll.sortMulti does not exist (TUR-298).
-TEST_F(JourneyParetoTest, DISABLED_sortsTheLegsWithSortMulti) {
+TEST_F(JourneyParetoTest, sortsTheLegsWithSortMulti) {
     expectRows("WITH [{service: 'a', nlc: 'A', departure: 482, arrival: 497}, "
                "{service: 'b', nlc: 'B', departure: 470, arrival: 500}, "
                "{service: 'c', nlc: 'A', departure: 490, arrival: 502}, "
                "{service: 'd', nlc: 'A', departure: 470, arrival: 500}] AS OTTlist "
-               "RETURN [leg IN apoc.coll.sortMulti(OTTlist, ['nlc', '^arrival', 'departure']) | leg.service]",
+               "RETURN [leg IN coll.sortMulti(OTTlist, ['nlc', '^arrival', 'departure']) | leg.service]",
                {{"[b, a, d, c]"}});
 }
 

@@ -685,6 +685,43 @@ def ListSlice : TuringOp<"list_slice", [MayRaise, ConstantThroughOperands, AttrS
 }
 
 /**
+* SortMulti
+*/
+def SortMulti : TuringOp<"sort_multi", [MayRaise, ConstantThroughOperands, AttrSizedOperandSegments, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+  let summary = "Sort each row's list of maps on the values of some keys";
+
+  let description = [{
+    `coll.sortMulti(maps, fields, limit, skip)`, APOC's `apoc.coll.sortMulti`. The op reads
+    one list column and produces one list cell per row:
+
+      %sorted = db.sort_multi(%maps) fields %fields limit %limit skip %skip
+                  : (!db.column<none>, !db.column<!storage.list<!storage.string>>,
+                     !db.column<i64>, !db.column<i64>) -> !db.column<none>
+
+    Row r's maps are sorted on the keys row r's fields name, the first one first: a field
+    starting with `^` sorts ascending on the key after it, any other descending. Two values
+    compare as ORDER BY compares them, and a missing key is a null, which APOC orders before
+    every value: first ascending, last descending. Maps that tie keep their order. The sorted maps past the first `skip` are
+    kept, at most `limit` of them, all where `limit` is negative.
+
+    An operand the query left out is absent: no field keeps the list as it is, whatever it
+    holds, no limit keeps every map and no skip keeps the first. A row with a null operand
+    gets a null cell. Sorted on a field, a null element holds no key, as `null.a` is null,
+    and an element that is no map raises, as do a field that is no string and a negative skip.
+    The result element type is the input's and is resolved during lowering.
+  }];
+
+  let arguments = (ins Column:$list, Optional<Column>:$fields, Optional<Column>:$limit, Optional<Column>:$skip);
+  let results   = (outs Column:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $list `)` (`fields` $fields^)? (`limit` $limit^)? (`skip` $skip^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+/**
 * PercentileCont / PercentileDisc
 */
 // Cypher's percentileCont(x, p) and percentileDisc(x, p) are a db.collect of the values

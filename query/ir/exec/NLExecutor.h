@@ -460,6 +460,10 @@ public:
     // its bounds, which copies nothing - a slice of a list is a run of the same elements.
     static void runListSlice(NLExecutionContext* context, NLFunctionData* data);
 
+    // Sort one list of maps per row (nl.sort_multi) on the keys its fields name, into the
+    // step's own buffer, which the next run clears. With no field the row is a slice of its list.
+    static void runSortMulti(NLExecutionContext* context, NLFunctionData* data);
+
     // Read one percentile per row (nl.percentile_cont / nl.percentile_disc) of the numbers
     // its list holds. The discrete one answers a value of the list as @tparam Result: a
     // nullable number where the list names its number type, a tagged cell where it does not.

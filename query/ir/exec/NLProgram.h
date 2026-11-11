@@ -4778,6 +4778,51 @@ private:
     Column* _result {nullptr};
 };
 
+// nl.sort_multi data: the list column and the fields column, each with the read telling an
+// absent cell from a list, the limit and the skip with the read their column shape takes,
+// the buffers the sorted lists are written into and the column the step fills. An operand
+// the query left out has no column.
+class NLSortMultiData : public NLFunctionData {
+public:
+    NLSortMultiData(const Column* list,
+                    NLListReadFunction listRead,
+                    const Column* fields,
+                    NLListReadFunction fieldsRead,
+                    const NLRangeBound& limit,
+                    const NLRangeBound& skip,
+                    NLStepBuffers* stepBuffers,
+                    Column* result)
+        : _list(list),
+        _listRead(listRead),
+        _fields(fields),
+        _fieldsRead(fieldsRead),
+        _limit(limit),
+        _skip(skip),
+        _stepBuffers(stepBuffers),
+        _result(result)
+    {
+    }
+
+    const Column* getList() const { return _list; }
+    NLListReadFunction getListRead() const { return _listRead; }
+    const Column* getFields() const { return _fields; }
+    NLListReadFunction getFieldsRead() const { return _fieldsRead; }
+    const NLRangeBound& getLimit() const { return _limit; }
+    const NLRangeBound& getSkip() const { return _skip; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
+    Column* getResult() const { return _result; }
+
+private:
+    const Column* _list {nullptr};
+    NLListReadFunction _listRead {nullptr};
+    const Column* _fields {nullptr};
+    NLListReadFunction _fieldsRead {nullptr};
+    NLRangeBound _limit;
+    NLRangeBound _skip;
+    NLStepBuffers* _stepBuffers {nullptr};
+    Column* _result {nullptr};
+};
+
 // The run of each row's range an nl.unwind_range keeps: the slice bounds, absent where the
 // query gave none, and whether the run is counted out backwards.
 struct NLRangeWindowBounds {

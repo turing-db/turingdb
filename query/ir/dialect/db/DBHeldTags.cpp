@@ -8,6 +8,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 
 #include "DBColumnElement.h"
@@ -27,6 +28,15 @@ constexpr size_t NO_READ = 0;
 
 TagMask tagBit(CellTag tag) {
     return TagMask {1} << static_cast<uint8_t>(tag);
+}
+
+TagMask tagMaskOf(std::initializer_list<CellTag> tags) {
+    TagMask mask = 0;
+    for (const CellTag tag : tags) {
+        mask |= tagBit(tag);
+    }
+
+    return mask;
 }
 
 CellTag integerTag(mlir::IntegerType integer) {
@@ -133,8 +143,13 @@ public:
         _steps.push_back(ReadStep {});
     }
 
-    bool holdsOnlyTags(mlir::Value column) {
-        reach(column, NO_READ);
+    bool holdsOnlyTags(mlir::Value column, llvm::ArrayRef<mlir::StringAttr> reads) {
+        size_t path = NO_READ;
+        for (const mlir::StringAttr read : llvm::reverse(reads)) {
+            path = prepend(read, path);
+        }
+
+        reach(column, path);
 
         while (!_worklist.empty()) {
             const Reach next = _worklist.pop_back_val();
@@ -246,6 +261,8 @@ private:
             return walkMadeMap(map, path);
         } else if (mlir::db::MergeMaps merge = mlir::dyn_cast_or_null<mlir::db::MergeMaps>(made)) {
             return walkMergedMaps(merge, path);
+        } else if (mlir::db::SortMulti sort = mlir::dyn_cast_or_null<mlir::db::SortMulti>(made)) {
+            return walkSortedList(sort, path);
         } else {
             return walkType(element, path);
         }
@@ -267,6 +284,16 @@ private:
             reach(listElement, step._rest);
         }
 
+        return true;
+    }
+
+    // A sort holds some of the elements of the list it sorts
+    bool walkSortedList(mlir::db::SortMulti sort, size_t path) {
+        if (path == NO_READ) {
+            return holds(CellTag::ListView);
+        }
+
+        reach(sort.getList(), path);
         return true;
     }
 
@@ -377,12 +404,13 @@ private:
 }
 
 bool db::holdsOnlyNullOr(mlir::Value column, std::initializer_list<CellTag> tags) {
-    TagMask mask = 0;
-    for (const CellTag tag : tags) {
-        mask |= tagBit(tag);
-    }
+    return readsHoldOnlyNullOr(column, {}, tags);
+}
 
-    HeldTagWalk walk(mask);
+bool db::readsHoldOnlyNullOr(mlir::Value column,
+                             llvm::ArrayRef<mlir::StringAttr> reads,
+                             std::initializer_list<CellTag> tags) {
+    HeldTagWalk walk(tagMaskOf(tags));
 
-    return walk.holdsOnlyTags(column);
+    return walk.holdsOnlyTags(column, reads);
 }

@@ -10445,6 +10445,9 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
     } else if (funcName == "replace") {
         translateReplace(expr, args);
         return;
+    } else if (funcName == "coll.sortMulti") {
+        translateSortMulti(expr, args);
+        return;
     } else if (funcName == "point.distance") {
         translatePointDistance(expr, args);
         return;
@@ -10621,6 +10624,29 @@ void DBProgramGenerator::translateSubstring(const Expr* expr, const ExprChain* a
                                                                            length);
 
     _part._exprMap[expr] = substring.getResult();
+}
+
+void DBProgramGenerator::translateSortMulti(const Expr* expr, const ExprChain* args) {
+    bioassert(args && !args->empty() && args->size() <= 4, "coll.sortMulti() takes 1 to 4 arguments.");
+
+    const ExprChain::ExprVector& argExprs = args->getExprs();
+    const size_t argCount = argExprs.size();
+
+    const mlir::Value list = translateArg(argExprs[0]);
+    const mlir::Value fields = argCount > 1 ? translateArg(argExprs[1]) : mlir::Value {};
+    const mlir::Value limit = argCount > 2 ? translateArg(argExprs[2]) : mlir::Value {};
+    const mlir::Value skip = argCount > 3 ? translateArg(argExprs[3]) : mlir::Value {};
+
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    mlir::db::SortMulti sortMulti = _opBuilder.create<mlir::db::SortMulti>(_opBuilder.getUnknownLoc(),
+                                                                           noneType,
+                                                                           list,
+                                                                           fields,
+                                                                           limit,
+                                                                           skip);
+
+    _part._exprMap[expr] = sortMulti.getResult();
 }
 
 void DBProgramGenerator::translateSplit(const Expr* expr, const ExprChain* args) {

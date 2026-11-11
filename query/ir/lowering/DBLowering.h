@@ -377,7 +377,9 @@ private:
     mlir::Type accumulatedElement(mlir::Type accumulated, mlir::Type chunkType);
     mlir::nl::ChunkType accumulatorChunkType(mlir::Type accumulated);
 
+    void rowAlignOptionalChunks(llvm::MutableArrayRef<mlir::Value> chunks);
     void lowerListSlice(mlir::db::ListSlice slice);
+    void lowerSortMulti(mlir::db::SortMulti sortMulti);
     void lowerPercentile(mlir::Operation* operation);
     void lowerPatternComprehension(mlir::db::PatternComprehension comprehension);
     void lowerScanEdges(mlir::db::ScanEdges scanEdges);
