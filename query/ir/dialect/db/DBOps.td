@@ -4498,7 +4498,7 @@ def OptionalYield : TuringOp<"optional_yield", [Pure, Terminator, AttrSizedOpera
 /**
 * CallSubquery
 */
-def CallSubquery : TuringOp<"call_subquery", [OpensRows, ReadsNoRowsInFlight, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet", "getYieldedResultOffset"]>]> {
+def CallSubquery : TuringOp<"call_subquery", [OpensRows, ReadsNoRowsInFlight, RecursiveMemoryEffects, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet", "getYieldedResultOffset"]>]> {
   let summary = "Run a query of its own once per row in flight";
 
   let description = [{
@@ -4537,7 +4537,8 @@ def CallSubquery : TuringOp<"call_subquery", [OpensRows, ReadsNoRowsInFlight, De
     are the operands still, however many rows the body walked or wrote for each of
     them. A unit body is never `optional` - it yields no row for OPTIONAL to pad.
 
-    The body may write to the graph, so the op is not Pure.
+    The body may write to the graph, so the op is not Pure: its effects are the ones of
+    the ops its body holds.
   }];
 
   let arguments = (ins Variadic<Column>:$input_columns,

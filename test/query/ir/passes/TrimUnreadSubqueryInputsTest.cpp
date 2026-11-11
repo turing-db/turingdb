@@ -229,10 +229,10 @@ TEST_F(TrimUnreadSubqueryInputsTest, keepsAColumnSizingTheRowsOfABodyReadingNone
                          {"Martina", "[1, 2]"}, {"Suhas", "[1, 2]"}, {"Cyrus", "[1, 2]"}, {"Doruk", "[1, 2]"}});
 }
 
-// The pattern walks from n alone, but hands i and the edge back as the rows it keeps
+// The pattern walks from n alone, and hands i back to its reader; the edge it only hands back
 TEST_F(TrimUnreadSubqueryInputsTest, keepsTheInputsAnOptionalMatchHandsBack) {
     const std::string_view query = "MATCH (n:Person)-->(i:Interest) OPTIONAL MATCH (n)-[:KNOWS_WELL]->(k) RETURN i.name, k.name";
-    expectShape<mlir::db::OptionalMatch>(query, {._count = 1, ._inElementBodies = 0, ._inputs = 3, ._unreadInputs = 0});
+    expectShape<mlir::db::OptionalMatch>(query, {._count = 1, ._inElementBodies = 0, ._inputs = 2, ._unreadInputs = 0});
 
     expectRows(query, {{"Ghosts", "Adam"}, {"Computers", "Adam"}, {"Eighties", "Adam"}, {"Bio", "Remy"},
                        {"Cooking", "Remy"}, {"Bio", "null"}, {"Padel", "null"}, {"Animals", "null"},
@@ -259,12 +259,13 @@ TEST_F(TrimUnreadSubqueryInputsTest, keepsAnInputACallHandsBackToAReader) {
     expectRows(query, {{"Remy", "Adam", "4"}, {"Adam", "Remy", "3"}});
 }
 
-// A body carrying its scope yields every input back, as its hops left it
+// A body carrying its scope yields every input back, as its hops left it; the edge to f it
+// only yields back
 TEST_F(TrimUnreadSubqueryInputsTest, keepsTheInputsACallCarryingItsScopeYieldsBack) {
     const std::string_view query = "MATCH (n:Person)-[:KNOWS_WELL]->(f) "
                                    "CALL { WITH n MATCH (n)-->(k:Interest) RETURN k } "
                                    "RETURN f.name, k.name";
-    expectShape<mlir::db::CallSubquery>(query, {._count = 1, ._inElementBodies = 0, ._inputs = 3, ._unreadInputs = 0});
+    expectShape<mlir::db::CallSubquery>(query, {._count = 1, ._inElementBodies = 0, ._inputs = 2, ._unreadInputs = 0});
 
     expectRows(query, {{"Adam", "Ghosts"}, {"Adam", "Computers"}, {"Adam", "Eighties"}, {"Remy", "Bio"},
                        {"Remy", "Cooking"}});

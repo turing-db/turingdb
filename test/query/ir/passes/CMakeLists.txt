@@ -239,3 +239,5 @@ add_ir_tests(test_query_ir_trim_unread_subquery_inputs TrimUnreadSubqueryInputsT
 add_ir_tests(test_query_ir_region_body_effects RegionBodyEffectsTest.cpp)
 
 add_ir_tests(test_query_ir_explicit_row_dependence ExplicitRowDependenceTest.cpp)
+
+add_ir_tests(test_query_ir_carry_through_hand_back_ops CarryThroughHandBackOpsTest.cpp)

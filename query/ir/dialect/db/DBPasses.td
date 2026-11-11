@@ -228,12 +228,12 @@ def HoistUnconditionalRegions : Pass<"hoist_unconditional_regions"> {
 }
 
 def HoistRepeatedRegionInvariantOps : Pass<"hoist_repeated_region_invariant_ops"> {
-    let summary = "Compute an op that reads only the columns carried into a region running more than once per row - a body over the elements of a list, the hop of a walk, a body behind a hop - and that raises on no row and has no effect, once per row in front of the op holding the region, its column carried back in through the CASE branches and hops between";
+    let summary = "Compute an op that reads only the columns carried into a region running more than once per row - a body over the elements of a list, the hop of a walk, a body behind a hop - and that raises on no row and has no effect, once per row in front of the op holding the region, its column carried back in through the CASE branches, optional matches, CALLs and hops between";
     let dependentDialects = ["mlir::db::DB"];
 }
 
 def TrimUnreadColumns : Pass<"trim_unread_columns"> {
-    let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products, grouping ops, calls, CASEs, optional matches and the ops over the elements of a list, the inputs no region of a subquery, a CALL, a CASE or a list op reads, and the constants and values computed per row that nothing reads";
+    let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products, grouping ops, calls, CASEs, optional matches and the ops over the elements of a list, the inputs no region of a subquery, a CALL, an optional match, a CASE or a list op reads but to yield them back, and the constants and values computed per row that nothing reads";
     let dependentDialects = ["mlir::db::DB"];
 }
 
