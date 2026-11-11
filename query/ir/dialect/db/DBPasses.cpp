@@ -47,6 +47,7 @@
 #include "DBOps.h"
 
 #include "BioAssert.h"
+#include "SegmentationSolver.h"
 
 namespace mlir::db {
 
@@ -12894,26 +12895,22 @@ double rowCost(Operation* op) {
     return 1;
 }
 
-// A conjunct of a filter's mask: the share of rows it keeps, and the ops computing it in the
-// filter's block, which another conjunct may share
+// A conjunct of a filter's mask: the share of rows it keeps, its rank, and the cost of the ops
+// it is the first conjunct to need. Its cone is a run of the planner's cone ops.
 struct RankedConjunct {
     Value _value;
     double _selectivity {1.0};
-    double _cost {0.0};
-    llvm::SmallVector<Operation*> _cone;
+    double _rank {0.0};
+    double _ownCost {0.0};
+    size_t _coneBegin {0};
+    size_t _coneEnd {0};
 };
 
-// One stage of a filter's conjuncts, run over the rows the stages before it keep: the ops
-// computing them there, and the columns its filter carries to later stages beside the filter's
-struct ConjunctStage {
-    llvm::SmallVector<Value, 4> _conjuncts;
-    llvm::SmallVector<Operation*> _ops;
-    llvm::SmallVector<Value, 4> _carried;
-};
-
-struct FilterStages {
-    FilterOp _filter;
-    llvm::SmallVector<ConjunctStage, 2> _stages;
+// Where an op of the cones is computed: in the stage of the first conjunct needing it, or before
+// the filter when an op besides the conjuncts reads it or one of the ops it feeds
+struct ConePlacement {
+    size_t _position {0};
+    bool _computedBefore {false};
 };
 
 // A value read at a later conjunct than the one it is computed at: the stage boundaries from
@@ -12926,213 +12923,244 @@ struct StageCrossing {
     bool _carriable {false};
 };
 
-// The cost of the cheapest partition into stages of the conjuncts before `_start`, extended by a
-// stage starting there, as a line in the cost of the conjuncts it holds: its slope is the share
-// of rows reaching `_start`
-struct StageStartLine {
-    double _slope {0};
-    double _intercept {0};
-    size_t _start {0};
+// How the count of values crossing a boundary changes from the boundary before
+struct CrossingChange {
+    int64_t _carried {0};
+    int64_t _blocked {0};
 };
 
-// The lower envelope of the stage starts (the convex hull trick). Starts arrive in order of
-// non-increasing slope and are queried at non-decreasing costs, so a line the envelope drops
-// never comes back and each one is added and dropped once.
-class StageStartEnvelope {
+// Where a stage ends in each list of its filter's stages
+struct StageEnd {
+    size_t _conjuncts {0};
+    size_t _ops {0};
+    size_t _carried {0};
+};
+
+// The stages a filter splits into, each over the rows the ones before it keep: its conjuncts,
+// the ops a later stage computes after the filter before it, and the columns each stage's filter
+// carries beside the filter's own
+struct FilterStages {
+    FilterOp _filter;
+    llvm::SmallVector<Value, 4> _conjuncts;
+    MaskCone _moved;
+    llvm::SmallVector<Value, 4> _carried;
+    llvm::SmallVector<StageEnd, 2> _stageEnds;
+};
+
+// Plans the stages of one filter after another, reusing its buffers from one to the next
+class StagePlanner {
 public:
-    void add(const StageStartLine& line) {
-        while (!_lines.empty()) {
-            const StageStartLine& back = _lines.back();
-            if (back._slope == line._slope) {
-                if (back._intercept <= line._intercept) {
-                    return;
-                }
-
-                _lines.pop_back();
-                continue;
-            } else if (_lines.size() < 2) {
-                break;
-            }
-
-            const StageStartLine& before = _lines[_lines.size() - 2];
-            const double crossesBefore = (line._intercept - before._intercept) * (before._slope - back._slope);
-            const double backCrossesBefore = (back._intercept - before._intercept) * (before._slope - line._slope);
-            if (crossesBefore > backCrossesBefore) {
-                break;
-            }
-
-            _lines.pop_back();
-        }
-
-        _lines.push_back(line);
+    StagePlanner(const RowEstimator& estimator, const WalkKnowledge& knowledge)
+        : _estimator(estimator),
+        _knowledge(knowledge)
+    {
     }
 
-    StageStartLine lowest(double cost) {
-        while (_lines.size() >= 2 && evaluate(_lines[1], cost) <= evaluate(_lines[0], cost)) {
-            _lines.pop_front();
-        }
-
-        return _lines.front();
-    }
-
-    static double evaluate(const StageStartLine& line, double cost) {
-        return line._slope * cost + line._intercept;
-    }
+    bool plan(FilterOp filter, FilterStages& stages);
 
 private:
-    std::deque<StageStartLine> _lines;
+    const RowEstimator& _estimator;
+    const WalkKnowledge& _knowledge;
+    ConeCache _cache;
+    ::db::SegmentationSolver _solver;
+    llvm::SmallPtrSet<Operation*, 8> _conjunction;
+    llvm::SmallVector<RankedConjunct, 4> _conjuncts;
+    MaskCone _cones;
+    llvm::SmallPtrSet<Operation*, 8> _visited;
+    llvm::DenseMap<Operation*, ConePlacement> _placements;
+    llvm::SmallVector<Operation*> _pending;
+    llvm::SmallVector<StageCrossing> _crossings;
+    llvm::DenseMap<Value, size_t> _crossingIndices;
+    llvm::SmallVector<CrossingChange> _crossingChanges;
+    std::vector<size_t> _stageStarts;
+
+    bool collectConjunction(Value mask);
+    void rankConjuncts(Block* block);
+    void placeConeOps();
+    void collectCrossings(FilterOp filter);
+    void chooseStageStarts(size_t columnCount);
+    void fillStages(FilterOp filter, FilterStages& stages);
+
+    llvm::ArrayRef<Operation*> getCone(const RankedConjunct& conjunct) const {
+        return llvm::ArrayRef<Operation*>(_cones._ops).slice(conjunct._coneBegin, conjunct._coneEnd - conjunct._coneBegin);
+    }
+
+    // The position of the conjunct whose stage computes @param op, false where none does
+    bool findStageOf(Operation* op, size_t& position) const;
 };
 
-// The `and`s joining the conjuncts of @param mask. False where one of them has a reader besides
-// the filter: its conjuncts are then computed on every row whatever the filter keeps.
-bool collectSoleConjunction(Value mask, llvm::SmallPtrSetImpl<Operation*>& conjunction) {
+bool StagePlanner::plan(FilterOp filter, FilterStages& stages) {
+    const Value mask = filter.getMask();
+    if (!mask.hasOneUse() || !collectConjunction(mask) || _conjuncts.size() < 2) {
+        return false;
+    }
+
+    rankConjuncts(filter->getBlock());
+    placeConeOps();
+    collectCrossings(filter);
+    chooseStageStarts(filter.getColumnsToFilter().size());
+    if (_stageStarts.size() < 2) {
+        return false;
+    }
+
+    fillStages(filter, stages);
+    return true;
+}
+
+// The conjuncts of @param mask, left to right, and the `and`s joining them. False where one of
+// the `and`s has a reader besides the filter: its conjuncts are then computed on every row
+// whatever the filter keeps.
+bool StagePlanner::collectConjunction(Value mask) {
+    _conjunction.clear();
+    _conjuncts.clear();
+
     llvm::SmallVector<Value> pending {mask};
     while (!pending.empty()) {
         const Value conjunct = pending.pop_back_val();
-        AndOp conjunctionOp = conjunct.getDefiningOp<AndOp>();
-        if (!conjunctionOp) {
+        AndOp conjunction = conjunct.getDefiningOp<AndOp>();
+        if (!conjunction) {
+            _conjuncts.push_back(RankedConjunct {conjunct});
             continue;
         } else if (!conjunct.hasOneUse()) {
             return false;
         }
 
-        conjunction.insert(conjunctionOp);
-        pending.push_back(conjunctionOp.getLhs());
-        pending.push_back(conjunctionOp.getRhs());
+        _conjunction.insert(conjunction);
+        pending.push_back(conjunction.getRhs());
+        pending.push_back(conjunction.getLhs());
     }
 
     return true;
 }
 
-// The conjuncts with what each keeps and costs, in the order of Hellerstein's rank,
-// (selectivity - 1) / cost, which puts the cheap and selective ones first
-void rankConjuncts(llvm::ArrayRef<Value> values,
-                   Block* block,
-                   const RowEstimator& estimator,
-                   const WalkKnowledge& knowledge,
-                   ConeCache& cache,
-                   llvm::SmallVectorImpl<RankedConjunct>& conjuncts) {
+// Orders the conjuncts by Hellerstein's rank, (selectivity - 1) / cost, which puts the cheap and
+// selective ones first
+void StagePlanner::rankConjuncts(Block* block) {
     const auto computedInTheBlock = [block](Operation* op) {
         return op->getBlock() == block && computesFromTheRow(op) && !raisesOnSomeRows(op);
     };
 
-    const auto nodeOf = [&cache](Value column) {
-        return cache.climbFilters(column);
+    const auto nodeOf = [this](Value column) {
+        return _cache.climbFilters(column);
     };
 
-    conjuncts.resize(values.size());
-    for (const auto [conjunct, value] : llvm::zip_equal(conjuncts, values)) {
-        MaskCone cone;
-        llvm::SmallPtrSet<Operation*, 8> visited;
-        collectConePostOrder(value, computedInTheBlock, visited, cone);
+    _cones._ops.clear();
+    _cones._inputs.clear();
+    for (RankedConjunct& conjunct : _conjuncts) {
+        _visited.clear();
+        conjunct._coneBegin = _cones._ops.size();
+        collectConePostOrder(conjunct._value, computedInTheBlock, _visited, _cones);
+        conjunct._coneEnd = _cones._ops.size();
 
-        conjunct._value = value;
-        conjunct._selectivity = estimator.getPredicateSelectivity(value, nodeOf, knowledge);
-        conjunct._cone.assign(cone._ops.begin(), cone._ops.end());
-        for (Operation* const op : cone._ops) {
-            conjunct._cost += rowCost(op);
+        double cost = 0;
+        for (Operation* const op : getCone(conjunct)) {
+            cost += rowCost(op);
         }
+
+        conjunct._selectivity = _estimator.getPredicateSelectivity(conjunct._value, nodeOf, _knowledge);
+        conjunct._rank = cost == 0 ? -std::numeric_limits<double>::infinity() : (conjunct._selectivity - 1.0) / cost;
     }
 
-    const auto rank = [](const RankedConjunct& conjunct) {
-        if (conjunct._cost == 0) {
-            return -std::numeric_limits<double>::infinity();
-        }
-
-        return (conjunct._selectivity - 1.0) / conjunct._cost;
-    };
-
-    std::stable_sort(conjuncts.begin(), conjuncts.end(), [&rank](const RankedConjunct& lhs, const RankedConjunct& rhs) {
-        return rank(lhs) < rank(rhs);
+    std::stable_sort(_conjuncts.begin(), _conjuncts.end(), [](const RankedConjunct& lhs, const RankedConjunct& rhs) {
+        return lhs._rank < rhs._rank;
     });
 }
 
-// The position of the first conjunct needing each op of the cones, and the ops computed before
-// the filter whatever it keeps: those an op besides the conjuncts reads, and the ops they read
-void placeConeOps(llvm::ArrayRef<RankedConjunct> conjuncts,
-                  const llvm::SmallPtrSetImpl<Operation*>& conjunction,
-                  llvm::DenseMap<Operation*, size_t>& firstNeeded,
-                  llvm::SmallPtrSetImpl<Operation*>& computedBefore) {
-    for (size_t position = 0; position < conjuncts.size(); position++) {
-        for (Operation* const op : conjuncts[position]._cone) {
-            firstNeeded.try_emplace(op, position);
+void StagePlanner::placeConeOps() {
+    _placements.clear();
+    for (size_t position = 0; position < _conjuncts.size(); position++) {
+        for (Operation* const op : getCone(_conjuncts[position])) {
+            _placements.try_emplace(op, ConePlacement {position, false});
         }
     }
 
-    llvm::SmallVector<Operation*> pending;
-    for (size_t position = 0; position < conjuncts.size(); position++) {
-        for (Operation* const op : conjuncts[position]._cone) {
-            if (firstNeeded.at(op) != position) {
+    _pending.clear();
+    for (size_t position = 0; position < _conjuncts.size(); position++) {
+        for (Operation* const op : getCone(_conjuncts[position])) {
+            ConePlacement& placement = _placements.find(op)->second;
+            if (placement._position != position || placement._computedBefore) {
                 continue;
             }
 
-            const bool readByAnotherOp = llvm::any_of(op->getUsers(), [&firstNeeded, &conjunction](Operation* user) {
-                return !firstNeeded.contains(user) && !conjunction.contains(user);
+            const bool readByAnotherOp = llvm::any_of(op->getUsers(), [this](Operation* user) {
+                return !_placements.contains(user) && !_conjunction.contains(user);
             });
 
-            if (readByAnotherOp && computedBefore.insert(op).second) {
-                pending.push_back(op);
+            if (readByAnotherOp) {
+                placement._computedBefore = true;
+                _pending.push_back(op);
             }
         }
     }
 
-    while (!pending.empty()) {
-        Operation* const op = pending.pop_back_val();
+    while (!_pending.empty()) {
+        Operation* const op = _pending.pop_back_val();
         for (const Value operand : op->getOperands()) {
-            Operation* const operandOp = operand.getDefiningOp();
-            if (operandOp && firstNeeded.contains(operandOp) && computedBefore.insert(operandOp).second) {
-                pending.push_back(operandOp);
+            const auto found = _placements.find(operand.getDefiningOp());
+            if (found != _placements.end() && !found->second._computedBefore) {
+                found->second._computedBefore = true;
+                _pending.push_back(found->first);
+            }
+        }
+    }
+
+    for (size_t position = 0; position < _conjuncts.size(); position++) {
+        RankedConjunct& conjunct = _conjuncts[position];
+        for (Operation* const op : getCone(conjunct)) {
+            size_t stage = 0;
+            if (findStageOf(op, stage) && stage == position) {
+                conjunct._ownCost += rowCost(op);
             }
         }
     }
 }
 
-bool computedInAStage(Operation* op,
-                      const llvm::DenseMap<Operation*, size_t>& firstNeeded,
-                      const llvm::SmallPtrSetImpl<Operation*>& computedBefore) {
-    return op && firstNeeded.contains(op) && !computedBefore.contains(op);
+bool StagePlanner::findStageOf(Operation* op, size_t& position) const {
+    const auto found = _placements.find(op);
+    if (found == _placements.end() || found->second._computedBefore) {
+        return false;
+    }
+
+    position = found->second._position;
+    return true;
 }
 
-// The values a conjunct reads, through its own value or the ops computing it at its position,
-// that a conjunct before it or the code before the filter computes
-void collectCrossings(FilterOp filter,
-                      llvm::ArrayRef<RankedConjunct> conjuncts,
-                      const llvm::DenseMap<Operation*, size_t>& firstNeeded,
-                      const llvm::SmallPtrSetImpl<Operation*>& computedBefore,
-                      ConeCache& cache,
-                      llvm::SmallVectorImpl<StageCrossing>& crossings) {
+// The values a conjunct reads, through its own value or the ops its stage computes for it, that
+// a conjunct before it or the code before the filter computes
+void StagePlanner::collectCrossings(FilterOp filter) {
+    _crossings.clear();
+    _crossingIndices.clear();
+
     Block* const block = filter->getBlock();
     const Operation::operand_range columns = filter.getColumnsToFilter();
-    llvm::DenseMap<Value, size_t> crossingIndex;
-
-    const auto noteRead = [&](Value value, size_t position) {
-        if (cache.yieldsConstantColumn(value) || llvm::is_contained(columns, value)) {
+    const auto noteRead = [this, block, &columns](Value value, size_t position) {
+        if (_cache.yieldsConstantColumn(value) || llvm::is_contained(columns, value)) {
             return;
         }
 
-        Operation* const op = value.getDefiningOp();
-        const size_t crossesFrom = computedInAStage(op, firstNeeded, computedBefore) ? firstNeeded.at(op) + 1 : 0;
+        size_t stage = 0;
+        const size_t crossesFrom = findStageOf(value.getDefiningOp(), stage) ? stage + 1 : 0;
         if (crossesFrom > position) {
             return;
         }
 
-        const auto [found, inserted] = crossingIndex.try_emplace(value, crossings.size());
+        const auto [found, inserted] = _crossingIndices.try_emplace(value, _crossings.size());
         if (inserted) {
             const bool carriable = isa<ColumnType>(value.getType()) && value.getParentBlock() == block;
-            crossings.push_back(StageCrossing {value, crossesFrom, position, carriable});
+            _crossings.push_back(StageCrossing {value, crossesFrom, position, carriable});
         } else {
-            StageCrossing& crossing = crossings[found->second];
+            StageCrossing& crossing = _crossings[found->second];
             crossing._lastRead = std::max(crossing._lastRead, position);
         }
     };
 
-    for (size_t position = 0; position < conjuncts.size(); position++) {
-        const RankedConjunct& conjunct = conjuncts[position];
+    for (size_t position = 0; position < _conjuncts.size(); position++) {
+        const RankedConjunct& conjunct = _conjuncts[position];
         noteRead(conjunct._value, position);
 
-        for (Operation* const op : conjunct._cone) {
-            const bool computedHere = computedInAStage(op, firstNeeded, computedBefore) && firstNeeded.at(op) == position;
-            if (!computedHere) {
+        for (Operation* const op : getCone(conjunct)) {
+            size_t stage = 0;
+            if (!findStageOf(op, stage) || stage != position) {
                 continue;
             }
 
@@ -13147,202 +13175,156 @@ bool crossesBoundary(const StageCrossing& crossing, size_t boundary) {
     return std::max<size_t>(1, crossing._crossesFrom) <= boundary && boundary <= crossing._lastRead;
 }
 
-// The positions the stages start at, the first always 0, of the partition of the ranked
-// conjuncts with the least estimated cost per row the filter tests: each stage computes its
-// conjuncts and runs a filter over the rows the stages before it keep, and its filter copies
-// the filter's columns and those a later stage reads on the rows it keeps
-void chooseStageStarts(llvm::ArrayRef<RankedConjunct> conjuncts,
-                       llvm::ArrayRef<double> costAt,
-                       llvm::ArrayRef<StageCrossing> crossings,
-                       size_t columnCount,
-                       llvm::SmallVectorImpl<size_t>& starts) {
-    const size_t count = conjuncts.size();
+// Stages of the ranked conjuncts are segments between boundaries: a stage starting at conjunct i
+// computes conjuncts i to j - 1 and runs a filter on the rows reaching i, and its filter copies
+// the filter's columns and those a later stage reads on the rows reaching j
+void StagePlanner::chooseStageStarts(size_t columnCount) {
+    const size_t count = _conjuncts.size();
 
-    llvm::SmallVector<int64_t> carriedChange(count + 1, 0);
-    llvm::SmallVector<int64_t> blockedChange(count + 1, 0);
-    for (const StageCrossing& crossing : crossings) {
+    _crossingChanges.assign(count + 1, CrossingChange {});
+    for (const StageCrossing& crossing : _crossings) {
         const size_t first = std::max<size_t>(1, crossing._crossesFrom);
         if (first > crossing._lastRead) {
             continue;
         }
 
-        carriedChange[first]++;
-        carriedChange[crossing._lastRead + 1]--;
+        _crossingChanges[first]._carried++;
+        _crossingChanges[crossing._lastRead + 1]._carried--;
         if (!crossing._carriable) {
-            blockedChange[first]++;
-            blockedChange[crossing._lastRead + 1]--;
+            _crossingChanges[first]._blocked++;
+            _crossingChanges[crossing._lastRead + 1]._blocked--;
         }
     }
 
-    llvm::SmallVector<double> rows(count + 1, 1.0);
-    llvm::SmallVector<double> spent(count + 1, 0.0);
-    for (size_t position = 0; position < count; position++) {
-        rows[position + 1] = rows[position] * conjuncts[position]._selectivity;
-        spent[position + 1] = spent[position] + costAt[position];
-    }
-
-    const auto startLine = [&rows, &spent](size_t start, double best) {
-        const double intercept = best + rows[start] * (FILTER_ROW_COST - spent[start]) + FILTER_STAGE_COST;
-        return StageStartLine {rows[start], intercept, start};
-    };
-
-    llvm::SmallVector<size_t> stageStart(count + 1, 0);
-    StageStartEnvelope envelope;
-    envelope.add(startLine(0, 0.0));
-
+    _solver.clear();
+    double rows = 1.0;
+    double spent = 0.0;
     int64_t carried = 0;
     int64_t blocked = 0;
-    for (size_t end = 1; end < count; end++) {
-        carried += carriedChange[end];
-        blocked += blockedChange[end];
-
-        const StageStartLine cheapest = envelope.lowest(spent[end]);
-        stageStart[end] = cheapest._start;
-        if (blocked > 0) {
-            continue;
+    for (size_t boundary = 0; boundary <= count; boundary++) {
+        if (boundary > 0) {
+            const RankedConjunct& conjunct = _conjuncts[boundary - 1];
+            const CrossingChange& change = _crossingChanges[boundary];
+            rows *= conjunct._selectivity;
+            spent += conjunct._ownCost;
+            carried += change._carried;
+            blocked += change._blocked;
         }
 
-        const double copied = rows[end] * FILTER_COPY_COST * static_cast<double>(columnCount + static_cast<size_t>(carried));
-        const double best = StageStartEnvelope::evaluate(cheapest, spent[end]) + copied;
-        envelope.add(startLine(end, best));
+        const bool isLast = boundary == count;
+        const double copiedColumns = static_cast<double>(columnCount + static_cast<size_t>(carried));
+
+        ::db::SegmentationSolver::Boundary stageBoundary;
+        stageBoundary._position = spent;
+        stageBoundary._weight = rows;
+        stageBoundary._startCost = rows * FILTER_ROW_COST + FILTER_STAGE_COST;
+        stageBoundary._endCost = isLast ? 0.0 : rows * FILTER_COPY_COST * copiedColumns;
+        stageBoundary._cuttable = !isLast && blocked == 0;
+        _solver.addBoundary(stageBoundary);
     }
 
-    stageStart[count] = envelope.lowest(spent[count])._start;
-
-    for (size_t end = count; end > 0; end = stageStart[end]) {
-        starts.push_back(stageStart[end]);
-    }
-
-    std::reverse(starts.begin(), starts.end());
+    _solver.getSegmentStarts(_stageStarts);
 }
 
-bool matchFilterStages(FilterOp filter,
-                       const RowEstimator& estimator,
-                       const WalkKnowledge& knowledge,
-                       ConeCache& cache,
-                       FilterStages& plan) {
-    const Value mask = filter.getMask();
-    llvm::SmallPtrSet<Operation*, 8> conjunction;
-    if (!mask.hasOneUse() || !collectSoleConjunction(mask, conjunction)) {
-        return false;
+void StagePlanner::fillStages(FilterOp filter, FilterStages& stages) {
+    stages._filter = filter;
+    for (const RankedConjunct& conjunct : _conjuncts) {
+        stages._conjuncts.push_back(conjunct._value);
     }
 
-    llvm::SmallVector<Value, 4> collected;
-    collectConjuncts(mask, collected);
-
-    const llvm::SmallSetVector<Value, 4> values(collected.begin(), collected.end());
-    if (values.size() < 2) {
-        return false;
-    }
-
-    llvm::SmallVector<RankedConjunct, 4> conjuncts;
-    rankConjuncts(values.getArrayRef(), filter->getBlock(), estimator, knowledge, cache, conjuncts);
-
-    llvm::DenseMap<Operation*, size_t> firstNeeded;
-    llvm::SmallPtrSet<Operation*, 8> computedBefore;
-    placeConeOps(conjuncts, conjunction, firstNeeded, computedBefore);
-
-    llvm::SmallVector<double, 4> costAt(conjuncts.size(), 0.0);
-    for (size_t position = 0; position < conjuncts.size(); position++) {
-        for (Operation* const op : conjuncts[position]._cone) {
-            if (computedInAStage(op, firstNeeded, computedBefore) && firstNeeded.at(op) == position) {
-                costAt[position] += rowCost(op);
-            }
-        }
-    }
-
-    llvm::SmallVector<StageCrossing> crossings;
-    collectCrossings(filter, conjuncts, firstNeeded, computedBefore, cache, crossings);
-
-    llvm::SmallVector<size_t, 4> starts;
-    chooseStageStarts(conjuncts, costAt, crossings, filter.getColumnsToFilter().size(), starts);
-    if (starts.size() < 2) {
-        return false;
-    }
-
-    plan._filter = filter;
-    for (size_t index = 0; index < starts.size(); index++) {
-        const size_t begin = starts[index];
-        const size_t end = index + 1 < starts.size() ? starts[index + 1] : conjuncts.size();
-        ConjunctStage& stage = plan._stages.emplace_back();
-
-        for (size_t position = begin; position < end; position++) {
-            stage._conjuncts.push_back(conjuncts[position]._value);
-        }
-
-        const auto computedInTheStage = [&firstNeeded, &computedBefore, begin, end](Operation* op) {
-            const auto found = firstNeeded.find(op);
-            return found != firstNeeded.end() && found->second >= begin && found->second < end && !computedBefore.contains(op);
-        };
+    _visited.clear();
+    for (size_t index = 0; index < _stageStarts.size(); index++) {
+        const size_t begin = _stageStarts[index];
+        const size_t end = index + 1 < _stageStarts.size() ? _stageStarts[index + 1] : _conjuncts.size();
 
         if (begin > 0) {
-            MaskCone cone;
-            llvm::SmallPtrSet<Operation*, 8> visited;
-            for (const Value conjunct : stage._conjuncts) {
-                collectConePostOrder(conjunct, computedInTheStage, visited, cone);
-            }
+            const auto computedInTheStage = [this, begin, end](Operation* op) {
+                size_t stage = 0;
+                return findStageOf(op, stage) && stage >= begin && stage < end;
+            };
 
-            stage._ops.assign(cone._ops.begin(), cone._ops.end());
+            for (size_t position = begin; position < end; position++) {
+                collectConePostOrder(_conjuncts[position]._value, computedInTheStage, _visited, stages._moved);
+            }
         }
 
-        if (end < conjuncts.size()) {
-            for (const StageCrossing& crossing : crossings) {
+        if (end < _conjuncts.size()) {
+            for (const StageCrossing& crossing : _crossings) {
                 if (crossesBoundary(crossing, end)) {
-                    stage._carried.push_back(crossing._value);
+                    stages._carried.push_back(crossing._value);
                 }
             }
         }
-    }
 
-    return true;
+        stages._stageEnds.push_back(StageEnd {end, stages._moved._ops.size(), stages._carried.size()});
+    }
 }
 
-void stageConjuncts(const FilterStages& plan, mlir::RewriterBase& rewriter) {
-    FilterOp filter = plan._filter;
+void stageConjuncts(const FilterStages& stages, mlir::RewriterBase& rewriter) {
+    FilterOp filter = stages._filter;
     const Location loc = filter.getLoc();
     const Value mask = filter.getMask();
     const Operation::operand_range columns = filter.getColumnsToFilter();
-    const llvm::SmallVector<Value> filterColumns(columns.begin(), columns.end());
+    const llvm::ArrayRef<Value> conjuncts = stages._conjuncts;
+    const llvm::ArrayRef<Operation*> moved = stages._moved._ops;
+    const llvm::ArrayRef<Value> carried = stages._carried;
 
     mlir::IRMapping mapping;
     rewriter.setInsertionPoint(filter);
 
+    llvm::SmallVector<Value, 4> stageMasks;
+    llvm::SmallVector<Value> operands;
+    llvm::SmallVector<Type> types;
+    const auto addOperand = [&mapping, &operands, &types](Value column) {
+        const Value operand = mapping.lookupOrDefault(column);
+        operands.push_back(operand);
+        types.push_back(operand.getType());
+    };
+
+    StageEnd stageStart;
     FilterOp stageFilter;
-    for (const ConjunctStage& stage : plan._stages) {
-        for (Operation* const op : stage._ops) {
+    for (const StageEnd& stageEnd : stages._stageEnds) {
+        for (Operation* const op : moved.slice(stageStart._ops, stageEnd._ops - stageStart._ops)) {
             rewriter.clone(*op, mapping);
         }
 
-        llvm::SmallVector<Value, 4> conjuncts;
-        for (const Value conjunct : stage._conjuncts) {
-            conjuncts.push_back(mapping.lookupOrDefault(conjunct));
+        stageMasks.clear();
+        for (const Value conjunct : conjuncts.slice(stageStart._conjuncts, stageEnd._conjuncts - stageStart._conjuncts)) {
+            stageMasks.push_back(mapping.lookupOrDefault(conjunct));
         }
 
-        llvm::SmallVector<Value> carried(filterColumns);
-        llvm::append_range(carried, stage._carried);
-
-        llvm::SmallVector<Value> operands;
-        llvm::SmallVector<Type> types;
-        for (const Value column : carried) {
-            const Value operand = mapping.lookupOrDefault(column);
-            operands.push_back(operand);
-            types.push_back(operand.getType());
+        const llvm::ArrayRef<Value> stageCarried = carried.slice(stageStart._carried, stageEnd._carried - stageStart._carried);
+        operands.clear();
+        types.clear();
+        for (const Value column : columns) {
+            addOperand(column);
         }
 
-        const Value stageMask = conjoin(conjuncts, loc, rewriter);
+        for (const Value column : stageCarried) {
+            addOperand(column);
+        }
+
+        const Value stageMask = conjoin(stageMasks, loc, rewriter);
         stageFilter = rewriter.create<FilterOp>(loc, types, stageMask, operands);
-        for (const auto [column, kept] : llvm::zip_equal(carried, stageFilter.getFilteredColumns())) {
-            mapping.map(column, kept);
+
+        const ResultRange kept = stageFilter.getFilteredColumns();
+        const size_t columnCount = columns.size();
+        for (size_t index = 0; index < columnCount; index++) {
+            mapping.map(columns[index], kept[index]);
         }
+
+        for (size_t index = 0; index < stageCarried.size(); index++) {
+            mapping.map(stageCarried[index], kept[columnCount + index]);
+        }
+
+        stageStart = stageEnd;
     }
 
     rewriter.replaceOp(filter, stageFilter.getResults());
     eraseUnusedConjunction(mask, rewriter);
 
-    for (const ConjunctStage& stage : llvm::reverse(plan._stages)) {
-        for (Operation* const op : llvm::reverse(stage._ops)) {
-            eraseIfUnused(op, rewriter);
-        }
+    for (Operation* const op : llvm::reverse(moved)) {
+        eraseIfUnused(op, rewriter);
     }
 }
 
@@ -13371,18 +13353,18 @@ struct StageFilterConjuncts : public impl::StageFilterConjunctsBase<StageFilterC
         // Every plan is read before any filter is rewritten, and a rewrite erases only its own
         // filter and the ops only it reads, so the filters go last to first: a plan names no
         // value a later filter's rewrite replaces.
-        ConeCache cache;
-        std::vector<FilterStages> plans;
-        getOperation()->walk([&estimator, &knowledge, &cache, &plans](FilterOp filter) {
-            FilterStages& plan = plans.emplace_back();
-            if (!matchFilterStages(filter, estimator, knowledge, cache, plan)) {
+        StagePlanner planner(estimator, knowledge);
+        std::deque<FilterStages> plans;
+        getOperation()->walk([&planner, &plans](FilterOp filter) {
+            FilterStages& stages = plans.emplace_back();
+            if (!planner.plan(filter, stages)) {
                 plans.pop_back();
             }
         });
 
         mlir::IRRewriter rewriter(&getContext());
-        for (const FilterStages& plan : llvm::reverse(plans)) {
-            stageConjuncts(plan, rewriter);
+        for (const FilterStages& stages : llvm::reverse(plans)) {
+            stageConjuncts(stages, rewriter);
         }
     }
 
