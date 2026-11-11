@@ -52,12 +52,18 @@ void WriteQueryTest::submit(const ChangeID& changeID) {
 }
 
 QueryStatus WriteQueryTest::runQuery(std::string_view query, NLOutputSink* sink) {
+    return runQuery(query, ChangeID::head(), sink);
+}
+
+QueryStatus WriteQueryTest::runQuery(std::string_view query,
+                                     const ChangeID& changeID,
+                                     NLOutputSink* sink) {
     QueryStatus status;
     _interpreter->execute(status,
                           query,
                           _graphName,
                           CommitHash::head(),
-                          ChangeID::head(),
+                          changeID,
                           sink);
 
     return status;
@@ -65,15 +71,7 @@ QueryStatus WriteQueryTest::runQuery(std::string_view query, NLOutputSink* sink)
 
 QueryStatus WriteQueryTest::runWrite(std::string_view query, const ChangeID& changeID) {
     NullSink sink;
-    QueryStatus status;
-    _interpreter->execute(status,
-                          query,
-                          _graphName,
-                          CommitHash::head(),
-                          changeID,
-                          &sink);
-
-    return status;
+    return runQuery(query, changeID, &sink);
 }
 
 void WriteQueryTest::applyWrite(std::string_view query) {

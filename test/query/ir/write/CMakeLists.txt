@@ -93,3 +93,6 @@ add_turing_test(test_query_ir_cell_write_to_existing_property CellWriteToExistin
 
 # One write giving a property with no type two types.
 add_turing_test(test_query_ir_new_property_two_types NewPropertyTwoTypesTest.cpp)
+
+# The nodes, edges and dataparts db.history reports for a commit COMMIT closes in a change.
+add_turing_test(test_query_ir_change_commit_history ChangeCommitHistoryTest.cpp)
