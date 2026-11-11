@@ -815,15 +815,7 @@ bool holdsTaggedCells(mlir::Type chunkType) {
 }
 
 mlir::Type promoteNumeric(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type rhs) {
-    const bool anyFloat = mlir::isa<mlir::Float64Type>(lhs) || mlir::isa<mlir::Float64Type>(rhs);
-    if (anyFloat) {
-        return builder.getF64Type();
-    }
-
-    // Cypher has one integer type and it is signed. A tally is carried unsigned - it can
-    // never be negative - but arithmetic over it can be, so a count entering an expression
-    // is promoted like any other integer instead of wrapping around zero
-    return builder.getIntegerType(64);
+    return promotedNumberElement(builder.getContext(), lhs, rhs);
 }
 
 // The element of one column holding both @param lhs and @param rhs. A value of the column

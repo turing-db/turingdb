@@ -534,22 +534,17 @@ public:
     void reserveNodeIDs(size_t count) { _constNodeIDs.reserve(count); }
     void addNodeID(NodeID nodeID) { _constNodeIDs.push_back(nodeID); }
 
-    std::span<const ColumnConst<types::Int64::Primitive>* const> getBoundIDs() const { return _boundIDs; }
-    std::span<const ColumnConst<types::Double::Primitive>* const> getBoundDoubleIDs() const { return _boundDoubleIDs; }
-    std::span<const ColumnConst<ListView>* const> getBoundIDLists() const { return _boundIDLists; }
-    bool hasBoundIDs() const { return !_boundIDs.empty() || !_boundDoubleIDs.empty() || !_boundIDLists.empty(); }
+    // Each a constant column holding, nullable or not, a number or a list of them
+    std::span<const Column* const> getBoundIDs() const { return _boundIDs; }
+    bool hasBoundIDs() const { return !_boundIDs.empty(); }
 
-    void addBoundID(const ColumnConst<types::Int64::Primitive>* column) { _boundIDs.push_back(column); }
-    void addBoundDoubleID(const ColumnConst<types::Double::Primitive>* column) { _boundDoubleIDs.push_back(column); }
-    void addBoundIDList(const ColumnConst<ListView>* column) { _boundIDLists.push_back(column); }
+    void addBoundIDs(const Column* column) { _boundIDs.push_back(column); }
 
     std::vector<NodeID>& getListedNodeIDs() { return _listedNodeIDs; }
 
 private:
     std::vector<NodeID> _constNodeIDs;
-    std::vector<const ColumnConst<types::Int64::Primitive>*> _boundIDs;
-    std::vector<const ColumnConst<types::Double::Primitive>*> _boundDoubleIDs;
-    std::vector<const ColumnConst<ListView>*> _boundIDLists;
+    std::vector<const Column*> _boundIDs;
 
     // The IDs naming a node a scan produces, listed again each time the loop starts
     std::vector<NodeID> _listedNodeIDs;

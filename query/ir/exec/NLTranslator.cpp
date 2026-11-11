@@ -1783,19 +1783,7 @@ void NLTranslator::translateConstScanLoop(const IteratorConfig& config,
     }
 
     for (const mlir::Value bound : config._boundNodeIDs) {
-        const Column* column = getColumn(bound);
-        const mlir::Type boundType = mlir::cast<nl::ChunkType>(bound.getType()).getElementType();
-
-        if (mlir::isa<storage::ListType>(boundType)) {
-            bioassert(column->getKind() == ColumnConst<ListView>::staticKind(), "Bound node IDs hold one list for the run");
-            loopData->addBoundIDList(static_cast<const ColumnConst<ListView>*>(column));
-        } else if (boundType.isF64()) {
-            bioassert(column->getKind() == ColumnConst<types::Double::Primitive>::staticKind(), "A bound node ID holds one value for the run");
-            loopData->addBoundDoubleID(static_cast<const ColumnConst<types::Double::Primitive>*>(column));
-        } else {
-            bioassert(column->getKind() == ColumnConst<types::Int64::Primitive>::staticKind(), "A bound node ID holds one value for the run");
-            loopData->addBoundID(static_cast<const ColumnConst<types::Int64::Primitive>*>(column));
-        }
+        loopData->addBoundIDs(getColumn(bound));
     }
 
     body->emplaceStmt(&NLExecutor::runConstScanNodesLoop, loopData);
@@ -1839,8 +1827,7 @@ void NLTranslator::translateScanByPropertyValueLoop(const IteratorConfig& config
     loopData->setLimit(limit);
 
     if (bound) {
-        const mlir::Type boundType = mlir::cast<nl::ChunkType>(bound.getType()).getElementType();
-        loopData->setBoundValue(getColumn(bound), elementTypeToValueType(boundType));
+        loopData->setBoundValue(getColumn(bound), valueTypeFromChunkType(bound.getType()));
     }
 
     body->emplaceStmt(&NLExecutor::runScanNodesByPropertyValueLoop, loopData);

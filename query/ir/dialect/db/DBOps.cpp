@@ -1818,7 +1818,7 @@ LogicalResult CountScanRows::verify() {
 
 LogicalResult ConstScanNodes::verify() {
     for (const Value bound : getBoundIDs()) {
-        const Type element = cast<ColumnType>(bound.getType()).getType();
+        const Type element = columnElement(bound);
         if (!storage::isBoundNodeIDsType(element)) {
             return emitOpError("requires bound IDs of type i64, f64 or !storage.list, got ") << element;
         }
@@ -1838,7 +1838,7 @@ LogicalResult ScanNodesByPropertyValue::verify() {
         return emitOpError("requires either a literal or a bound value");
     }
 
-    const Type valueType = literal ? literal->getType() : cast<ColumnType>(bound.getType()).getType();
+    const Type valueType = literal ? literal->getType() : columnElement(bound);
     if (!storage::isPropertyScanType(valueType)) {
         return emitOpError(storage::propertyScanLiteralKinds()) << valueType;
     }

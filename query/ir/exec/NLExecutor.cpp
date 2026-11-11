@@ -1391,31 +1391,55 @@ typename T::Primitive propertyScanLiteralAs(const NLScanByPropertyValueLoopData:
     }
 }
 
-template <SupportedType T>
-typename T::Primitive boundValueAs(const Column* bound) {
-    bioassert(bound->getKind() == ColumnConst<typename T::Primitive>::staticKind(), "A bound value holds one value for the run");
+// The value @param bound holds for the run, read off a constant column of T or of nullable T.
+// False when it is neither.
+template <typename T>
+bool readBoundConstant(const Column* bound, std::optional<T>& value) {
+    if (bound->getKind() == ColumnConst<T>::staticKind()) {
+        value = static_cast<const ColumnConst<T>*>(bound)->getRaw();
+        return true;
+    } else if (bound->getKind() == ColumnConst<std::optional<T>>::staticKind()) {
+        value = static_cast<const ColumnConst<std::optional<T>>*>(bound)->getRaw();
+        return true;
+    }
 
-    return static_cast<const ColumnConst<typename T::Primitive>*>(bound)->getRaw();
+    return false;
 }
 
-// The value bound to a property-value scan, read as the literal a query spells
+template <SupportedType T>
+bool readBoundValueAs(const Column* bound, NLScanByPropertyValueLoopData::Literal& given) {
+    std::optional<typename T::Primitive> value;
+    const bool readsAConstant = readBoundConstant(bound, value);
+    bioassert(readsAConstant, "A bound value holds one value for the run");
+
+    if (!value) {
+        return false;
+    }
+
+    if constexpr (std::same_as<T, types::String>) {
+        given = std::string(*value);
+    } else {
+        given = *value;
+    }
+
+    return true;
+}
+
+// The value bound to a property-value scan, read as the literal a query spells. False where
+// it holds null, which no stored value equals.
 bool readBoundPropertyValue(const Column* bound, ValueType boundType, NLScanByPropertyValueLoopData::Literal& given) {
     switch (boundType) {
         case ValueType::Int64:
-            given = boundValueAs<types::Int64>(bound);
-            return true;
+            return readBoundValueAs<types::Int64>(bound, given);
         break;
         case ValueType::Double:
-            given = boundValueAs<types::Double>(bound);
-            return true;
+            return readBoundValueAs<types::Double>(bound, given);
         break;
         case ValueType::Bool:
-            given = boundValueAs<types::Bool>(bound);
-            return true;
+            return readBoundValueAs<types::Bool>(bound, given);
         break;
         case ValueType::String:
-            given = std::string(boundValueAs<types::String>(bound));
-            return true;
+            return readBoundValueAs<types::String>(bound, given);
         break;
         default:
             return false;
@@ -1438,16 +1462,8 @@ void appendBoundNodeIDs(const NLConstScanLoopData& loopData, const ScannedNodes&
         }
     };
 
-    for (const ColumnConst<types::Int64::Primitive>* bound : loopData.getBoundIDs()) {
-        appendNodeID(bound->getRaw());
-    }
-
-    for (const ColumnConst<types::Double::Primitive>* bound : loopData.getBoundDoubleIDs()) {
-        appendNodeID(bound->getRaw());
-    }
-
-    for (const ColumnConst<ListView>* bound : loopData.getBoundIDLists()) {
-        for (const CellView element : bound->getRaw()) {
+    const auto appendListedNodeIDs = [&appendNodeID](const ListView& list) {
+        for (const CellView element : list) {
             switch (element.getTag()) {
                 case CellTag::Int:
                     appendNodeID(element.getAs<types::Int64::Primitive>());
@@ -1461,6 +1477,28 @@ void appendBoundNodeIDs(const NLConstScanLoopData& loopData, const ScannedNodes&
                 default:
                 break;
             }
+        }
+    };
+
+    for (const Column* bound : loopData.getBoundIDs()) {
+        std::optional<types::Int64::Primitive> integer;
+        std::optional<types::Double::Primitive> real;
+        std::optional<ListView> list;
+
+        if (readBoundConstant(bound, integer)) {
+            if (integer) {
+                appendNodeID(*integer);
+            }
+        } else if (readBoundConstant(bound, real)) {
+            if (real) {
+                appendNodeID(*real);
+            }
+        } else if (readBoundConstant(bound, list)) {
+            if (list) {
+                appendListedNodeIDs(*list);
+            }
+        } else {
+            bioassert(false, "Bound node IDs hold one number or one list for the run");
         }
     }
 }

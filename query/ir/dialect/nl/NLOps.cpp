@@ -293,7 +293,7 @@ LogicalResult ConstScanNodes::inferReturnTypes(MLIRContext* context,
 
 LogicalResult ConstScanNodes::verify() {
     for (const Value bound : getBoundIDs()) {
-        const Type element = cast<ChunkType>(bound.getType()).getElementType();
+        const Type element = valueElementOf(bound.getType());
         if (!storage::isBoundNodeIDsType(element)) {
             return emitOpError("requires bound IDs of type i64, f64 or !storage.list, got ") << element;
         }
@@ -313,7 +313,7 @@ LogicalResult ScanNodesByPropertyValue::verify() {
         return emitOpError("requires either a literal or a bound value");
     }
 
-    const Type valueType = literal ? literal->getType() : cast<ChunkType>(bound.getType()).getElementType();
+    const Type valueType = literal ? literal->getType() : valueElementOf(bound.getType());
     if (!storage::isPropertyScanType(valueType)) {
         return emitOpError(storage::propertyScanLiteralKinds()) << valueType;
     }

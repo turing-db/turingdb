@@ -64,6 +64,7 @@ def ConstScanNodes : NLOp<"const_scan_nodes", [Pure, InferTypeOpAdaptor]> {
     `nodeIDs` is the same constant list db.const_scan_nodes carried; translation
     turns each entry into a storage NodeID. The bound IDs are read when the loop
     starts, as db.const_scan_nodes reads them, each node emitted once, in ID order.
+    A bound chunk may be nullable, and names no node where it holds null.
     The loop drops, when it starts, any ID naming no node a scan would produce.
     Emitting a known set needs no graph walk, but it narrows only which rows are
     produced, never their shape, so - like nl.scan_nodes - the result is always
@@ -101,7 +102,8 @@ def ScanNodesByPropertyValue : NLOp<"scan_nodes_by_property_value", [Pure, Infer
     bound chunk and label list the db op carried; translation resolves the names
     against the schema, the same way an nl.get_property_type name is resolved by
     the property fetch that consumes it, and the value is coerced to the stored
-    type, the bound one when the loop starts. A property or label absent from the
+    type, the bound one when the loop starts. A bound chunk may be nullable, and
+    matches no node where it holds null. A property or label absent from the
     schema is carried by no node, so the loop yields no chunk. Filtering by value
     narrows only the rows, never their shape, so - like nl.scan_nodes - the result
     is always !nl.iter<!nl.chunk<!storage.node_id>> and is inferred, not spelled

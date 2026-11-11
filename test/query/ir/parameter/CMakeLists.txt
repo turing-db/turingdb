@@ -42,3 +42,5 @@ target_sources(test_query_ir_embedding_parameter PRIVATE ${IR_TEST_DIR}/StringRo
 target_include_directories(test_query_ir_embedding_parameter PRIVATE ${IR_TEST_DIR})
 
 add_call_v3_test(test_query_ir_parameter_lookup_value_types ParameterLookupValueTypesTest.cpp)
+
+add_call_v3_test(test_query_ir_run_invariant_lookup RunInvariantLookupTest.cpp)

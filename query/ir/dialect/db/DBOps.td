@@ -84,8 +84,10 @@ def ConstScanNodes : TuringOp<"const_scan_nodes", [Pure]> {
 
     `nodeIDs` lists the IDs the query spells. `boundIDs` are the IDs bound when the
     query runs, each a column holding one value for the whole run: a number, or a
-    list whose numbers are the IDs. A parameter is one, so
-    `id(n) = $id OR id(n) IN $ids` scans
+    list whose numbers are the IDs. A parameter is one, and so is a value ops that
+    cannot raise compute from parameters and literals alone, as `$id + 1`, whose
+    column may leave its number for lowering to type. `id(n) = $id OR id(n) IN $ids`
+    scans
 
       %a = db.const_scan_nodes([], %id, %ids : !db.column<f64>, !db.column<!storage.list<!storage.any>>)
         : !db.column<!storage.node_id>
@@ -180,7 +182,9 @@ def ScanNodesByPropertyValue : TuringOp<"scan_nodes_by_property_value", [Pure]> 
     carried, one of the literal kinds the query language can spell: a signless
     i64 integer, an f64 double, an i1 boolean or a !storage.string - or
     `boundValue`, a column of one of those types holding one value for the whole
-    run, which the scan reads when it starts. A parameter is one:
+    run, which the scan reads when it starts, and which matches no node where it
+    holds null. A parameter is one, and so is a value ops that cannot raise compute
+    from parameters and literals alone, as `$first + $last`:
 
       %c = db.scan_nodes_by_property_value("age", %age : !db.column<i64>) : !db.column<!storage.node_id>
 

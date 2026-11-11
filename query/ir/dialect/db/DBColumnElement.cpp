@@ -8,6 +8,7 @@
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Value.h"
 #include "mlir/IR/ValueRange.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 
@@ -251,6 +252,69 @@ ElementRule lookupElementRule(mlir::Operation* function) {
     return it == elementRules.end() ? nullptr : it->second;
 }
 
+using OperatorElementRule = mlir::Type (*)(mlir::MLIRContext* context, mlir::Type lhsElement, mlir::Type rhsElement);
+
+bool isNumberElement(mlir::Type element) {
+    const auto integerType = mlir::dyn_cast<mlir::IntegerType>(element);
+
+    return mlir::isa<mlir::Float64Type>(element) || (integerType && integerType.getWidth() == 64);
+}
+
+// Arithmetic over anything but two numbers computes a temporal or reads a tagged cell, which
+// lowering resolves
+mlir::Type arithmeticElement(mlir::MLIRContext* context, mlir::Type lhsElement, mlir::Type rhsElement) {
+    if (!isNumberElement(lhsElement) || !isNumberElement(rhsElement)) {
+        return mlir::Type {};
+    }
+
+    return promotedNumberElement(context, lhsElement, rhsElement);
+}
+
+mlir::Type powerElement(mlir::MLIRContext* context, mlir::Type lhsElement, mlir::Type rhsElement) {
+    if (!isNumberElement(lhsElement) || !isNumberElement(rhsElement)) {
+        return mlir::Type {};
+    }
+
+    return mlir::Float64Type::get(context);
+}
+
+mlir::Type concatenationElement(mlir::MLIRContext* context, mlir::Type lhsElement, mlir::Type rhsElement) {
+    if (!mlir::isa<storage::StringType>(lhsElement) || !mlir::isa<storage::StringType>(rhsElement)) {
+        return mlir::Type {};
+    }
+
+    return storage::StringType::get(context);
+}
+
+const std::unordered_map<std::string_view, OperatorElementRule> operatorElementRules = {
+    {"db.add",    &arithmeticElement},
+    {"db.sub",    &arithmeticElement},
+    {"db.mul",    &arithmeticElement},
+    {"db.div",    &arithmeticElement},
+    {"db.mod",    &arithmeticElement},
+    {"db.pow",    &powerElement},
+    {"db.concat", &concatenationElement},
+};
+
+OperatorElementRule lookupOperatorElementRule(mlir::Operation* op) {
+    const mlir::OperationName operationName = op->getName();
+    const llvm::StringRef name = operationName.getStringRef();
+    const auto it = operatorElementRules.find(std::string_view(name.data(), name.size()));
+
+    return it == operatorElementRules.end() ? nullptr : it->second;
+}
+
+// The leading operands whose elements a rule answers @param op's element over, none without a rule
+size_t ruledOperandCount(mlir::Operation* op) {
+    if (lookupElementRule(op)) {
+        return 1;
+    } else if (lookupOperatorElementRule(op)) {
+        return 2;
+    }
+
+    return 0;
+}
+
 }
 
 mlir::Type db::declaredColumnElement(mlir::Value column) {
@@ -304,29 +368,72 @@ mlir::Type db::unaryFunctionElement(mlir::Operation* function, mlir::Type inputE
 }
 
 mlir::Type db::inferredColumnElement(mlir::Value column) {
-    llvm::SmallVector<mlir::Operation*> functions;
+    mlir::MLIRContext* const context = column.getContext();
+    const mlir::Type unknown = mlir::NoneType::get(context);
 
-    mlir::Value current = column;
-    mlir::Type element = declaredColumnElement(current);
+    llvm::SmallDenseMap<mlir::Value, mlir::Type, 8> inferred;
+    llvm::SmallVector<mlir::Value> worklist {column};
+    llvm::SmallVector<mlir::Type, 2> operandElements;
 
-    while (mlir::isa<mlir::NoneType>(element)) {
-        mlir::Operation* const definingOp = current.getDefiningOp();
-        const bool isAUnaryFunction = definingOp && lookupElementRule(definingOp);
-        if (!isAUnaryFunction) {
-            return element;
+    while (!worklist.empty()) {
+        const mlir::Value value = worklist.back();
+        if (inferred.contains(value)) {
+            worklist.pop_back();
+            continue;
         }
 
-        functions.push_back(definingOp);
-        current = definingOp->getOperand(0);
-        element = declaredColumnElement(current);
-    }
+        const mlir::Type declared = declaredColumnElement(value);
+        mlir::Operation* const definingOp = value.getDefiningOp();
+        const size_t ruledOperands = definingOp ? ruledOperandCount(definingOp) : 0;
 
-    for (mlir::Operation* const function : llvm::reverse(functions)) {
-        element = unaryFunctionElement(function, element);
-        if (!element) {
-            return mlir::NoneType::get(column.getContext());
+        if (!mlir::isa<mlir::NoneType>(declared) || ruledOperands == 0) {
+            inferred[value] = declared;
+            worklist.pop_back();
+            continue;
         }
+
+        operandElements.clear();
+        bool operandsInferred = true;
+        for (const mlir::Value operand : definingOp->getOperands().take_front(ruledOperands)) {
+            const auto inferredIt = inferred.find(operand);
+            if (inferredIt == inferred.end()) {
+                worklist.push_back(operand);
+                operandsInferred = false;
+            } else {
+                operandElements.push_back(inferredIt->second);
+            }
+        }
+
+        if (!operandsInferred) {
+            continue;
+        }
+
+        const bool readsAnUnknownElement = llvm::any_of(operandElements, [](mlir::Type element) {
+            return mlir::isa<mlir::NoneType>(element);
+        });
+
+        mlir::Type element;
+        if (!readsAnUnknownElement && ruledOperands == 1) {
+            element = unaryFunctionElement(definingOp, operandElements.front());
+        } else if (!readsAnUnknownElement) {
+            element = lookupOperatorElementRule(definingOp)(context, operandElements[0], operandElements[1]);
+        }
+
+        inferred[value] = element ? element : unknown;
+        worklist.pop_back();
     }
 
-    return element;
+    return inferred.lookup(column);
+}
+
+mlir::Type db::promotedNumberElement(mlir::MLIRContext* context, mlir::Type lhs, mlir::Type rhs) {
+    const bool anyFloat = mlir::isa<mlir::Float64Type>(lhs) || mlir::isa<mlir::Float64Type>(rhs);
+    if (anyFloat) {
+        return mlir::Float64Type::get(context);
+    }
+
+    // Cypher has one integer type and it is signed. A tally is carried unsigned - it can
+    // never be negative - but arithmetic over it can be, so a count entering an expression
+    // is promoted like any other integer instead of wrapping around zero
+    return mlir::IntegerType::get(context, 64);
 }

@@ -130,12 +130,12 @@ TEST_F(FetchNodesTest, fetchesANodeTheQueryCreated) {
     EXPECT_EQ(sink.getRows(), expected);
 }
 
-TEST_F(FetchNodesTest, fetchesTheSecondFactorOfAConstantExpression) {
+TEST_F(FetchNodesTest, looksUpTheSecondFactorByAConstantExpression) {
     const std::string_view query = "MATCH (a:Person), (n) WHERE n = 1 + 0 RETURN count(*)";
 
     std::string program;
     dbProgramOf(query, program);
-    EXPECT_TRUE(contains(program, "db.fetch_nodes")) << program;
+    EXPECT_TRUE(contains(program, "db.const_scan_nodes")) << program;
 
     expectRows(query, {{"8"}});
     expectRows("MATCH (a:Person) MATCH (n) WHERE n = 1 + 0 RETURN count(*)", {{"8"}});

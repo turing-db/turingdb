@@ -195,10 +195,13 @@ void runFilterWorklist(Operation* root, MatchFilter matchFilter, RewriteFilter r
     });
 }
 
-// Whether @param value is bound before the query runs, as a parameter is: it holds one value
-// for the whole run, which any op can read wherever it stands
-bool isBoundBeforeTheRun(Value value) {
-    return ::db::isFunctionArgument(value);
+// A bound value is run-invariant: ops that cannot raise compute it from parameters and
+// literals alone, so it holds the same value wherever it is computed
+void computeBoundValuesAhead(Operation* lookup) {
+    mlir::IRRewriter rewriter(lookup->getContext());
+    const mlir::LogicalResult moved = mlir::moveValueDefinitions(rewriter, lookup->getOperands(), lookup);
+
+    bioassert(mlir::succeeded(moved), "The bound values of a lookup are computed ahead of it");
 }
 
 bool isNodeSource(Operation* op) {
@@ -757,11 +760,11 @@ struct NodeIDList {
 };
 
 bool matchBoundNodeIDs(Value side, bool listsIDs, bool comparesTheID, NodeIDList& nodeIDs) {
-    if (!isBoundBeforeTheRun(side)) {
+    if (!::db::isRunInvariant(side)) {
         return false;
     }
 
-    const Type element = cast<ColumnType>(side.getType()).getType();
+    const Type element = ::db::inferredColumnElement(side);
     const storage::ListType list = dyn_cast<storage::ListType>(element);
 
     const bool holdsANumber = !listsIDs && (element.isSignlessInteger(64) || element.isF64());
@@ -964,8 +967,8 @@ bool matchPropertyEquality(EqOp equality, PropertyEquality& match) {
     const TypedAttr literal = constant ? dyn_cast<TypedAttr>(constant.getValue()) : TypedAttr();
     const bool scansTheLiteral = literal && storage::isPropertyScanLiteral(literal);
     const bool scansTheBoundValue = !constant
-                                 && isBoundBeforeTheRun(constantSide)
-                                 && storage::isPropertyScanType(cast<ColumnType>(constantSide.getType()).getType());
+                                 && ::db::isRunInvariant(constantSide)
+                                 && storage::isPropertyScanType(::db::inferredColumnElement(constantSide));
 
     if (!scansTheLiteral && !scansTheBoundValue) {
         return false;
@@ -3264,6 +3267,7 @@ void fuseScanByNodeIDs(NodeIDScanChain& chain, mlir::RewriterBase& rewriter) {
                                                                scan->getResult(0).getType(),
                                                                chain._nodeIDs._literals,
                                                                chain._nodeIDs._bound);
+    computeBoundValuesAhead(constScan);
 
     llvm::SmallVector<Value> fused {constScan.getResult()};
     if (chain._source._labels) {
@@ -5833,6 +5837,8 @@ Value buildNodeScan(const NodeScanPredicate& predicate, ArrayAttr labels, Locati
                                                                                  predicate._value,
                                                                                  predicate._boundValue,
                                                                                  labels);
+        computeBoundValuesAhead(scan);
+
         return scan.getResult();
     }
 
@@ -5840,6 +5846,8 @@ Value buildNodeScan(const NodeScanPredicate& predicate, ArrayAttr labels, Locati
                                                            nodeColumnType,
                                                            predicate._nodeIDs._literals,
                                                            predicate._nodeIDs._bound);
+    computeBoundValuesAhead(listed);
+
     llvm::SmallVector<Value> nodes {listed.getResult()};
     if (labels) {
         keepLabelledRows(nodes, labels, loc, builder);
@@ -7780,6 +7788,7 @@ void fuseScanByPropertyValue(PropertyValueScanChain& chain, mlir::RewriterBase& 
                                                                                chain._value,
                                                                                chain._boundValue,
                                                                                chain._source._labels);
+    computeBoundValuesAhead(fused);
 
     rewriter.replaceOp(scan, fused.getResult());
     dropConjunct(chain._filter, chain._conjunct, rewriter);
@@ -9965,7 +9974,7 @@ private:
 double estimateListedNodes(ConstScanNodes constScan) {
     double listed = static_cast<double>(constScan.getNodeIDs().size());
     for (const Value bound : constScan.getBoundIDs()) {
-        const bool listsIDs = isa<storage::ListType>(cast<ColumnType>(bound.getType()).getType());
+        const bool listsIDs = isa<storage::ListType>(::db::inferredColumnElement(bound));
         listed += listsIDs ? static_cast<double>(uncountableRows) : 1.0;
     }
 
@@ -12353,7 +12362,7 @@ bool fusesIntoScanByPropertyValue(FilterOp filter, Value start, const SeedPatter
 
     const MaskCone cone = collectMaskCone(filter.getMask());
     const bool readsTheStartAlone = llvm::all_of(cone._inputs, [&readsTheStart](Value input) {
-        return readsTheStart(input) || isBoundBeforeTheRun(input);
+        return readsTheStart(input) || ::db::isRunInvariant(input);
     });
 
     if (!readsTheStartAlone) {

@@ -37,6 +37,11 @@ bool yieldsConstantColumn(mlir::Value value);
 // whole cone under each one.
 bool yieldsConstantColumn(mlir::Value value, llvm::DenseMap<mlir::Value, bool>& classified);
 
+// Whether @param value holds one value for the whole run, known before any row is: a
+// parameter, a literal, or what ops that cannot raise compute from those alone. A body run
+// once per row binds its arguments anew for each row, so they are not.
+bool isRunInvariant(mlir::Value value);
+
 // Drops from @param classified the values @param operation and the ops nested in it define,
 // as it is erased: a value created later at an erased one's address would otherwise read the
 // erased one's answer
