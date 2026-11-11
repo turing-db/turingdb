@@ -27,7 +27,7 @@ TEST_F(FileWriterTest, General) {
         // FileWriter with small buffer
         writer.setFile(&file);
 
-        std::array<uint8_t, 256> bytes;
+        std::array<uint8_t, 256> bytes {};
         bytes[0] = 0;
         bytes[3] = 3;
         bytes[6] = 6;
