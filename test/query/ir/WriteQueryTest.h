@@ -35,8 +35,9 @@ protected:
     void openChange(db::ChangeID& changeID);
     void submit(const db::ChangeID& changeID);
 
-    // A reading query at the graph's head, and a writing one in @param changeID
+    // A query at the graph's head or in @param changeID, and a writing one whose rows are dropped
     db::QueryStatus runQuery(std::string_view query, db::NLOutputSink* sink);
+    db::QueryStatus runQuery(std::string_view query, const db::ChangeID& changeID, db::NLOutputSink* sink);
     db::QueryStatus runWrite(std::string_view query, const db::ChangeID& changeID);
 
     // Runs a writing query in its own change and submits it, so a following read sees it

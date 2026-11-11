@@ -113,6 +113,8 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
 
     _builders.clear();
 
+    updateCommitStats();
+
     return {};
 }
 
@@ -122,20 +124,6 @@ CommitResult<std::unique_ptr<Commit>> CommitBuilder::build(JobSystem& jobsystem)
     }
 
     _commit->history().journal().finalise();
-
-    const size_t numCommitDataParts = _commit->history().commitDataparts().size();
-    size_t numNodesAdded = 0;
-    size_t numEdgesAdded = 0;
-
-    for (size_t i = 0; i < numCommitDataParts; ++i) {
-        const DataPart* part = _commit->data().commitDataparts()[i].get();
-        numNodesAdded += part->getNodeContainerSize();
-        numEdgesAdded += part->getEdgeContainerSize();
-    }
-
-    _commit->_numDataParts = numCommitDataParts;
-    _commit->_numNodes = numNodesAdded;
-    _commit->_numEdges = numEdgesAdded;
 
     return std::move(_commit);
 }
@@ -210,6 +198,21 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
     }
 
     wb.setFlushed();
+}
+
+void CommitBuilder::updateCommitStats() {
+    const DataPartSpan commitDataparts = _commitData->commitDataparts();
+    size_t numNodesAdded = 0;
+    size_t numEdgesAdded = 0;
+
+    for (const WeakArc<DataPart>& part : commitDataparts) {
+        numNodesAdded += part->getNodeContainerSize();
+        numEdgesAdded += part->getEdgeContainerSize();
+    }
+
+    _commit->_numDataParts = commitDataparts.size();
+    _commit->_numNodes = numNodesAdded;
+    _commit->_numEdges = numEdgesAdded;
 }
 
 CommitBuilder::CommitBuilder(VersionController& controller, Change* change, const GraphView& view)
