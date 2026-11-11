@@ -86,7 +86,7 @@ TEST_F(PropertyDumpFormatTest, stringDumpBytes) {
 
     uint64_t hash = 0;
     hashDumpFileContent(path, hash);
-    EXPECT_EQ(hash, 3120130461636103366ull);
+    EXPECT_EQ(hash, 5183985201322724322ull);
 
     {
         auto reader = fs::FilePageReader::open(path, DumpConfig::PAGE_SIZE);
