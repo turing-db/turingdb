@@ -22,6 +22,7 @@ set(common_sources
         Profiler.cpp
         ThreadName.cpp
         HybridString.cpp
+        SegmentationSolver.cpp
 
         log/LogSetup.cpp
         log/LogUtils.cpp)

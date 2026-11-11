@@ -1,3 +1,4 @@
 add_turing_test(test_common_perfstat PerfStatTest.cpp)
 add_turing_test(test_common_hybridstring HybridStringTest.cpp)
 add_turing_test(test_common_demon_readiness DemonReadinessTest.cpp)
+add_turing_test(test_common_segmentation_solver SegmentationSolverTest.cpp)
