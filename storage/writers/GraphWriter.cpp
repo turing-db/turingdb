@@ -114,6 +114,8 @@ void GraphWriter::deleteNode(NodeID id) {
         return;
     }
 
+    _dataPartBuilder->throwIfUnknownNode(id);
+
     _commitBuilder->writeBuffer().addDeletedNode(id);
     _commitBuilder->writeBuffer().addHangingEdges(openWriteTransaction().viewGraph());
 }
@@ -121,6 +123,10 @@ void GraphWriter::deleteNode(NodeID id) {
 void GraphWriter::deleteNodes(const std::vector<NodeID>& ids) {
     if (!_commitBuilder) {
         return;
+    }
+
+    for (const NodeID id : ids) {
+        _dataPartBuilder->throwIfUnknownNode(id);
     }
 
     _commitBuilder->writeBuffer().addDeletedNodes(ids);
@@ -131,6 +137,9 @@ EdgeRecord GraphWriter::addEdge(std::string_view edgeType, NodeID src, NodeID tg
     if (!_dataPartBuilder) {
         return {};
     }
+
+    _dataPartBuilder->throwIfUnknownNode(src);
+    _dataPartBuilder->throwIfUnknownNode(tgt);
 
     auto& metadata = _commitBuilder->metadata();
 
@@ -152,12 +161,18 @@ void GraphWriter::deleteEdge(EdgeID id) {
         return;
     }
 
+    _dataPartBuilder->throwIfUnknownEdge(id);
+
     _commitBuilder->writeBuffer().addDeletedEdge(id);
 }
 
 void GraphWriter::deleteEdges(const std::vector<EdgeID>& ids) {
     if (!_commitBuilder) {
         return;
+    }
+
+    for (const EdgeID id : ids) {
+        _dataPartBuilder->throwIfUnknownEdge(id);
     }
 
     _commitBuilder->writeBuffer().addDeletedEdges(ids);
@@ -168,6 +183,8 @@ void GraphWriter::addNodeProperty(NodeID nodeID, std::string_view propertyTypeNa
     if (!_dataPartBuilder) {
         return;
     }
+
+    _dataPartBuilder->throwIfUnknownNode(nodeID);
 
     auto& metadata = _commitBuilder->metadata();
     const PropertyType propertyType = metadata.getOrCreatePropertyType(std::string {propertyTypeName}, T::_valueType);
@@ -189,6 +206,8 @@ void GraphWriter::addEdgeProperty(const EdgeRecord& edge, std::string_view prope
     if (!_dataPartBuilder) {
         return;
     }
+
+    _dataPartBuilder->throwIfUnknownEdge(edge);
 
     auto& metadata = _commitBuilder->metadata();
     const PropertyType propertyType = metadata.getOrCreatePropertyType(std::string {propertyTypeName}, T::_valueType);

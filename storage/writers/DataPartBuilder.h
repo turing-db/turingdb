@@ -71,6 +71,10 @@ public:
 
     const EdgeRecord& addEdge(EdgeTypeID typeID, NodeID srcID, NodeID tgtID);
 
+    void throwIfUnknownNode(NodeID nodeID) const;
+    void throwIfUnknownEdge(EdgeID edgeID) const;
+    void throwIfUnknownEdge(const EdgeRecord& edge) const;
+
     NodeID firstNodeID() const { return _firstNodeID; }
     EdgeID firstEdgeID() const { return _firstEdgeID; }
     size_t nodeCount() const { return _coreNodeLabelSets.size(); }

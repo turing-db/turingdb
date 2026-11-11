@@ -161,6 +161,8 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
 
         dpBuilder._firstNodeID += numCreatedNodes;
         dpBuilder._firstEdgeID += numCreatedEdges;
+        dpBuilder._nextNodeID = dpBuilder._firstNodeID;
+        dpBuilder._nextEdgeID = dpBuilder._firstEdgeID;
 
         wb.applyUpdates(dpBuilder);
     }

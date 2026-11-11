@@ -1,5 +1,7 @@
 #include "DataPartBuilder.h"
 
+#include <spdlog/fmt/fmt.h>
+
 #include "Graph.h"
 #include "ID.h"
 #include "datapart/DataPart.h"
@@ -8,6 +10,7 @@
 #include "properties/PropertyManager.h"
 #include "reader/GraphReader.h"
 #include "versioning/EmbeddingDimensionChecker.h"
+#include "versioning/VersionControlException.h"
 #include "writers/MetadataBuilder.h"
 
 using namespace db;
@@ -74,6 +77,8 @@ template <SupportedType T>
 void DataPartBuilder::addNodeProperty(NodeID nodeID,
                                       PropertyTypeID ptID,
                                       std::optional<typename T::Primitive>&& value) {
+    throwIfUnknownNode(nodeID);
+
     if (!_nodeProperties->hasPropertyType(ptID)) {
         _nodeProperties->registerPropertyType<T>(ptID);
     }
@@ -89,6 +94,8 @@ void DataPartBuilder::addEdgeProperty(const EdgeRecord& edge,
                                       PropertyTypeID ptID,
                                       std::optional<typename T::Primitive>&& value,
                                       LabelSetHandle srcLblSet/*={}*/) {
+    throwIfUnknownEdge(edge);
+
     // If the property does not exist in this DP, create it
     if (!_edgeProperties->hasPropertyType(ptID)) {
         _edgeProperties->registerPropertyType<T>(ptID);
@@ -128,6 +135,9 @@ bool DataPartBuilder::hasProperty(I id, PropertyTypeID pid) {
 }
 
 const EdgeRecord& DataPartBuilder::addEdge(EdgeTypeID typeID, NodeID srcID, NodeID tgtID) {
+    throwIfUnknownNode(srcID);
+    throwIfUnknownNode(tgtID);
+
     auto& edge = _edges.emplace_back();
     edge._edgeID = _nextEdgeID;
     edge._nodeID = srcID;
@@ -150,10 +160,29 @@ const EdgeRecord& DataPartBuilder::addEdge(EdgeTypeID typeID, NodeID srcID, Node
     return edge;
 }
 
+void DataPartBuilder::throwIfUnknownNode(NodeID nodeID) const {
+    if (nodeID >= _nextNodeID) {
+        throw VersionControlException(fmt::format("Node {} does not exist", nodeID.getValue()));
+    }
+}
+
+void DataPartBuilder::throwIfUnknownEdge(EdgeID edgeID) const {
+    if (edgeID >= _nextEdgeID) {
+        throw VersionControlException(fmt::format("Edge {} does not exist", edgeID.getValue()));
+    }
+}
+
+void DataPartBuilder::throwIfUnknownEdge(const EdgeRecord& edge) const {
+    throwIfUnknownEdge(edge._edgeID);
+    throwIfUnknownNode(edge._nodeID);
+}
+
 template <>
 void DataPartBuilder::addNodeProperty<types::Embedding>(NodeID nodeID,
                                                         PropertyTypeID ptID,
                                                         std::optional<types::Embedding::Primitive>&& value) {
+    throwIfUnknownNode(nodeID);
+
     if (!registerEmbeddingWrite(*_nodeProperties, ptID, value)) {
         _nodeNullsWithoutContainer[ptID].insert(nodeID.getValue());
         return;
@@ -170,6 +199,8 @@ void DataPartBuilder::addEdgeProperty<types::Embedding>(const EdgeRecord& edge,
                                                         PropertyTypeID ptID,
                                                         std::optional<types::Embedding::Primitive>&& value,
                                                         LabelSetHandle srcLblSet/*={}*/) {
+    throwIfUnknownEdge(edge);
+
     if (!registerEmbeddingWrite(*_edgeProperties, ptID, value)) {
         _edgeNullsWithoutContainer[ptID].insert(edge._edgeID.getValue());
         return;
@@ -187,6 +218,8 @@ requires std::same_as<T, types::List> || std::same_as<T, types::Map>
 void DataPartBuilder::addNodeProperty(NodeID nodeID,
                                       PropertyTypeID ptID,
                                       std::optional<typename T::OwningPrimitive>&& value) {
+    throwIfUnknownNode(nodeID);
+
     if (!_nodeProperties->hasPropertyType(ptID)) {
         _nodeProperties->registerPropertyType<T>(ptID);
     }
@@ -209,6 +242,8 @@ void DataPartBuilder::addEdgeProperty(const EdgeRecord& edge,
                                       PropertyTypeID ptID,
                                       std::optional<typename T::OwningPrimitive>&& value,
                                       LabelSetHandle srcLblSet/*={}*/) {
+    throwIfUnknownEdge(edge);
+
     if (!_edgeProperties->hasPropertyType(ptID)) {
         _edgeProperties->registerPropertyType<T>(ptID);
     }
