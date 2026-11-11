@@ -52,3 +52,5 @@ add_call_v3_test(test_query_ir_parameter_membership_operand_type MembershipOpera
 add_call_v3_test(test_query_ir_edge_id_lookup EdgeIDLookupTest.cpp)
 
 add_call_v3_test(test_query_ir_limit_skip_parameter LimitSkipParameterTest.cpp)
+
+add_call_v3_test(test_query_ir_point_parameter PointParameterTest.cpp)

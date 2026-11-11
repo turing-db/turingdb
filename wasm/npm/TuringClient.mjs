@@ -286,7 +286,7 @@ export function double(value) {
     return new DoubleValue(value);
 }
 
-// A point a query returns. z is undefined for a 2D point.
+// A point a query returns, or a parameter sends. z is undefined for a 2D point.
 export class Point {
     constructor(srid, x, y, z) {
         this.srid = srid;
@@ -308,6 +308,34 @@ function readPoint(view, offset) {
     const z = isThreeDimensional ? view.getFloat64(offset + 16, true) : undefined;
 
     return new Point(srid, view.getFloat64(offset, true), view.getFloat64(offset + 8, true), z);
+}
+
+// A point goes as the 32 bytes readPoint reads: x, y and z, its CRS ordinal, 7 zero bytes. The
+// server checks the coordinates as point() does, but no ordinal names an unknown SRID, so that
+// and the dimension are checked here.
+function writePoint(writer, point, path) {
+    const ordinal = POINT_SRIDS.indexOf(point.srid);
+    if (ordinal < 0) {
+        throwParameterError(path, `is a point of SRID ${point.srid}, which names no coordinate reference system`);
+    }
+
+    const crsDimension = point.srid === 9157 || point.srid === 4979 ? 3 : 2;
+    const dimension = point.z === undefined ? 2 : 3;
+    if (dimension !== crsDimension) {
+        throwParameterError(path, `is a ${point.crs} point of ${dimension} coordinates: a ${point.crs} point has ${crsDimension}`);
+    }
+
+    const coordinates = dimension === 3 ? [point.x, point.y, point.z] : [point.x, point.y, 0];
+    if (coordinates.some((coordinate) => typeof coordinate !== "number")) {
+        throwParameterError(path, `is a ${point.crs} point whose coordinates are not all numbers`);
+    }
+
+    writer.u8(CELL_TAG_POINT);
+    for (const coordinate of coordinates) {
+        writer.f64(coordinate);
+    }
+    writer.u8(ordinal);
+    writer.bytes(new Uint8Array(7));
 }
 
 function throwParameterError(path, message) {
@@ -357,7 +385,7 @@ function writeMap(writer, map, pathOf, ancestors) {
 }
 
 // An integral number goes as an Int64, as Cypher reads 470, and any other number as a Double.
-// A Float32Array goes as an Embedding, the type a query returns one as.
+// A Float32Array goes as an Embedding and a Point as a point, the types a query returns them as.
 function writeParameterValue(writer, value, path, ancestors) {
     if (value === null) {
         writer.u8(CELL_TAG_NULL);
@@ -393,6 +421,8 @@ function writeParameterValue(writer, value, path, ancestors) {
         for (const element of value) {
             writer.f32(element);
         }
+    } else if (value instanceof Point) {
+        writePoint(writer, value, path);
     } else if (ancestors.has(value)) {
         throwParameterError(path, "refers back to a value that contains it");
     } else if (Array.isArray(value)) {

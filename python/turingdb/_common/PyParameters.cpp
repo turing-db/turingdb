@@ -14,6 +14,7 @@
 #include "PyTimeTypes.h"
 #include "metadata/DateTime.h"
 #include "metadata/Duration.h"
+#include "metadata/Point.h"
 
 #include "TuringException.h"
 
@@ -83,6 +84,40 @@ bool isPoint(nb::handle value, nb::object& pointType) {
     return isInstance == 1;
 }
 
+double coordinateOf(nb::handle point, const char* name) {
+    const nb::object value = point.attr(name);
+
+    double coordinate = 0.0;
+    if (!nb::try_cast(value, coordinate)) {
+        throw TuringException(std::string("A Point parameter reads a number for '") + name + "', not a " + getTypeName(value));
+    }
+
+    return coordinate;
+}
+
+// A turingdb.Point, as a query returns one: its z is None in 2D. The constructor checks the
+// coordinates as point() does.
+void readPoint(nb::handle source, db::ParameterValue& target) {
+    const nb::object srid = source.attr("srid");
+
+    int64_t code = 0;
+    db::PointCRS crs {db::PointCRS::Cartesian};
+    const bool namesACRS = nb::isinstance<nb::int_>(srid) && nb::try_cast(srid, code, false) && db::Point::crsOfSRID(code, crs);
+    if (!namesACRS) {
+        throw TuringException("Unknown coordinate reference system SRID: " + std::string(nb::repr(srid).c_str()));
+    }
+
+    const size_t dimension = source.attr("z").is_none() ? 2 : 3;
+    const size_t crsDimension = db::Point::getDimension(crs);
+    if (dimension != crsDimension) {
+        throw TuringException("A " + std::string(db::Point::getCRSName(crs)) + " point has " + std::to_string(crsDimension)
+                              + " coordinates, not " + std::to_string(dimension));
+    }
+
+    const double z = dimension == 3 ? coordinateOf(source, "z") : 0.0;
+    target.setPoint(db::Point(crs, coordinateOf(source, "x"), coordinateOf(source, "y"), z));
+}
+
 void readEmbedding(const Float32Vector& source, db::ParameterValue& target) {
     const auto floats = source.view();
 
@@ -94,14 +129,15 @@ void readEmbedding(const Float32Vector& source, db::ParameterValue& target) {
 }
 
 // A bool is checked before an int: in Python, bool is a subclass of int. A Point is a tuple
-// too, but a value rather than a list, and no parameter holds a point.
+// too, but a value rather than a list.
 void readValue(nb::handle source,
                db::ParameterValue& target,
                PyTimeTypes& times,
                nb::object& pointType,
                std::vector<Item>& worklist) {
-    const bool readsAsAList = nb::isinstance<nb::list>(source)
-                           || (nb::isinstance<nb::tuple>(source) && !isPoint(source, pointType));
+    const bool isATuple = nb::isinstance<nb::tuple>(source);
+    const bool readsAsAPoint = isATuple && isPoint(source, pointType);
+    const bool readsAsAList = nb::isinstance<nb::list>(source) || (isATuple && !readsAsAPoint);
 
     Float32Vector floats;
 
@@ -121,6 +157,8 @@ void readValue(nb::handle source,
         target.setDouble(nb::cast<double>(source));
     } else if (nb::isinstance<nb::str>(source)) {
         target.setString(nb::cast<std::string>(source));
+    } else if (readsAsAPoint) {
+        readPoint(source, target);
     } else if (readsAsAList) {
         db::ParameterValue::List& list = target.setList();
         list.resize(nb::len(source));

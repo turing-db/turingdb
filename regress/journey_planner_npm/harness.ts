@@ -74,11 +74,8 @@ export function embedding(...values: number[]): Float32Array {
     return new Float32Array(values);
 }
 
-// The typings keep Point's constructor private, since no parameter holds a point, so the
-// expected value is built through the class the client decodes into
 export function point(srid: Point["srid"], x: number, y: number, z?: number): Point {
-    const PointConstructor = Point as unknown as new (srid: number, x: number, y: number, z: number | undefined) => Point;
-    return new PointConstructor(srid, x, y, z);
+    return new Point(srid, x, y, z);
 }
 
 // Renders a decoded value so an Int64 (480) reads apart from a Double (480.0)

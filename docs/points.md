@@ -45,6 +45,23 @@ It raises on a map naming both a `crs` and an `srid`, on an unknown CRS, on long
 in a cartesian CRS, on a number of coordinates the CRS does not have, and on a coordinate that is
 no number. Neo4j parses a numeric string coordinate; TuringDB does not.
 
+# Parameters
+
+A parameter holds a point, set with `ParameterValue::setPoint` in C++. A query takes `$p`
+wherever it takes a point literal: `RETURN $p.x`, `point.distance($p, point({x: 4, y: 6}))`,
+`CREATE (:City {at: $p})`, `MATCH (c {at: $p})`, and inside a list or a map parameter.
+
+On the wire a point parameter is a `CellTag::Point` and its 32 bytes, as a point in a result is.
+The server rebuilds it with `Point::fromBytes`, which goes through the constructor: it refuses
+what `point()` refuses, an unknown CRS ordinal, and a z other than 0 in a 2D CRS. It turns
+`-0.0` into `0.0`, wraps a longitude outside [-180, 180] and zeroes the padding.
+
+A client sends a point as the type it returns one as, which carries the fields of Bolt's
+`Point2D` and `Point3D`: Python a `turingdb.Point(srid, x, y, z=None)`, the npm client a
+`Point(srid, x, y, z)` with `z` undefined in 2D. Each refuses an unknown SRID, a z in 2D and a
+missing z in 3D before it sends the query. The shell binds one with
+`:param p => point({x: 1.0, y: 2.0})`.
+
 # Reading one
 
 `p.x`, `p.y` and `p.z` are its coordinates, and `p.longitude`, `p.latitude` and `p.height` the

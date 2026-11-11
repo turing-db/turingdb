@@ -81,3 +81,18 @@ TEST_F(ShellParameterTest, anEmbeddingExpressionBindsAnEmbedding) {
     EXPECT_NE(output.find("| Embedding "), std::string::npos) << output;
     EXPECT_NE(output.find("| [1, 0.5] "), std::string::npos) << output;
 }
+
+TEST_F(ShellParameterTest, aPointExpressionBindsAPoint) {
+    std::string output;
+    runLines(":param pt => point({x: 1.0, y: 2.0})\n"
+             "SHOW PARAMETERS\n"
+             "RETURN point.distance($pt, point({x: 4.0, y: 6.0})) AS distance\n",
+             output);
+
+    EXPECT_NE(output.find("| Point "), std::string::npos) << output;
+    EXPECT_NE(output.find("| point({x: 1.0, y: 2.0, crs: 'cartesian'}) "), std::string::npos) << output;
+
+    std::string distance;
+    firstCellUnder(output, "| distance |", distance);
+    EXPECT_EQ(distance, "5") << output;
+}

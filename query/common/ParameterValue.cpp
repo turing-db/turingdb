@@ -110,6 +110,8 @@ ValueType ParameterValue::getType() const {
         return ValueType::DateTime;
     } else if (std::holds_alternative<Embedding>(_value)) {
         return ValueType::Embedding;
+    } else if (std::holds_alternative<Point>(_value)) {
+        return ValueType::Point;
     }
 
     bioassert(false, "A parameter holds a value of no known kind");
@@ -164,6 +166,11 @@ std::span<const float> ParameterValue::getEmbedding() const {
     return std::get<Embedding>(_value);
 }
 
+Point ParameterValue::getPoint() const {
+    bioassert(std::holds_alternative<Point>(_value), "Parameter is not a Point");
+    return std::get<Point>(_value);
+}
+
 void ParameterValue::setNull() {
     _value.emplace<std::monostate>();
 }
@@ -210,6 +217,10 @@ void ParameterValue::setEmbedding(std::span<const float> value) {
 
 ParameterValue::Embedding& ParameterValue::setEmbedding() {
     return _value.emplace<Embedding>();
+}
+
+void ParameterValue::setPoint(Point value) {
+    _value.emplace<Point>(value);
 }
 
 void ParameterValue::detachContainer(std::vector<Variant>& worklist) {

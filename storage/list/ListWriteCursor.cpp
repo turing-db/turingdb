@@ -77,6 +77,7 @@ template CellView ListWriteCursor::writeValue(CellTag, const types::Bool::Primit
 template CellView ListWriteCursor::writeValue(CellTag, const PropertyNull&);
 template CellView ListWriteCursor::writeValue(CellTag, const types::DateTime::Primitive&);
 template CellView ListWriteCursor::writeValue(CellTag, const types::Duration::Primitive&);
+template CellView ListWriteCursor::writeValue(CellTag, const types::Point::Primitive&);
 
 template CellView ListWriteCursor::writeValueAt(size_t, CellTag, const EdgeID&);
 template CellView ListWriteCursor::writeValueAt(size_t, CellTag, const NodeID&);

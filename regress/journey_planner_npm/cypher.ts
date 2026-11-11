@@ -634,12 +634,12 @@ export function clientChecks(url: string): Check[] {
             },
         },
         {
-            name: "rejects a point a query returned as a parameter before sending it",
+            name: "finds the station whose location a query returned when it is sent back as a parameter",
             run: async (client) => {
-                const location = firstValue(await client.query("MATCH (s:STATION {crs: 'OXF'}) RETURN s.location"));
-                const parameters = { at: location } as unknown as Parameters;
+                const location = firstValue(await client.query("MATCH (s:STATION {crs: 'OXF'}) RETURN s.location")) as Point;
+                const data = await client.queryData("MATCH (s:STATION) WHERE s.location = $at RETURN s.crs", { parameters: { at: location } });
 
-                await assert.rejects(client.query("RETURN 1", { parameters }), expectStatus("PARAMETER_ERROR", "$at is a Point"));
+                assert.deepEqual(data, [[["OXF"]]]);
             },
         },
         {

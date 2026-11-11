@@ -57,6 +57,9 @@ void toStoredScalar(const db::ParameterValue& value, Item& item) {
         case db::ValueType::Embedding:
             item = db::types::Embedding::Primitive {value.getEmbedding()};
         break;
+        case db::ValueType::Point:
+            item = value.getPoint();
+        break;
         default:
             bioassert(false, "Parameter of type {} is not a scalar", value.getTypeName());
         break;

@@ -10,6 +10,7 @@
 
 #include "metadata/DateTime.h"
 #include "metadata/Duration.h"
+#include "metadata/Point.h"
 #include "metadata/PropertyType.h"
 
 namespace db {
@@ -19,7 +20,7 @@ public:
     using List = std::vector<ParameterValue>;
     using Map = std::map<std::string, ParameterValue>;
     using Embedding = std::vector<float>;
-    using Variant = std::variant<std::monostate, int64_t, double, bool, std::string, List, Map, Duration, DateTime, Embedding>;
+    using Variant = std::variant<std::monostate, int64_t, double, bool, std::string, List, Map, Duration, DateTime, Embedding, Point>;
 
     ParameterValue();
     ParameterValue(const ParameterValue& other);
@@ -42,6 +43,7 @@ public:
     Duration getDuration() const;
     DateTime getDateTime() const;
     std::span<const float> getEmbedding() const;
+    Point getPoint() const;
 
     void setNull();
     void setInt64(int64_t value);
@@ -55,6 +57,7 @@ public:
     void setDateTime(DateTime value);
     void setEmbedding(std::span<const float> value);
     Embedding& setEmbedding();
+    void setPoint(Point value);
 
 private:
     Variant _value;

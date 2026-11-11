@@ -68,6 +68,20 @@ type `VECTOR SEARCH` and `cosine_similarity` take; an array of numbers stays a l
 other value, such as a `Date`, a `Float64Array` or `undefined`, throws a
 `TuringQueryError` with status `PARAMETER_ERROR` before the query is sent.
 
+A `Point`, the class a query returns a point as, is sent as a point, so a point read from
+one result can be sent back unchanged. `new Point(4326, 2.3522, 48.8566)` is a wgs-84
+point and `new Point(9157, 1, 2, 3)` a cartesian-3d one: the SRID names the CRS, and `z`
+is left out in 2D. An unknown SRID throws a `PARAMETER_ERROR`, as does a 2D point with a
+`z` or a 3D point without one. The server refuses a coordinate that `point()` refuses.
+
+```js
+import { Point } from "turingdb";
+
+await client.query("MATCH (c:City) WHERE point.distance(c.at, $here) < 5000 RETURN c.name", {
+    parameters: { here: new Point(4326, 2.3522, 48.8566) },
+});
+```
+
 ## Column
 
 A `Column` holds the decoded buffers and builds JS values only when a row is read.

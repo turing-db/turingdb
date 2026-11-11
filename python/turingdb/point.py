@@ -4,7 +4,7 @@ _CRS_NAMES = {7203: "cartesian", 9157: "cartesian-3d", 4326: "wgs-84", 4979: "wg
 
 
 class Point(NamedTuple):
-    """A point a query returns. z is None for a 2D point."""
+    """A point a query returns or a parameter holds. z is None for a 2D point."""
 
     srid: int
     x: float

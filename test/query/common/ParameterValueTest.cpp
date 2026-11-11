@@ -183,3 +183,22 @@ TEST(ParameterValueTest, anEmbeddingKeepsItsFloats) {
     filled.push_back(2.0f);
     EXPECT_EQ(moved.getEmbedding().size(), 1u);
 }
+
+TEST(ParameterValueTest, aPointKeepsItsCRSAndCoordinates) {
+    const Point paris(PointCRS::WGS84_3D, 2.3522, 48.8566, 35.0);
+
+    ParameterValue at;
+    at.setPoint(paris);
+
+    EXPECT_EQ(at.getType(), ValueType::Point);
+    EXPECT_EQ(at.getTypeName(), "Point");
+    EXPECT_EQ(at.getPoint(), paris);
+    EXPECT_EQ(at.getPoint().getCRS(), PointCRS::WGS84_3D);
+    EXPECT_EQ(at.getPoint().getZ(), 35.0);
+
+    const ParameterValue copy(at);
+    EXPECT_EQ(copy.getPoint(), paris);
+
+    ParameterValue moved(std::move(at));
+    EXPECT_EQ(moved.getPoint(), paris);
+}

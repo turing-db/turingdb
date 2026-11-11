@@ -25,6 +25,7 @@
 #include "PathView.h"
 #include "list/ListView.h"
 #include "map/MapView.h"
+#include "metadata/Point.h"
 #include "metadata/PropertyNull.h"
 
 #include "NameOf.h"
@@ -63,6 +64,7 @@ public:
     void read(EdgeID) { throwNotAValue("an edge"); }
     void read(PathView) { throwNotAValue("a path"); }
     void read(std::span<const float> embedding) { _value.setEmbedding(embedding); }
+    void read(Point point) { _value.setPoint(point); }
 
     void read(ListView list) {
         ParameterValue::List& elements = _value.setList();

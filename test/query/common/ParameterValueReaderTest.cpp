@@ -16,6 +16,7 @@
 #include "columns/ColumnVector.h"
 #include "list/ListBuffer.h"
 #include "map/MapBuffer.h"
+#include "metadata/Point.h"
 #include "metadata/PropertyNull.h"
 
 using namespace db;
@@ -214,4 +215,32 @@ TEST_F(ParameterValueReaderTest, anEmbeddingIsAnEmbedding) {
     readParameterValue(list, 0, value);
     ASSERT_EQ(value.getList().size(), 1u);
     EXPECT_TRUE(std::ranges::equal(value.getList()[0].getEmbedding(), floats));
+}
+
+TEST_F(ParameterValueReaderTest, aPointIsAPoint) {
+    const Point paris(PointCRS::WGS84, 2.3522, 48.8566, 0.0);
+    const Point tower(PointCRS::Cartesian3D, 3.0, 4.0, 5.0);
+
+    ParameterValue value;
+    readParameterValue(column<types::Point::Primitive>({paris, tower}), 1, value);
+
+    ASSERT_EQ(value.getType(), ValueType::Point);
+    EXPECT_EQ(value.getPoint(), tower);
+
+    std::vector<ListBuffer<>::ListItemVariant> elements;
+    elements.emplace_back(paris);
+    ColumnConst<ListView>* list = _memory.alloc<ColumnConst<ListView>>();
+    list->set(_lists.insert(elements));
+
+    readParameterValue(list, 0, value);
+    ASSERT_EQ(value.getList().size(), 1u);
+    EXPECT_EQ(value.getList()[0].getPoint(), paris);
+
+    std::vector<MapBuffer<>::MapKeyValuePair> entries;
+    entries.push_back({"at", paris});
+    ColumnConst<MapView>* map = _memory.alloc<ColumnConst<MapView>>();
+    map->set(_maps.insert(entries));
+
+    readParameterValue(map, 0, value);
+    EXPECT_EQ(value.getMap().at("at").getPoint(), paris);
 }

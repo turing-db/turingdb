@@ -282,3 +282,31 @@ TEST_F(TuringProtoParameterWriterTest, anEmbeddingKeepsItsTag) {
     ASSERT_EQ(list.front().getTag(), CellTag::Embedding);
     EXPECT_TRUE(std::ranges::equal(list.front().getAs<Embedding>(), profile));
 }
+
+TEST_F(TuringProtoParameterWriterTest, aPointKeepsItsTag) {
+    const Point paris(PointCRS::WGS84, 2.3522, 48.8566, 0.0);
+    const Point tower(PointCRS::Cartesian3D, 3.0, 4.0, 5.0);
+
+    ParameterMap parameters;
+    parameters.insert("at").setPoint(paris);
+    parameters.insert("route").setList().emplace_back().setPoint(tower);
+
+    write(parameters);
+
+    MapView view;
+    decode(view);
+    ASSERT_EQ(view.size(), 2u);
+
+    auto entry = view.begin();
+    EXPECT_EQ(entry->getKey(), "at");
+    ASSERT_EQ(entry->getValue().getTag(), CellTag::Point);
+    EXPECT_EQ(entry->getValue().getAs<Point>(), paris);
+    ++entry;
+    EXPECT_EQ(entry->getKey(), "route");
+    ASSERT_EQ(entry->getValue().getTag(), CellTag::ListView);
+
+    const ListView list = entry->getValue().getAs<ListView>();
+    ASSERT_EQ(list.size(), 1u);
+    ASSERT_EQ(list.front().getTag(), CellTag::Point);
+    EXPECT_EQ(list.front().getAs<Point>(), tower);
+}

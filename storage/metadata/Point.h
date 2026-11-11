@@ -82,6 +82,10 @@ public:
     // point() of a map. False where the map holds a null.
     static bool fromMap(const MapView& map, Point& value);
 
+    // The point the 32 stored bytes at @param bytes hold, read from outside the engine: checked
+    // as the constructor checks its arguments, and raises on an unknown CRS and on a z in 2D
+    static Point fromBytes(const char* bytes);
+
     // Nullopt for two points in different CRSs
     static std::optional<double> distance(Point lhs, Point rhs);
 

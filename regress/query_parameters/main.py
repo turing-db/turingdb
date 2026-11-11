@@ -84,6 +84,20 @@ def check(kind: str, db: turingdb.TuringDB) -> None:
     else:
         raise AssertionError(f"{kind}: a float64 array was taken as an embedding")
 
+    here = turingdb.Point(7203, 1.0, 2.0)
+    measured = db.query("RETURN point.distance($p, point({x: 4.0, y: 6.0})) AS d, $p AS p", query_parameters={"p": here})
+    distance = measured["d"].tolist()
+    returned = measured["p"].tolist()
+    assert distance == [5.0], f"{kind}: a Point parameter gave {distance}"
+    assert returned == [here], f"{kind}: a Point parameter came back as {returned}"
+
+    try:
+        db.query("RETURN $p", query_parameters={"p": turingdb.Point(4326, 2.0, 91.0)})
+    except TuringDBException as error:
+        assert "lies in [-90, 90], not 91" in str(error), f"{kind}: a latitude of 91 gave {error}"
+    else:
+        raise AssertionError(f"{kind}: a latitude of 91 was accepted")
+
     try:
         db.query("MATCH (n:$label) RETURN n")
     except TuringDBException as e:

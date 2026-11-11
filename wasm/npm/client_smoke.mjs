@@ -497,15 +497,19 @@ async function testParameters() {
         ratio: double(2),
         stop: { rank: -1, crs: "PAD" },
         profile: new Float32Array([1, 0.5]),
+        here: new Point(4326, 2.5, 48.5),
     };
     await client.query("RETURN $window", { parameters });
 
     const map = new Writer();
-    map.u32(8);
+    map.u32(9);
     map.u32(0);
     map.string("big");
     map.u8(TAG_INT);
     map.i64(2n ** 62n);
+    map.string("here");
+    map.u8(TAG_POINT);
+    map.point(2, 2.5, 48.5, 0);
     map.string("name");
     map.u8(TAG_STRING);
     map.string("Oxford");
@@ -550,6 +554,7 @@ async function testRejectsParametersAQueryCannotHold() {
     const rejected = [
         [{ when: new Date(0) }, "$when"],
         [{ profile: new Float64Array(2) }, "$profile"],
+        [{ here: new Point(1234, 1, 2) }, "$here"],
         [{ stop: { crs: undefined } }, "$stop.crs"],
         [{ calls: [1, [2, Symbol("x")]] }, "$calls[1][1]"],
         [{ big: 2n ** 63n }, "$big"],

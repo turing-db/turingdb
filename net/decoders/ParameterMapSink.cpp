@@ -10,6 +10,7 @@
 #include "CellTag.h"
 #include "metadata/DateTime.h"
 #include "metadata/Duration.h"
+#include "metadata/Point.h"
 #include "metadata/PropertyType.h"
 
 #include "TuringException.h"
@@ -72,7 +73,7 @@ void readScalar(const char* bytes, db::ParameterValue& slot) {
             slot.setDuration(readValue<db::types::Duration::Primitive>(value));
         break;
         case db::CellTag::Point:
-            throwUnsupportedType("Point");
+            slot.setPoint(db::Point::fromBytes(value));
         break;
         case db::CellTag::LabelID:
             throwUnsupportedType("LabelID");

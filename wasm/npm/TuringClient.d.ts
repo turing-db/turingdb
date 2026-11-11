@@ -39,9 +39,9 @@ export declare const ColumnEncoding: Readonly<{
 
 export type ColumnEncodingCode = (typeof ColumnEncoding)[keyof typeof ColumnEncoding];
 
-/** A point a query returns. z is undefined for a 2D point. */
+/** A point a query returns, or a parameter sends. z is undefined for a 2D point. */
 export declare class Point {
-    private constructor();
+    constructor(srid: 7203 | 9157 | 4326 | 4979, x: number, y: number, z?: number);
     readonly srid: 7203 | 9157 | 4326 | 4979;
     readonly x: number;
     readonly y: number;
@@ -82,8 +82,8 @@ export declare function double(value: number): DoubleValue;
 
 /**
  * A query parameter. A number with no fraction goes as an Int64 and any other number as a
- * Double. A bigint goes as an Int64, double(x) as a Double, and a Float32Array as an
- * Embedding.
+ * Double. A bigint goes as an Int64, double(x) as a Double, a Float32Array as an Embedding
+ * and a Point as a Point.
  */
 export type ParameterValue =
     | bigint
@@ -93,6 +93,7 @@ export type ParameterValue =
     | null
     | DoubleValue
     | Float32Array
+    | Point
     | ParameterValue[]
     | { [key: string]: ParameterValue };
 

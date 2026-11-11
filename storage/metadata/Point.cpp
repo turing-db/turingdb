@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stdint.h>
+#include <string.h>
 
 #include <algorithm>
 #include <array>
@@ -423,6 +424,23 @@ bool Point::fromMap(const MapView& map, Point& value) {
     value = Point(crs, x, y, z);
 
     return true;
+}
+
+Point Point::fromBytes(const char* bytes) {
+    Point sent;
+    memcpy(&sent, bytes, sizeof(Point));
+
+    const PointCRS crs = sent._crs;
+    if (std::ranges::find(CRS_SYSTEMS, crs) == CRS_SYSTEMS.end()) {
+        throw TuringException(fmt::format("Unknown coordinate reference system ordinal: {}", static_cast<uint32_t>(crs)));
+    }
+
+    const bool holdsAThirdCoordinate = getDimension(crs) == 2 && sent._z != 0.0;
+    if (holdsAThirdCoordinate) {
+        throw TuringException(fmt::format("A {} point has 2 coordinates, not 3", getCRSName(crs)));
+    }
+
+    return Point(crs, sent._x, sent._y, sent._z);
 }
 
 bool Point::crsNamed(std::string_view name, PointCRS& crs) {

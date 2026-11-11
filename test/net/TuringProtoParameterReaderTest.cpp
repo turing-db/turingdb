@@ -6,8 +6,10 @@
 #include <algorithm>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <vector>
 
+#include "CellTag.h"
 #include "ParameterMap.h"
 #include "ParameterValue.h"
 #include "ProtocolException.h"
@@ -18,6 +20,7 @@
 #include "TuringProtoParameterReader.h"
 #include "TuringProtoParameterWriter.h"
 #include "map/MapBuffer.h"
+#include "metadata/Point.h"
 
 using namespace db;
 using namespace net::proto;
@@ -25,6 +28,34 @@ using namespace net::proto;
 namespace {
 
 constexpr size_t BUFFER_CAPACITY = 16ul * 1024 * 1024;
+
+// The map {pt: <point>}, the point as x, y and z, its CRS ordinal and 7 bytes of padding
+void writePointMap(double x, double y, double z, uint8_t crs, uint8_t padding, std::vector<uint8_t>& bytes) {
+    const auto append = [&bytes](const void* data, size_t size) {
+        const uint8_t* begin = static_cast<const uint8_t*>(data);
+        bytes.insert(bytes.end(), begin, begin + size);
+    };
+
+    const uint32_t entryCount = 1;
+    const uint32_t byteSize = 0;
+    const uint32_t keyLength = 2;
+    const CellTag tag = CellTag::Point;
+
+    append(&entryCount, sizeof(entryCount));
+    append(&byteSize, sizeof(byteSize));
+    append(&keyLength, sizeof(keyLength));
+    append("pt", keyLength);
+    append(&tag, sizeof(tag));
+    append(&x, sizeof(x));
+    append(&y, sizeof(y));
+    append(&z, sizeof(z));
+    append(&crs, sizeof(crs));
+    bytes.insert(bytes.end(), 7, padding);
+}
+
+bool sameBytes(const Point& lhs, const Point& rhs) {
+    return memcmp(&lhs, &rhs, sizeof(Point)) == 0;
+}
 
 }
 
@@ -47,6 +78,15 @@ protected:
     void roundTrip(const ParameterMap& source, ParameterMap& decoded) {
         write(source);
         read(_outBuf.size(), decoded);
+    }
+
+    static void readBytes(const std::vector<uint8_t>& bytes, ParameterMap& parameters) {
+        TuringProtoInBuf inBuf(bytes.size());
+        memcpy(inBuf.data(), bytes.data(), bytes.size());
+        inBuf.increaseWriteOffset(bytes.size());
+
+        readParameters(&inBuf, parameters);
+        EXPECT_EQ(inBuf.readable(), 0u);
     }
 
     TuringProtoOutBuf _outBuf {BUFFER_CAPACITY};
@@ -352,4 +392,118 @@ TEST_F(TuringProtoParameterReaderTest, readsTheEmbeddingAClientWrites) {
     const std::vector<float> expected {1.0f, 0.5f};
     ASSERT_EQ(decoded.get("v")->getType(), ValueType::Embedding);
     EXPECT_TRUE(std::ranges::equal(decoded.get("v")->getEmbedding(), expected));
+}
+
+TEST_F(TuringProtoParameterReaderTest, aPointComesBackInEachCRS) {
+    const Point cartesian(PointCRS::Cartesian, 1.0, 2.0, 0.0);
+    const Point cartesian3D(PointCRS::Cartesian3D, 1.5, -2.0, 3.0);
+    const Point wgs84(PointCRS::WGS84, 2.3522, 48.8566, 0.0);
+    const Point wgs843D(PointCRS::WGS84_3D, 2.3522, 48.8566, 35.0);
+
+    ParameterMap source;
+    source.insert("c").setPoint(cartesian);
+    source.insert("c3").setPoint(cartesian3D);
+    source.insert("g").setPoint(wgs84);
+
+    ParameterValue::List& route = source.insert("route").setList();
+    route.emplace_back().setPoint(wgs843D);
+    route.emplace_back().setNull();
+
+    source.insert("stop").setMap()["at"].setPoint(cartesian3D);
+
+    ParameterMap decoded;
+    roundTrip(source, decoded);
+
+    ASSERT_EQ(decoded.get("c")->getType(), ValueType::Point);
+    EXPECT_TRUE(sameBytes(decoded.get("c")->getPoint(), cartesian));
+    EXPECT_TRUE(sameBytes(decoded.get("c3")->getPoint(), cartesian3D));
+    EXPECT_TRUE(sameBytes(decoded.get("g")->getPoint(), wgs84));
+
+    const ParameterValue::List& decodedRoute = decoded.get("route")->getList();
+    ASSERT_EQ(decodedRoute.size(), 2u);
+    EXPECT_TRUE(sameBytes(decodedRoute[0].getPoint(), wgs843D));
+    EXPECT_TRUE(decodedRoute[1].isNull());
+
+    EXPECT_TRUE(sameBytes(decoded.get("stop")->getMap().at("at").getPoint(), cartesian3D));
+}
+
+// The bytes the npm client (wasm/npm/TuringClient.mjs) writes for {pt: new Point(4326, 2.5, 48.5)}
+TEST_F(TuringProtoParameterReaderTest, readsThePointAClientWrites) {
+    const std::vector<uint8_t> bytes = {
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x70, 0x74, 0x0e, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x48, 0x40, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    };
+
+    ParameterMap decoded;
+    readBytes(bytes, decoded);
+
+    ASSERT_EQ(decoded.get("pt")->getType(), ValueType::Point);
+    EXPECT_TRUE(sameBytes(decoded.get("pt")->getPoint(), Point(PointCRS::WGS84, 2.5, 48.5, 0.0)));
+}
+
+TEST_F(TuringProtoParameterReaderTest, aPointThatBreaksItsInvariantsIsRefused) {
+    constexpr double NOT_A_NUMBER = std::numeric_limits<double>::quiet_NaN();
+    constexpr double INFINITE = std::numeric_limits<double>::infinity();
+
+    struct RefusedPoint {
+        double _x {0.0};
+        double _y {0.0};
+        double _z {0.0};
+        uint8_t _crs {0};
+        std::string_view _message;
+    };
+
+    const std::vector<RefusedPoint> refused {
+        {1.0, 2.0, 0.0, 4, "Unknown coordinate reference system ordinal: 4"},
+        {1.0, 2.0, 0.0, 255, "Unknown coordinate reference system ordinal: 255"},
+        {NOT_A_NUMBER, 2.0, 0.0, 0, "A point cannot have a non-finite coordinate"},
+        {1.0, INFINITE, 0.0, 2, "A point cannot have a non-finite coordinate"},
+        {1.0, 2.0, -INFINITE, 1, "A point cannot have a non-finite coordinate"},
+        {2.0, 91.0, 0.0, 2, "The latitude of a wgs-84 point lies in [-90, 90], not 91"},
+        {2.0, -90.5, 3.0, 3, "The latitude of a wgs-84-3d point lies in [-90, 90], not -90.5"},
+        {1.0, 2.0, 5.0, 0, "A cartesian point has 2 coordinates, not 3"},
+        {2.0, 48.0, 35.0, 2, "A wgs-84 point has 2 coordinates, not 3"},
+    };
+
+    for (const RefusedPoint& point : refused) {
+        std::vector<uint8_t> bytes;
+        writePointMap(point._x, point._y, point._z, point._crs, 0, bytes);
+
+        ParameterMap decoded;
+        try {
+            readBytes(bytes, decoded);
+            ADD_FAILURE() << "A point parameter was read where it should fail with: " << point._message;
+        } catch (const TuringException& error) {
+            EXPECT_EQ(std::string_view(error.what()), point._message);
+        }
+    }
+}
+
+TEST_F(TuringProtoParameterReaderTest, aPointIsReadInTheFormItIsStoredIn) {
+    struct SentPoint {
+        double _x {0.0};
+        double _y {0.0};
+        double _z {0.0};
+        uint8_t _crs {0};
+        uint8_t _padding {0};
+        Point _stored {};
+    };
+
+    const std::vector<SentPoint> sent {
+        {-0.0, 2.0, -0.0, 0, 0xff, Point(PointCRS::Cartesian, 0.0, 2.0, 0.0)},
+        {1.0, -0.0, -0.0, 1, 0, Point(PointCRS::Cartesian3D, 1.0, 0.0, 0.0)},
+        {190.0, 48.0, 0.0, 2, 0, Point(PointCRS::WGS84, -170.0, 48.0, 0.0)},
+        {540.0, -0.0, 12.0, 3, 0x01, Point(PointCRS::WGS84_3D, 180.0, 0.0, 12.0)},
+    };
+
+    for (const SentPoint& point : sent) {
+        std::vector<uint8_t> bytes;
+        writePointMap(point._x, point._y, point._z, point._crs, point._padding, bytes);
+
+        ParameterMap decoded;
+        readBytes(bytes, decoded);
+
+        EXPECT_TRUE(sameBytes(decoded.get("pt")->getPoint(), point._stored)) << point._x << ", " << point._y << ", " << point._z;
+    }
 }

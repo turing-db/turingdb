@@ -31,6 +31,7 @@
 #include "TuringTestEnv.h"
 #include "dataframe/Dataframe.h"
 #include "map/MapBuffer.h"
+#include "metadata/Point.h"
 
 using namespace db;
 using namespace turing::test;
@@ -276,4 +277,38 @@ TEST_F(TuringProtoParametersTest, anEmbeddingParameterReachesTheEngine) {
     parameters.insert("v").setEmbedding(profile);
 
     expectRows("RETURN cosine_similarity($v, (1.0, 0.0)), cosine_similarity($v, (0.0, 1.0))", &parameters, {{"1", "0"}});
+}
+
+TEST_F(TuringProtoParametersTest, aPointParameterReachesTheEngine) {
+    ParameterMap parameters;
+    parameters.insert("pt").setPoint(Point(PointCRS::Cartesian, 1.0, 2.0, 0.0));
+    parameters.insert("route").setList().emplace_back().setPoint(Point(PointCRS::WGS84_3D, 2.3522, 48.8566, 35.0));
+
+    expectRows("RETURN $pt, point.distance($pt, point({x: 4.0, y: 6.0})), $route[0].height",
+               &parameters,
+               {{"point({x: 1.0, y: 2.0, crs: 'cartesian'})", "5", "35"}});
+}
+
+TEST_F(TuringProtoParametersTest, aPointThatBreaksItsInvariantsIsAQueryError) {
+    MapBuffer<> mapBuffer;
+    const std::vector<MapBuffer<>::MapKeyValuePair> entries = {{"pt", Point(PointCRS::WGS84, 2.0, 48.0, 0.0)}};
+
+    net::proto::TuringProtoOutBuf parameterBuffer(net::proto::DEFAULT_BUFFER_CAPACITY);
+    net::proto::NestedContainerWriter writer(&parameterBuffer);
+    writer.writeMapView(mapBuffer.insert(entries));
+
+    const std::string_view written(parameterBuffer.data(), parameterBuffer.size());
+    const size_t pointOffset = written.size() - sizeof(Point);
+    const size_t latitudeOffset = pointOffset + sizeof(double);
+    const double latitude = 91.0;
+
+    std::string parameterBytes(written);
+    memcpy(parameterBytes.data() + latitudeOffset, &latitude, sizeof(latitude));
+
+    std::string body;
+    makeEnvelope("RETURN $pt", parameterBytes, body);
+    postEnvelope(body,
+                 "HTTP/1.1 200 OK",
+                 net::proto::MessageTypes::ERROR,
+                 "The latitude of a wgs-84 point lies in [-90, 90], not 91");
 }

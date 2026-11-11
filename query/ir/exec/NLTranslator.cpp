@@ -108,6 +108,9 @@ size_t parameterValueBytes(const ParameterValue& value) {
         case ValueType::Embedding:
             return sizeof(types::Embedding::Primitive);
         break;
+        case ValueType::Point:
+            return sizeof(types::Point::Primitive);
+        break;
         case ValueType::List:
             return sizeof(ListView);
         break;
@@ -167,6 +170,9 @@ void writeParameterValue(LocalMemory* memory, Cursor& cursor, const ParameterVal
         break;
         case ValueType::Embedding:
             cursor.writeValue(CellTag::Embedding, memory->embeddingBuffer().insert(value.getEmbedding()));
+        break;
+        case ValueType::Point:
+            cursor.writeValue(CellTag::Point, value.getPoint());
         break;
         default:
             throw IRException(fmt::format("A parameter cannot hold a {} inside a list or a map", value.getTypeName()));
@@ -2029,6 +2035,9 @@ Column* NLTranslator::boundParameterColumn(llvm::StringRef name, mlir::Type elem
         break;
         case ValueType::Embedding:
             return allocBoundConstant<types::Embedding::Primitive>(_memory, _memory->embeddingBuffer().insert(value.getEmbedding()));
+        break;
+        case ValueType::Point:
+            return allocBoundConstant<types::Point::Primitive>(_memory, value.getPoint());
         break;
         default:
             throw IRException(fmt::format("Parameter ${} is a {}, which a parameter cannot hold",

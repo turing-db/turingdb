@@ -741,6 +741,9 @@ void asString(std::string& out, const ParameterValue& root) {
             case ValueType::Embedding:
                 asString(out, value.getEmbedding());
             break;
+            case ValueType::Point:
+                asString(out, value.getPoint());
+            break;
             case ValueType::List: {
                 const ParameterValue::List& list = value.getList();
 
