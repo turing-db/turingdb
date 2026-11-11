@@ -1162,23 +1162,27 @@ bool dropsRows(mlir::Operation* operation) {
                      mlir::db::RemoveDuplicates>(operation);
 }
 
+bool isFirstOf(const mlir::MutableOperandRange& operands, mlir::OpOperand& operand) {
+    return !operands.empty() && &operands[0] == &operand;
+}
+
 // A walk's end set is one relation every seed shares, consumed in full before the walk
-// runs, and a scan's bound values hold one value for the run, read when it starts: no
-// column of the rows in flight, though a pass binds it ahead of the function
+// runs, and a scan's bound values and a cut's bound count hold one value for the run, read
+// when it starts: no column of the rows in flight, though a pass binds it ahead of the
+// function
 bool readsAheadOfTheRows(mlir::OpOperand& operand) {
     mlir::Operation* const owner = operand.getOwner();
     if (mlir::isa<mlir::db::ConstScanNodes, mlir::db::ConstScanEdges, mlir::db::ScanNodesByPropertyValue>(owner)) {
         return true;
+    } else if (mlir::db::Limit limit = mlir::dyn_cast<mlir::db::Limit>(owner)) {
+        return isFirstOf(limit.getBoundCountMutable(), operand);
+    } else if (mlir::db::Skip skip = mlir::dyn_cast<mlir::db::Skip>(owner)) {
+        return isFirstOf(skip.getBoundCountMutable(), operand);
+    } else if (mlir::db::ExplorePaths exploration = mlir::dyn_cast<mlir::db::ExplorePaths>(owner)) {
+        return isFirstOf(exploration.getEndNodesMutable(), operand);
     }
 
-    mlir::db::ExplorePaths exploration = mlir::dyn_cast<mlir::db::ExplorePaths>(owner);
-    if (!exploration) {
-        return false;
-    }
-
-    const mlir::MutableOperandRange endNodes = exploration.getEndNodesMutable();
-
-    return !endNodes.empty() && &endNodes[0] == &operand;
+    return false;
 }
 
 // Hands every row it reads on as at least one row, and writes nothing. An optional match
@@ -1257,10 +1261,13 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     _optionalMatchLimits.clear();
     _sortTopK.clear();
     _fusedLimits.clear();
+    _loweredAhead.clear();
 
     for (const auto [dbArgument, nlArgument] : llvm::zip_equal(dbFunction.getArguments(), nlFunction.getArguments())) {
         _valueMap[dbArgument] = nlArgument;
     }
+
+    lowerBoundCountsAhead(dbFunction);
 
     // Find ORDER BY ... LIMIT k: a db.limit capping a db.sort's result fuses into
     // a bounded top-K, so the limit gets no streaming handle and the sort carries
@@ -1316,15 +1323,34 @@ void DBLowering::hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock
     // Hoist one nl.limit handle per db.limit to the top of the hoist block, where
     // each dominates the loops, the update and the truncate that read it.
     if (!limits.empty()) {
+        llvm::SmallVector<mlir::Value, 2> counts;
+        mlir::Operation* lastCountDefinition = nullptr;
+        for (mlir::db::Limit limit : limits) {
+            const mlir::Value boundCount = limit.getBoundCount();
+            const mlir::Value count = boundCount ? mapValue(boundCount) : mlir::Value();
+            counts.push_back(count);
+
+            mlir::Operation* const definition = count ? count.getDefiningOp() : nullptr;
+            const bool definedLaterInTheBlock = definition
+                                             && definition->getBlock() == hoistBlock
+                                             && (!lastCountDefinition || lastCountDefinition->isBeforeInBlock(definition));
+            if (definedLaterInTheBlock) {
+                lastCountDefinition = definition;
+            }
+        }
+
         const bool hoistsIntoTheEntryBlock = hoistBlock == _entryBlock;
         if (hoistsIntoTheEntryBlock) {
-            setInsertionAfterHoisted();
+            setInsertionBelowHoisted(lastCountDefinition);
+        } else if (lastCountDefinition) {
+            _builder.setInsertionPointAfter(lastCountDefinition);
         } else {
             _builder.setInsertionPointToStart(hoistBlock);
         }
 
-        for (mlir::db::Limit limit : limits) {
-            nl::Limit limitOp = _builder.create<nl::Limit>(loc, limit.getCount());
+        for (const auto [limit, count] : llvm::zip_equal(limits, counts)) {
+            nl::Limit limitOp = count ? _builder.create<nl::Limit>(loc, count)
+                                      : _builder.create<nl::Limit>(loc, *limit.getCount());
             _limitHandles[limit.getOperation()] = limitOp.getState();
 
             if (hoistsIntoTheEntryBlock) {
@@ -1359,6 +1385,10 @@ void DBLowering::hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock
 }
 
 void DBLowering::lowerOperation(mlir::Operation& operation) {
+    if (_loweredAhead.contains(&operation)) {
+        return;
+    }
+
     for (const LaidOutOperand& laidOut : llvm::reverse(_laidOutOperands)) {
         _valueMap[laidOut._operand] = laidOut._constantChunk;
     }
@@ -1534,6 +1564,74 @@ void DBLowering::moveAheadOfLoops(mlir::Operation* computation) {
 
     for (mlir::Operation* const op : cone) {
         op->moveBefore(firstLoop);
+    }
+}
+
+void DBLowering::lowerBoundCountsAhead(mlir::func::FuncOp dbFunction) {
+    dbFunction.walk([this](mlir::Operation* op) {
+        mlir::Value boundCount;
+        if (mlir::db::Limit limit = mlir::dyn_cast<mlir::db::Limit>(op)) {
+            boundCount = limit.getBoundCount();
+        } else if (mlir::db::Skip skip = mlir::dyn_cast<mlir::db::Skip>(op)) {
+            boundCount = skip.getBoundCount();
+        }
+
+        if (boundCount) {
+            lowerCountAhead(boundCount);
+        }
+    });
+}
+
+void DBLowering::lowerCountAhead(mlir::Value count) {
+    llvm::SmallVector<mlir::Operation*> ahead;
+    llvm::SmallVector<std::pair<mlir::Operation*, bool>, 8> worklist;
+    llvm::SmallPtrSet<mlir::Operation*, 8> visited;
+
+    const auto pushDefinition = [this, &worklist, &visited](mlir::Value value) {
+        mlir::Operation* const definingOp = value.getDefiningOp();
+        if (definingOp && !_valueMap.contains(value) && visited.insert(definingOp).second) {
+            worklist.emplace_back(definingOp, false);
+        }
+    };
+
+    pushDefinition(count);
+
+    while (!worklist.empty()) {
+        const auto [op, operandsPushed] = worklist.back();
+        if (operandsPushed) {
+            ahead.push_back(op);
+            worklist.pop_back();
+            continue;
+        }
+
+        worklist.back().second = true;
+
+        for (const mlir::Value operand : op->getOperands()) {
+            pushDefinition(operand);
+        }
+
+        mlir::visitUsedValuesDefinedAbove(op->getRegions(), [&pushDefinition](mlir::OpOperand* operand) {
+            pushDefinition(operand->get());
+        });
+    }
+
+    for (mlir::Operation* const op : ahead) {
+        if (op->hasTrait<mlir::OpTrait::ConstantThroughOperands>()) {
+            lowerOnceOverConstants(*op);
+        } else {
+            lowerOperation(*op);
+        }
+
+        _loweredAhead.insert(op);
+    }
+}
+
+void DBLowering::setInsertionAtStart(mlir::Block* block, mlir::Value count) {
+    mlir::Operation* const definition = count ? count.getDefiningOp() : nullptr;
+    if (definition && definition->getBlock() == block) {
+        _builder.setInsertionPointAfter(definition);
+    } else {
+        _builder.setInsertionPointToStart(block);
     }
 }
 
@@ -4264,8 +4362,12 @@ void DBLowering::lowerSkip(mlir::db::Skip skip) {
     // early-exit - every row past the dropped prefix must still be produced), so it
     // needs no up-front pre-scan: the handle is created here, in program order,
     // once the producing loops already exist.
-    _builder.setInsertionPointToStart(_rootBlock);
-    const mlir::Value handle = _builder.create<nl::Skip>(loc, skip.getCount()).getState();
+    const mlir::Value boundCount = skip.getBoundCount();
+    const mlir::Value count = boundCount ? mapValue(boundCount) : mlir::Value();
+
+    setInsertionAtStart(_rootBlock, count);
+    nl::Skip skipOp = count ? _builder.create<nl::Skip>(loc, count) : _builder.create<nl::Skip>(loc, *skip.getCount());
+    const mlir::Value handle = skipOp.getState();
 
     // The representative is the first skipped column, in the innermost producing
     // loop body (post-cross-product if there is one), so its row count is what this
@@ -4325,7 +4427,7 @@ void DBLowering::detectTopKFusion(mlir::func::FuncOp dbFunction) {
 
         // The sole-user check above guarantees this limit is the only consumer of
         // the sort, so no other limit can claim it; record the fusion.
-        _sortTopK[sort.getOperation()] = limit.getCount();
+        _sortTopK[sort.getOperation()] = limit;
         _fusedLimits.insert(limit.getOperation());
     });
 }
@@ -4353,18 +4455,24 @@ void DBLowering::lowerSort(mlir::db::Sort sort) {
     // loop fills them and the handle dominates the collect and the emit loop. A sort
     // fused with a terminal db.limit carries that count as its top-K bound, so the
     // accumulator keeps only the best k rows; an unfused sort keeps every row.
-    _builder.setInsertionPointToStart(_rootBlock);
-
-    const auto topK = _sortTopK.find(sort.getOperation());
+    const auto fusedIt = _sortTopK.find(sort.getOperation());
     mlir::IntegerAttr topKAttr;
-    if (topK != _sortTopK.end()) {
-        topKAttr = _builder.getIntegerAttr(_builder.getIntegerType(64, /*isSigned=*/false), topK->second);
+    mlir::Value boundTopK;
+    if (fusedIt != _sortTopK.end()) {
+        mlir::db::Limit fusedLimit = fusedIt->second;
+        const mlir::Value boundCount = fusedLimit.getBoundCount();
+
+        topKAttr = fusedLimit.getCountAttr();
+        boundTopK = boundCount ? mapValue(boundCount) : mlir::Value();
     }
+
+    setInsertionAtStart(_rootBlock, boundTopK);
 
     nl::SortBuffer bufferOp = _builder.create<nl::SortBuffer>(loc,
                                                               sort.getKeyColumnsAttr(),
                                                               sort.getKeyAscendingAttr(),
-                                                              topKAttr);
+                                                              topKAttr,
+                                                              boundTopK);
     const mlir::Value state = bufferOp.getState();
 
     // The collect appends each step's chunk of every column to the buffers. It

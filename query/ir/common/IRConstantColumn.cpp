@@ -38,6 +38,7 @@ void collectReadValues(mlir::Operation* operation, llvm::SmallVectorImpl<mlir::V
 }
 
 using ConstantLeaf = bool (*)(mlir::Value value);
+using ConstantThrough = bool (*)(mlir::Operation* operation);
 
 bool isKnownBeforeTheRun(mlir::Value value) {
     mlir::Operation* const definingOp = value.getDefiningOp();
@@ -51,7 +52,18 @@ bool holdsOneValueForEveryRow(mlir::Value value) {
     return isKnownBeforeTheRun(value) || (definingOp && definingOp->hasTrait<mlir::OpTrait::ConstantResult>());
 }
 
-bool isConstantColumn(mlir::Value root, ConstantLeaf isConstantLeaf, llvm::DenseMap<mlir::Value, bool>& classified) {
+bool computesThroughOperands(mlir::Operation* operation) {
+    return operation->hasTrait<mlir::OpTrait::ConstantThroughOperands>();
+}
+
+bool computesThroughOperandsWithoutRaising(mlir::Operation* operation) {
+    return computesThroughOperands(operation) && runsWithoutRaising(operation);
+}
+
+bool isConstantColumn(mlir::Value root,
+                      ConstantLeaf isConstantLeaf,
+                      ConstantThrough isConstantThrough,
+                      llvm::DenseMap<mlir::Value, bool>& classified) {
     llvm::SmallVector<mlir::Value> worklist {root};
     llvm::SmallVector<mlir::Value> reads;
     llvm::SmallVector<mlir::Value> pendingOperands;
@@ -65,9 +77,7 @@ bool isConstantColumn(mlir::Value root, ConstantLeaf isConstantLeaf, llvm::Dense
 
         mlir::Operation* const definingOp = value.getDefiningOp();
         const bool isConstantLike = isConstantLeaf(value);
-        const bool constantThroughOperands = definingOp
-                                          && definingOp->hasTrait<mlir::OpTrait::ConstantThroughOperands>()
-                                          && runsWithoutRaising(definingOp);
+        const bool constantThroughOperands = definingOp && isConstantThrough(definingOp);
         const bool dependsOnOperands = !isConstantLike && constantThroughOperands;
 
         if (!dependsOnOperands) {
@@ -114,16 +124,21 @@ bool db::isFunctionArgument(mlir::Value value) {
 
 bool db::yieldsConstantColumn(mlir::Value value) {
     llvm::DenseMap<mlir::Value, bool> classified;
-    return isConstantColumn(value, holdsOneValueForEveryRow, classified);
+    return isConstantColumn(value, holdsOneValueForEveryRow, computesThroughOperandsWithoutRaising, classified);
 }
 
 bool db::yieldsConstantColumn(mlir::Value value, llvm::DenseMap<mlir::Value, bool>& classified) {
-    return isConstantColumn(value, holdsOneValueForEveryRow, classified);
+    return isConstantColumn(value, holdsOneValueForEveryRow, computesThroughOperandsWithoutRaising, classified);
 }
 
 bool db::isRunInvariant(mlir::Value value) {
     llvm::DenseMap<mlir::Value, bool> classified;
-    return isConstantColumn(value, isKnownBeforeTheRun, classified);
+    return isConstantColumn(value, isKnownBeforeTheRun, computesThroughOperandsWithoutRaising, classified);
+}
+
+bool db::readsNoRow(mlir::Value value) {
+    llvm::DenseMap<mlir::Value, bool> classified;
+    return isConstantColumn(value, isKnownBeforeTheRun, computesThroughOperands, classified);
 }
 
 void db::forgetErasedValues(mlir::Operation* operation, llvm::DenseMap<mlir::Value, bool>& classified) {

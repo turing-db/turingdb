@@ -1418,6 +1418,35 @@ bool readBoundConstant(const Column* bound, std::optional<T>& value) {
     return false;
 }
 
+// The row count bound to a LIMIT or a SKIP, read when its loop starts: an integer, or a cell
+// holding one
+size_t readBoundRowCount(const Column* bound, std::string_view clause) {
+    std::optional<types::Int64::Primitive> count;
+    std::optional<CellView> cell;
+
+    if (readBoundConstant(bound, cell)) {
+        const CellTag tag = cell ? cell->getTag() : CellTag::Null;
+        if (tag == CellTag::Int) {
+            count = cell->getAs<types::Int64::Primitive>();
+        } else if (tag == CellTag::UInt) {
+            return static_cast<size_t>(cell->getAs<types::UInt64::Primitive>());
+        } else if (tag != CellTag::Null) {
+            throw IRException(fmt::format("{} requires a non-negative integer, got a {}", clause, queryTypeName(tag)));
+        }
+    } else {
+        const bool readsAnInteger = readBoundConstant(bound, count);
+        bioassert(readsAnInteger, "A bound row count holds one integer or one cell for the run");
+    }
+
+    if (!count) {
+        throw IRException(fmt::format("{} requires a non-negative integer, got null", clause));
+    } else if (*count < 0) {
+        throw IRException(fmt::format("{} requires a non-negative integer, got {}", clause, *count));
+    }
+
+    return static_cast<size_t>(*count);
+}
+
 template <SupportedType T>
 bool readBoundValueAs(const Column* bound, NLScanByPropertyValueLoopData::Literal& given) {
     std::optional<typename T::Primitive> value;
@@ -9793,7 +9822,8 @@ void NLExecutor::runCrossProductLoop(NLExecutionContext* context, NLFunctionData
 
 void NLExecutor::runLimitInit(NLExecutionContext* context, NLFunctionData* data) {
     const NLLimitInitData* init = static_cast<NLLimitInitData*>(data);
-    init->getState()->reset(init->getCount());
+    const Column* boundCount = init->getBoundCount();
+    init->getState()->reset(boundCount ? readBoundRowCount(boundCount, "LIMIT") : init->getCount());
 }
 
 void NLExecutor::runLimitRemaining(NLExecutionContext* context, NLFunctionData* data) {
@@ -9822,7 +9852,8 @@ void NLExecutor::runLimitTruncate(NLExecutionContext* context, NLFunctionData* d
 
 void NLExecutor::runSkipInit(NLExecutionContext* context, NLFunctionData* data) {
     const NLSkipInitData* init = static_cast<NLSkipInitData*>(data);
-    init->getState()->reset(init->getCount());
+    const Column* boundCount = init->getBoundCount();
+    init->getState()->reset(boundCount ? readBoundRowCount(boundCount, "SKIP") : init->getCount());
 }
 
 void NLExecutor::runSkipUpdate(NLExecutionContext* context, NLFunctionData* data) {
@@ -12135,7 +12166,13 @@ template NLUnaryFunctionKernel NLExecutor::selectOrNull<&NLExecutor::selectConve
 
 void NLExecutor::runSortReset(NLExecutionContext* context, NLFunctionData* data) {
     const NLSortResetData* reset = static_cast<NLSortResetData*>(data);
-    reset->getState()->reset();
+    NLSortState* state = reset->getState();
+
+    if (const Column* boundTopK = reset->getBoundTopK()) {
+        state->setTopK(readBoundRowCount(boundTopK, "LIMIT"));
+    }
+
+    state->reset();
 }
 
 void NLExecutor::runSortCollect(NLExecutionContext* context, NLFunctionData* data) {

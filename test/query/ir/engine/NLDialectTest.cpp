@@ -110,6 +110,22 @@ func.func @main() {
 }
 )mlir";
 
+constexpr const char* cutsToBoundCounts = R"mlir(
+func.func @main(%n: !nl.chunk<i64>, %k: !nl.chunk<!storage.nullable<i64>>) {
+  %limit = nl.limit(%n : !nl.chunk<i64>)
+  %skip = nl.skip(%k : !nl.chunk<!storage.nullable<i64>>)
+  %sort = nl.sort_buffer keys [0] ascending [true] limit %n : !nl.chunk<i64>
+  func.return
+}
+)mlir";
+
+constexpr const char* limitsToABoundString = R"mlir(
+func.func @main(%s: !nl.chunk<!storage.string>) {
+  %limit = nl.limit(%s : !nl.chunk<!storage.string>)
+  func.return
+}
+)mlir";
+
 // An nl.limit_truncate passes its column types through unchanged - results mirror
 // the operand chunk types - and verifies in a limit/update/truncate/output chain.
 TEST_F(NLDialectTest, verifierAcceptsLimitTruncate) {
@@ -1055,6 +1071,18 @@ func.func @main() {
   return
 }
 )mlir";
+
+TEST_F(NLDialectTest, verifierAcceptsCutsToBoundCounts) {
+    EXPECT_TRUE(parses(cutsToBoundCounts));
+}
+
+TEST_F(NLDialectTest, verifierRejectsALimitToABoundString) {
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+
+    EXPECT_FALSE(parses(limitsToABoundString));
+}
 
 // The shapes db.vector_search rejects reach faiss through the nl sibling otherwise: a
 // search reporting no neighbour sizes its output buffers at zero, and a query vector of

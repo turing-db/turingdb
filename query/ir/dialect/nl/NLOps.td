@@ -230,7 +230,7 @@ def VectorSearch : NLOp<"vector_search", [Pure, InferTypeOpAdaptor, AttrSizedOpe
                        Optional<NLChunk>:$bound_query_vector);
   let results   = (outs NLIterator:$result);
   let assemblyFormat = [{
-    `(` $index_name `,` custom<NeighbourCount>($k, $bound_k, type($bound_k)) `,`
+    `(` $index_name `,` custom<BoundCount>($k, $bound_k, type($bound_k)) `,`
     custom<QueryVector>($query_vector, $bound_query_vector, type($bound_query_vector)) `)`
     attr-dict `:` qualified(type($result))
   }];
@@ -2029,12 +2029,28 @@ def Limit : NLOp<"limit", []> {
     LIMIT, or an enclosing nl.for body for a nested one, where it re-initializes
     once per enclosing step. Produces the !nl.limit_state handle the loops,
     nl.limit_update and nl.output read. The result type is buildable and omitted.
+
+    The budget is the count db.limit carried, or the chunk holding the count it bound,
+    read each time the counter resets:
+
+      %h = nl.limit(3)
+      %b = nl.limit(%n : !nl.chunk<i64>)
   }];
 
   // Unsigned: a row budget is never negative.
-  let arguments = (ins UI64Attr:$count);
+  let arguments = (ins OptionalAttr<UI64Attr>:$count, Optional<NLChunk>:$bound_count);
   let results   = (outs NLLimitState:$state);
-  let assemblyFormat = "`(` $count `)` attr-dict";
+  let assemblyFormat = "`(` custom<BoundCount>($count, $bound_count, type($bound_count)) `)` attr-dict";
+  let hasVerifier = 1;
+
+  let builders = [
+    OpBuilder<(ins "uint64_t":$count), [{
+      build($_builder, $_state, $_builder.getIntegerAttr($_builder.getIntegerType(64, /*isSigned=*/false), count), ::mlir::Value());
+    }]>,
+    OpBuilder<(ins "::mlir::Value":$boundCount), [{
+      build($_builder, $_state, ::mlir::IntegerAttr(), boundCount);
+    }]>
+  ];
 }
 
 /**
@@ -2126,13 +2142,24 @@ def Skip : NLOp<"skip", []> {
     !nl.skip_state handle nl.skip_update and nl.skip_truncate read. Unlike nl.limit
     it never appears on an nl.for: a skip drives no loop early-exit, since every row
     past the dropped prefix must still be produced. The result type is buildable and
-    omitted.
+    omitted. The count is the one db.skip carried, or the chunk holding the count it
+    bound, read as nl.limit reads one.
   }];
 
   // Unsigned: a count of rows to drop is never negative.
-  let arguments = (ins UI64Attr:$count);
+  let arguments = (ins OptionalAttr<UI64Attr>:$count, Optional<NLChunk>:$bound_count);
   let results   = (outs NLSkipState:$state);
-  let assemblyFormat = "`(` $count `)` attr-dict";
+  let assemblyFormat = "`(` custom<BoundCount>($count, $bound_count, type($bound_count)) `)` attr-dict";
+  let hasVerifier = 1;
+
+  let builders = [
+    OpBuilder<(ins "uint64_t":$count), [{
+      build($_builder, $_state, $_builder.getIntegerAttr($_builder.getIntegerType(64, /*isSigned=*/false), count), ::mlir::Value());
+    }]>,
+    OpBuilder<(ins "::mlir::Value":$boundCount), [{
+      build($_builder, $_state, ::mlir::IntegerAttr(), boundCount);
+    }]>
+  ];
 }
 
 /**
@@ -2227,18 +2254,32 @@ def SortBuffer : NLOp<"sort_buffer", []> {
     to the sort and never decremented:
 
       %state = nl.sort_buffer keys [1] ascending [true] limit 10
+
+    The bound may also be the chunk holding the count a db.limit bound, read each
+    time the accumulator resets:
+
+      %state = nl.sort_buffer keys [1] ascending [true] limit %k : !nl.chunk<i64>
   }];
 
   // keyColumns are indices into the collected column set, most significant first;
   // keyAscending gives one direction per key. The two arrays are parallel. The
-  // optional topK count, when present, bounds the accumulator to its best rows.
+  // optional topK count, or the bound one, bounds the accumulator to its best rows.
   let arguments = (ins DenseI64ArrayAttr:$keyColumns,
                        DenseBoolArrayAttr:$keyAscending,
-                       OptionalAttr<UI64Attr>:$topK);
+                       OptionalAttr<UI64Attr>:$topK,
+                       Optional<NLChunk>:$boundTopK);
   let results   = (outs NLSortState:$state);
 
-  let assemblyFormat = "`keys` $keyColumns `ascending` $keyAscending (`limit` $topK^)? attr-dict";
+  let assemblyFormat = [{
+    `keys` $keyColumns `ascending` $keyAscending (`limit` custom<BoundCount>($topK, $boundTopK, type($boundTopK))^)? attr-dict
+  }];
   let hasVerifier = 1;
+
+  let builders = [
+    OpBuilder<(ins "::mlir::DenseI64ArrayAttr":$keyColumns, "::mlir::DenseBoolArrayAttr":$keyAscending, "::mlir::IntegerAttr":$topK), [{
+      build($_builder, $_state, keyColumns, keyAscending, topK, ::mlir::Value());
+    }]>
+  ];
 }
 
 /**

@@ -482,7 +482,7 @@ def VectorSearch : TuringOp<"vector_search", [Pure, AttrSizedOperandSegments]> {
   // The parameters print inside the parens ahead of the colon, as db.const_scan_nodes
   // prints its IDs; the two result types follow, qualified, as db.scan_edges prints its.
   let assemblyFormat = [{
-    `(` $index_name `,` custom<NeighbourCount>($k, $bound_k, type($bound_k)) `,`
+    `(` $index_name `,` custom<BoundCount>($k, $bound_k, type($bound_k)) `,`
     custom<QueryVector>($query_vector, $bound_query_vector, type($bound_query_vector)) `)`
     attr-dict `:` qualified(type($ids)) `,` qualified(type($scores))
   }];
@@ -2599,7 +2599,7 @@ def Output : TuringOp<"output"> {
 /**
 * Limit
 */
-def Limit : TuringOp<"limit", [Pure, KeepsRowsByPosition, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet"]>]> {
+def Limit : TuringOp<"limit", [Pure, AttrSizedOperandSegments, KeepsRowsByPosition, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getCarrySetMutable"]>]> {
   let summary = "Take the first N rows of a column dataflow";
   let description = [{
     The declarative counterpart of a Cypher RETURN ... LIMIT N. Caps the result
@@ -2610,6 +2610,18 @@ def Limit : TuringOp<"limit", [Pure, KeepsRowsByPosition, DeclareOpInterfaceMeth
       %la = db.limit(%a) count 3 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
       db.output(%la) : !db.column<!storage.node_id>
 
+    The count is either `count`, the one the query spells, or `bound_count`, an
+    integer column holding one value for the whole run, which the limit reads when
+    its loop starts: a parameter, or what ops compute from parameters and literals.
+    An op that raises computing it fails the query, whatever rows it reads. `LIMIT $n`
+    limits
+
+      %la = db.limit(%a) count %n : !db.column<i64> : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+
+    Exactly one of the two is given, and the program does not depend on the count
+    bound. A bound count that is negative or null fails the query when the loop
+    starts.
+
     It lowers to a hoisted nl.limit handle, an nl.limit_update in the innermost
     loop body, a `limit` operand on every nl.for in the nest, and a `limit`
     operand on nl.output. Reading a prefix of the graph is deterministic, so the
@@ -2618,25 +2630,35 @@ def Limit : TuringOp<"limit", [Pure, KeepsRowsByPosition, DeclareOpInterfaceMeth
 
   // The columns flow through unchanged; count is unsigned - a row budget is
   // never negative, so a negative literal fails to parse rather than reaching
-  // the verifier.
-  let arguments = (ins Variadic<Column>:$columns, UI64Attr:$count);
+  // the verifier. The bound count comes first, so the carry set is the trailing
+  // operands.
+  let arguments = (ins Optional<Column>:$bound_count, Variadic<Column>:$columns, OptionalAttr<UI64Attr>:$count);
   let results   = (outs Variadic<Column>:$results);
 
   // One result per input column, same types; functional-type prints the
-  // `(operandTypes) -> resultTypes` form and the named count attribute prints
-  // ahead of the colon, elided from attr-dict.
+  // `(columnTypes) -> resultTypes` form and the count prints ahead of the colon,
+  // elided from attr-dict.
   let assemblyFormat = [{
-    `(` $columns `)` `count` $count attr-dict `:` functional-type(operands, results)
+    `(` $columns `)` `count` custom<BoundCount>($count, $bound_count, type($bound_count)) attr-dict `:` functional-type($columns, results)
   }];
 
-  // results arity and types must equal the columns.
+  let builders = [
+    OpBuilder<(ins "::mlir::TypeRange":$results, "::mlir::ValueRange":$columns, "uint64_t":$count), [{
+      build($_builder, $_state, results, ::mlir::Value(), columns, $_builder.getIntegerAttr($_builder.getIntegerType(64, /*isSigned=*/false), count));
+    }]>,
+    OpBuilder<(ins "::mlir::TypeRange":$results, "::mlir::ValueRange":$columns, "::mlir::Value":$boundCount), [{
+      build($_builder, $_state, results, boundCount, columns, ::mlir::IntegerAttr());
+    }]>
+  ];
+
+  // results arity and types must equal the columns, and the count is given once.
   let hasVerifier = 1;
 }
 
 /**
 * Skip
 */
-def Skip : TuringOp<"skip", [Pure, KeepsRowsByPosition, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet"]>]> {
+def Skip : TuringOp<"skip", [Pure, AttrSizedOperandSegments, KeepsRowsByPosition, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getCarrySetMutable"]>]> {
   let summary = "Drop the first M rows of a column dataflow";
   let description = [{
     The declarative counterpart of a Cypher RETURN ... SKIP M. Drops the first M
@@ -2645,22 +2667,36 @@ def Skip : TuringOp<"skip", [Pure, KeepsRowsByPosition, DeclareOpInterfaceMethod
       %a  = db.scan_nodes() : !db.column<!storage.node_id>
       %sa = db.skip(%a) count 3 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
       db.output(%sa) : !db.column<!storage.node_id>
+
+    The count is either `count` or `bound_count`, as db.limit's is: `SKIP $n` skips
+
+      %sa = db.skip(%a) count %n : !db.column<i64> : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   }];
 
   // The columns flow through unchanged; count is unsigned - a count of rows to
   // drop is never negative, so a negative literal fails to parse rather than
-  // reaching the verifier.
-  let arguments = (ins Variadic<Column>:$columns, UI64Attr:$count);
+  // reaching the verifier. The bound count comes first, so the carry set is the
+  // trailing operands.
+  let arguments = (ins Optional<Column>:$bound_count, Variadic<Column>:$columns, OptionalAttr<UI64Attr>:$count);
   let results   = (outs Variadic<Column>:$results);
 
   // One result per input column, same types; functional-type prints the
-  // `(operandTypes) -> resultTypes` form and the named count attribute prints
-  // ahead of the colon, elided from attr-dict.
+  // `(columnTypes) -> resultTypes` form and the count prints ahead of the colon,
+  // elided from attr-dict.
   let assemblyFormat = [{
-    `(` $columns `)` `count` $count attr-dict `:` functional-type(operands, results)
+    `(` $columns `)` `count` custom<BoundCount>($count, $bound_count, type($bound_count)) attr-dict `:` functional-type($columns, results)
   }];
 
-  // results arity and types must equal the columns.
+  let builders = [
+    OpBuilder<(ins "::mlir::TypeRange":$results, "::mlir::ValueRange":$columns, "uint64_t":$count), [{
+      build($_builder, $_state, results, ::mlir::Value(), columns, $_builder.getIntegerAttr($_builder.getIntegerType(64, /*isSigned=*/false), count));
+    }]>,
+    OpBuilder<(ins "::mlir::TypeRange":$results, "::mlir::ValueRange":$columns, "::mlir::Value":$boundCount), [{
+      build($_builder, $_state, results, boundCount, columns, ::mlir::IntegerAttr());
+    }]>
+  ];
+
+  // results arity and types must equal the columns, and the count is given once.
   let hasVerifier = 1;
 }
 

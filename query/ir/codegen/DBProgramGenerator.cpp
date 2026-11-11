@@ -963,6 +963,27 @@ int64_t applyConstantBinary(const DiagnosticsManager* diagnostics,
     }
 }
 
+bool spellsLiteralsAlone(const Expr* expr) {
+    llvm::SmallVector<const Expr*> worklist {expr};
+
+    while (!worklist.empty()) {
+        const Expr* current = worklist.pop_back_val();
+        const Expr::Kind kind = current->getKind();
+
+        if (kind == Expr::Kind::UNARY) {
+            worklist.push_back(static_cast<const UnaryExpr*>(current)->getSubExpr());
+        } else if (kind == Expr::Kind::BINARY) {
+            const BinaryExpr* binaryExpr = static_cast<const BinaryExpr*>(current);
+            worklist.push_back(binaryExpr->getLHS());
+            worklist.push_back(binaryExpr->getRHS());
+        } else if (kind != Expr::Kind::LITERAL) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 int64_t evaluateConstantInteger(const DiagnosticsManager* diagnostics, const Expr* expr) {
     const Expr::Kind kind = expr->getKind();
 
@@ -3948,30 +3969,16 @@ void DBProgramGenerator::collectWalkReads(llvm::SmallVectorImpl<PublishedColumn>
 
 void DBProgramGenerator::generateMatchWindow(const MatchStmt* matchStmt) {
     if (matchStmt->hasSkip()) {
-        const int64_t skipValue = evaluateConstantInteger(_ast->getDiagnosticsManager(),
-                                                         matchStmt->getSkip()->getExpr());
-
-        if (skipValue < 0) {
-            throwError("SKIP expression must be a non-negative integer", matchStmt->getSkip());
-        }
-
-        cutAllColumns<mlir::db::Skip>(static_cast<uint64_t>(skipValue));
+        cutAllColumns<mlir::db::Skip>(matchStmt->getSkip()->getExpr(), "SKIP");
     }
 
     if (matchStmt->hasLimit()) {
-        const int64_t limitValue = evaluateConstantInteger(_ast->getDiagnosticsManager(),
-                                                          matchStmt->getLimit()->getExpr());
-
-        if (limitValue < 0) {
-            throwError("LIMIT expression must be a non-negative integer", matchStmt->getLimit());
-        }
-
-        cutAllColumns<mlir::db::Limit>(static_cast<uint64_t>(limitValue));
+        cutAllColumns<mlir::db::Limit>(matchStmt->getLimit()->getExpr(), "LIMIT");
     }
 }
 
 template <typename CutOp>
-void DBProgramGenerator::cutAllColumns(uint64_t count) {
+void DBProgramGenerator::cutAllColumns(const Expr* countExpr, std::string_view clauseName) {
     InFlightColumns inFlight;
     collectInFlightColumns(inFlight);
 
@@ -3979,15 +3986,38 @@ void DBProgramGenerator::cutAllColumns(uint64_t count) {
         return;
     }
 
+    CutOp cutOp = createCut<CutOp>(countExpr, clauseName, inFlight._columns);
+
+    rebindInFlightColumns(cutOp.getResults(), /*firstResult=*/0, inFlight);
+}
+
+template <typename CutOp>
+CutOp DBProgramGenerator::createCut(const Expr* countExpr, std::string_view clauseName, mlir::ValueRange columns) {
     llvm::SmallVector<mlir::Type> resultTypes;
-    for (const mlir::Value column : inFlight._columns) {
+    for (const mlir::Value column : columns) {
         resultTypes.push_back(column.getType());
     }
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
-    auto cutOp = _opBuilder.create<CutOp>(loc, resultTypes, inFlight._columns, count);
 
-    rebindInFlightColumns(cutOp.getResults(), /*firstResult=*/0, inFlight);
+    if (spellsLiteralsAlone(countExpr)) {
+        const int64_t count = evaluateConstantInteger(_ast->getDiagnosticsManager(), countExpr);
+
+        if (count < 0) {
+            throwError(fmt::format("{} expression must be a non-negative integer", clauseName), countExpr);
+        }
+
+        return _opBuilder.create<CutOp>(loc, resultTypes, columns, static_cast<uint64_t>(count));
+    }
+
+    translateExpr(countExpr);
+    const mlir::Value boundCount = _part._exprMap.at(countExpr);
+
+    if (!::db::readsNoRow(boundCount)) {
+        throwError(fmt::format("{} expression must be computed from parameters and literals", clauseName), countExpr);
+    }
+
+    return _opBuilder.create<CutOp>(loc, resultTypes, columns, boundCount);
 }
 
 void DBProgramGenerator::generateCall(const CallStmt* callStmt) {
@@ -7658,12 +7688,6 @@ void DBProgramGenerator::translateCut(const Projection* projection,
                                       std::string_view clauseName,
                                       llvm::SmallVectorImpl<mlir::Value>& projected,
                                       llvm::MutableArrayRef<PublishedColumn> carriedColumns) {
-    const int64_t countValue = evaluateConstantInteger(_ast->getDiagnosticsManager(), countExpr);
-
-    if (countValue < 0) {
-        throwError(fmt::format("{} expression must be a non-negative integer", clauseName), countExpr);
-    }
-
     llvm::SmallVector<size_t> cutItems;
     llvm::SmallVector<mlir::Value> cut;
     collectRowColumns(projection, projected, cutItems, cut);
@@ -7675,15 +7699,7 @@ void DBProgramGenerator::translateCut(const Projection* projection,
         collectCutColumns(projection, projected, cutItems, cut);
     }
 
-    llvm::SmallVector<mlir::Type> cutResultTypes;
-    for (const mlir::Value column : cut) {
-        cutResultTypes.push_back(column.getType());
-    }
-
-    auto cutOp = _opBuilder.create<CutOp>(_opBuilder.getUnknownLoc(),
-                                          cutResultTypes,
-                                          mlir::ValueRange {cut},
-                                          static_cast<uint64_t>(countValue));
+    CutOp cutOp = createCut<CutOp>(countExpr, clauseName, cut);
 
     const mlir::ResultRange cutResults = cutOp.getResults();
     for (size_t resultIndex = 0; resultIndex < cutItems.size(); resultIndex++) {

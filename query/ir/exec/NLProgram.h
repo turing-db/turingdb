@@ -1734,21 +1734,25 @@ private:
 
 // nl.limit data: resets a counter to its budget each time the block it lives in
 // runs - once at function scope for a top-level LIMIT, or per enclosing step for
-// a nested one.
+// a nested one. The budget is the count the query spells, or the one held by the
+// constant column bound to it, read at each reset.
 class NLLimitInitData : public NLFunctionData {
 public:
-    NLLimitInitData(NLLimitState* state, size_t count)
+    NLLimitInitData(NLLimitState* state, size_t count, const Column* boundCount)
         : _state(state),
-        _count(count)
+        _count(count),
+        _boundCount(boundCount)
     {
     }
 
     NLLimitState* getState() const { return _state; }
     size_t getCount() const { return _count; }
+    const Column* getBoundCount() const { return _boundCount; }
 
 private:
     NLLimitState* _state {nullptr};
     size_t _count {0};
+    const Column* _boundCount {nullptr};
 };
 
 // nl.limit_remaining data: resets a counter to the budget another one has left each
@@ -1853,18 +1857,21 @@ private:
 // sibling of NLLimitInitData.
 class NLSkipInitData : public NLFunctionData {
 public:
-    NLSkipInitData(NLSkipState* state, size_t count)
+    NLSkipInitData(NLSkipState* state, size_t count, const Column* boundCount)
         : _state(state),
-        _count(count)
+        _count(count),
+        _boundCount(boundCount)
     {
     }
 
     NLSkipState* getState() const { return _state; }
     size_t getCount() const { return _count; }
+    const Column* getBoundCount() const { return _boundCount; }
 
 private:
     NLSkipState* _state {nullptr};
     size_t _count {0};
+    const Column* _boundCount {nullptr};
 };
 
 // nl.skip_update data: the counter to charge and the representative column whose
@@ -1957,8 +1964,6 @@ public:
         _bounded = true;
     }
 
-    bool isBounded() const { return _bounded; }
-
     // Record one column: its buffer, the scratch the trim gathers the survivors
     // into (null when unbounded - no trimming happens), and the gather that fills
     // one from the other. Kept parallel, one entry per collected column.
@@ -2030,18 +2035,22 @@ private:
 };
 
 // nl.sort_buffer data: resets an accumulator to empty each time the block it
-// lives in runs - once at function scope for a top-level ORDER BY.
+// lives in runs - once at function scope for a top-level ORDER BY. A top-K bound
+// to a constant column is read at each reset.
 class NLSortResetData : public NLFunctionData {
 public:
-    NLSortResetData(NLSortState* state)
-        : _state(state)
+    NLSortResetData(NLSortState* state, const Column* boundTopK)
+        : _state(state),
+        _boundTopK(boundTopK)
     {
     }
 
     NLSortState* getState() const { return _state; }
+    const Column* getBoundTopK() const { return _boundTopK; }
 
 private:
     NLSortState* _state {nullptr};
+    const Column* _boundTopK {nullptr};
 };
 
 // nl.sort_collect data: appends the current chunk of every column to the matching

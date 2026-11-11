@@ -44,10 +44,10 @@ void mlir::printCSVPath(OpAsmPrinter& printer, Operation* op, StringAttr path, V
     printer.printAttribute(path);
 }
 
-ParseResult mlir::parseNeighbourCount(OpAsmParser& parser,
-                                      IntegerAttr& count,
-                                      std::optional<OpAsmParser::UnresolvedOperand>& boundCount,
-                                      Type& boundType) {
+ParseResult mlir::parseBoundCount(OpAsmParser& parser,
+                                  IntegerAttr& count,
+                                  std::optional<OpAsmParser::UnresolvedOperand>& boundCount,
+                                  Type& boundType) {
     const OptionalParseResult parsedBound = parseBoundValue(parser, boundCount, boundType);
     if (parsedBound.has_value()) {
         return *parsedBound;
@@ -57,7 +57,7 @@ ParseResult mlir::parseNeighbourCount(OpAsmParser& parser,
     return parser.parseAttribute(count, builder.getIntegerType(64, /*isSigned=*/false));
 }
 
-void mlir::printNeighbourCount(OpAsmPrinter& printer, Operation* op, IntegerAttr count, Value boundCount, Type boundType) {
+void mlir::printBoundCount(OpAsmPrinter& printer, Operation* op, IntegerAttr count, Value boundCount, Type boundType) {
     if (boundCount) {
         printer << boundCount << " : " << boundType;
         return;

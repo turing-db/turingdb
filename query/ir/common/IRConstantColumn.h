@@ -42,6 +42,11 @@ bool yieldsConstantColumn(mlir::Value value, llvm::DenseMap<mlir::Value, bool>& 
 // once per row binds its arguments anew for each row, so they are not.
 bool isRunInvariant(mlir::Value value);
 
+// Whether @param value is computed from parameters and literals alone, by ops that may raise:
+// it reads no row, so a value computed once, before any row is read, holds for the whole run.
+// Computing it raises where an op of it raises, whatever rows the query reads.
+bool readsNoRow(mlir::Value value);
+
 // Drops from @param classified the values @param operation and the ops nested in it define,
 // as it is erased: a value created later at an erased one's address would otherwise read the
 // erased one's answer

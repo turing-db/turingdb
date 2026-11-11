@@ -5257,8 +5257,10 @@ void NLTranslator::translateLimit(nl::Limit limit, NLStmtContainer* body) {
 
     // The reset runs each time the block holding this nl.limit runs: once at
     // function scope for a top-level LIMIT, per enclosing step for a nested one.
-    const size_t count = limit.getCount();
-    NLLimitInitData* initData = _program->allocFunctionData<NLLimitInitData>(state, count);
+    const size_t count = limit.getCount().value_or(0);
+    const mlir::Value boundCount = limit.getBoundCount();
+    const Column* boundColumn = boundCount ? getColumn(boundCount) : nullptr;
+    NLLimitInitData* initData = _program->allocFunctionData<NLLimitInitData>(state, count, boundColumn);
 
     body->emplaceStmt(&NLExecutor::runLimitInit, initData);
 }
@@ -5369,8 +5371,10 @@ void NLTranslator::translateSkip(nl::Skip skip, NLStmtContainer* body) {
 
     // The reset runs each time the block holding this nl.skip runs: once at
     // function scope for a top-level SKIP.
-    const size_t count = skip.getCount();
-    NLSkipInitData* initData = _program->allocFunctionData<NLSkipInitData>(state, count);
+    const size_t count = skip.getCount().value_or(0);
+    const mlir::Value boundCount = skip.getBoundCount();
+    const Column* boundColumn = boundCount ? getColumn(boundCount) : nullptr;
+    NLSkipInitData* initData = _program->allocFunctionData<NLSkipInitData>(state, count, boundColumn);
 
     body->emplaceStmt(&NLExecutor::runSkipInit, initData);
 }
@@ -5477,7 +5481,9 @@ void NLTranslator::translateSortBuffer(nl::SortBuffer buffer, NLStmtContainer* b
 
     // The reset empties the buffers each time the block holding this nl.sort_buffer
     // runs: once at function scope for a top-level ORDER BY.
-    NLSortResetData* resetData = _program->allocFunctionData<NLSortResetData>(state);
+    const mlir::Value boundTopK = buffer.getBoundTopK();
+    const Column* boundColumn = boundTopK ? getColumn(boundTopK) : nullptr;
+    NLSortResetData* resetData = _program->allocFunctionData<NLSortResetData>(state, boundColumn);
     body->emplaceStmt(&NLExecutor::runSortReset, resetData);
 }
 
@@ -5504,7 +5510,7 @@ void NLTranslator::translateSortCollect(nl::SortCollect collect, NLStmtContainer
     // column's element type; the append copies a chunk's rows onto its tail. A
     // bounded accumulator also gets a compaction scratch column and the gather
     // that fills it, so the trim can drop all but the best k rows.
-    const bool bounded = state->isBounded();
+    const bool bounded = buffer.getTopK().has_value() || static_cast<bool>(buffer.getBoundTopK());
     const mlir::OperandRange columns = collect.getColumns();
     for (const mlir::Value column : columns) {
         Column* bufferColumn = allocColumnForChunkType(column.getType());

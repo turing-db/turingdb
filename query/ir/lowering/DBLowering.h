@@ -233,11 +233,14 @@ private:
 
     // A db.sort whose result is capped by an adjacent terminal db.limit fuses into
     // a bounded top-K: the count is baked into the nl.sort_buffer and the db.limit
-    // becomes a pass-through. _sortTopK maps the fused db.sort to its bound;
-    // _fusedLimits is the set of db.limits absorbed this way, so the limit pre-scan
-    // and lowering skip them.
-    llvm::DenseMap<mlir::Operation*, uint64_t> _sortTopK;   // db.sort -> top-K bound
-    llvm::DenseSet<mlir::Operation*> _fusedLimits;          // db.limits fused into a sort
+    // becomes a pass-through. _sortTopK maps the fused db.sort to the db.limit whose
+    // count bounds it; _fusedLimits is the set of db.limits absorbed this way, so the
+    // limit pre-scan and lowering skip them.
+    llvm::DenseMap<mlir::Operation*, mlir::db::Limit> _sortTopK;   // db.sort -> fused db.limit
+    llvm::DenseSet<mlir::Operation*> _fusedLimits;                  // db.limits fused into a sort
+
+    // The db ops lowerBoundCountsAhead lowered before the walk over their block reached them
+    llvm::DenseSet<mlir::Operation*> _loweredAhead;
 
     void lowerOperation(mlir::Operation& operation);
     void lowerOperationByKind(mlir::Operation& operation);
@@ -279,6 +282,17 @@ private:
     void moveAheadOfLoops(mlir::Operation* computation);
 
     void eraseOp(mlir::Operation* operation);
+
+    // Lowers the ops computing the bound count of every db.limit and db.skip at the top of
+    // the function, each once, before the walk reaches them. A count reads no row and the
+    // handle reading it sits above the loops it cuts, and an op of it that raises raises
+    // there, whatever rows the query reads.
+    void lowerBoundCountsAhead(mlir::func::FuncOp dbFunction);
+    void lowerCountAhead(mlir::Value count);
+
+    // Point the builder at the start of @param block, past the op defining @param count
+    // where @param block holds it
+    void setInsertionAtStart(mlir::Block* block, mlir::Value count);
 
     // Hoist one nl.limit handle per db.limit of @param region to the top of @param
     // hoistBlock and assign it to the loops producing the limited columns. A limit

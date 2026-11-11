@@ -974,7 +974,13 @@ private:
 
     // Cut the rows in flight with a db.skip or a db.limit, given as @tparam CutOp
     template <typename CutOp>
-    void cutAllColumns(uint64_t count);
+    void cutAllColumns(const Expr* countExpr, std::string_view clauseName);
+
+    // A db.skip or a db.limit cutting @param columns to @param countExpr: a count spelled with
+    // literals alone is folded into the op, any other is computed from parameters and
+    // literals and read when the loop starts
+    template <typename CutOp>
+    CutOp createCut(const Expr* countExpr, std::string_view clauseName, mlir::ValueRange columns);
 
     // Rebind them to an op's results, so later ops read what it produced. firstResult is
     // where its pass-through results start - zero for an op that only takes them (a

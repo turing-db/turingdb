@@ -9388,7 +9388,8 @@ struct CutRowsReader {
 // limit bounds them. The budget reaches the cut only through ops handing each row on as at
 // least one row as they read it, which the filter keeping other conjuncts than the equality
 // does not. A skip adds the rows it drops to the limit after it, and a LIMIT 0 needs no row:
-// the loops stop before their first step.
+// the loops stop before their first step. A count bound when the query runs bounds nothing
+// the plan can know.
 std::optional<uint64_t> limitOverTheCut(const EqualityCross& match) {
     FilterOp filter = match._filter;
     EqOp equality = match._equality;
@@ -9417,11 +9418,20 @@ std::optional<uint64_t> limitOverTheCut(const EqualityCross& match) {
         Operation* const op = reader._op;
 
         if (Limit limit = dyn_cast<Limit>(op)) {
-            const uint64_t count = limit.getCount();
-            const uint64_t rows = count == 0 ? 0 : llvm::SaturatingAdd(reader._skipped, count);
+            const std::optional<uint64_t> count = limit.getCount();
+            if (!count) {
+                return std::nullopt;
+            }
+
+            const uint64_t rows = *count == 0 ? 0 : llvm::SaturatingAdd(reader._skipped, *count);
             budget = std::max(budget.value_or(0), rows);
         } else if (Skip skip = dyn_cast<Skip>(op)) {
-            pushReaders(op, llvm::SaturatingAdd(reader._skipped, skip.getCount()));
+            const std::optional<uint64_t> count = skip.getCount();
+            if (!count) {
+                return std::nullopt;
+            }
+
+            pushReaders(op, llvm::SaturatingAdd(reader._skipped, *count));
         } else if (computesAValuePerRow(op) || isa<OptionalMatch>(op)) {
             pushReaders(op, reader._skipped);
         } else {

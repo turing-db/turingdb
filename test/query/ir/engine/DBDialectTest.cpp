@@ -246,6 +246,41 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (a) RETURN a SKIP $n + 1 LIMIT $n: the counts are a parameter main takes and a
+// value computed from it.
+const char* const boundCutProgram = R"mlir(
+func.func @main(%n: !db.column<i64>) {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %one = db.constant(1 : i64)
+  %skipped = db.add %n, %one : (!db.column<i64>, !db.column<i64>) -> !db.column<none>
+  %sa = db.skip(%a) count %skipped : !db.column<none> : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  %la = db.limit(%sa) count %n : !db.column<i64> : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%la) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// A count read from the rows the limit cuts, which hold no one value for the run.
+const char* const rowBoundLimitProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %age = db.get_node_properties(%a, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %la = db.limit(%a) count %age : !db.column<!storage.nullable<i64>> : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%la) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// A count bound to a string.
+const char* const stringBoundSkipProgram = R"mlir(
+func.func @main(%s: !db.column<!storage.string>) {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %sa = db.skip(%a) count %s : !db.column<!storage.string> : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%sa) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // MATCH (a) RETURN a AS person: the projection names the column it emits.
 const char* const namedOutputProgram = R"mlir(
 func.func @main() {
@@ -968,6 +1003,73 @@ TEST_F(DBDialectTest, verifierRejectsSkipColumnTypeMismatch) {
         return mlir::success();
     });
     EXPECT_TRUE(mlir::failed(mlir::verify(skip.getOperation())));
+}
+
+TEST_F(DBDialectTest, roundTripsCutsOfBoundCounts) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(boundCutProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::Limit limit;
+    mlir::db::Skip skip;
+    module.get().walk([&](mlir::Operation* op) {
+        if (mlir::db::Limit found = mlir::dyn_cast<mlir::db::Limit>(op)) {
+            limit = found;
+        } else if (mlir::db::Skip found = mlir::dyn_cast<mlir::db::Skip>(op)) {
+            skip = found;
+        }
+    });
+    ASSERT_TRUE(limit);
+    ASSERT_TRUE(skip);
+
+    mlir::func::FuncOp main = mlir::cast<mlir::func::FuncOp>(limit->getParentOp());
+    EXPECT_EQ(limit.getBoundCount(), main.getArgument(0));
+    EXPECT_FALSE(limit.getCount().has_value());
+    EXPECT_TRUE(skip.getBoundCount().getDefiningOp<mlir::db::AddOp>());
+    EXPECT_EQ(limit.getColumns().size(), 1u);
+
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed) << printed;
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+TEST_F(DBDialectTest, rejectsALimitCountReadFromTheRows) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(rowBoundLimitProgram);
+    EXPECT_FALSE(module);
+}
+
+TEST_F(DBDialectTest, rejectsASkipCountBoundToAString) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(stringBoundSkipProgram);
+    EXPECT_FALSE(module);
+}
+
+TEST_F(DBDialectTest, verifierRejectsALimitGivenBothCounts) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    const mlir::Type nodeColumn = mlir::db::ColumnType::get(&_context, mlir::storage::NodeIDType::get(&_context));
+    const mlir::Type countColumn = mlir::db::ColumnType::get(&_context, builder.getIntegerType(64));
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {countColumn}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    auto scan = builder.create<mlir::db::ScanNodes>(loc, nodeColumn);
+    const mlir::IntegerAttr count = builder.getIntegerAttr(builder.getIntegerType(64, /*isSigned=*/false), 3);
+    auto limit = builder.create<mlir::db::Limit>(loc,
+                                                 mlir::TypeRange {nodeColumn},
+                                                 function.getArgument(0),
+                                                 mlir::ValueRange {scan.getResult()},
+                                                 count);
+
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+    EXPECT_TRUE(mlir::failed(mlir::verify(limit.getOperation())));
 }
 
 TEST_F(DBDialectTest, rejectsSortKeyOutOfRange) {

@@ -258,6 +258,17 @@ LogicalResult verifyCaseWrites(CaseOp caseOp) {
 
     return verifyCellWrites(caseOp.getOperation(), caseOp.getResult().getType(), writtenTypes);
 }
+
+// A count bound when the query runs is an integer, null where an expression made it one, or a
+// cell the loop checks holds one when it starts
+LogicalResult verifyBoundCount(Operation* op, Value boundCount) {
+    const Type element = boundCount ? valueElementOf(boundCount.getType()) : Type();
+    if (element && !element.isSignlessInteger(64) && !isa<storage::AnyType>(element)) {
+        return op->emitOpError("requires a bound count of type i64 or !storage.any, got ") << element;
+    }
+
+    return success();
+}
 }
 
 // A node scan always produces one chunk of node IDs per step
@@ -866,6 +877,24 @@ LogicalResult RowListsCollect::verify() {
     return verifyReadAsCells(getOperation(), getValue().getType());
 }
 
+LogicalResult Limit::verify() {
+    const Value boundCount = getBoundCount();
+    if (getCount().has_value() == static_cast<bool>(boundCount)) {
+        return emitOpError("requires either a count or a bound one");
+    }
+
+    return verifyBoundCount(getOperation(), boundCount);
+}
+
+LogicalResult Skip::verify() {
+    const Value boundCount = getBoundCount();
+    if (getCount().has_value() == static_cast<bool>(boundCount)) {
+        return emitOpError("requires either a count or a bound one");
+    }
+
+    return verifyBoundCount(getOperation(), boundCount);
+}
+
 // An nl.sort_buffer needs at least one key, and one direction per key: the two
 // arrays describe the same list of sort keys. The buffers' column count is not
 // known here (the types live on the feeding nl.sort_collect), so key indices are
@@ -883,7 +912,12 @@ LogicalResult SortBuffer::verify() {
                << keyColumns.size() << " keys and " << keyAscending.size() << " flags";
     }
 
-    return success();
+    const Value boundTopK = getBoundTopK();
+    if (getTopK() && boundTopK) {
+        return emitOpError("requires at most one of a top-K count and a bound one");
+    }
+
+    return verifyBoundCount(getOperation(), boundTopK);
 }
 
 // An nl.sort_collect must append at least one column - an empty append could not

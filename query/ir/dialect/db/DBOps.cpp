@@ -12,6 +12,7 @@
 
 #include "DBColumnElement.h"
 #include "DBHeldTags.h"
+#include "IRConstantColumn.h"
 #include "IRLiteralList.h"
 #include "IRRange.h"
 #include "IRValueTypes.h"
@@ -631,6 +632,25 @@ LogicalResult verifyPassThrough(Operation* op,
                                               << " must have the same type as input column "
                                               << columnIndex;
         }
+    }
+
+    return success();
+}
+
+// The count of a db.limit or a db.skip: the literal, or an integer bound for the whole run, or
+// a cell holding one, which the loop checks when it starts
+LogicalResult verifyCutCount(Operation* op, std::optional<uint64_t> count, Value boundCount) {
+    if (count.has_value() == static_cast<bool>(boundCount)) {
+        return op->emitOpError("requires either a count or a bound one");
+    } else if (!boundCount) {
+        return success();
+    }
+
+    const Type element = columnElement(boundCount);
+    if (!element.isSignlessInteger(64) && !isa<NoneType, storage::AnyType>(element)) {
+        return op->emitOpError("requires a bound count of type i64 or !storage.any, got ") << element;
+    } else if (!::db::readsNoRow(boundCount)) {
+        return op->emitOpError("requires a bound count computed from parameters and literals alone");
     }
 
     return success();
@@ -2081,12 +2101,20 @@ LogicalResult CheckedCast::verify() {
 // db.limit passes its columns straight through, so the results must be exactly
 // the input columns - same count, same types and in the same order.
 LogicalResult Limit::verify() {
-    return verifyPassThrough(getOperation(), getColumns(), getResults());
+    if (failed(verifyPassThrough(getOperation(), getColumns(), getResults()))) {
+        return failure();
+    }
+
+    return verifyCutCount(getOperation(), getCount(), getBoundCount());
 }
 
 // db.skip passes its columns straight through, the same as db.limit.
 LogicalResult Skip::verify() {
-    return verifyPassThrough(getOperation(), getColumns(), getResults());
+    if (failed(verifyPassThrough(getOperation(), getColumns(), getResults()))) {
+        return failure();
+    }
+
+    return verifyCutCount(getOperation(), getCount(), getBoundCount());
 }
 
 // db.sort passes its columns straight through reordered, so the results must be
@@ -3020,13 +3048,23 @@ bool FilterOp::getCarrySet(CarrySet& carrySet) {
 }
 
 bool Limit::getCarrySet(CarrySet& carrySet) {
-    carrySet = CarrySet {._count = getColumns().size()};
+    const MutableOperandRange carried = getCarrySetMutable();
+    carrySet = CarrySet {._operandOffset = operandRunOffset(carried), ._count = carried.size()};
     return true;
 }
 
+MutableOperandRange Limit::getCarrySetMutable() {
+    return getColumnsMutable();
+}
+
 bool Skip::getCarrySet(CarrySet& carrySet) {
-    carrySet = CarrySet {._count = getColumns().size()};
+    const MutableOperandRange carried = getCarrySetMutable();
+    carrySet = CarrySet {._operandOffset = operandRunOffset(carried), ._count = carried.size()};
     return true;
+}
+
+MutableOperandRange Skip::getCarrySetMutable() {
+    return getColumnsMutable();
 }
 
 bool Sort::getCarrySet(CarrySet& carrySet) {

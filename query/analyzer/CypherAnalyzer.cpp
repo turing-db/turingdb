@@ -1834,7 +1834,8 @@ void CypherAnalyzer::analyze(Skip* skipSt) {
     Expr* expr = skipSt->getExpr();
     _exprAnalyzer->analyzeRootExpr(expr);
 
-    if (expr->getType() != EvaluatedType::Integer) {
+    const EvaluatedType type = expr->getType();
+    if (type != EvaluatedType::Integer && type != EvaluatedType::Any) {
         throwError("SKIP expression must be an integer", skipSt);
     }
 
@@ -1847,7 +1848,8 @@ void CypherAnalyzer::analyze(Limit* limitSt) {
     Expr* expr = limitSt->getExpr();
     _exprAnalyzer->analyzeRootExpr(expr);
 
-    if (expr->getType() != EvaluatedType::Integer) {
+    const EvaluatedType type = expr->getType();
+    if (type != EvaluatedType::Integer && type != EvaluatedType::Any) {
         throwError("LIMIT expression must be an integer", limitSt);
     }
 

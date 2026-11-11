@@ -303,7 +303,8 @@ void ReadStmtAnalyzer::analyze(Skip* skip) {
         throwError("Invalid use of aggregate expression in this context", skip);
     }
 
-    if (expr->getType() != EvaluatedType::Integer) {
+    const EvaluatedType type = expr->getType();
+    if (type != EvaluatedType::Integer && type != EvaluatedType::Any) {
         throwError("SKIP expression must be an integer", skip);
     }
 }
@@ -320,7 +321,8 @@ void ReadStmtAnalyzer::analyze(Limit* limit) {
         throwError("Invalid use of aggregate expression in this context", limit);
     }
 
-    if (expr->getType() != EvaluatedType::Integer) {
+    const EvaluatedType type = expr->getType();
+    if (type != EvaluatedType::Integer && type != EvaluatedType::Any) {
         throwError("LIMIT expression must be an integer", limit);
     }
 }
