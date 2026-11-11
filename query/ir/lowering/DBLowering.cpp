@@ -335,7 +335,6 @@ const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionL
     {"db.to_boolean_list",    {&emitNLUnaryFunction<nl::ToBooleanList>, ResultNullability::FollowsInput}},
     {"db.to_string_list",     {&emitNLUnaryFunction<nl::ToStringList>, ResultNullability::FollowsInput}},
     {"db.element_id", {&emitNLUnaryFunction<nl::ElementID>, ResultNullability::AlwaysNullable}},
-    {"db.node_id_of", {&emitNLUnaryFunction<nl::NodeIDOf>, ResultNullability::NeverNullable}},
     {"db.size",       {&emitNLUnaryFunction<nl::Size>, ResultNullability::FollowsInput}},
     {"db.is_empty",   {&emitNLUnaryFunction<nl::IsEmpty>, ResultNullability::FollowsInput}},
     {"db.char_length", {&emitNLUnaryFunction<nl::CharLength>, ResultNullability::FollowsInput}},
@@ -1033,6 +1032,7 @@ nl::Output soleOutputConsumer(mlir::ResultRange results) {
 bool opensSourceLoop(mlir::Operation* operation) {
     return mlir::isa<mlir::db::ScanNodes,
                      mlir::db::ConstScanNodes,
+                     mlir::db::ConstScanEdges,
                      mlir::db::UnwindConst,
                      mlir::db::LoadCSV,
                      mlir::db::VectorSearch,
@@ -1155,6 +1155,7 @@ bool dropsRows(mlir::Operation* operation) {
 
     return mlir::isa<mlir::db::FilterOp,
                      mlir::db::FetchNodes,
+                     mlir::db::FetchEdges,
                      mlir::db::HashJoin,
                      mlir::db::Skip,
                      mlir::db::Limit,
@@ -1166,7 +1167,7 @@ bool dropsRows(mlir::Operation* operation) {
 // column of the rows in flight, though a pass binds it ahead of the function
 bool readsAheadOfTheRows(mlir::OpOperand& operand) {
     mlir::Operation* const owner = operand.getOwner();
-    if (mlir::isa<mlir::db::ConstScanNodes, mlir::db::ScanNodesByPropertyValue>(owner)) {
+    if (mlir::isa<mlir::db::ConstScanNodes, mlir::db::ConstScanEdges, mlir::db::ScanNodesByPropertyValue>(owner)) {
         return true;
     }
 
@@ -1611,6 +1612,8 @@ void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
         lowerPatternComprehension(patternComprehension);
     } else if (mlir::db::ScanEdges scanEdges = mlir::dyn_cast<mlir::db::ScanEdges>(operation)) {
         lowerScanEdges(scanEdges);
+    } else if (mlir::db::ConstScanEdges constScanEdges = mlir::dyn_cast<mlir::db::ConstScanEdges>(operation)) {
+        lowerConstScanEdges(constScanEdges);
     } else if (mlir::db::ScanEdgesByType scanEdgesByType = mlir::dyn_cast<mlir::db::ScanEdgesByType>(operation)) {
         lowerScanEdgesByType(scanEdgesByType);
     } else if (mlir::db::ScanOutEdgesByLabelSrc scanOutEdgesByLabelSrc = mlir::dyn_cast<mlir::db::ScanOutEdgesByLabelSrc>(operation)) {
@@ -1803,6 +1806,10 @@ void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
         lowerFilter(filter);
     } else if (mlir::db::FetchNodes fetch = mlir::dyn_cast<mlir::db::FetchNodes>(operation)) {
         lowerFetchNodes(fetch);
+    } else if (mlir::db::FetchEdges fetch = mlir::dyn_cast<mlir::db::FetchEdges>(operation)) {
+        lowerFetchEdges(fetch);
+    } else if (mlir::db::EntityIDOf entityIDOf = mlir::dyn_cast<mlir::db::EntityIDOf>(operation)) {
+        lowerEntityIDOf(entityIDOf);
     } else if (mlir::db::GroupAggregate groupAggregate = mlir::dyn_cast<mlir::db::GroupAggregate>(operation)) {
         lowerGroupAggregate(groupAggregate);
     } else if (mlir::db::Collect collect = mlir::dyn_cast<mlir::db::Collect>(operation)) {
@@ -3068,6 +3075,21 @@ void DBLowering::lowerScanEdges(mlir::db::ScanEdges scanEdges) {
 
     nl::ScanEdges edges = _builder.create<nl::ScanEdges>(_builder.getUnknownLoc());
     buildLoopForSource(edges.getResult(), scanEdges.getOperation());
+}
+
+void DBLowering::lowerConstScanEdges(mlir::db::ConstScanEdges constScanEdges) {
+    setInsertionInto(_rootBlock);
+
+    llvm::SmallVector<mlir::Value, 2> boundIDs;
+    for (const mlir::Value bound : constScanEdges.getBoundIDs()) {
+        boundIDs.push_back(mapValue(bound));
+    }
+
+    nl::ConstScanEdges edges = _builder.create<nl::ConstScanEdges>(_builder.getUnknownLoc(),
+                                                                   constScanEdges.getEdgeIDsAttr(),
+                                                                   boundIDs,
+                                                                   constScanEdges.getUndirectedAttr());
+    buildLoopForSource(edges.getResult(), constScanEdges.getOperation());
 }
 
 void DBLowering::lowerScanEdgesByType(mlir::db::ScanEdgesByType scanEdgesByType) {
@@ -7287,6 +7309,54 @@ void DBLowering::lowerFetchNodes(mlir::db::FetchNodes fetch) {
     }
 
     followCardinalityThrough(inputChunks, nlFetch->getResults());
+}
+
+void DBLowering::lowerFetchEdges(mlir::db::FetchEdges fetch) {
+    mlir::MLIRContext* const context = _builder.getContext();
+    const mlir::Type nodeChunk = nl::ChunkType::get(context, storage::NodeIDType::get(context));
+
+    llvm::SmallVector<mlir::Value, 4> carriedChunks;
+    llvm::SmallVector<mlir::Type, 8> resultTypes {nodeChunk,
+                                                  nl::ChunkType::get(context, storage::EdgeIDType::get(context)),
+                                                  nl::ChunkType::get(context, storage::EdgeTypeIDType::get(context)),
+                                                  nodeChunk};
+    for (const mlir::Value column : fetch.getColumnsToFilter()) {
+        const mlir::Value columnChunk = mapValue(column);
+
+        carriedChunks.push_back(columnChunk);
+        resultTypes.push_back(columnChunk.getType());
+    }
+
+    const mlir::Value idsChunk = rowAlignedChunk(mapValue(fetch.getIds()), cardinalityDriver(carriedChunks));
+
+    llvm::SmallVector<mlir::Value, 4> inputChunks {idsChunk};
+    llvm::append_range(inputChunks, carriedChunks);
+
+    setInsertionInto(deeperOfBlocks(_rootBlock, ownerBlock(deepestBoundChunk(inputChunks))));
+
+    nl::FetchEdges nlFetch = _builder.create<nl::FetchEdges>(_builder.getUnknownLoc(),
+                                                             resultTypes,
+                                                             idsChunk,
+                                                             carriedChunks,
+                                                             fetch.getUndirectedAttr());
+
+    const mlir::ResultRange results = fetch->getResults();
+    for (size_t resultIndex = 0; resultIndex < results.size(); resultIndex++) {
+        _valueMap[results[resultIndex]] = nlFetch->getResult(resultIndex);
+    }
+
+    followCardinalityThrough(inputChunks, nlFetch->getResults());
+}
+
+void DBLowering::lowerEntityIDOf(mlir::db::EntityIDOf entityIDOf) {
+    const mlir::Value inputChunk = mapValue(entityIDOf.getInput());
+    const mlir::db::ColumnType resultColumn = mlir::cast<mlir::db::ColumnType>(entityIDOf.getType());
+    const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultColumn.getType());
+
+    setInsertionForUnaryOp(inputChunk);
+
+    nl::EntityIDOf nlEntityIDOf = _builder.create<nl::EntityIDOf>(_builder.getUnknownLoc(), resultType, inputChunk);
+    _valueMap[entityIDOf.getResult()] = nlEntityIDOf.getResult();
 }
 
 mlir::Value DBLowering::deepestBoundChunk(llvm::ArrayRef<mlir::Value> chunks) {

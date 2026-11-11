@@ -217,6 +217,10 @@ public:
     const PendingNode& getPendingNode(size_t idx) const { return _pendingNodes.at(idx); }
     const PendingEdge& getPendingEdge(size_t idx) const { return _pendingEdges.at(idx); }
 
+    // The ID an endpoint of a pending edge commits as, @param firstPendingNodeID being where
+    // this change's provisional node IDs start
+    static NodeID committedIDOf(const ExistingOrPendingNode& node, size_t firstPendingNodeID);
+
     const PendingIndexes& pendingIndexes() const { return _pendingIndexes; }
     const DroppedIndexes& droppedIndexes() const { return _droppedIndexes; }
 

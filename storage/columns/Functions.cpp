@@ -18,7 +18,7 @@
 #include "reader/GraphReader.h"
 #include "versioning/CommitWriteBuffer.h"
 #include "views/GraphView.h"
-#include "NodeIDOfNumber.h"
+#include "EntityIDOfNumber.h"
 
 #include "BioAssert.h"
 
@@ -1178,53 +1178,61 @@ TaggedIdFunction::ResultType TaggedIdFunction::operator()(const ArgType cell) co
     throw TuringException(fmt::format("id() and elementId() read a node or an edge, not '{}'", queryTypeName(tag)));
 }
 
-template <typename NumberType>
-NodeID NodeIDOfNumberFunction<NumberType>::operator()(const ArgType number) const {
-    int64_t nodeID = 0;
-    if (!nodeIDOfNumber(number, nodeID)) {
-        return NodeID {};
+template <TypedInternalID IDType, typename NumberType>
+IDType EntityIDOfNumberFunction<IDType, NumberType>::operator()(const ArgType number) const {
+    IDType entity;
+    if (!entityIDOfNumber(number, entity)) {
+        return IDType {};
     }
 
-    return NodeID(static_cast<uint64_t>(nodeID));
+    return entity;
 }
 
-template <typename NumberType>
-NodeID NodeIDOfNumberFunction<NumberType>::operator()(const std::optional<ArgType>& number) const {
+template <TypedInternalID IDType, typename NumberType>
+IDType EntityIDOfNumberFunction<IDType, NumberType>::operator()(const std::optional<ArgType>& number) const {
     if (!number.has_value()) {
-        return NodeID {};
+        return IDType {};
     }
 
     return (*this)(*number);
 }
 
-template class db::NodeIDOfNumberFunction<types::Int64::Primitive>;
-template class db::NodeIDOfNumberFunction<types::UInt64::Primitive>;
-template class db::NodeIDOfNumberFunction<types::Double::Primitive>;
+template class db::EntityIDOfNumberFunction<NodeID, types::Int64::Primitive>;
+template class db::EntityIDOfNumberFunction<NodeID, types::UInt64::Primitive>;
+template class db::EntityIDOfNumberFunction<NodeID, types::Double::Primitive>;
+template class db::EntityIDOfNumberFunction<EdgeID, types::Int64::Primitive>;
+template class db::EntityIDOfNumberFunction<EdgeID, types::UInt64::Primitive>;
+template class db::EntityIDOfNumberFunction<EdgeID, types::Double::Primitive>;
 
-NodeID TaggedNodeIDOfFunction::operator()(const ArgType cell) const {
+template <TypedInternalID IDType>
+IDType TaggedEntityIDOfFunction<IDType>::operator()(const ArgType cell) const {
     switch (cell.getTag()) {
         case CellTag::Int:
-            return NodeIDOfNumberFunction<types::Int64::Primitive> {}(cell.getAs<types::Int64::Primitive>());
+            return EntityIDOfNumberFunction<IDType, types::Int64::Primitive> {}(cell.getAs<types::Int64::Primitive>());
         break;
         case CellTag::UInt:
-            return NodeIDOfNumberFunction<types::UInt64::Primitive> {}(cell.getAs<types::UInt64::Primitive>());
+            return EntityIDOfNumberFunction<IDType, types::UInt64::Primitive> {}(cell.getAs<types::UInt64::Primitive>());
         break;
         case CellTag::Double:
-            return NodeIDOfNumberFunction<types::Double::Primitive> {}(cell.getAs<types::Double::Primitive>());
+            return EntityIDOfNumberFunction<IDType, types::Double::Primitive> {}(cell.getAs<types::Double::Primitive>());
         break;
         default:
-            return NodeID {};
+            return IDType {};
         break;
     }
 }
 
-NodeID TaggedNodeIDOfFunction::operator()(const std::optional<ArgType>& cell) const {
+template <TypedInternalID IDType>
+IDType TaggedEntityIDOfFunction<IDType>::operator()(const std::optional<ArgType>& cell) const {
     if (!cell.has_value()) {
-        return NodeID {};
+        return IDType {};
     }
 
     return (*this)(*cell);
 }
+
+template class db::TaggedEntityIDOfFunction<NodeID>;
+template class db::TaggedEntityIDOfFunction<EdgeID>;
 
 void ToBoolFunction::strToLower(std::string& lower, std::string_view src) {
     lower.clear();

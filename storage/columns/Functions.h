@@ -175,14 +175,14 @@ public:
     ResultType operator()(const IDT id) const { return static_cast<types::Int64::Primitive>(id.getValue()); }
 };
 
-// The node n for which id(n) = value holds: an integer, or a double holding one, in range and
-// not negative, names the node of that ID. Any other value names none, which a node column
-// spells as the invalid ID.
-template <typename NumberType>
-class NodeIDOfNumberFunction {
+// The node or edge e for which id(e) = value holds: an integer, or a double holding one, in
+// range and not negative, names the entity of that ID. Any other value names none, which an
+// ID column spells as the invalid ID.
+template <TypedInternalID IDType, typename NumberType>
+class EntityIDOfNumberFunction {
 public:
     using ArgType = NumberType;
-    using ResultType = NodeID;
+    using ResultType = IDType;
 
     static constexpr bool ReadsNullsItself = true;
 
@@ -190,10 +190,11 @@ public:
     ResultType operator()(const std::optional<ArgType>& number) const;
 };
 
-class TaggedNodeIDOfFunction {
+template <TypedInternalID IDType>
+class TaggedEntityIDOfFunction {
 public:
     using ArgType = CellView;
-    using ResultType = NodeID;
+    using ResultType = IDType;
 
     static constexpr bool ReadsNullsItself = true;
 
@@ -201,20 +202,13 @@ public:
     ResultType operator()(const std::optional<ArgType>& cell) const;
 };
 
-class NodeIDOfNodeFunction {
+template <TypedInternalID IDType, TypedInternalID EntityType>
+class EntityIDOfEntityFunction {
 public:
-    using ArgType = NodeID;
-    using ResultType = NodeID;
+    using ArgType = EntityType;
+    using ResultType = IDType;
 
-    ResultType operator()(const NodeID node) const { return node; }
-};
-
-class NodeIDOfEdgeFunction {
-public:
-    using ArgType = EdgeID;
-    using ResultType = NodeID;
-
-    ResultType operator()(const EdgeID edge) const { return NodeID(edge.getValue()); }
+    ResultType operator()(const EntityType entity) const { return IDType(entity.getValue()); }
 };
 
 // What a conversion over a type-erased cell answers for a value it has no rule for

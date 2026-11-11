@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <algorithm>
+#include <concepts>
 #include <memory>
 #include <new>
 #include <optional>
@@ -11,6 +12,7 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <variant>
@@ -33,6 +35,7 @@
 #include "columns/ColumnMask.h"
 #include "columns/ColumnStringTable.h"
 #include "columns/ColumnVector.h"
+#include "datapart/EdgeRecord.h"
 #include "iterators/ChunkConfig.h"
 #include "iterators/PathDistanceIndex.h"
 #include "iterators/PathExplorationDir.h"
@@ -899,6 +902,44 @@ public:
 
 private:
     std::vector<EdgeTypeID> _requestedTypes;
+};
+
+// nl.const_scan_edges loop data: the edge scan over a fixed, explicitly listed set of edge
+// IDs, the edge sibling of NLConstScanLoopData
+class NLConstScanEdgesLoopData : public NLScanEdgesLoopData {
+public:
+    NLConstScanEdgesLoopData(ColumnNodeIDs* sources,
+                             ColumnEdgeIDs* edgeIDs,
+                             ColumnEdgeTypes* edgeTypes,
+                             ColumnNodeIDs* targets,
+                             bool undirected)
+        : NLScanEdgesLoopData(sources, edgeIDs, edgeTypes, targets),
+        _undirected(undirected)
+    {
+    }
+
+    std::span<const EdgeID> getConstEdgeIDs() const { return _constEdgeIDs; }
+    void reserveEdgeIDs(size_t count) { _constEdgeIDs.reserve(count); }
+    void addEdgeID(EdgeID edgeID) { _constEdgeIDs.push_back(edgeID); }
+
+    // Each a constant column holding, nullable or not, an edge, an integer or a list
+    std::span<const Column* const> getBoundIDs() const { return _boundIDs; }
+    void addBoundIDs(const Column* column) { _boundIDs.push_back(column); }
+
+    bool isUndirected() const { return _undirected; }
+
+    std::vector<EdgeID>& getListedEdgeIDs() { return _listedEdgeIDs; }
+    std::vector<EdgeRecord>& getListedRows() { return _listedRows; }
+
+private:
+    std::vector<EdgeID> _constEdgeIDs;
+    std::vector<const Column*> _boundIDs;
+    bool _undirected {false};
+
+    // The edges a scan produces, and the rows they come out as, listed again each time the
+    // loop starts
+    std::vector<EdgeID> _listedEdgeIDs;
+    std::vector<EdgeRecord> _listedRows;
 };
 
 // Loop data of the four by-label edge scans: the edge scan restricted to the edges hanging
@@ -2405,6 +2446,67 @@ private:
     ColumnNodeIDs* _nodes {nullptr};
     std::vector<NLFilterData::FilterColumn> _columns;
     ColumnVector<size_t> _indices;
+};
+
+class NLFetchEdgesData;
+
+// The edge sibling of NLFetchNodesFunction, appending the source, edge, type and target of
+// each row's edge
+using NLFetchEdgesFunction = void (*)(const NLExecutionContext* context, NLFetchEdgesData* fetch);
+
+template <TypedInternalID IDType>
+using NLFetchFunction = std::conditional_t<std::same_as<IDType, NodeID>, NLFetchNodesFunction, NLFetchEdgesFunction>;
+
+class NLFetchEdgesData : public NLFunctionData {
+public:
+    NLFetchEdgesData(const Column* ids,
+                     NLFetchEdgesFunction fetch,
+                     bool undirected,
+                     ColumnNodeIDs* sources,
+                     ColumnEdgeIDs* edgeIDs,
+                     ColumnEdgeTypes* edgeTypes,
+                     ColumnNodeIDs* targets)
+        : _ids(ids),
+        _fetch(fetch),
+        _undirected(undirected),
+        _sources(sources),
+        _edgeIDs(edgeIDs),
+        _edgeTypes(edgeTypes),
+        _targets(targets)
+    {
+    }
+
+    const Column* getIDs() const { return _ids; }
+    NLFetchEdgesFunction getFetch() const { return _fetch; }
+    bool isUndirected() const { return _undirected; }
+
+    ColumnNodeIDs* getSources() const { return _sources; }
+    ColumnEdgeIDs* getEdgeIDs() const { return _edgeIDs; }
+    ColumnEdgeTypes* getEdgeTypes() const { return _edgeTypes; }
+    ColumnNodeIDs* getTargets() const { return _targets; }
+
+    const std::vector<NLFilterData::FilterColumn>& getColumns() const { return _columns; }
+
+    void addColumn(const NLFilterData::FilterColumn& column) {
+        _columns.push_back(column);
+    }
+
+    ColumnVector<size_t>* getIndices() { return &_indices; }
+    std::vector<EdgeRecord>& getRows() { return _rows; }
+
+private:
+    const Column* _ids {nullptr};
+    NLFetchEdgesFunction _fetch {nullptr};
+    bool _undirected {false};
+    ColumnNodeIDs* _sources {nullptr};
+    ColumnEdgeIDs* _edgeIDs {nullptr};
+    ColumnEdgeTypes* _edgeTypes {nullptr};
+    ColumnNodeIDs* _targets {nullptr};
+    std::vector<NLFilterData::FilterColumn> _columns;
+    ColumnVector<size_t> _indices;
+
+    // Scratch for the rows of this step's edges
+    std::vector<EdgeRecord> _rows;
 };
 
 // Type of handle that returns how many rows of a column are non-null. One per

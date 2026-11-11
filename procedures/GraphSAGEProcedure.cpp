@@ -10,7 +10,7 @@
 #include <spdlog/fmt/bundled/format.h>
 
 #include "samplers/GraphSAGESampler.h"
-#include "versioning/ScannedNodes.h"
+#include "versioning/ScannedEntities.h"
 
 #include "ProcUtils.h"
 #include "Procedure.h"

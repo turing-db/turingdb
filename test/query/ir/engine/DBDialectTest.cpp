@@ -1239,7 +1239,7 @@ func.func @main() {
 // and $ids a list of mixed values
 const char* const boundConstScanNodesProgram = R"mlir(
 func.func @main(%id: !db.column<f64>, %ids: !db.column<!storage.list<!storage.any>>) {
-  %m = db.node_id_of(%id) : (!db.column<f64>) -> !db.column<!storage.node_id>
+  %m = db.entity_id_of(%id) : (!db.column<f64>) -> !db.column<!storage.node_id>
   %a = db.const_scan_nodes([3], %m, %ids : !db.column<!storage.node_id>, !db.column<!storage.list<!storage.any>>) : !db.column<!storage.node_id>
   db.output(%a) : !db.column<!storage.node_id>
   return

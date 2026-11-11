@@ -386,6 +386,29 @@ def FetchNodes : NLOp<"fetch_nodes", [Pure]> {
 }
 
 /**
+* FetchEdges
+*/
+def FetchEdges : NLOp<"fetch_edges", [Pure]> {
+  let summary = "Keep the rows whose ID cell names an edge, with that edge's four columns, as freshly cut chunks";
+  let description = [{
+    Imperative counterpart of db.fetch_edges. Each step reads the chunk of ID cells, keeps
+    the rows naming an edge a scan would produce, writes the source, edge, type and target
+    of each, twice from either end with `undirected`, and cuts the carry set to them:
+
+      %s, %e, %t, %d, %i2 = nl.fetch_edges(%ids, {%i})
+                              : (!nl.chunk<!storage.edge_id>, !nl.chunk<!storage.nullable<i64>>)
+                              -> (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<i64>>)
+  }];
+
+  let arguments = (ins NLChunk:$ids, Variadic<NLChunk>:$columns_to_filter, UnitAttr:$undirected);
+  let results   = (outs NLChunk:$srcids, NLChunk:$eids, NLChunk:$etypes, NLChunk:$tgtids, Variadic<NLChunk>:$carried);
+
+  let assemblyFormat = [{
+    `(` $ids `,` `{` $columns_to_filter `}` `)` (`undirected` $undirected^)? attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+/**
 * MakeList
 */
 def MakeList : NLOp<"make_list", [Pure, RowAlignedThroughOperands]> {
@@ -856,6 +879,32 @@ def ScanEdges : NLOp<"scan_edges", [Pure, InferTypeOpAdaptor]> {
   }];
   let results   = (outs NLIterator:$result);
   let assemblyFormat = "`(`operands`)` attr-dict";
+}
+
+/**
+* ConstScanEdges
+*/
+def ConstScanEdges : NLOp<"const_scan_edges", [Pure, InferTypeOpAdaptor]> {
+  let summary = "Create a database iterator over a fixed, explicitly listed set of edges";
+  let description = [{
+    Imperative counterpart of db.const_scan_edges. Each step of an enclosing nl.for fills
+    one row of the four edge chunks nl.scan_edges fills, for the edges listed in `edgeIDs`
+    or held by the `boundIDs` chunks:
+
+      %edges = nl.const_scan_edges([3, 7])
+      %bound = nl.const_scan_edges([], %ids : !nl.chunk<!storage.list<i64>>) undirected
+
+    The IDs are read and the edges they name looked up when the loop starts, as
+    nl.const_scan_nodes reads its nodes, each edge emitted once in ID order, or twice, once
+    from each end, with `undirected`. Listing edges narrows only which rows are produced,
+    never their shape, so the result is always the four-chunk edge iterator and is
+    inferred, not spelled out.
+  }];
+  let arguments = (ins DenseI64ArrayAttr:$edgeIDs, Variadic<NLChunk>:$boundIDs, UnitAttr:$undirected);
+  let results   = (outs NLIterator:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = "`(` $edgeIDs (`,` $boundIDs^ `:` type($boundIDs))? `)` (`undirected` $undirected^)? attr-dict";
 }
 
 /**
@@ -3277,9 +3326,9 @@ def CurrentDateTime : NLOp<"current_datetime", [Pure, ConstantThroughOperands, R
 // db.element_id lowers to this, and carries its operand's constancy as the list family does.
 def ElementID : NLUnaryFunctionOp<"element_id", [ConstantThroughOperands]>;
 
-// db.node_id_of lowers to this: the node chunk naming, row for row, the node each value of
-// its operand names by its ID, the invalid ID where it names none
-def NodeIDOf : NLUnaryFunctionOp<"node_id_of", [ConstantThroughOperands]> {
+// db.entity_id_of lowers to this: the node or edge chunk naming, row for row, the entity each
+// value of its operand names by its ID, the invalid ID where it names none
+def EntityIDOf : NLUnaryFunctionOp<"entity_id_of", [ConstantThroughOperands]> {
   let hasVerifier = 1;
 }
 

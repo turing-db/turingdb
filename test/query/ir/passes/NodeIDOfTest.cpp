@@ -26,16 +26,16 @@ using namespace turing::test;
 
 namespace {
 
-// MATCH (n) WHERE id(n) = x for x of several types, each a column db.node_id_of reads
+// MATCH (n) WHERE id(n) = x for x of several types, each a column db.entity_id_of reads
 const char* const nodeIDOfValues = R"mlir(
 func.func @main(%d: !db.column<f64>, %i: !db.column<i64>, %c: !db.column<!storage.any>, %s: !db.column<!storage.string>, %u: !db.column<none>) {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %a = db.node_id_of(%d) : (!db.column<f64>) -> !db.column<!storage.node_id>
-  %b = db.node_id_of(%i) : (!db.column<i64>) -> !db.column<!storage.node_id>
-  %e = db.node_id_of(%c) : (!db.column<!storage.any>) -> !db.column<!storage.node_id>
-  %f = db.node_id_of(%s) : (!db.column<!storage.string>) -> !db.column<!storage.node_id>
-  %g = db.node_id_of(%u) : (!db.column<none>) -> !db.column<!storage.node_id>
-  %h = db.node_id_of(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  %a = db.entity_id_of(%d) : (!db.column<f64>) -> !db.column<!storage.node_id>
+  %b = db.entity_id_of(%i) : (!db.column<i64>) -> !db.column<!storage.node_id>
+  %e = db.entity_id_of(%c) : (!db.column<!storage.any>) -> !db.column<!storage.node_id>
+  %f = db.entity_id_of(%s) : (!db.column<!storage.string>) -> !db.column<!storage.node_id>
+  %g = db.entity_id_of(%u) : (!db.column<none>) -> !db.column<!storage.node_id>
+  %h = db.entity_id_of(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%a, %b, %e, %f, %g, %h) : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
 }
@@ -43,7 +43,7 @@ func.func @main(%d: !db.column<f64>, %i: !db.column<i64>, %c: !db.column<!storag
 
 const char* const nodeIDOfAnEdge = R"mlir(
 func.func @main(%r: !db.column<!storage.edge_id>) {
-  %a = db.node_id_of(%r) : (!db.column<!storage.edge_id>) -> !db.column<!storage.node_id>
+  %a = db.entity_id_of(%r) : (!db.column<!storage.edge_id>) -> !db.column<!storage.node_id>
   db.output(%a) : !db.column<!storage.node_id>
   return
 }
@@ -51,7 +51,7 @@ func.func @main(%r: !db.column<!storage.edge_id>) {
 
 const char* const nodeIDOfAPath = R"mlir(
 func.func @main(%p: !db.column<!storage.path>) {
-  %a = db.node_id_of(%p) : (!db.column<!storage.path>) -> !db.column<!storage.node_id>
+  %a = db.entity_id_of(%p) : (!db.column<!storage.path>) -> !db.column<!storage.node_id>
   db.output(%a) : !db.column<!storage.node_id>
   return
 }
@@ -59,7 +59,7 @@ func.func @main(%p: !db.column<!storage.path>) {
 
 const char* const nodeIDOfIntoAnInteger = R"mlir(
 func.func @main(%d: !db.column<f64>) {
-  %a = db.node_id_of(%d) : (!db.column<f64>) -> !db.column<i64>
+  %a = db.entity_id_of(%d) : (!db.column<f64>) -> !db.column<i64>
   db.output(%a) : !db.column<i64>
   return
 }
@@ -67,37 +67,37 @@ func.func @main(%d: !db.column<f64>) {
 
 const char* const nlNodeIDOf = R"mlir(
 func.func @main(%d: !nl.chunk<!storage.nullable<f64>>, %c: !nl.chunk<!storage.any>, %r: !nl.chunk<!storage.edge_id>) {
-  %a = nl.node_id_of %d : (!nl.chunk<!storage.nullable<f64>>) -> !nl.chunk<!storage.node_id>
-  %b = nl.node_id_of %c : (!nl.chunk<!storage.any>) -> !nl.chunk<!storage.node_id>
-  %e = nl.node_id_of %r : (!nl.chunk<!storage.edge_id>) -> !nl.chunk<!storage.node_id>
+  %a = nl.entity_id_of %d : (!nl.chunk<!storage.nullable<f64>>) -> !nl.chunk<!storage.node_id>
+  %b = nl.entity_id_of %c : (!nl.chunk<!storage.any>) -> !nl.chunk<!storage.node_id>
+  %e = nl.entity_id_of %r : (!nl.chunk<!storage.edge_id>) -> !nl.chunk<!storage.node_id>
   func.return
 }
 )mlir";
 
 const char* const nlNodeIDOfAPath = R"mlir(
 func.func @main(%p: !nl.chunk<!storage.path>) {
-  %a = nl.node_id_of %p : (!nl.chunk<!storage.path>) -> !nl.chunk<!storage.node_id>
+  %a = nl.entity_id_of %p : (!nl.chunk<!storage.path>) -> !nl.chunk<!storage.node_id>
   func.return
 }
 )mlir";
 
 const char* const nlNodeIDOfIntoAnInteger = R"mlir(
 func.func @main(%d: !nl.chunk<f64>) {
-  %a = nl.node_id_of %d : (!nl.chunk<f64>) -> !nl.chunk<i64>
+  %a = nl.entity_id_of %d : (!nl.chunk<f64>) -> !nl.chunk<i64>
   func.return
 }
 )mlir";
 
-// node_id_of(n), node_id_of(id(n)), node_id_of(id(r)) and node_id_of(x)
+// entity_id_of(n), entity_id_of(id(n)), entity_id_of(id(r)) and entity_id_of(x)
 const char* const foldableNodeIDOf = R"mlir(
 func.func @main(%r: !db.column<!storage.edge_id>, %x: !db.column<f64>) {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
   %id = db.element_id(%n) : (!db.column<!storage.node_id>) -> !db.column<none>
   %edgeID = db.element_id(%r) : (!db.column<!storage.edge_id>) -> !db.column<none>
-  %a = db.node_id_of(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
-  %b = db.node_id_of(%id) : (!db.column<none>) -> !db.column<!storage.node_id>
-  %c = db.node_id_of(%edgeID) : (!db.column<none>) -> !db.column<!storage.node_id>
-  %d = db.node_id_of(%x) : (!db.column<f64>) -> !db.column<!storage.node_id>
+  %a = db.entity_id_of(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  %b = db.entity_id_of(%id) : (!db.column<none>) -> !db.column<!storage.node_id>
+  %c = db.entity_id_of(%edgeID) : (!db.column<none>) -> !db.column<!storage.node_id>
+  %d = db.entity_id_of(%x) : (!db.column<f64>) -> !db.column<!storage.node_id>
   db.output(%a, %b, %c, %d) : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
 }
@@ -216,7 +216,7 @@ protected:
 
     bool canonicalize(mlir::ModuleOp module) {
         mlir::PassManager passManager(&_context);
-        passManager.addPass(mlir::db::createCanonicalizeNodeIDEqualities());
+        passManager.addPass(mlir::db::createCanonicalizeIDEqualities());
 
         return mlir::succeeded(passManager.run(module));
     }
@@ -239,7 +239,7 @@ protected:
         return equalities.front();
     }
 
-    static mlir::Value foldedValue(mlir::db::NodeIDOf nodeIDOf) {
+    static mlir::Value foldedValue(mlir::db::EntityIDOf nodeIDOf) {
         llvm::SmallVector<mlir::OpFoldResult> results;
         if (mlir::failed(nodeIDOf->fold(results)) || results.size() != 1) {
             return {};
@@ -255,7 +255,7 @@ TEST_F(NodeIDOfTest, readsAValueOfAnyTypeAndANode) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(nodeIDOfValues);
     ASSERT_TRUE(module);
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
-    EXPECT_EQ(countOps<mlir::db::NodeIDOf>(*module), 6u);
+    EXPECT_EQ(countOps<mlir::db::EntityIDOf>(*module), 6u);
 
     std::string printed;
     llvm::raw_string_ostream stream(printed);
@@ -265,7 +265,7 @@ TEST_F(NodeIDOfTest, readsAValueOfAnyTypeAndANode) {
     const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed);
     ASSERT_TRUE(reparsed) << printed;
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
-    EXPECT_EQ(countOps<mlir::db::NodeIDOf>(*reparsed), 6u);
+    EXPECT_EQ(countOps<mlir::db::EntityIDOf>(*reparsed), 6u);
 }
 
 TEST_F(NodeIDOfTest, readsAnEdgeAndRejectsAPath) {
@@ -284,7 +284,7 @@ TEST_F(NodeIDOfTest, lowersToAnNLOpOfTheSameShape) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(nlNodeIDOf);
     ASSERT_TRUE(module);
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*module)));
-    EXPECT_EQ(countOps<mlir::nl::NodeIDOf>(*module), 3u);
+    EXPECT_EQ(countOps<mlir::nl::EntityIDOf>(*module), 3u);
 
     EXPECT_FALSE(parse(nlNodeIDOfAPath));
     EXPECT_FALSE(parse(nlNodeIDOfIntoAnInteger));
@@ -295,7 +295,7 @@ TEST_F(NodeIDOfTest, foldsANodeAndTheIDOfANodeToTheNode) {
     ASSERT_TRUE(module);
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
 
-    const llvm::SmallVector<mlir::db::NodeIDOf> nodeIDOfs = collect<mlir::db::NodeIDOf>(*module);
+    const llvm::SmallVector<mlir::db::EntityIDOf> nodeIDOfs = collect<mlir::db::EntityIDOf>(*module);
     ASSERT_EQ(nodeIDOfs.size(), 4u);
 
     const mlir::Value nodes = collect<mlir::db::ScanNodes>(*module).front().getResult();
@@ -315,7 +315,7 @@ TEST_F(NodeIDOfTest, comparesAFilteredNodeToTheNodeAValueNames) {
     const mlir::Value nodes = collect<mlir::db::ScanNodes>(*module).front().getResult();
     EXPECT_EQ(equality.getLhs(), nodes);
 
-    mlir::db::NodeIDOf nodeIDOf = equality.getRhs().getDefiningOp<mlir::db::NodeIDOf>();
+    mlir::db::EntityIDOf nodeIDOf = equality.getRhs().getDefiningOp<mlir::db::EntityIDOf>();
     ASSERT_TRUE(nodeIDOf);
     EXPECT_TRUE(mlir::isa<mlir::BlockArgument>(nodeIDOf.getInput()));
     EXPECT_EQ(countOps<mlir::db::ElementID>(*module), 0u);
@@ -325,7 +325,7 @@ TEST_F(NodeIDOfTest, comparesADisjoinedNodeToTheNodeAValueNames) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parseAndCanonicalize(disjoinedIDEquality);
     ASSERT_TRUE(module);
 
-    EXPECT_EQ(countOps<mlir::db::NodeIDOf>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::EntityIDOf>(*module), 1u);
     EXPECT_EQ(countOps<mlir::db::ElementID>(*module), 0u);
 }
 
@@ -336,7 +336,7 @@ TEST_F(NodeIDOfTest, keepsAnIDComparedOutsideAFilter) {
         const mlir::OwningOpRef<mlir::ModuleOp> module = parseAndCanonicalize(program);
         ASSERT_TRUE(module) << program;
 
-        EXPECT_EQ(countOps<mlir::db::NodeIDOf>(*module), 0u) << program;
+        EXPECT_EQ(countOps<mlir::db::EntityIDOf>(*module), 0u) << program;
         EXPECT_EQ(countOps<mlir::db::ElementID>(*module), 1u) << program;
     }
 }
@@ -348,7 +348,7 @@ TEST_F(NodeIDOfTest, comparesANodeToTheNodeAnEdgeNumbers) {
     mlir::db::EqOp equality = soleEquality(*module);
     ASSERT_TRUE(equality);
 
-    mlir::db::NodeIDOf nodeIDOf = equality.getRhs().getDefiningOp<mlir::db::NodeIDOf>();
+    mlir::db::EntityIDOf nodeIDOf = equality.getRhs().getDefiningOp<mlir::db::EntityIDOf>();
     ASSERT_TRUE(nodeIDOf);
     EXPECT_TRUE(mlir::isa<mlir::BlockArgument>(nodeIDOf.getInput()));
     EXPECT_EQ(countOps<mlir::db::ElementID>(*module), 0u);
@@ -367,7 +367,7 @@ TEST_F(NodeIDOfTest, foldsALiteralToTheIDItNames) {
     ASSERT_TRUE(nodeID);
     EXPECT_EQ(nodeID.getInt(), 3);
 
-    mlir::db::NodeIDOf unnamed = equalities[1].getRhs().getDefiningOp<mlir::db::NodeIDOf>();
+    mlir::db::EntityIDOf unnamed = equalities[1].getRhs().getDefiningOp<mlir::db::EntityIDOf>();
     ASSERT_TRUE(unnamed);
     EXPECT_TRUE(unnamed.getInput().getDefiningOp<mlir::db::ConstantOp>());
     EXPECT_EQ(countOps<mlir::db::ElementID>(*module), 0u);
@@ -383,6 +383,6 @@ TEST_F(NodeIDOfTest, comparesTwoIDsAsTheirNodes) {
     const mlir::Value nodes = collect<mlir::db::ScanNodes>(*module).front().getResult();
     EXPECT_EQ(equality.getLhs(), nodes);
     EXPECT_TRUE(mlir::isa<mlir::BlockArgument>(equality.getRhs()));
-    EXPECT_EQ(countOps<mlir::db::NodeIDOf>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::EntityIDOf>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::ElementID>(*module), 0u);
 }

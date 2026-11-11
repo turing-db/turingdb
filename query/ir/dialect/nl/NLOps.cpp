@@ -23,7 +23,7 @@
 #include "NullLiteralType.h"
 #include "GroupAggregateKindsFormat.h"
 #include "PropertyScanLiteral.h"
-#include "BoundNodeIDs.h"
+#include "BoundEntityIDs.h"
 #include "BoundValueFormat.h"
 
 using namespace mlir;
@@ -292,9 +292,10 @@ LogicalResult ConstScanNodes::inferReturnTypes(MLIRContext* context,
 }
 
 LogicalResult ConstScanNodes::verify() {
+    const Type node = storage::NodeIDType::get(getContext());
     for (const Value bound : getBoundIDs()) {
         const Type element = valueElementOf(bound.getType());
-        if (!storage::isBoundNodeIDsType(element)) {
+        if (!storage::isBoundEntityIDsType(element, node)) {
             return emitOpError("requires bound IDs of type i64, !storage.node_id or !storage.list, got ") << element;
         }
     }
@@ -302,15 +303,15 @@ LogicalResult ConstScanNodes::verify() {
     return success();
 }
 
-LogicalResult NodeIDOf::verify() {
+LogicalResult EntityIDOf::verify() {
     const Type input = valueElementOf(getOperand().getType());
-    if (!storage::isNodeIDOfInputType(input)) {
+    if (!storage::isEntityIDOfInputType(input)) {
         return emitOpError("requires a value, a node or an edge, not a path, got ") << input;
     }
 
     const Type result = cast<ChunkType>(getResult().getType()).getElementType();
-    if (!isa<storage::NodeIDType>(result)) {
-        return emitOpError("requires a node result, got ") << result;
+    if (!storage::isEntityIDType(result)) {
+        return emitOpError("requires a node or an edge result, got ") << result;
     }
 
     return success();
@@ -421,6 +422,26 @@ LogicalResult ScanEdges::inferReturnTypes(MLIRContext* context,
                                          ScanEdges::Adaptor adaptor,
                                          SmallVectorImpl<Type>& inferredReturnTypes) {
     inferredReturnTypes.push_back(getEdgeIteratorType(context, {}));
+    return success();
+}
+
+LogicalResult ConstScanEdges::inferReturnTypes(MLIRContext* context,
+                                               std::optional<Location> location,
+                                               ConstScanEdges::Adaptor adaptor,
+                                               SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.push_back(getEdgeIteratorType(context, {}));
+    return success();
+}
+
+LogicalResult ConstScanEdges::verify() {
+    const Type edge = storage::EdgeIDType::get(getContext());
+    for (const Value bound : getBoundIDs()) {
+        const Type element = valueElementOf(bound.getType());
+        if (!storage::isBoundEntityIDsType(element, edge)) {
+            return emitOpError("requires bound IDs of type i64, !storage.edge_id or !storage.list, got ") << element;
+        }
+    }
+
     return success();
 }
 

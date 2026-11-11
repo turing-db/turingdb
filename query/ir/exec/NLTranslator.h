@@ -64,6 +64,7 @@ private:
         ConstScanNodes,
         ScanNodesByPropertyValue,
         ScanEdges,
+        ConstScanEdges,
         ScanEdgesByType,
         ScanEdgesBySourceLabel,
         ScanEdgesByTargetLabel,
@@ -175,12 +176,13 @@ private:
         NLNodeSetState* _endNodeSet {nullptr};
         bool _distinctEnds {false};
 
-        // The node IDs a ConstScanNodes iterator emits; empty for the other kinds.
-        // A view into the op's DenseI64ArrayAttr storage, which the MLIRContext
-        // keeps alive for the whole translation; resolved to owned NodeIDs when the
-        // loop is translated.
-        llvm::ArrayRef<int64_t> _nodeIDs;
-        llvm::SmallVector<mlir::Value, 2> _boundNodeIDs;
+        // The IDs a ConstScanNodes or ConstScanEdges iterator emits; empty for the other
+        // kinds. A view into the op's DenseI64ArrayAttr storage, which the MLIRContext
+        // keeps alive for the whole translation; resolved to owned IDs when the loop is
+        // translated.
+        llvm::ArrayRef<int64_t> _listedIDs;
+        llvm::SmallVector<mlir::Value, 2> _boundIDs;
+        bool _undirected {false};
 
         // The property name and literal a ScanNodesByPropertyValue iterator matches on;
         // empty and null for the other kinds. Like _labels, views into the op's interned
@@ -196,7 +198,7 @@ private:
 
         // What a VectorSearch iterator searches for: the index, how many neighbours to
         // report, and the query vector. Empty and zero for the other kinds. Like _labels
-        // and _nodeIDs, views into the op's interned attribute storage, which the
+        // and _listedIDs, views into the op's interned attribute storage, which the
         // MLIRContext keeps alive for the whole execution.
         llvm::StringRef _indexName;
         size_t _neighbourCount {0};
@@ -490,6 +492,11 @@ private:
     // record the edge-scan loop statement in body. The edge sibling of
     // translateScanLoop - a source loop with no input chunk and no carry set.
     void translateScanEdgesLoop(mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body);
+
+    void translateConstScanEdgesLoop(const IteratorConfig& config,
+                                     mlir::Block& loopBody,
+                                     NLLimitState* limit,
+                                     NLStmtContainer* body);
     void translateScanEdgesByTypeLoop(const IteratorConfig& config, mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body);
     void translateScanEdgesByLabelLoop(const IteratorConfig& config, mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body, NLHandlerFunction executor);
     void translateScanEdgesByEndpointLabelsLoop(const IteratorConfig& config, mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body, NLHandlerFunction executor);
@@ -949,7 +956,8 @@ private:
     static NLAppendFunction selectAppendForChunkType(mlir::Type chunkType);
 
     static NLGatherFunction selectGatherForChunkType(mlir::Type chunkType);
-    static NLFetchNodesFunction selectFetchForChunkType(mlir::Type chunkType);
+    template <TypedInternalID IDType>
+    static NLFetchFunction<IDType> selectFetchForChunkType(mlir::Type chunkType, mlir::Type entityType);
     static NLFillNullFunction selectFillNullForChunkType(mlir::Type chunkType);
     NLUnaryFn selectRowConstantForChunkType(mlir::Type chunkType, const Column* row, Column*& result);
 
@@ -1185,6 +1193,7 @@ private:
     void translateFilter(mlir::nl::Filter filter, NLStmtContainer* body);
 
     void translateFetchNodes(mlir::nl::FetchNodes fetch, NLStmtContainer* body);
+    void translateFetchEdges(mlir::nl::FetchEdges fetch, NLStmtContainer* body);
 
     void translateOutput(mlir::nl::Output output, NLStmtContainer* body);
 

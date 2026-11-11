@@ -48,3 +48,5 @@ add_call_v3_test(test_query_ir_run_invariant_lookup RunInvariantLookupTest.cpp)
 add_call_v3_test(test_query_ir_node_id_of_lookup NodeIDOfLookupTest.cpp)
 
 add_call_v3_test(test_query_ir_parameter_membership_operand_type MembershipOperandTypeTest.cpp)
+
+add_call_v3_test(test_query_ir_edge_id_lookup EdgeIDLookupTest.cpp)

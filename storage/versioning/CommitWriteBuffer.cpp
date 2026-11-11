@@ -625,6 +625,14 @@ void CommitWriteBufferRebaser::rebaseIndexes(Commit::CommitSpan commitsSinceBran
     incomingIndexes.erase(newEnd, oldEnd);
 }
 
+NodeID CommitWriteBuffer::committedIDOf(const ExistingOrPendingNode& node, size_t firstPendingNodeID) {
+    if (std::holds_alternative<NodeID>(node)) {
+        return std::get<NodeID>(node);
+    }
+
+    return NodeID(firstPendingNodeID + std::get<PendingNodeOffset>(node));
+}
+
 size_t db::committedNodeCount(const GraphView* view) {
     if (!view || !view->isValid()) {
         return 0;

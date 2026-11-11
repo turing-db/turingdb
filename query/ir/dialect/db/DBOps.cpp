@@ -27,7 +27,7 @@
 #include "NullLiteralType.h"
 #include "GroupAggregateKindsFormat.h"
 #include "PropertyScanLiteral.h"
-#include "BoundNodeIDs.h"
+#include "BoundEntityIDs.h"
 #include "BoundValueFormat.h"
 
 using namespace mlir;
@@ -957,6 +957,18 @@ void ScanEdges::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     }
 }
 
+void ConstScanEdges::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    for (Value result : getResults()) {
+        setNameFn(result, "");
+    }
+}
+
+void FetchEdges::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    for (Value result : getResults()) {
+        setNameFn(result, "");
+    }
+}
+
 void ScanEdgesByType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     for (Value result : getResults()) {
         setNameFn(result, "");
@@ -1817,9 +1829,10 @@ LogicalResult CountScanRows::verify() {
 }
 
 LogicalResult ConstScanNodes::verify() {
+    const Type node = columnElement(getResult());
     for (const Value bound : getBoundIDs()) {
         const Type element = columnElement(bound);
-        if (!storage::isBoundNodeIDsType(element)) {
+        if (!storage::isBoundEntityIDsType(element, node)) {
             return emitOpError("requires bound IDs of type i64, !storage.node_id or !storage.list, got ") << element;
         }
     }
@@ -1827,16 +1840,28 @@ LogicalResult ConstScanNodes::verify() {
     return success();
 }
 
-LogicalResult NodeIDOf::verify() {
+LogicalResult ConstScanEdges::verify() {
+    const Type edge = columnElement(getEids());
+    for (const Value bound : getBoundIDs()) {
+        const Type element = columnElement(bound);
+        if (!storage::isBoundEntityIDsType(element, edge)) {
+            return emitOpError("requires bound IDs of type i64, !storage.edge_id or !storage.list, got ") << element;
+        }
+    }
+
+    return success();
+}
+
+LogicalResult EntityIDOf::verify() {
     const Type element = columnElement(getInput());
-    if (!storage::isNodeIDOfInputType(element)) {
+    if (!storage::isEntityIDOfInputType(element)) {
         return emitOpError("requires a value, a node or an edge, not a path, got ") << element;
     }
 
     return success();
 }
 
-OpFoldResult NodeIDOf::fold(FoldAdaptor adaptor) {
+OpFoldResult EntityIDOf::fold(FoldAdaptor adaptor) {
     const Value input = getInput();
     const Type resultType = getType();
 
@@ -3031,6 +3056,11 @@ bool Collect::getCarrySet(CarrySet& carrySet) {
 
 bool FetchNodes::getCarrySet(CarrySet& carrySet) {
     carrySet = CarrySet {._operandOffset = 1, ._resultOffset = 1, ._count = getColumnsToFilter().size()};
+    return true;
+}
+
+bool FetchEdges::getCarrySet(CarrySet& carrySet) {
+    carrySet = CarrySet {._operandOffset = 1, ._resultOffset = 4, ._count = getColumnsToFilter().size()};
     return true;
 }
 

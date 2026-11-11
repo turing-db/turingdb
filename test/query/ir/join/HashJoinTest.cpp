@@ -50,14 +50,20 @@ TEST_F(HashJoinTest, sinksTheKeyIntoBothFactors) {
     EXPECT_LT(firstFetch, program.find("} factor {")) << program;
 }
 
-// A key that is the column itself needs no sinking, so the join names the column already
-// yielded rather than adding one.
-TEST_F(HashJoinTest, joinsOnTheColumnItselfWhenTheKeyIsTheVariable) {
-    std::string program;
-    dbProgram("MATCH ()-[e]->(), ()-[f]->() WHERE e = f RETURN e", program);
+// An edge equal to another is the edge the other's ID names, so it is looked up rather than
+// joined
+TEST_F(HashJoinTest, looksUpAnEdgeEqualToAnotherRatherThanJoining) {
+    const std::string_view query = "MATCH ()-[e]->(), ()-[f]->() WHERE e = f RETURN e";
 
-    EXPECT_TRUE(contains(program, "db.hash_join")) << program;
-    EXPECT_TRUE(contains(program, "on 0, 0")) << program;
+    std::string program;
+    dbProgram(query, program);
+    EXPECT_TRUE(contains(program, "db.fetch_edges")) << program;
+    EXPECT_FALSE(contains(program, "db.hash_join")) << program;
+    EXPECT_FALSE(contains(program, "db.cross_product")) << program;
+
+    StringRowSink sink;
+    runQuery(query, sink);
+    EXPECT_EQ(sink.getRows().size(), 18u);
 }
 
 TEST_F(HashJoinTest, lowersTheJoinToASiblingBuildLoopAndProbeLoop) {
@@ -153,13 +159,15 @@ TEST_F(HashJoinTest, cutsTheJoinedRowsWithALimit) {
     expectRows("MATCH (n), (m) WHERE n.name = m.name RETURN n, m LIMIT 3", expected);
 }
 
-// An edge equals the integer its ID is: edge 0 is 32 less the age of Remy (0) and Adam (1)
-TEST_F(HashJoinTest, joinsAnEdgeToTheIntegerOfItsID) {
+// An edge equals the integer its ID is, so the edge each integer names is looked up rather
+// than joined: edge 0 is 32 less the age of Remy (0) and Adam (1)
+TEST_F(HashJoinTest, looksUpTheEdgeAnIntegerNamesRatherThanJoining) {
     const std::string_view query = "MATCH ()-[e]->(), (m) WHERE e = m.age - 32 RETURN e, m";
 
     std::string program;
     dbProgram(query, program);
-    EXPECT_TRUE(contains(program, "db.hash_join")) << program;
+    EXPECT_TRUE(contains(program, "db.fetch_edges")) << program;
+    EXPECT_FALSE(contains(program, "db.hash_join")) << program;
     EXPECT_FALSE(contains(program, "db.cross_product")) << program;
 
     StringRowSink sink;

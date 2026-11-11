@@ -20,7 +20,7 @@
 #include <llvm/Support/MathExtras.h>
 
 #include "NumberOrder.h"
-#include "NodeIDOfNumber.h"
+#include "EntityIDOfNumber.h"
 #include "TypeUtils.h"
 #include "columns/ContainerKind.h"
 #include "iterators/GetEdgesIterator.h"
@@ -74,7 +74,7 @@
 #include "reader/GraphReader.h"
 #include "versioning/CommitWriteBuffer.h"
 #include "versioning/PendingAdjacency.h"
-#include "versioning/ScannedNodes.h"
+#include "versioning/ScannedEntities.h"
 #include "views/GraphView.h"
 
 #include "CSVParser.h"
@@ -854,14 +854,16 @@ NLUnaryFunctionKernel selectTaggedCellFunction(const Column* input, bool inputNu
     return &functionVectorKernel<Functor>;
 }
 
-// A column holding no number names no node on any row
-void namesNoNodeKernel(NLExecutionContext* context, Column* result, const Column* input, NLStepBuffers* memory) {
-    std::vector<NodeID>& resultRaw = static_cast<ColumnVector<NodeID>*>(result)->getRaw();
-    resultRaw.assign(input->size(), NodeID {});
+// A column holding no number names no node or edge on any row
+template <TypedInternalID IDType>
+void namesNoEntityKernel(NLExecutionContext* context, Column* result, const Column* input, NLStepBuffers* memory) {
+    std::vector<IDType>& resultRaw = static_cast<ColumnVector<IDType>*>(result)->getRaw();
+    resultRaw.assign(input->size(), IDType {});
 }
 
-void namesNoNodeConstKernel(NLExecutionContext* context, Column* result, const Column* input, NLStepBuffers* memory) {
-    static_cast<ColumnConst<NodeID>*>(result)->set(NodeID {});
+template <TypedInternalID IDType>
+void namesNoEntityConstKernel(NLExecutionContext* context, Column* result, const Column* input, NLStepBuffers* memory) {
+    static_cast<ColumnConst<IDType>*>(result)->set(IDType {});
 }
 
 // A node or edge an OPTIONAL MATCH did not match is an invalid ID, so a function reading
@@ -1457,32 +1459,37 @@ bool readBoundPropertyValue(const Column* bound, ValueType boundType, NLScanByPr
     }
 }
 
-// Appends to @param listed the nodes a scan produces that the bound IDs of a const scan
-// name: the numbers they hold, each naming the node whose ID it equals
-void appendBoundNodeIDs(const NLConstScanLoopData& loopData, const ScannedNodes& scanned, std::vector<NodeID>& listed) {
-    const auto appendNodeID = [&scanned, &listed]<Number T>(T number) {
-        int64_t nodeID = 0;
-        if (!nodeIDOfNumber(number, nodeID)) {
-            return;
-        }
-
-        const NodeID candidate(static_cast<uint64_t>(nodeID));
-        if (scanned.contains(candidate)) {
-            listed.push_back(candidate);
+// Appends to @param listed the nodes or edges a scan produces that the bound IDs of a const
+// scan name: the entities they hold, and the numbers they hold, each naming the entity whose
+// ID it equals
+template <TypedInternalID IDType>
+void appendBoundIDs(std::span<const Column* const> boundIDs,
+                    const ScannedEntities<IDType>& scanned,
+                    std::vector<IDType>& listed) {
+    const auto appendEntity = [&scanned, &listed](IDType entity) {
+        if (scanned.contains(entity)) {
+            listed.push_back(entity);
         }
     };
 
-    const auto appendListedNodeIDs = [&appendNodeID](const ListView& list) {
+    const auto appendNumberedEntity = [&appendEntity]<Number T>(T number) {
+        IDType entity;
+        if (entityIDOfNumber(number, entity)) {
+            appendEntity(entity);
+        }
+    };
+
+    const auto appendListedEntities = [&appendNumberedEntity](const ListView& list) {
         for (const CellView element : list) {
             switch (element.getTag()) {
                 case CellTag::Int:
-                    appendNodeID(element.getAs<types::Int64::Primitive>());
+                    appendNumberedEntity(element.getAs<types::Int64::Primitive>());
                 break;
                 case CellTag::UInt:
-                    appendNodeID(element.getAs<types::UInt64::Primitive>());
+                    appendNumberedEntity(element.getAs<types::UInt64::Primitive>());
                 break;
                 case CellTag::Double:
-                    appendNodeID(element.getAs<types::Double::Primitive>());
+                    appendNumberedEntity(element.getAs<types::Double::Primitive>());
                 break;
                 default:
                 break;
@@ -1490,25 +1497,22 @@ void appendBoundNodeIDs(const NLConstScanLoopData& loopData, const ScannedNodes&
         }
     };
 
-    for (const Column* bound : loopData.getBoundIDs()) {
+    for (const Column* bound : boundIDs) {
         std::optional<types::Int64::Primitive> integer;
         std::optional<ListView> list;
 
-        if (bound->getKind() == ColumnConst<NodeID>::staticKind()) {
-            const NodeID node = static_cast<const ColumnConst<NodeID>*>(bound)->getRaw();
-            if (scanned.contains(node)) {
-                listed.push_back(node);
-            }
+        if (bound->getKind() == ColumnConst<IDType>::staticKind()) {
+            appendEntity(static_cast<const ColumnConst<IDType>*>(bound)->getRaw());
         } else if (readBoundConstant(bound, integer)) {
             if (integer) {
-                appendNodeID(*integer);
+                appendNumberedEntity(*integer);
             }
         } else if (readBoundConstant(bound, list)) {
             if (list) {
-                appendListedNodeIDs(*list);
+                appendListedEntities(*list);
             }
         } else {
-            bioassert(false, "Bound node IDs hold one node, one integer or one list for the run");
+            bioassert(false, "Bound IDs hold one entity, one integer or one list for the run");
         }
     }
 }
@@ -1659,47 +1663,44 @@ void collectOptTaggedCellSurvivors(const Column* mask, ColumnVector<size_t>* ind
     }
 }
 
-std::optional<NodeID> namedNode(NodeID node) {
-    return node;
+template <TypedInternalID IDType>
+std::optional<IDType> namedEntity(IDType entity) {
+    return entity;
 }
 
-template <std::integral Integer>
-std::optional<NodeID> namedNode(Integer id) {
-    int64_t nodeID = 0;
-    if (!nodeIDOfNumber(id, nodeID)) {
+template <TypedInternalID IDType, std::integral Integer>
+std::optional<IDType> namedEntity(Integer id) {
+    IDType entity;
+    if (!entityIDOfNumber(id, entity)) {
         return std::nullopt;
     }
 
-    return NodeID(static_cast<uint64_t>(nodeID));
+    return entity;
 }
 
-std::optional<NodeID> namedNode(CellView cell) {
-    switch (cell.getTag()) {
-        case CellTag::Int:
-            return namedNode(cell.getAs<types::Int64::Primitive>());
-        break;
+template <TypedInternalID IDType>
+std::optional<IDType> namedEntity(CellView cell) {
+    constexpr CellTag ENTITY_TAG = std::same_as<IDType, NodeID> ? CellTag::NodeID : CellTag::EdgeID;
+    const CellTag tag = cell.getTag();
 
-        case CellTag::UInt:
-            return namedNode(cell.getAs<types::UInt64::Primitive>());
-        break;
-
-        case CellTag::NodeID:
-            return cell.getAs<NodeID>();
-        break;
-
-        default:
-            return std::nullopt;
-        break;
+    if (tag == CellTag::Int) {
+        return namedEntity<IDType>(cell.getAs<types::Int64::Primitive>());
+    } else if (tag == CellTag::UInt) {
+        return namedEntity<IDType>(cell.getAs<types::UInt64::Primitive>());
+    } else if (tag == ENTITY_TAG) {
+        return cell.getAs<IDType>();
     }
+
+    return std::nullopt;
 }
 
-template <typename Cell>
-std::optional<NodeID> namedNode(const std::optional<Cell>& cell) {
+template <TypedInternalID IDType, typename Cell>
+std::optional<IDType> namedEntity(const std::optional<Cell>& cell) {
     if (!cell.has_value()) {
         return std::nullopt;
     }
 
-    return namedNode(*cell);
+    return namedEntity<IDType>(*cell);
 }
 
 template <typename Cell>
@@ -1711,12 +1712,80 @@ void fetchNamedNodes(const Column* ids, const NLExecutionContext* context, Colum
     const ScannedNodes scanned(*context->getView(), context->getWriteBuffer(), context->getFirstQueryNode());
 
     for (size_t row = 0; row < cells.size(); row++) {
-        const std::optional<NodeID> node = namedNode(cells[row]);
+        const std::optional<NodeID> node = namedEntity<NodeID>(cells[row]);
 
         if (node.has_value() && scanned.contains(*node)) {
             rows.push_back(row);
             fetched.push_back(*node);
         }
+    }
+}
+
+// The rows an edge comes out as: once from its source, and with @param undirected once more
+// from its target, as a hop walking either way reaches it from each of its ends
+void appendEdgeRows(const EdgeRecord& edge, bool undirected, std::vector<EdgeRecord>& rows) {
+    rows.push_back(edge);
+
+    if (undirected) {
+        rows.push_back(EdgeRecord {._edgeID = edge._edgeID,
+                                   ._nodeID = edge._otherID,
+                                   ._otherID = edge._nodeID,
+                                   ._edgeTypeID = edge._edgeTypeID});
+    }
+}
+
+void writeEdgeRows(std::span<const EdgeRecord> rows,
+                   ColumnNodeIDs* sources,
+                   ColumnEdgeIDs* edgeIDs,
+                   ColumnEdgeTypes* edgeTypes,
+                   ColumnNodeIDs* targets) {
+    const size_t rowCount = rows.size();
+
+    sources->getRaw().resize(rowCount);
+    edgeIDs->getRaw().resize(rowCount);
+    edgeTypes->getRaw().resize(rowCount);
+    targets->getRaw().resize(rowCount);
+
+    std::ranges::transform(rows, sources->getRaw().begin(), &EdgeRecord::_nodeID);
+    std::ranges::transform(rows, edgeIDs->getRaw().begin(), &EdgeRecord::_edgeID);
+    std::ranges::transform(rows, edgeTypes->getRaw().begin(), &EdgeRecord::_edgeTypeID);
+    std::ranges::transform(rows, targets->getRaw().begin(), &EdgeRecord::_otherID);
+}
+
+template <typename Cell>
+void fetchNamedEdges(const NLExecutionContext* context, NLFetchEdgesData* fetch) {
+    const std::vector<Cell>& cells = static_cast<const ColumnVector<Cell>*>(fetch->getIDs())->getRaw();
+    std::vector<size_t>& indices = fetch->getIndices()->getRaw();
+    const bool undirected = fetch->isUndirected();
+
+    const ScannedEdges scanned(*context->getView(), context->getWriteBuffer(), context->getFirstQueryEdge());
+
+    std::vector<EdgeRecord>& rows = fetch->getRows();
+    rows.clear();
+
+    for (size_t row = 0; row < cells.size(); row++) {
+        const std::optional<EdgeID> edge = namedEntity<EdgeID>(cells[row]);
+        if (!edge.has_value() || !scanned.contains(*edge)) {
+            continue;
+        }
+
+        EdgeRecord record;
+        scanned.readEdge(*edge, record);
+
+        const size_t firstRow = rows.size();
+        appendEdgeRows(record, undirected, rows);
+        indices.insert(indices.end(), rows.size() - firstRow, row);
+    }
+
+    writeEdgeRows(rows, fetch->getSources(), fetch->getEdgeIDs(), fetch->getEdgeTypes(), fetch->getTargets());
+}
+
+template <TypedInternalID IDType, typename Cell>
+constexpr NLFetchFunction<IDType> fetchNamedEntities() {
+    if constexpr (std::same_as<IDType, NodeID>) {
+        return &fetchNamedNodes<Cell>;
+    } else {
+        return &fetchNamedEdges<Cell>;
     }
 }
 
@@ -8156,7 +8225,7 @@ void NLExecutor::runConstScanNodesLoop(NLExecutionContext* context, NLFunctionDa
     });
 
     if (loopData->hasBoundIDs()) {
-        appendBoundNodeIDs(*loopData, scanned, listed);
+        appendBoundIDs(loopData->getBoundIDs(), scanned, listed);
 
         std::ranges::sort(listed);
         listed.erase(std::unique(listed.begin(), listed.end()), listed.end());
@@ -8193,6 +8262,80 @@ void NLExecutor::runConstScanNodesLoop(NLExecutionContext* context, NLFunctionDa
             return;
         }
 
+        runBody(context, loopBody);
+    };
+
+    if (limit) {
+        while (cursor < totalCount && limit->getRemaining() > 0) {
+            runIteration();
+        }
+    } else {
+        while (cursor < totalCount) {
+            runIteration();
+        }
+    }
+}
+
+void NLExecutor::runConstScanEdgesLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLConstScanEdgesLoopData* loopData = static_cast<NLConstScanEdgesLoopData*>(data);
+    const NLStmtContainer* loopBody = loopData->getStmts();
+    const size_t chunkSize = context->getChunkSize();
+    const GraphView* view = context->getView();
+
+    ColumnNodeIDs* sources = loopData->getSources();
+    ColumnEdgeIDs* edgeIDs = loopData->getEdgeIDs();
+    ColumnEdgeTypes* edgeTypes = loopData->getEdgeTypes();
+    ColumnNodeIDs* targets = loopData->getTargets();
+
+    const ScannedEdges scanned(*view, context->getWriteBuffer(), context->getFirstQueryEdge());
+
+    std::vector<EdgeID>& listed = loopData->getListedEdgeIDs();
+    listed.clear();
+    std::ranges::copy_if(loopData->getConstEdgeIDs(), std::back_inserter(listed), [&scanned](EdgeID edge) {
+        return scanned.contains(edge);
+    });
+
+    const std::span<const Column* const> boundIDs = loopData->getBoundIDs();
+    if (!boundIDs.empty()) {
+        appendBoundIDs(boundIDs, scanned, listed);
+
+        std::ranges::sort(listed);
+        listed.erase(std::unique(listed.begin(), listed.end()), listed.end());
+    }
+
+    std::vector<EdgeRecord>& rows = loopData->getListedRows();
+    rows.clear();
+
+    for (const EdgeID edge : listed) {
+        EdgeRecord record;
+        scanned.readEdge(edge, record);
+        appendEdgeRows(record, loopData->isUndirected(), rows);
+    }
+
+    const size_t totalCount = rows.size();
+    const NLLimitState* limit = loopData->getLimit();
+    size_t cursor = 0;
+    std::vector<EdgeRecord> kept;
+
+    const auto runIteration = [&]() {
+        const size_t count = std::min(chunkSize, totalCount - cursor);
+        std::span<const EdgeRecord> slice = std::span<const EdgeRecord>(rows).subspan(cursor, count);
+        cursor += count;
+
+        // The edges were checked when the loop started, before any DELETE of this query ran
+        if (view->hasDeletedEdges()) {
+            kept.clear();
+            std::ranges::copy_if(slice, std::back_inserter(kept), [view](const EdgeRecord& row) {
+                return !view->isDeleted(row._edgeID);
+            });
+            slice = kept;
+        }
+
+        if (slice.empty()) {
+            return;
+        }
+
+        writeEdgeRows(slice, sources, edgeIDs, edgeTypes, targets);
         runBody(context, loopBody);
     };
 
@@ -11742,27 +11885,31 @@ NLUnaryFunctionKernel NLExecutor::selectId(const Column* input, bool inputNullab
     return selectFunction<TaggedIdFunction>(input, inputNullable, memory, result);
 }
 
-NLUnaryFunctionKernel NLExecutor::selectNodeIDOf(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+template <TypedInternalID IDType>
+NLUnaryFunctionKernel NLExecutor::selectEntityIDOf(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
     if (columnHoldsElement<NodeID>(input)) {
-        return selectFunction<NodeIDOfNodeFunction>(input, inputNullable, memory, result);
+        return selectFunction<EntityIDOfEntityFunction<IDType, NodeID>>(input, inputNullable, memory, result);
     } else if (columnHoldsElement<EdgeID>(input)) {
-        return selectFunction<NodeIDOfEdgeFunction>(input, inputNullable, memory, result);
+        return selectFunction<EntityIDOfEntityFunction<IDType, EdgeID>>(input, inputNullable, memory, result);
     } else if (readsTaggedCells(input)) {
-        return selectTaggedCellFunction<TaggedNodeIDOfFunction>(input, inputNullable, memory, result);
+        return selectTaggedCellFunction<TaggedEntityIDOfFunction<IDType>>(input, inputNullable, memory, result);
     } else if (columnHoldsElement<types::Int64::Primitive>(input)) {
-        return selectTaggedCellFunction<NodeIDOfNumberFunction<types::Int64::Primitive>>(input, inputNullable, memory, result);
+        return selectTaggedCellFunction<EntityIDOfNumberFunction<IDType, types::Int64::Primitive>>(input, inputNullable, memory, result);
     } else if (columnHoldsElement<types::UInt64::Primitive>(input)) {
-        return selectTaggedCellFunction<NodeIDOfNumberFunction<types::UInt64::Primitive>>(input, inputNullable, memory, result);
+        return selectTaggedCellFunction<EntityIDOfNumberFunction<IDType, types::UInt64::Primitive>>(input, inputNullable, memory, result);
     } else if (columnHoldsElement<types::Double::Primitive>(input)) {
-        return selectTaggedCellFunction<NodeIDOfNumberFunction<types::Double::Primitive>>(input, inputNullable, memory, result);
+        return selectTaggedCellFunction<EntityIDOfNumberFunction<IDType, types::Double::Primitive>>(input, inputNullable, memory, result);
     } else if (input->getContainerKind() == ContainerKind::code<ColumnConst>()) {
-        result = memory->alloc<ColumnConst<NodeID>>();
-        return &namesNoNodeConstKernel;
+        result = memory->alloc<ColumnConst<IDType>>();
+        return &namesNoEntityConstKernel<IDType>;
     }
 
-    result = memory->alloc<ColumnVector<NodeID>>();
-    return &namesNoNodeKernel;
+    result = memory->alloc<ColumnVector<IDType>>();
+    return &namesNoEntityKernel<IDType>;
 }
+
+template NLUnaryFunctionKernel NLExecutor::selectEntityIDOf<NodeID>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectEntityIDOf<EdgeID>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
 NLUnaryFunctionKernel NLExecutor::selectReverse(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
     if (columnHoldsElement<types::String::Primitive>(input)) {
@@ -12484,6 +12631,19 @@ void NLExecutor::runFetchNodes(NLExecutionContext* context, NLFunctionData* data
     }
 }
 
+void NLExecutor::runFetchEdges(NLExecutionContext* context, NLFunctionData* data) {
+    NLFetchEdgesData* fetch = static_cast<NLFetchEdgesData*>(data);
+
+    ColumnVector<size_t>* indices = fetch->getIndices();
+    indices->getRaw().clear();
+
+    fetch->getFetch()(context, fetch);
+
+    for (const NLFilterData::FilterColumn& column : fetch->getColumns()) {
+        column._gather(column._input, indices, column._output);
+    }
+}
+
 void NLExecutor::runCountReset(NLExecutionContext* context, NLFunctionData* data) {
     const NLCountResetData* reset = static_cast<NLCountResetData*>(data);
     reset->getState()->reset();
@@ -13125,29 +13285,41 @@ NLMaskSurvivorFunction NLExecutor::selectMaskSurvivorFunction(NLTruthColumnKind 
     throw IRException("Unhandled truth column kind");
 }
 
-NLFetchNodesFunction NLExecutor::selectNodeFetchFunction() {
-    return &fetchNamedNodes<NodeID>;
+template <TypedInternalID IDType>
+NLFetchFunction<IDType> NLExecutor::selectEntityFetchFunction() {
+    return fetchNamedEntities<IDType, IDType>();
 }
 
-NLFetchNodesFunction NLExecutor::selectIntegerFetchFunction(NLChunkKind kind, bool nullable) {
+template <TypedInternalID IDType>
+NLFetchFunction<IDType> NLExecutor::selectIntegerFetchFunction(NLChunkKind kind, bool nullable) {
     switch (kind) {
         case NLChunkKind::Int64:
-            return nullable ? &fetchNamedNodes<std::optional<types::Int64::Primitive>> : &fetchNamedNodes<types::Int64::Primitive>;
+            return nullable ? fetchNamedEntities<IDType, std::optional<types::Int64::Primitive>>()
+                            : fetchNamedEntities<IDType, types::Int64::Primitive>();
         break;
 
         case NLChunkKind::UInt64:
-            return nullable ? &fetchNamedNodes<std::optional<types::UInt64::Primitive>> : &fetchNamedNodes<types::UInt64::Primitive>;
+            return nullable ? fetchNamedEntities<IDType, std::optional<types::UInt64::Primitive>>()
+                            : fetchNamedEntities<IDType, types::UInt64::Primitive>();
         break;
 
         default:
-            throw IRException("nl.fetch_nodes reads node IDs out of nodes, integers or tagged cells");
+            throw IRException("A fetch reads node or edge IDs out of entities, integers or tagged cells");
         break;
     }
 }
 
-NLFetchNodesFunction NLExecutor::selectTaggedFetchFunction(bool nullable) {
-    return nullable ? &fetchNamedNodes<std::optional<CellView>> : &fetchNamedNodes<CellView>;
+template <TypedInternalID IDType>
+NLFetchFunction<IDType> NLExecutor::selectTaggedFetchFunction(bool nullable) {
+    return nullable ? fetchNamedEntities<IDType, std::optional<CellView>>() : fetchNamedEntities<IDType, CellView>();
 }
+
+template NLFetchFunction<NodeID> NLExecutor::selectEntityFetchFunction<NodeID>();
+template NLFetchFunction<EdgeID> NLExecutor::selectEntityFetchFunction<EdgeID>();
+template NLFetchFunction<NodeID> NLExecutor::selectIntegerFetchFunction<NodeID>(NLChunkKind kind, bool nullable);
+template NLFetchFunction<EdgeID> NLExecutor::selectIntegerFetchFunction<EdgeID>(NLChunkKind kind, bool nullable);
+template NLFetchFunction<NodeID> NLExecutor::selectTaggedFetchFunction<NodeID>(bool nullable);
+template NLFetchFunction<EdgeID> NLExecutor::selectTaggedFetchFunction<EdgeID>(bool nullable);
 
 NLBroadcastFunction NLExecutor::selectBlockRepeatFunction(NLChunkKind kind) {
     NLBroadcastFunction selected = nullptr;

@@ -31,7 +31,7 @@ bool mlir::db::isRowWiseOp(Operation* op) {
                AndOp, OrOp, XorOp, NotOp, IsNullOp, IsNotNullOp,
                AddOp, SubOp, MulOp, DivOp, ModOp, PowOp, ConcatOp, Negate, UnaryPlus,
                ConstantOp,
-               GetNodeProperties, GetEdgeProperties, ElementID, NodeIDOf,
+               GetNodeProperties, GetEdgeProperties, ElementID, EntityIDOf,
                GetNodeLabelSet, CheckLabelConstraint, CheckEdgeTypeConstraint,
                Labels, EdgeType, ToInteger, ToFloat, ToBoolean,
                CosineSimilarity, EuclideanDistance>(op);

@@ -140,7 +140,7 @@ set(storage_sources
         versioning/CommitView.cpp
         versioning/CommitBuilder.cpp
         versioning/PendingAdjacency.cpp
-        versioning/ScannedNodes.cpp
+        versioning/ScannedEntities.cpp
         versioning/ChangeRebaser.cpp
         versioning/ChangeConflictChecker.cpp
         versioning/EmbeddingDimensionChecker.cpp

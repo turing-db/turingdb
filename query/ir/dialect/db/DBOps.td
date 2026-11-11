@@ -89,7 +89,7 @@ def ConstScanNodes : TuringOp<"const_scan_nodes", [Pure]> {
     `$id + 1`, whose column may leave its number for lowering to type.
     `id(n) = $id OR id(n) IN $ids` scans
 
-      %m = db.node_id_of(%id) : (!db.column<f64>) -> !db.column<!storage.node_id>
+      %m = db.entity_id_of(%id) : (!db.column<f64>) -> !db.column<!storage.node_id>
       %a = db.const_scan_nodes([], %m, %ids : !db.column<!storage.node_id>, !db.column<!storage.list<!storage.any>>)
         : !db.column<!storage.node_id>
 
@@ -153,6 +153,86 @@ def FetchNodes : TuringOp<"fetch_nodes", [Pure, DeclareOpInterfaceMethods<Column
 
   let assemblyFormat = [{
     `(` $ids `,` `{` $columns_to_filter `}` `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+/**
+* ConstScanEdges
+*/
+def ConstScanEdges : TuringOp<"const_scan_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+  let summary = "Produce a fixed, explicitly listed set of edges as four row-aligned columns";
+
+  let description = [{
+    The edge counterpart of db.const_scan_nodes: where db.scan_edges produces every edge,
+    this produces exactly the edges whose IDs it lists, in the same four row-aligned columns
+    - the source node, the edge, its type and the target node:
+
+      %srcs, %eids, %etypes, %tgts = db.const_scan_edges([3, 7]) : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+
+    It is what a pattern filtered on the ID of one of its edges is walked out from
+    (reroot_pattern_at_edge_ids): `MATCH (a)-[r]->(b) WHERE id(r) IN [3, 7]` looks the two
+    edges up rather than walking every edge.
+
+    `edgeIDs` and `boundIDs` hold the IDs as db.const_scan_nodes holds them: the ones the
+    query spells, and the ones bound when the query runs, each a column holding one value
+    for the run - an edge, an integer, or a list whose numbers are the IDs. The scan reads
+    the bound IDs when it starts and emits the edges the IDs name, each once, in ID order.
+    An ID naming no edge a scan produces names none, as a bound value that is not a number
+    or a negative number does.
+
+    With `undirected` each edge comes out twice, once from each end, as db.get_edges walks
+    it from every node: the first column holds the end it is walked from and the last one
+    the other end, so a self-loop comes out twice. `MATCH (a)-[r]-(b)` reads that form.
+
+    Like db.scan_edges it reads no row and takes no input, so it opens a dataflow rather
+    than consuming one. Producing a fixed list is deterministic, so the op is Pure.
+  }];
+
+  let arguments = (ins DenseI64ArrayAttr:$edgeIDs, Variadic<Column>:$boundIDs, UnitAttr:$undirected);
+  let results   = (outs ColumnNodeIDs:$srcids,
+                        ColumnEdgeIDs:$eids,
+                        ColumnEdgeTypes:$etypes,
+                        ColumnNodeIDs:$tgtids);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $edgeIDs (`,` $boundIDs^ `:` type($boundIDs))? `)` (`undirected` $undirected^)? attr-dict `:`
+    qualified(type($srcids)) `,` qualified(type($eids)) `,` qualified(type($etypes)) `,` qualified(type($tgtids))
+  }];
+}
+
+/**
+* FetchEdges
+*/
+def FetchEdges : TuringOp<"fetch_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet"]>]> {
+  let summary = "Produce for each row the edge its ID cell names, dropping the rows naming none";
+
+  let description = [{
+    The edge counterpart of db.fetch_nodes, and the per-row counterpart of
+    db.const_scan_edges: the IDs are a column computed for each row rather than a list known
+    at plan time.
+
+      %s, %e, %t, %d, %i2 = db.fetch_edges(%ids, {%i})
+          : (!db.column<!storage.edge_id>, !db.column<none>)
+         -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<none>)
+
+    A row is kept where its cell names an edge a scan would produce - one the graph holds or
+    the query created - as `r = cell` would hold of it: an edge, an integer holding the
+    edge's ID, or a tagged cell holding either. The edge comes out in the four columns of
+    db.scan_edges, and with `undirected` twice, once from each end, as db.const_scan_edges
+    orients them. Every other row is dropped. `columns_to_filter` is the carry set, cut to
+    the kept rows as db.filter cuts it.
+  }];
+
+  let arguments = (ins Column:$ids, Variadic<Column>:$columns_to_filter, UnitAttr:$undirected);
+  let results   = (outs ColumnNodeIDs:$srcids,
+                        ColumnEdgeIDs:$eids,
+                        ColumnEdgeTypes:$etypes,
+                        ColumnNodeIDs:$tgtids,
+                        Variadic<Column>:$carried);
+
+  let assemblyFormat = [{
+    `(` $ids `,` `{` $columns_to_filter `}` `)` (`undirected` $undirected^)? attr-dict `:` functional-type(operands, results)
   }];
 }
 
@@ -3198,33 +3278,34 @@ def CurrentDateTime : TuringOp<"current_datetime", [Pure, ConstantThroughOperand
 // The ID of a node, an edge, or the entity a type-erased cell holds, as an integer.
 def ElementID : TypedUnaryFunctionOp<"element_id", "::mlir::storage::NodeIDType, ::mlir::storage::EdgeIDType">;
 
-def NodeIDOf : TuringOp<"node_id_of", [Pure, ConstantThroughOperands]> {
-  let summary = "The node each value names by its ID";
+def EntityIDOf : TuringOp<"entity_id_of", [Pure, ConstantThroughOperands]> {
+  let summary = "The node or the edge each value names by its ID";
 
   let description = [{
-    The converse of db.element_id over nodes: for each row, the node n for which
-    `id(n) = value` holds, or null where there is none.
+    The converse of db.element_id: for each row, the entity e of the result's kind - a node
+    or an edge - for which `id(e) = value` holds, or null where there is none.
 
-      %m = db.node_id_of(%x) : (!db.column<!storage.any>) -> !db.column<!storage.node_id>
+      %m = db.entity_id_of(%x) : (!db.column<!storage.any>) -> !db.column<!storage.node_id>
+      %r = db.entity_id_of(%x) : (!db.column<i64>) -> !db.column<!storage.edge_id>
 
-    A number names the node whose ID it equals: an integer, or a double holding one,
-    in range and not negative, so 3 and 3.0 name node 3. A node names itself, and an
-    edge the node whose ID is its own number, since `=` compares an integer to an edge
-    by its ID. Any other value - a null, a string, a boolean, a list, a map, a
-    fractional or negative number, or a node or an edge a type-erased cell holds, which
-    `=` tells from a number - names none, which the node column spells as its own null,
-    the invalid ID. Whether the graph holds the node is for the op reading the column
-    to decide, as db.fetch_nodes does.
+    A number names the entity whose ID it equals: an integer, or a double holding one, in
+    range and not negative, so 3 and 3.0 name node 3, or edge 3. A node or an edge names the
+    entity of the result's kind whose ID is its own number, since `=` compares an integer to
+    either by its ID: a node names itself, and an edge the node of its number. Any other
+    value - a null, a string, a boolean, a list, a map, a fractional or negative number, or
+    a node or an edge a type-erased cell holds, which `=` tells from a number - names none,
+    which the result column spells as its own null, the invalid ID. Whether the graph holds
+    the entity is for the op reading the column to decide, as db.fetch_nodes does.
 
-    It is what canonicalize_node_id_equalities compares a node to in place of its
-    id(): `WHERE id(n) = x` becomes `WHERE n = node_id_of(x)`, which every node lookup
+    It is what canonicalize_id_equalities compares a node or an edge to in place of its
+    id(): `WHERE id(n) = x` becomes `WHERE n = entity_id_of(x)`, which every lookup by ID
     reads. It cannot raise, so it holds one value for the run where its operand does.
 
     A path has no ID, and the verifier rejects it.
   }];
 
   let arguments = (ins Column:$input);
-  let results   = (outs ColumnNodeIDs:$result);
+  let results   = (outs AnyTypeOf<[ColumnNodeIDs, ColumnEdgeIDs]>:$result);
 
   let hasVerifier = 1;
   let hasFolder = 1;

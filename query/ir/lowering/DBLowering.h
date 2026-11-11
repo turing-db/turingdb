@@ -383,6 +383,7 @@ private:
     void lowerPercentile(mlir::Operation* operation);
     void lowerPatternComprehension(mlir::db::PatternComprehension comprehension);
     void lowerScanEdges(mlir::db::ScanEdges scanEdges);
+    void lowerConstScanEdges(mlir::db::ConstScanEdges constScanEdges);
     void lowerScanEdgesByType(mlir::db::ScanEdgesByType scanEdgesByType);
     void lowerScanOutEdgesByLabelSrc(mlir::db::ScanOutEdgesByLabelSrc scanOutEdgesByLabelSrc);
     void lowerScanInEdgesByLabelTgt(mlir::db::ScanInEdgesByLabelTgt scanInEdgesByLabelTgt);
@@ -770,6 +771,8 @@ private:
     void lowerFilter(mlir::db::FilterOp filter);
 
     void lowerFetchNodes(mlir::db::FetchNodes fetch);
+    void lowerFetchEdges(mlir::db::FetchEdges fetch);
+    void lowerEntityIDOf(mlir::db::EntityIDOf entityIDOf);
 
     // Lower a db.group_aggregate: the grouped, multi-row sibling of lowerAggregate,
     // modeled on lowerSort. Hoist an nl.group_aggregate_buffer accumulator (carrying

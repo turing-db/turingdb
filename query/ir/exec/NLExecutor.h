@@ -79,6 +79,10 @@ public:
     static void runEachRowLoop(NLExecutionContext* context, NLFunctionData* data);
 
     static void runScanEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
+
+    // The edge sibling of runConstScanNodesLoop: emit the rows of the listed edges one chunk
+    // at a time, running the body over each slice
+    static void runConstScanEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runScanEdgesByTypeLoop(NLExecutionContext* context, NLFunctionData* data);
 
     // One loop per labelled endpoint rather than per op: both hop directions of a
@@ -259,6 +263,10 @@ public:
 
     // Keep the rows whose ID cell names a node, with that node, and cut the carry set to them
     static void runFetchNodes(NLExecutionContext* context, NLFunctionData* data);
+
+    // Keep the rows whose ID cell names an edge, with that edge's four columns, and cut the
+    // carry set to them
+    static void runFetchEdges(NLExecutionContext* context, NLFunctionData* data);
 
     // Zero the tally of a COUNT; runs each time its block runs.
     static void runCountReset(NLExecutionContext* context, NLFunctionData* data);
@@ -567,7 +575,9 @@ public:
     static NLUnaryFunctionKernel selectIsEmpty(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
     static NLUnaryFunctionKernel selectId(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
-    static NLUnaryFunctionKernel selectNodeIDOf(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+
+    template <TypedInternalID IDType>
+    static NLUnaryFunctionKernel selectEntityIDOf(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
     static NLUnaryFunctionKernel selectReverse(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
@@ -625,10 +635,16 @@ public:
     // keeps nothing, and a type-erased cell keeps its row where it holds true.
     static NLMaskSurvivorFunction selectMaskSurvivorFunction(NLTruthColumnKind kind);
 
-    // The fetch for an nl.fetch_nodes reading its IDs out of nodes, integers or tagged cells
-    static NLFetchNodesFunction selectNodeFetchFunction();
-    static NLFetchNodesFunction selectIntegerFetchFunction(NLChunkKind kind, bool nullable);
-    static NLFetchNodesFunction selectTaggedFetchFunction(bool nullable);
+    // The fetch for an nl.fetch_nodes or an nl.fetch_edges reading its IDs out of entities of
+    // its kind, integers or tagged cells
+    template <TypedInternalID IDType>
+    static NLFetchFunction<IDType> selectEntityFetchFunction();
+
+    template <TypedInternalID IDType>
+    static NLFetchFunction<IDType> selectIntegerFetchFunction(NLChunkKind kind, bool nullable);
+
+    template <TypedInternalID IDType>
+    static NLFetchFunction<IDType> selectTaggedFetchFunction(bool nullable);
 
     // Append (onto a buffer tail) for a chunk / a nullable chunk of this kind. Used by
     // nl.sort_collect.

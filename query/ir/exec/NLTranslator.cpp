@@ -428,7 +428,6 @@ const std::unordered_map<std::string_view, NLUnaryFunctionSelector> unaryFunctio
     {"nl.point_srid",      &NLExecutor::selectFunction<PointComponentFunction<PointPart::SRID>>},
 
     {"nl.element_id", &NLExecutor::selectId},
-    {"nl.node_id_of", &NLExecutor::selectNodeIDOf},
     {"nl.size",       &NLExecutor::selectSize},
     {"nl.is_empty",   &NLExecutor::selectIsEmpty},
     {"nl.char_length", &NLExecutor::selectFunction<CharLengthFunction>},
@@ -493,6 +492,11 @@ NLUnaryFunctionSelector lookupUnaryFunctionSelector(mlir::Operation& operation) 
         return selectNormalFormFunction<NormalizeFunction>(normalize.getForm());
     } else if (nl::IsNormalized isNormalized = mlir::dyn_cast<nl::IsNormalized>(operation)) {
         return selectNormalFormFunction<IsNormalizedFunction>(isNormalized.getForm());
+    } else if (nl::EntityIDOf entityIDOf = mlir::dyn_cast<nl::EntityIDOf>(operation)) {
+        const nl::ChunkType result = mlir::cast<nl::ChunkType>(entityIDOf.getResult().getType());
+        const bool namesEdges = mlir::isa<storage::EdgeIDType>(result.getElementType());
+
+        return namesEdges ? &NLExecutor::selectEntityIDOf<EdgeID> : &NLExecutor::selectEntityIDOf<NodeID>;
     }
 
     const llvm::StringRef name = operation.getName().getStringRef();
@@ -1151,9 +1155,9 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             _iteratorConfigs[scanNodesByLabel.getResult()] = config;
         } else if (nl::ConstScanNodes constScanNodes = mlir::dyn_cast<nl::ConstScanNodes>(operation)) {
             IteratorConfig config {IteratorKind::ConstScanNodes, {}, {}};
-            config._nodeIDs = constScanNodes.getNodeIDs();
+            config._listedIDs = constScanNodes.getNodeIDs();
             const mlir::OperandRange boundIDs = constScanNodes.getBoundIDs();
-            config._boundNodeIDs.assign(boundIDs.begin(), boundIDs.end());
+            config._boundIDs.assign(boundIDs.begin(), boundIDs.end());
             _iteratorConfigs[constScanNodes.getResult()] = config;
         } else if (nl::ScanNodesByPropertyValue scanByValue = mlir::dyn_cast<nl::ScanNodesByPropertyValue>(operation)) {
             IteratorConfig config {IteratorKind::ScanNodesByPropertyValue, {}, {}};
@@ -1166,6 +1170,13 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             _iteratorConfigs[scanByValue.getResult()] = config;
         } else if (nl::ScanEdges scanEdges = mlir::dyn_cast<nl::ScanEdges>(operation)) {
             _iteratorConfigs[scanEdges.getResult()] = IteratorConfig {IteratorKind::ScanEdges, {}, {}};
+        } else if (nl::ConstScanEdges constScanEdges = mlir::dyn_cast<nl::ConstScanEdges>(operation)) {
+            IteratorConfig config {IteratorKind::ConstScanEdges, {}, {}};
+            config._listedIDs = constScanEdges.getEdgeIDs();
+            const mlir::OperandRange boundIDs = constScanEdges.getBoundIDs();
+            config._boundIDs.assign(boundIDs.begin(), boundIDs.end());
+            config._undirected = constScanEdges.getUndirected();
+            _iteratorConfigs[constScanEdges.getResult()] = config;
         } else if (nl::ScanEdgesByType scanEdgesByType = mlir::dyn_cast<nl::ScanEdgesByType>(operation)) {
             IteratorConfig config {IteratorKind::ScanEdgesByType, {}, {}};
             resolveEdgeTypeNames(scanEdgesByType.getEdgeTypes(), config._edgeTypes);
@@ -1467,6 +1478,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateFilter(filter, body);
         } else if (nl::FetchNodes fetch = mlir::dyn_cast<nl::FetchNodes>(operation)) {
             translateFetchNodes(fetch, body);
+        } else if (nl::FetchEdges fetch = mlir::dyn_cast<nl::FetchEdges>(operation)) {
+            translateFetchEdges(fetch, body);
         } else if (nl::GetNodeProperties getNodeProperties = mlir::dyn_cast<nl::GetNodeProperties>(operation)) {
             translatePropertyFetch(getNodeProperties.getInputNodes(),
                                    getNodeProperties.getPropertyType(),
@@ -1666,6 +1679,8 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         translateScanByPropertyValueLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::ScanEdges) {
         translateScanEdgesLoop(loopBody, limit, body);
+    } else if (config._kind == IteratorKind::ConstScanEdges) {
+        translateConstScanEdgesLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::ScanEdgesByType) {
         translateScanEdgesByTypeLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::ScanEdgesBySourceLabel) {
@@ -1778,12 +1793,12 @@ void NLTranslator::translateConstScanLoop(const IteratorConfig& config,
     NLConstScanLoopData* loopData = _program->allocFunctionData<NLConstScanLoopData>(nodeIDs);
     loopData->setLimit(limit);
 
-    loopData->reserveNodeIDs(config._nodeIDs.size());
-    for (const int64_t nodeID : config._nodeIDs) {
+    loopData->reserveNodeIDs(config._listedIDs.size());
+    for (const int64_t nodeID : config._listedIDs) {
         loopData->addNodeID(NodeID(static_cast<uint64_t>(nodeID)));
     }
 
-    for (const mlir::Value bound : config._boundNodeIDs) {
+    for (const mlir::Value bound : config._boundIDs) {
         loopData->addBoundIDs(getColumn(bound));
     }
 
@@ -2576,6 +2591,36 @@ void NLTranslator::translateScanEdgesLoop(mlir::Block& loopBody, NLLimitState* l
     loopData->setLimit(limit);
 
     body->addStmt(NLFunctionDescriptor {&NLExecutor::runScanEdgesLoop, loopData});
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+void NLTranslator::translateConstScanEdgesLoop(const IteratorConfig& config,
+                                               mlir::Block& loopBody,
+                                               NLLimitState* limit,
+                                               NLStmtContainer* body) {
+    ColumnNodeIDs* sources = static_cast<ColumnNodeIDs*>(allocColumn(loopBody.getArgument(0)));
+    ColumnEdgeIDs* edgeIDs = static_cast<ColumnEdgeIDs*>(allocColumn(loopBody.getArgument(1)));
+    ColumnEdgeTypes* edgeTypes = static_cast<ColumnEdgeTypes*>(allocColumn(loopBody.getArgument(2)));
+    ColumnNodeIDs* targets = static_cast<ColumnNodeIDs*>(allocColumn(loopBody.getArgument(3)));
+
+    NLConstScanEdgesLoopData* loopData = _program->allocFunctionData<NLConstScanEdgesLoopData>(sources,
+                                                                                               edgeIDs,
+                                                                                               edgeTypes,
+                                                                                               targets,
+                                                                                               config._undirected);
+    loopData->setLimit(limit);
+
+    loopData->reserveEdgeIDs(config._listedIDs.size());
+    for (const int64_t edgeID : config._listedIDs) {
+        loopData->addEdgeID(EdgeID(static_cast<uint64_t>(edgeID)));
+    }
+
+    for (const mlir::Value bound : config._boundIDs) {
+        loopData->addBoundIDs(getColumn(bound));
+    }
+
+    body->emplaceStmt(&NLExecutor::runConstScanEdgesLoop, loopData);
 
     translateBlock(loopBody, loopData->getStmts());
 }
@@ -5039,7 +5084,8 @@ void NLTranslator::translateFetchNodes(nl::FetchNodes fetch, NLStmtContainer* bo
     ColumnNodeIDs* nodes = static_cast<ColumnNodeIDs*>(allocColumnForChunkType(nodesValue.getType()));
     _valueSlots[nodesValue] = nodes;
 
-    const NLFetchNodesFunction fetchFunction = selectFetchForChunkType(idsValue.getType());
+    const mlir::Type nodeType = mlir::cast<nl::ChunkType>(nodesValue.getType()).getElementType();
+    const NLFetchNodesFunction fetchFunction = selectFetchForChunkType<NodeID>(idsValue.getType(), nodeType);
     NLFetchNodesData* data = _program->allocFunctionData<NLFetchNodesData>(ids, fetchFunction, nodes);
 
     data->getIndices()->reserve(_program->getChunkSize());
@@ -5058,6 +5104,47 @@ void NLTranslator::translateFetchNodes(nl::FetchNodes fetch, NLStmtContainer* bo
     }
 
     body->emplaceStmt(&NLExecutor::runFetchNodes, data);
+}
+
+void NLTranslator::translateFetchEdges(nl::FetchEdges fetch, NLStmtContainer* body) {
+    const mlir::Value idsValue = fetch.getIds();
+    const Column* ids = getColumn(idsValue);
+
+    ColumnNodeIDs* sources = static_cast<ColumnNodeIDs*>(allocColumnForChunkType(fetch.getSrcids().getType()));
+    ColumnEdgeIDs* edgeIDs = static_cast<ColumnEdgeIDs*>(allocColumnForChunkType(fetch.getEids().getType()));
+    ColumnEdgeTypes* edgeTypes = static_cast<ColumnEdgeTypes*>(allocColumnForChunkType(fetch.getEtypes().getType()));
+    ColumnNodeIDs* targets = static_cast<ColumnNodeIDs*>(allocColumnForChunkType(fetch.getTgtids().getType()));
+
+    _valueSlots[fetch.getSrcids()] = sources;
+    _valueSlots[fetch.getEids()] = edgeIDs;
+    _valueSlots[fetch.getEtypes()] = edgeTypes;
+    _valueSlots[fetch.getTgtids()] = targets;
+
+    const mlir::Type edgeType = mlir::cast<nl::ChunkType>(fetch.getEids().getType()).getElementType();
+    const NLFetchEdgesFunction fetchFunction = selectFetchForChunkType<EdgeID>(idsValue.getType(), edgeType);
+    NLFetchEdgesData* data = _program->allocFunctionData<NLFetchEdgesData>(ids,
+                                                                           fetchFunction,
+                                                                           fetch.getUndirected(),
+                                                                           sources,
+                                                                           edgeIDs,
+                                                                           edgeTypes,
+                                                                           targets);
+
+    data->getIndices()->reserve(_program->getChunkSize());
+
+    const mlir::OperandRange columns = fetch.getColumnsToFilter();
+    const mlir::ResultRange results = fetch.getCarried();
+    for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+        const mlir::Type columnType = columns[columnIndex].getType();
+
+        const Column* input = getColumn(columns[columnIndex]);
+        Column* output = allocColumnForChunkType(columnType);
+        _valueSlots[results[columnIndex]] = output;
+
+        data->addColumn(NLFilterData::FilterColumn {input, output, selectGatherForChunkType(columnType)});
+    }
+
+    body->emplaceStmt(&NLExecutor::runFetchEdges, data);
 }
 
 void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
@@ -7379,11 +7466,12 @@ NLGatherFunction NLTranslator::selectGatherForChunkType(mlir::Type chunkType) {
     return NLExecutor::selectGatherFunction(chunkKindFromElementType(elementType));
 }
 
-NLFetchNodesFunction NLTranslator::selectFetchForChunkType(mlir::Type chunkType) {
+template <TypedInternalID IDType>
+NLFetchFunction<IDType> NLTranslator::selectFetchForChunkType(mlir::Type chunkType, mlir::Type entityType) {
     const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
 
-    if (mlir::isa<storage::NodeIDType>(elementType)) {
-        return NLExecutor::selectNodeFetchFunction();
+    if (elementType == entityType) {
+        return NLExecutor::selectEntityFetchFunction<IDType>();
     }
 
     const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
@@ -7392,12 +7480,12 @@ NLFetchNodesFunction NLTranslator::selectFetchForChunkType(mlir::Type chunkType)
     const mlir::Type cellType = nullable ? nullableType.getValueType() : elementType;
 
     if (mlir::isa<storage::AnyType>(cellType)) {
-        return NLExecutor::selectTaggedFetchFunction(nullable);
+        return NLExecutor::selectTaggedFetchFunction<IDType>(nullable);
     }
 
     const NLChunkKind kind = nullable ? chunkKindFromNullableValue(cellType) : chunkKindFromElementType(cellType);
 
-    return NLExecutor::selectIntegerFetchFunction(kind, nullable);
+    return NLExecutor::selectIntegerFetchFunction<IDType>(kind, nullable);
 }
 
 NLFillNullFunction NLTranslator::selectFillNullForChunkType(mlir::Type chunkType) {

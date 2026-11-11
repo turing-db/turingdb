@@ -35,14 +35,14 @@
 #include "metadata/GraphMetadata.h"
 #include "metadata/LabelSet.h"
 #include "views/GraphView.h"
-#include "NodeIDOfNumber.h"
+#include "EntityIDOfNumber.h"
 
 #include "IRConstantColumn.h"
 #include "IRRaiseEffect.h"
 #include "DBColumnElement.h"
 #include "StorageAttributes.h"
 #include "PropertyScanLiteral.h"
-#include "BoundNodeIDs.h"
+#include "BoundEntityIDs.h"
 #include "PathHopArguments.h"
 #include "NullLiteralType.h"
 #include "DBOps.h"
@@ -82,6 +82,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSEHASHJOIN
 #define GEN_PASS_DEF_FUSEFETCHNODES
 #define GEN_PASS_DEF_REROOTPATTERNATSEED
+#define GEN_PASS_DEF_REROOTPATTERNATEDGEIDS
 #define GEN_PASS_DEF_REROOTPATTERNATCHEAPESTNODE
 #define GEN_PASS_DEF_FUSEEXPLOREENDCONSTRAINT
 #define GEN_PASS_DEF_HOISTHOPCONJUNCTS
@@ -99,7 +100,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
 #define GEN_PASS_DEF_COUNTFROMMETADATA
 #define GEN_PASS_DEF_CANONICALIZECOALESCE
-#define GEN_PASS_DEF_CANONICALIZENODEIDEQUALITIES
+#define GEN_PASS_DEF_CANONICALIZEIDEQUALITIES
 #define GEN_PASS_DEF_HOISTUNCONDITIONALREGIONS
 #include "DBPasses.h.inc"
 
@@ -279,6 +280,16 @@ bool isUntypedNullMask(Value mask);
 bool isNodeColumn(Value column) {
     const ColumnType type = dyn_cast<ColumnType>(column.getType());
     return type && isa<storage::NodeIDType>(type.getType());
+}
+
+bool isEdgeColumn(Value column) {
+    const ColumnType type = dyn_cast<ColumnType>(column.getType());
+    return type && isa<storage::EdgeIDType>(type.getType());
+}
+
+bool isEntityColumn(Value column) {
+    const ColumnType type = dyn_cast<ColumnType>(column.getType());
+    return type && storage::isEntityIDType(type.getType());
 }
 
 // Every equality of two node columns the filter requires: it keeps only the rows where they
@@ -724,65 +735,67 @@ void keepLabelledRows(llvm::SmallVectorImpl<Value>& columns, ArrayAttr labels, L
     columns.assign(labelFilter.getResults().begin(), labelFilter.getResults().end());
 }
 
-// The node column a side of an id comparison names, compared as itself or through id()
-Value comparedNodeColumn(Value side) {
+// The node or edge column a side of an id comparison names, compared as itself or through id()
+Value comparedEntityColumn(Value side) {
     if (ElementID id = side.getDefiningOp<ElementID>()) {
         side = id.getInput();
     }
 
-    return isNodeColumn(side) ? side : Value();
+    return isEntityColumn(side) ? side : Value();
 }
 
-// The ID of the node a literal names, as id(n) = literal compares them
-bool nodeIDOfLiteral(Attribute literal, int64_t& nodeID) {
+// The ID of the node or edge a literal names, as id(e) = literal compares them
+bool entityIDOfLiteral(Attribute literal, int64_t& entityID) {
     const IntegerAttr integer = dyn_cast<IntegerAttr>(literal);
     const FloatAttr floating = dyn_cast<FloatAttr>(literal);
 
     if (integer && integer.getType().isSignlessInteger(64)) {
-        return ::db::nodeIDOfNumber(integer.getInt(), nodeID);
+        return ::db::entityIDOfNumber(integer.getInt(), entityID);
     } else if (floating) {
-        return ::db::nodeIDOfNumber(floating.getValueAsDouble(), nodeID);
+        return ::db::entityIDOfNumber(floating.getValueAsDouble(), entityID);
     }
 
     return false;
 }
 
-// The lookups compare as id() does, which a node compared to itself agrees with on every
+// The lookups compare as id() does, which an entity compared to itself agrees with on every
 // value but a double: n = 3.0 holds of no node, id(n) = 3.0 of node 3
 bool mayHoldADouble(Type element) {
     return isa<Float64Type, storage::AnyType>(element);
 }
 
-// The IDs a disjunction over a node column names: the ones the query spells, and the columns
-// holding the ones bound when it runs, each an ID or a list of them
-struct NodeIDList {
+// The IDs a disjunction over a node or edge column names: the ones the query spells, and the
+// columns holding the ones bound when it runs, each an ID or a list of them
+struct EntityIDList {
     llvm::SmallVector<int64_t> _literals;
     llvm::SmallVector<Value, 2> _bound;
 };
 
-void addBoundNodeIDs(Value bound, NodeIDList& nodeIDs) {
-    if (!llvm::is_contained(nodeIDs._bound, bound)) {
-        nodeIDs._bound.push_back(bound);
+void addBoundIDs(Value bound, EntityIDList& entityIDs) {
+    if (!llvm::is_contained(entityIDs._bound, bound)) {
+        entityIDs._bound.push_back(bound);
     }
 }
 
-// A value bound when the query runs that a node equals by its ID: a node, or an integer
-bool matchBoundNodeID(Value value, NodeIDList& nodeIDs) {
+// A value bound when the query runs that an entity of @param scanColumn equals by its ID: an
+// entity of the same kind, or an integer
+bool matchBoundID(Value value, Value scanColumn, EntityIDList& entityIDs) {
     if (!::db::isRunInvariant(value)) {
         return false;
     }
 
     const Type element = ::db::inferredColumnElement(value);
-    if (!element.isSignlessInteger(64) && !isa<storage::NodeIDType>(element)) {
+    const Type scanned = cast<ColumnType>(scanColumn.getType()).getType();
+    if (!element.isSignlessInteger(64) && element != scanned) {
         return false;
     }
 
-    addBoundNodeIDs(value, nodeIDs);
+    addBoundIDs(value, entityIDs);
 
     return true;
 }
 
-bool matchBoundNodeIDList(Value list, bool comparesTheID, NodeIDList& nodeIDs) {
+bool matchBoundIDList(Value list, bool comparesTheID, EntityIDList& entityIDs) {
     if (!::db::isRunInvariant(list)) {
         return false;
     }
@@ -792,14 +805,14 @@ bool matchBoundNodeIDList(Value list, bool comparesTheID, NodeIDList& nodeIDs) {
         return false;
     }
 
-    addBoundNodeIDs(list, nodeIDs);
+    addBoundIDs(list, entityIDs);
 
     return true;
 }
 
-// A node equals an integer literal by its ID and no other literal: a double it would equal
+// An entity equals an integer literal by its ID and no other literal: a double it would equal
 // through id() was canonicalized to the integer
-bool matchNodeIDEquality(Value mask, Value scanColumn, NodeIDList& nodeIDs) {
+bool matchIDEquality(Value mask, Value scanColumn, EntityIDList& entityIDs) {
     EqOp equality = mask.getDefiningOp<EqOp>();
     if (!equality) {
         return false;
@@ -819,21 +832,21 @@ bool matchNodeIDEquality(Value mask, Value scanColumn, NodeIDList& nodeIDs) {
 
     ConstantOp constant = value.getDefiningOp<ConstantOp>();
     if (!constant) {
-        return matchBoundNodeID(value, nodeIDs);
+        return matchBoundID(value, scanColumn, entityIDs);
     }
 
     const IntegerAttr integer = dyn_cast<IntegerAttr>(constant.getValue());
-    int64_t nodeID = 0;
-    if (integer && nodeIDOfLiteral(integer, nodeID)) {
-        nodeIDs._literals.push_back(nodeID);
+    int64_t entityID = 0;
+    if (integer && entityIDOfLiteral(integer, entityID)) {
+        entityIDs._literals.push_back(entityID);
     }
 
     return true;
 }
 
-bool matchNodeIDMembership(Value mask, Value scanColumn, NodeIDList& nodeIDs) {
+bool matchIDMembership(Value mask, Value scanColumn, EntityIDList& entityIDs) {
     InOp membership = mask.getDefiningOp<InOp>();
-    if (!membership || comparedNodeColumn(membership.getLhs()) != scanColumn) {
+    if (!membership || comparedEntityColumn(membership.getLhs()) != scanColumn) {
         return false;
     }
 
@@ -842,7 +855,7 @@ bool matchNodeIDMembership(Value mask, Value scanColumn, NodeIDList& nodeIDs) {
     const Value list = membership.getRhs();
     ConstantOp constant = list.getDefiningOp<ConstantOp>();
     if (!constant) {
-        return matchBoundNodeIDList(list, comparesTheID, nodeIDs);
+        return matchBoundIDList(list, comparesTheID, entityIDs);
     }
 
     const ArrayAttr elements = dyn_cast<ArrayAttr>(constant.getValue());
@@ -859,9 +872,9 @@ bool matchNodeIDMembership(Value mask, Value scanColumn, NodeIDList& nodeIDs) {
     }
 
     for (const Attribute element : elements) {
-        int64_t nodeID = 0;
-        if (nodeIDOfLiteral(element, nodeID)) {
-            nodeIDs._literals.push_back(nodeID);
+        int64_t entityID = 0;
+        if (entityIDOfLiteral(element, entityID)) {
+            entityIDs._literals.push_back(entityID);
         }
     }
 
@@ -884,7 +897,7 @@ bool isNeverTrue(Value mask) {
 
 // An UNWIND of N elements folds into a chain of N - 1 ORs, so the walk keeps its own stack:
 // recursing once per OR overflows the thread's stack on a list of a few thousand.
-bool collectNodeIDDisjunction(Value mask, Value scanColumn, NodeIDList& nodeIDs) {
+bool collectIDDisjunction(Value mask, Value scanColumn, EntityIDList& entityIDs) {
     llvm::SmallVector<Value> pending {mask};
     while (!pending.empty()) {
         const Value disjunct = pending.pop_back_val();
@@ -895,15 +908,15 @@ bool collectNodeIDDisjunction(Value mask, Value scanColumn, NodeIDList& nodeIDs)
             continue;
         }
 
-        const bool listsNodes = matchNodeIDEquality(disjunct, scanColumn, nodeIDs)
-                             || matchNodeIDMembership(disjunct, scanColumn, nodeIDs)
-                             || isNeverTrue(disjunct);
-        if (!listsNodes) {
+        const bool listsEntities = matchIDEquality(disjunct, scanColumn, entityIDs)
+                                || matchIDMembership(disjunct, scanColumn, entityIDs)
+                                || isNeverTrue(disjunct);
+        if (!listsEntities) {
             return false;
         }
     }
 
-    llvm::SmallVector<int64_t>& literals = nodeIDs._literals;
+    llvm::SmallVector<int64_t>& literals = entityIDs._literals;
     llvm::sort(literals);
     literals.erase(std::unique(literals.begin(), literals.end()), literals.end());
 
@@ -939,9 +952,9 @@ bool isTestedAsAFilter(Value predicate) {
     return true;
 }
 
-// id(n) = value over a node column, which holds where n = node_id_of(value) does. Where the
-// value names no node, the first is false and the second null, so it is rewritten only
-// where a filter drops both
+// id(e) = value over a node or edge column, which holds where e = entity_id_of(value) does.
+// Where the value names no entity, the first is false and the second null, so it is rewritten
+// only where a filter drops both
 struct IDComparison {
     EqOp _equality;
     ElementID _id;
@@ -951,12 +964,12 @@ struct IDComparison {
 bool matchIDComparison(EqOp equality, IDComparison& comparison) {
     for (unsigned operand = 0; operand < 2; operand++) {
         ElementID id = equality->getOperand(operand).getDefiningOp<ElementID>();
-        if (!id || !isNodeColumn(id.getInput())) {
+        if (!id || !isEntityColumn(id.getInput())) {
             continue;
         }
 
         const Value value = equality->getOperand(1 - operand);
-        if (!storage::isNodeIDOfInputType(::db::inferredColumnElement(value))) {
+        if (!storage::isEntityIDOfInputType(::db::inferredColumnElement(value))) {
             return false;
         }
 
@@ -971,22 +984,22 @@ bool matchIDComparison(EqOp equality, IDComparison& comparison) {
 void canonicalizeIDComparison(const IDComparison& comparison, mlir::OpBuilder& builder) {
     EqOp equality = comparison._equality;
     ElementID id = comparison._id;
-    const Value nodes = id.getInput();
+    const Value entities = id.getInput();
     const Location loc = equality.getLoc();
 
     builder.setInsertionPoint(equality);
 
     ConstantOp literal = comparison._value.getDefiningOp<ConstantOp>();
-    int64_t nodeID = 0;
+    int64_t entityID = 0;
 
-    Value nodeIDs;
-    if (literal && nodeIDOfLiteral(literal.getValue(), nodeID)) {
-        nodeIDs = builder.create<ConstantOp>(loc, builder.getI64IntegerAttr(nodeID)).getResult();
+    Value entityIDs;
+    if (literal && entityIDOfLiteral(literal.getValue(), entityID)) {
+        entityIDs = builder.create<ConstantOp>(loc, builder.getI64IntegerAttr(entityID)).getResult();
     } else {
-        nodeIDs = builder.createOrFold<NodeIDOf>(loc, nodes.getType(), comparison._value);
+        entityIDs = builder.createOrFold<EntityIDOf>(loc, entities.getType(), comparison._value);
     }
 
-    equality->setOperands({nodes, nodeIDs});
+    equality->setOperands({entities, entityIDs});
 
     eraseIfUnused(id);
     if (Operation* const valueOp = comparison._value.getDefiningOp()) {
@@ -994,7 +1007,7 @@ void canonicalizeIDComparison(const IDComparison& comparison, mlir::OpBuilder& b
     }
 }
 
-struct CanonicalizeNodeIDEqualities : public impl::CanonicalizeNodeIDEqualitiesBase<CanonicalizeNodeIDEqualities> {
+struct CanonicalizeIDEqualities : public impl::CanonicalizeIDEqualitiesBase<CanonicalizeIDEqualities> {
     void runOnOperation() override {
         llvm::SmallVector<IDComparison> comparisons;
         getOperation()->walk([&comparisons](EqOp equality) {
@@ -1062,7 +1075,7 @@ struct UnwindEqualityCross {
     bool _readsTheElement {false};
     Value _unwoundColumn;
     Value _comparedColumn;
-    NodeIDOf _converted {nullptr};
+    EntityIDOf _converted {nullptr};
     EqOp _equality {nullptr};
     FilterOp _filter {nullptr};
 };
@@ -1124,14 +1137,14 @@ bool elementsCompareDistinctly(UnwindConst unwind) {
     return literalElements && !holdsEqualElements(elements);
 }
 
-// Whether no two elements name one node, and one at least names a node: an element naming
-// none matches no row, and two naming one node would emit its rows once each
-bool namesDistinctNodes(UnwindConst unwind) {
+// Whether no two elements name one entity, and one at least names an entity: an element
+// naming none matches no row, and two naming one entity would emit its rows once each
+bool namesDistinctEntities(UnwindConst unwind) {
     llvm::SmallDenseSet<int64_t, 8> named;
 
     for (const Attribute element : unwind.getElements()) {
-        int64_t nodeID = 0;
-        if (nodeIDOfLiteral(element, nodeID) && !named.insert(nodeID).second) {
+        int64_t entityID = 0;
+        if (entityIDOfLiteral(element, entityID) && !named.insert(entityID).second) {
             return false;
         }
     }
@@ -1139,9 +1152,9 @@ bool namesDistinctNodes(UnwindConst unwind) {
     return !named.empty();
 }
 
-NodeIDOf findNodeIDOfElements(Value unwoundColumn) {
+EntityIDOf findEntityIDOfElements(Value unwoundColumn) {
     for (Operation* const user : unwoundColumn.getUsers()) {
-        if (NodeIDOf converted = dyn_cast<NodeIDOf>(user)) {
+        if (EntityIDOf converted = dyn_cast<EntityIDOf>(user)) {
             return converted;
         }
     }
@@ -1204,10 +1217,10 @@ bool onlyOutputsRead(Value column) {
     });
 }
 
-// The one equality the elements reach, as themselves or as the nodes @param converted names,
-// provided nothing else reads them but the filter that equality masks - so dropping the
-// unwind leaves no other reader behind.
-EqOp matchSoleEquality(Value unwoundColumn, NodeIDOf converted, FilterOp& filter) {
+// The one equality the elements reach, as themselves or as the entities @param converted
+// names, provided nothing else reads them but the filter that equality masks - so dropping
+// the unwind leaves no other reader behind.
+EqOp matchSoleEquality(Value unwoundColumn, EntityIDOf converted, FilterOp& filter) {
     const Value compared = converted ? converted.getResult() : unwoundColumn;
 
     EqOp equality;
@@ -1269,10 +1282,10 @@ bool matchUnwindEqualityCross(CrossProduct product, UnwindEqualityCross& match) 
     // an unwind on the left contributes the first and one on the right the last.
     const size_t unwoundIndex = match._unwindOnTheLeft ? 0 : product.getResults().size() - 1;
     match._unwoundColumn = product.getResult(unwoundIndex);
-    match._converted = findNodeIDOfElements(match._unwoundColumn);
+    match._converted = findEntityIDOfElements(match._unwoundColumn);
 
-    NodeIDOf converted = match._converted;
-    const bool distinct = converted ? namesDistinctNodes(match._unwind) : elementsCompareDistinctly(match._unwind);
+    EntityIDOf converted = match._converted;
+    const bool distinct = converted ? namesDistinctEntities(match._unwind) : elementsCompareDistinctly(match._unwind);
     if (!distinct) {
         return false;
     }
@@ -1298,11 +1311,11 @@ bool matchUnwindEqualityCross(CrossProduct product, UnwindEqualityCross& match) 
     }
 
     // The disjunction is tested on every row of the relation, which only pays where it is a
-    // lookup: node IDs, which fuse_scan_by_node_ids scans directly, or one element, a single
-    // equality. A longer list of keys is a cut fuse_hash_join indexes.
-    const bool comparesNodeIDs = isNodeColumn(match._comparedColumn);
+    // lookup: node or edge IDs, which the scans by ID look up directly, or one element, a
+    // single equality. A longer list of keys is a cut fuse_hash_join indexes.
+    const bool comparesEntityIDs = isEntityColumn(match._comparedColumn);
     const bool unwindsOneElement = match._unwind.getElements().size() == 1;
-    if (!comparesNodeIDs && (converted || !unwindsOneElement)) {
+    if (!comparesEntityIDs && (converted || !unwindsOneElement)) {
         return false;
     }
 
@@ -1390,13 +1403,13 @@ Value buildElementDisjunction(UnwindEqualityCross& match, mlir::OpBuilder& build
 
     Value mask;
     for (const Attribute element : match._unwind.getElements()) {
-        int64_t nodeID = 0;
-        const bool namesANode = match._converted && nodeIDOfLiteral(element, nodeID);
-        if (match._converted && !namesANode) {
+        int64_t entityID = 0;
+        const bool namesAnEntity = match._converted && entityIDOfLiteral(element, entityID);
+        if (match._converted && !namesAnEntity) {
             continue;
         }
 
-        const Attribute value = namesANode ? Attribute(builder.getI64IntegerAttr(nodeID)) : element;
+        const Attribute value = namesAnEntity ? Attribute(builder.getI64IntegerAttr(entityID)) : element;
         ConstantOp constant = builder.create<ConstantOp>(loc, value);
         EqOp equality = builder.create<EqOp>(loc, boolColumnType, match._comparedColumn, constant.getResult());
 
@@ -3251,7 +3264,7 @@ struct NodeIDScanChain {
     FilterOp _filter;
     Value _conjunct;
     ScanSource _source;
-    NodeIDList _nodeIDs;
+    EntityIDList _nodeIDs;
 };
 
 Value disjunctionColumn(Value mask) {
@@ -3263,14 +3276,14 @@ Value disjunctionColumn(Value mask) {
             pending.push_back(disjunction.getRhs());
             pending.push_back(disjunction.getLhs());
         } else if (InOp membership = disjunct.getDefiningOp<InOp>()) {
-            return comparedNodeColumn(membership.getLhs());
+            return comparedEntityColumn(membership.getLhs());
         } else if (EqOp equality = disjunct.getDefiningOp<EqOp>()) {
             const Value lhs = equality.getLhs();
             const Value rhs = equality.getRhs();
 
-            if (isNodeColumn(lhs)) {
+            if (isEntityColumn(lhs)) {
                 return lhs;
-            } else if (isNodeColumn(rhs)) {
+            } else if (isEntityColumn(rhs)) {
                 return rhs;
             }
 
@@ -3281,6 +3294,12 @@ Value disjunctionColumn(Value mask) {
     }
 
     return {};
+}
+
+Value nodeDisjunctionColumn(Value mask) {
+    const Value column = disjunctionColumn(mask);
+
+    return column && isNodeColumn(column) ? column : Value();
 }
 
 bool keepsTheSourceRows(Operation& op) {
@@ -3358,16 +3377,16 @@ bool matchNodeIDConjunct(FilterOp filter, Value conjunct, LineageClimbs& climbs,
     chain._filter = filter;
     chain._conjunct = conjunct;
 
-    const Value column = disjunctionColumn(conjunct);
+    const Value column = nodeDisjunctionColumn(conjunct);
     if (column) {
-        return collectNodeIDDisjunction(conjunct, column, chain._nodeIDs)
+        return collectIDDisjunction(conjunct, column, chain._nodeIDs)
             && matchPatternScanSource(filter, column, climbs, reaching, chain._source);
     }
 
     // A disjunction comparing no node, every disjunct of it never true, keeps no row of the
     // scan the filter reads
     const bool listsNoNode = matchSoleScanSource(filter, chain._source)
-                          && collectNodeIDDisjunction(conjunct, chain._source._column, chain._nodeIDs);
+                          && collectIDDisjunction(conjunct, chain._source._column, chain._nodeIDs);
 
     return listsNoNode && readsOnlyIntoTheFilter(chain._source._op, filter);
 }
@@ -5892,12 +5911,12 @@ struct NodeScanPredicate {
     StringAttr _property;
     TypedAttr _value;
     Value _boundValue;
-    NodeIDList _nodeIDs;
+    EntityIDList _nodeIDs;
 };
 
 bool matchNodeIDPredicate(Value conjunct, NodeScanPredicate& predicate) {
-    const Value column = disjunctionColumn(conjunct);
-    if (!column || !collectNodeIDDisjunction(conjunct, column, predicate._nodeIDs)) {
+    const Value column = nodeDisjunctionColumn(conjunct);
+    if (!column || !collectIDDisjunction(conjunct, column, predicate._nodeIDs)) {
         return false;
     }
 
@@ -10053,8 +10072,8 @@ private:
     double getEqualitySelectivity(EqOp equality, llvm::function_ref<Value(Value)> nodeOf, const WalkKnowledge& knowledge) const {
         double nodes = 0;
         for (const Value side : {equality.getLhs(), equality.getRhs()}) {
-            const Value nodeColumn = comparedNodeColumn(side);
-            if (nodeColumn) {
+            const Value nodeColumn = comparedEntityColumn(side);
+            if (nodeColumn && isNodeColumn(nodeColumn)) {
                 nodes = std::max(nodes, getLabelledNodes(knowledge._labels.lookup(nodeOf(nodeColumn))));
             }
         }
@@ -10095,9 +10114,9 @@ private:
 
 // A list bound when the query runs has a length no statistic of the graph measures, so it
 // reads at the figure an uncountable source does
-double estimateListedNodes(ConstScanNodes constScan) {
-    double listed = static_cast<double>(constScan.getNodeIDs().size());
-    for (const Value bound : constScan.getBoundIDs()) {
+double estimateListedEntities(size_t literalCount, mlir::OperandRange boundIDs) {
+    double listed = static_cast<double>(literalCount);
+    for (const Value bound : boundIDs) {
         const bool listsIDs = isa<storage::ListType>(::db::inferredColumnElement(bound));
         listed += listsIDs ? static_cast<double>(uncountableRows) : 1.0;
     }
@@ -10111,7 +10130,10 @@ double estimateListedNodes(ConstScanNodes constScan) {
 // those labels, and a property scan the share of those an equality keeps.
 std::optional<double> estimateSourceRows(Operation* op, const RowEstimator& estimator, WalkKnowledge& knowledge) {
     if (ConstScanNodes constScan = dyn_cast<ConstScanNodes>(op)) {
-        return estimateListedNodes(constScan);
+        return estimateListedEntities(constScan.getNodeIDs().size(), constScan.getBoundIDs());
+    } else if (ConstScanEdges constScan = dyn_cast<ConstScanEdges>(op)) {
+        const double listed = estimateListedEntities(constScan.getEdgeIDs().size(), constScan.getBoundIDs());
+        return constScan.getUndirected() ? 2 * listed : listed;
     } else if (UnwindConst unwind = dyn_cast<UnwindConst>(op)) {
         return static_cast<double>(unwind.getElements().size());
     } else if (ScanNodesByLabel byLabel = dyn_cast<ScanNodesByLabel>(op)) {
@@ -11048,6 +11070,7 @@ struct PatternSeed {
     EqOp _equality {nullptr};
     Value _seeded;
     Value _ids;
+    const PatternStep* _fetchedStep {nullptr};
     llvm::SmallVector<WalkEvent> _events;
 };
 
@@ -11183,11 +11206,17 @@ bool analyzePattern(SeedPattern& pattern, llvm::ArrayRef<Operation*> orderedOps)
     return true;
 }
 
-// Whether the pattern can be walked out from the seeded node: every hop reached from one
-// of its ends, a walk only ever from the node it starts at
-bool isWalkableFrom(const SeedPattern& pattern, Value seeded) {
+// Whether the pattern can be walked out from the seeded node, or from both ends of the hop
+// @param fetchedStep: every hop reached from one of its ends, a walk only ever from the node
+// it starts at
+bool isWalkableFrom(const SeedPattern& pattern, Value seeded, const PatternStep* fetchedStep) {
     llvm::SmallPtrSet<void*, 16> reached {seeded.getAsOpaquePointer()};
     llvm::SmallPtrSet<Operation*, 16> walked;
+
+    if (fetchedStep) {
+        reached = {fetchedStep->_from.getAsOpaquePointer(), fetchedStep->_to.getAsOpaquePointer()};
+        walked.insert(fetchedStep->_op);
+    }
 
     bool progressed = true;
     while (progressed) {
@@ -11212,6 +11241,16 @@ bool isWalkableFrom(const SeedPattern& pattern, Value seeded) {
     }
 
     return walked.size() == pattern._steps.size();
+}
+
+const PatternStep* findEdgeStep(const SeedPattern& pattern, Value origin) {
+    for (const PatternStep& step : pattern._steps) {
+        if (isHop(step._op) && step._op->getResult(EDGE_IDS_RESULT) == origin) {
+            return &step;
+        }
+    }
+
+    return nullptr;
 }
 
 bool isPatternNode(const SeedPattern& pattern, Value origin) {
@@ -11276,12 +11315,13 @@ void bindStep(const PatternStep& step, llvm::DenseSet<Value>& bound) {
     }
 }
 
-// The order a pattern is rebuilt in from its seeded node: each filter as soon as what it
-// reads is bound, then the first step written that leaves a bound node. The rows already
-// pass the filters of @param applied, and the root's labels when @param rootChecked. False
-// when the walk leaves a step or a filter out.
+// The order a pattern is rebuilt in from its seeded node, or from the hop @param fetchedStep
+// binds whole: each filter as soon as what it reads is bound, then the first step written
+// that leaves a bound node. The rows already pass the filters of @param applied, and the
+// root's labels when @param rootChecked. False when the walk leaves a step or a filter out.
 bool planWalk(const SeedPattern& pattern,
               Value seeded,
+              const PatternStep* fetchedStep,
               const llvm::SmallPtrSetImpl<Operation*>& applied,
               bool rootChecked,
               llvm::SmallVectorImpl<WalkEvent>& events) {
@@ -11289,6 +11329,11 @@ bool planWalk(const SeedPattern& pattern,
     llvm::DenseSet<Value> bound {seeded};
     llvm::SmallPtrSet<Operation*, 16> appliedFilters(applied.begin(), applied.end());
     llvm::SmallPtrSet<Operation*, 16> walked;
+
+    if (fetchedStep) {
+        bindStep(*fetchedStep, bound);
+        walked.insert(fetchedStep->_op);
+    }
 
     const auto readsBound = [&pattern, &bound](Value value) {
         llvm::SmallPtrSet<void*, 8> inputs;
@@ -11586,8 +11631,16 @@ bool readsTheJunctionRowWise(const PatternJunction& junction, FilterOp filter) {
     return true;
 }
 
+// The values db.fetch_edges reads an edge out of: an edge, an integer, or a type-erased cell
+bool namesEdgesByID(Value ids) {
+    const Type element = ::db::inferredColumnElement(ids);
+
+    return element.isSignlessInteger(64) || isa<storage::EdgeIDType, storage::AnyType>(element);
+}
+
 bool matchPatternSeedSide(FilterOp filter, EqOp equality, Value seeded, Value ids, JunctionTraces& traces, PatternSeed& seed) {
-    if (!isNodeColumn(seeded)) {
+    const bool seedsAnEdge = isEdgeColumn(seeded) && namesEdgesByID(ids);
+    if (!isNodeColumn(seeded) && !seedsAnEdge) {
         return false;
     }
 
@@ -11609,8 +11662,10 @@ bool matchPatternSeedSide(FilterOp filter, EqOp equality, Value seeded, Value id
     const PatternJunction& junction = seed._junction;
     const size_t outputIndex = llvm::find(junction._patternResults, Value(seededResult)) - junction._patternResults.begin();
     seed._seeded = patternOrigin(junction._patternOutputs[outputIndex], seed._pattern);
+    seed._fetchedStep = seedsAnEdge ? findEdgeStep(seed._pattern, seed._seeded) : nullptr;
 
-    const bool walkableFromTheSeed = isPatternNode(seed._pattern, seed._seeded) && isWalkableFrom(seed._pattern, seed._seeded);
+    const bool seedsAPatternEntity = seedsAnEdge ? static_cast<bool>(seed._fetchedStep) : isPatternNode(seed._pattern, seed._seeded);
+    const bool walkableFromTheSeed = seedsAPatternEntity && isWalkableFrom(seed._pattern, seed._seeded, seed._fetchedStep);
     if (!walkableFromTheSeed) {
         return false;
     }
@@ -11620,18 +11675,20 @@ bool matchPatternSeedSide(FilterOp filter, EqOp equality, Value seeded, Value id
         return false;
     }
 
-    // A literal list equated to the root folds into a node-ID disjunction over the scan,
-    // which fuse_scan_by_node_ids turns into a const scan listing the nodes at plan time
+    // A literal list equated to the root or to an edge folds into an ID disjunction over the
+    // pattern, which the scans by ID turn into a const scan listing the nodes or the edges at
+    // plan time
     UnwindEqualityCross unwindEquality;
     CrossProduct product = dyn_cast<CrossProduct>(junction._op);
     const bool seedsTheRoot = seed._seeded == seed._pattern._root->getResult(0);
-    const bool foldsIntoAConstScan = product && seedsTheRoot && matchUnwindEqualityCross(product, unwindEquality);
+    const bool listsTheSeeds = seed._fetchedStep || seedsTheRoot;
+    const bool foldsIntoAConstScan = product && listsTheSeeds && matchUnwindEqualityCross(product, unwindEquality);
     if (foldsIntoAConstScan) {
         return false;
     }
 
     const llvm::SmallPtrSet<Operation*, 1> noneApplied;
-    if (!planWalk(seed._pattern, seed._seeded, noneApplied, false, seed._events)) {
+    if (!planWalk(seed._pattern, seed._seeded, seed._fetchedStep, noneApplied, false, seed._events)) {
         return false;
     }
 
@@ -12057,6 +12114,10 @@ bool namesGraphNodes(Value column) {
             column = op->getOperand(resultIndex);
         } else if (isa<FetchNodes>(op)) {
             return true;
+        } else if (isa<FetchEdges>(op) && resultIndex >= hopFixedResultCount) {
+            column = op->getOperand(1 + resultIndex - hopFixedResultCount);
+        } else if (isa<FetchEdges>(op)) {
+            return resultIndex == 0 || resultIndex == EDGE_TARGETS_RESULT;
         } else if (isEdgeHop(op) && resultIndex >= hopFixedResultCount) {
             column = op->getOperand(1 + resultIndex - hopFixedResultCount);
         } else if (isEdgeHop(op)) {
@@ -12103,9 +12164,26 @@ void reroot(PatternSeed& seed, mlir::RewriterBase& rewriter) {
     }
 
     const Value ids = cloneSeedIDs(seed._ids, junction, seedMapping, rewriter);
+    const PatternStep* const fetchedStep = seed._fetchedStep;
 
     llvm::SmallVector<Value> seededColumns {ids};
-    if (namesGraphNodes(ids)) {
+    size_t seededCount = 1;
+    if (fetchedStep) {
+        Operation* const hop = fetchedStep->_op;
+
+        llvm::SmallVector<Type> fetchTypes;
+        for (size_t index = 0; index < hopFixedResultCount; index++) {
+            fetchTypes.push_back(hop->getResult(index).getType());
+        }
+
+        for (const Value column : seedColumns) {
+            fetchTypes.push_back(column.getType());
+        }
+
+        FetchEdges fetch = rewriter.create<FetchEdges>(loc, fetchTypes, ids, seedColumns, isa<GetEdges>(hop));
+        seededColumns.assign(fetch->getResults().begin(), fetch->getResults().end());
+        seededCount = hopFixedResultCount;
+    } else if (namesGraphNodes(ids)) {
         llvm::append_range(seededColumns, seedColumns);
     } else {
         llvm::SmallVector<Type> fetchTypes {seed._seeded.getType()};
@@ -12119,10 +12197,20 @@ void reroot(PatternSeed& seed, mlir::RewriterBase& rewriter) {
 
     PatternReplay replay(seed._pattern, rewriter, loc);
     for (size_t index = 0; index < seedColumns.size(); index++) {
-        replay.bind(junction._otherResults[index], seededColumns[index + 1]);
+        replay.bind(junction._otherResults[index], seededColumns[seededCount + index]);
     }
 
-    replay.bind(seed._seeded, seededColumns.front());
+    if (fetchedStep) {
+        Operation* const hop = fetchedStep->_op;
+
+        replay.bind(fetchedStep->_from, seededColumns[hopInputResult(hop)]);
+        replay.bind(fetchedStep->_to, seededColumns[hopReachedResult(hop)]);
+        replay.bind(hop->getResult(EDGE_IDS_RESULT), seededColumns[EDGE_IDS_RESULT]);
+        replay.bind(hop->getResult(EDGE_TYPES_RESULT), seededColumns[EDGE_TYPES_RESULT]);
+    } else {
+        replay.bind(seed._seeded, seededColumns.front());
+    }
+
     replay.walk(seed._events);
 
     for (size_t index = 0; index < junction._patternResults.size(); index++) {
@@ -12168,6 +12256,128 @@ struct RerootPatternAtSeed : public impl::RerootPatternAtSeedBase<RerootPatternA
         };
 
         runFilterWorklist<PatternSeed>(getOperation(), matchSeed, rerootAtSeed);
+    }
+};
+
+// A pattern one of whose hops binds the edges a disjunction of ID tests reads after the
+// pattern: it is rebuilt from the edges the disjunction lists, walked out from both their ends
+struct ListedEdgesPattern {
+    SeedPattern _pattern;
+    FilterOp _filter {nullptr};
+    const PatternStep* _listedStep {nullptr};
+    EntityIDList _edgeIDs;
+    llvm::SmallVector<Operation*> _patternOps;
+    llvm::SmallVector<WalkEvent> _events;
+};
+
+// Nothing but the pattern and the filter reads what the pattern binds, and the filter carries
+// the pattern's columns alone, so the rows rebuilt for the filter replace them all
+bool endsAtTheFilter(const SeedPattern& pattern, llvm::ArrayRef<Operation*> patternOps, FilterOp filter) {
+    for (Operation* const patternOp : patternOps) {
+        for (Operation* const user : patternOp->getUsers()) {
+            if (user != filter.getOperation() && !pattern._ops.contains(user)) {
+                return false;
+            }
+        }
+    }
+
+    return llvm::all_of(filter.getColumnsToFilter(), [&pattern](Value column) {
+        Operation* const def = column.getDefiningOp();
+        return def && pattern._ops.contains(def);
+    });
+}
+
+bool matchListedEdgesPattern(FilterOp filter, ListedEdgesPattern& match) {
+    const Value mask = filter.getMask();
+    const Value column = disjunctionColumn(mask);
+    if (!column || !isEdgeColumn(column)) {
+        return false;
+    }
+
+    Operation* const root = findPatternRoot(column);
+    if (!root || root->getBlock() != filter->getBlock()) {
+        return false;
+    }
+
+    SeedPattern& pattern = match._pattern;
+    collectPatternOps(root, filter, pattern);
+
+    for (Operation& op : llvm::make_range(Block::iterator(root), Block::iterator(filter.getOperation()))) {
+        if (pattern._ops.contains(&op)) {
+            match._patternOps.push_back(&op);
+        }
+    }
+
+    if (!endsAtTheFilter(pattern, match._patternOps, filter) || !analyzePattern(pattern, match._patternOps)) {
+        return false;
+    }
+
+    const PatternStep* const step = findEdgeStep(pattern, patternOrigin(column, pattern));
+    if (!step || !collectIDDisjunction(mask, column, match._edgeIDs)) {
+        return false;
+    }
+
+    const Value edges = step->_op->getResult(EDGE_IDS_RESULT);
+    const llvm::SmallPtrSet<Operation*, 1> noneApplied;
+    if (!isWalkableFrom(pattern, edges, step) || !planWalk(pattern, edges, step, noneApplied, false, match._events)) {
+        return false;
+    }
+
+    match._filter = filter;
+    match._listedStep = step;
+
+    return true;
+}
+
+// Every row rebuilt from the listed edges holds the disjunction, so the filter testing it goes
+void rerootAtListedEdges(ListedEdgesPattern& match, mlir::RewriterBase& rewriter) {
+    FilterOp filter = match._filter;
+    const Location loc = filter.getLoc();
+    const PatternStep& step = *match._listedStep;
+    Operation* const hop = step._op;
+
+    rewriter.setInsertionPoint(filter);
+    ConstScanEdges listed = rewriter.create<ConstScanEdges>(loc,
+                                                            hop->getResult(0).getType(),
+                                                            hop->getResult(EDGE_IDS_RESULT).getType(),
+                                                            hop->getResult(EDGE_TYPES_RESULT).getType(),
+                                                            hop->getResult(EDGE_TARGETS_RESULT).getType(),
+                                                            match._edgeIDs._literals,
+                                                            match._edgeIDs._bound,
+                                                            isa<GetEdges>(hop));
+    computeBoundValuesAhead(listed);
+
+    PatternReplay replay(match._pattern, rewriter, loc);
+    replay.bind(step._from, listed->getResult(hopInputResult(hop)));
+    replay.bind(step._to, listed->getResult(hopReachedResult(hop)));
+    replay.bind(hop->getResult(EDGE_IDS_RESULT), listed.getEids());
+    replay.bind(hop->getResult(EDGE_TYPES_RESULT), listed.getEtypes());
+    replay.walk(match._events);
+
+    const ResultRange filtered = filter.getFilteredColumns();
+    const Operation::operand_range carried = filter.getColumnsToFilter();
+    for (size_t index = 0; index < filtered.size(); index++) {
+        filtered[index].replaceAllUsesWith(replay.materialize(carried[index]));
+    }
+
+    const MaskCone cone = collectMaskCone(filter.getMask());
+    rewriter.eraseOp(filter);
+
+    for (Operation* const op : llvm::reverse(match._patternOps)) {
+        op->dropAllUses();
+        rewriter.eraseOp(op);
+    }
+
+    for (Operation* const coneOp : llvm::reverse(cone._ops)) {
+        if (!match._pattern._ops.contains(coneOp)) {
+            eraseIfUnused(coneOp, rewriter);
+        }
+    }
+}
+
+struct RerootPatternAtEdgeIDs : public impl::RerootPatternAtEdgeIDsBase<RerootPatternAtEdgeIDs> {
+    void runOnOperation() override {
+        runFilterWorklist<ListedEdgesPattern>(getOperation(), matchListedEdgesPattern, rerootAtListedEdges);
     }
 };
 
@@ -12678,7 +12888,7 @@ bool matchCheapestRoot(Operation* scan, const RowEstimator& estimator, const DBP
     }
 
     for (const Value candidate : candidates) {
-        if (!isWalkableFrom(pattern, candidate)) {
+        if (!isWalkableFrom(pattern, candidate, nullptr)) {
             continue;
         }
 
@@ -12694,7 +12904,7 @@ bool matchCheapestRoot(Operation* scan, const RowEstimator& estimator, const DBP
         const ArrayAttr startLabels = labels.empty() ? ArrayAttr() : ArrayAttr::get(scan->getContext(), labels);
 
         llvm::SmallVector<WalkEvent> events;
-        if (!planWalk(pattern, candidate, absorbed, isTheRoot || !rootLabels, events)) {
+        if (!planWalk(pattern, candidate, nullptr, absorbed, isTheRoot || !rootLabels, events)) {
             continue;
         }
 

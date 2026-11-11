@@ -133,6 +133,11 @@ def FuseFetchNodes : Pass<"fuse_fetch_nodes"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def RerootPatternAtEdgeIDs : Pass<"reroot_pattern_at_edge_ids"> {
+    let summary = "Walk a pattern out from the edges a filter on the IDs of one of its edges lists, an OR of equalities to an ID and IN tests over a list of IDs, looked up by a const_scan_edges, instead of scanning the pattern and filtering it";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def RerootPatternAtSeed : Pass<"reroot_pattern_at_seed"> {
     let summary = "Walk a pattern out from the nodes an equality binds one of its nodes to, fetched from the bound column, instead of crossing the whole pattern with that column";
     let dependentDialects = ["mlir::db::DB"];
@@ -217,8 +222,8 @@ def CountPathRows : Pass<"count_path_rows"> {
     let summary = "Count the rows a path was built over, or the handles a walk's list was expanded from, instead of building the path or the list";
 }
 
-def CanonicalizeNodeIDEqualities : Pass<"canonicalize_node_id_equalities"> {
-    let summary = "Compare a node to the node a value names, node_id_of(x), rather than its id() to x where a filter tests the comparison, so the passes that look a node up by its ID match one shape";
+def CanonicalizeIDEqualities : Pass<"canonicalize_id_equalities"> {
+    let summary = "Compare a node or an edge to the entity a value names, entity_id_of(x), rather than its id() to x where a filter tests the comparison, so the passes that look an entity up by its ID match one shape";
     let dependentDialects = ["mlir::db::DB"];
 }
 
