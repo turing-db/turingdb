@@ -6314,7 +6314,10 @@ void DBLowering::lowerConstant(mlir::db::ConstantOp constant) {
     // - and every region hanging under it - above a constant its body still reads.
     setInsertionAfterHoisted();
 
-    nl::Constant nlConstant = _builder.create<nl::Constant>(_builder.getUnknownLoc(), constant.getValue());
+    const mlir::Type element = mlir::cast<mlir::db::ColumnType>(constant.getType()).getType();
+    const nl::ChunkType chunkType = nl::ChunkType::get(_builder.getContext(), element);
+
+    nl::Constant nlConstant = _builder.create<nl::Constant>(_builder.getUnknownLoc(), chunkType, constant.getValue());
     _valueMap[constant.getResult()] = nlConstant.getResult();
     _lastHoisted = nlConstant.getOperation();
 }

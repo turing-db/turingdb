@@ -8,6 +8,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Types.h"
 
+#include "NullLiteralType.h"
 #include "StorageTypes.h"
 
 namespace db {
@@ -59,6 +60,42 @@ inline bool listPositionIndex(size_t count, int64_t position, size_t& index) {
 
     index = static_cast<size_t>(fromStart);
     return true;
+}
+
+// The element a constant holding @param literal names: a list for an array, an embedding for
+// a dense f32 array, a map for a dictionary, and the type of a typed attribute. Null for the
+// unit a null is, which names none.
+inline mlir::Type literalValueType(mlir::Attribute literal) {
+    mlir::MLIRContext* const context = literal.getContext();
+
+    if (const auto elements = mlir::dyn_cast<mlir::ArrayAttr>(literal)) {
+        return mlir::storage::ListType::get(context, sharedLiteralElementType(elements));
+    } else if (mlir::isa<mlir::DenseF32ArrayAttr>(literal)) {
+        return mlir::storage::EmbeddingType::get(context);
+    } else if (mlir::isa<mlir::DictionaryAttr>(literal)) {
+        return mlir::storage::MapType::get(context);
+    }
+
+    const auto typed = mlir::dyn_cast<mlir::TypedAttr>(literal);
+
+    return typed ? typed.getType() : mlir::Type {};
+}
+
+// Whether a tagged cell holds @param literal: a scalar, an embedding, a list, a map or the unit
+// a null is. Not the null literal, whose empty string a cell would hold as a string
+inline bool isCellLiteral(mlir::Attribute literal) {
+    const auto typed = mlir::dyn_cast<mlir::TypedAttr>(literal);
+    if (typed && mlir::isNullLiteralType(typed.getType())) {
+        return false;
+    }
+
+    return mlir::isa<mlir::IntegerAttr,
+                     mlir::FloatAttr,
+                     mlir::StringAttr,
+                     mlir::DenseF32ArrayAttr,
+                     mlir::UnitAttr,
+                     mlir::ArrayAttr,
+                     mlir::DictionaryAttr>(literal);
 }
 
 }

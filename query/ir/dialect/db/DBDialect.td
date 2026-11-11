@@ -12,6 +12,8 @@ def DB : Dialect {
     // Removes the need to define custom printers for our custom types
     let useDefaultTypePrinterParser = 1;
 
+    let hasConstantMaterializer = 1;
+
     // Declare other functions: mlir::turing::db::f()
     let extraClassDeclaration = [{
         void registerTypes(); // Makes MLIR aware of our custom types

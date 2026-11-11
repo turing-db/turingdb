@@ -290,6 +290,29 @@ int64_t positionLiteral(Attribute position) {
     return cast<IntegerAttr>(position).getValue().getSExtValue();
 }
 
+ParseResult parseConstantResultType(OpAsmParser& parser, Type& resultType, Attribute value) {
+    if (succeeded(parser.parseOptionalColon())) {
+        return parser.parseType(resultType);
+    }
+
+    const Type named = ::db::literalValueType(value);
+    if (!named) {
+        return parser.emitError(parser.getCurrentLocation(), "a db.constant of ") << value << " needs a result type";
+    }
+
+    resultType = ColumnType::get(parser.getContext(), named);
+    return success();
+}
+
+void printConstantResultType(OpAsmPrinter& printer, Operation* op, Type resultType, Attribute value) {
+    const Type named = ::db::literalValueType(value);
+    if (named && resultType == ColumnType::get(op->getContext(), named)) {
+        return;
+    }
+
+    printer << " : " << resultType;
+}
+
 // What a filter reads as a mask: a boolean column, a boolean literal, one whose values may be
 // null, a property read whose type lowering resolves, or the untyped null an expression over a
 // property no row carries evaluates to
@@ -2171,53 +2194,37 @@ LogicalResult CallProcedure::verify() {
     return success();
 }
 
-// Allows inline declaration of a constant type
-LogicalResult ConstantOp::inferReturnTypes(MLIRContext* context,
-                                           std::optional<Location> location,
-                                           ValueRange operands,
-                                           DictionaryAttr attributes,
-                                           PropertyRef properties,
-                                           RegionRange regions,
-                                           SmallVectorImpl<Type>& inferredReturnTypes) {
-    ConstantOpGenericAdaptor adaptor(operands, attributes, properties, regions);
+void ConstantOp::build(OpBuilder& builder, OperationState& state, Attribute value) {
+    const Type named = ::db::literalValueType(value);
+    const Type element = named ? named : Type(storage::AnyType::get(builder.getContext()));
 
-    // An array of per-element attributes is a list literal; it carries no type of its own,
-    // so the element type is the homogeneity verdict over the elements.
-    if (const auto elements = llvm::dyn_cast<ArrayAttr>(adaptor.getValue())) {
-        const mlir::Type listType = storage::ListType::get(context, ::db::sharedLiteralElementType(elements));
+    build(builder, state, ColumnType::get(builder.getContext(), element), value);
+}
 
-        inferredReturnTypes.emplace_back(mlir::db::ColumnType::get(context, listType));
-        return success();
+// A column whose type lowering resolves holds no constant: a list read resolves it from its list,
+// a tagged cell for [1, 'a'][0] and an integer for [1, 2][0], which the literal alone does not say
+bool ConstantOp::isBuildableWith(Attribute value, Type type) {
+    const ColumnType column = dyn_cast<ColumnType>(type);
+    if (!column) {
+        return false;
     }
 
-    // A dense f32 array is an embedding: a flat run of floats, which is the one attribute
-    // kind carrying no type of its own that still names its column's element type.
-    if (llvm::isa<mlir::DenseF32ArrayAttr>(adaptor.getValue())) {
-        const mlir::Type embeddingType = storage::EmbeddingType::get(context);
+    const Type element = column.getType();
+    const bool holdsACell = isa<storage::AnyType>(element);
 
-        inferredReturnTypes.emplace_back(mlir::db::ColumnType::get(context, embeddingType));
-        return success();
+    return element == ::db::literalValueType(value) || (holdsACell && ::db::isCellLiteral(value));
+}
+
+LogicalResult ConstantOp::verify() {
+    if (!isBuildableWith(getValue(), getType())) {
+        return emitOpError("cannot hold ") << getValue() << " in a " << getType();
     }
 
-    if (llvm::isa<mlir::DictionaryAttr>(adaptor.getValue())) {
-        const mlir::Type mapType = storage::MapType::get(context);
+    return success();
+}
 
-        inferredReturnTypes.emplace_back(mlir::db::ColumnType::get(context, mapType));
-        return success();
-    }
-
-    // Type inference runs while the op is still being parsed, ahead of the operand
-    // constraint that limits the value to those three kinds, so an attribute of any other
-    // kind has to be turned away here rather than cast blindly.
-    const mlir::TypedAttr typedValue = llvm::dyn_cast<mlir::TypedAttr>(adaptor.getValue());
-    if (!typedValue) {
-        return mlir::emitOptionalError(location,
-                                       "db.constant carries a typed value, a dense f32 array "
-                                       "or an array of literals, not ", adaptor.getValue());
-    }
-
-    inferredReturnTypes.emplace_back(mlir::db::ColumnType::get(context, typedValue.getType()));
-    return mlir::success();
+OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
+    return getValue();
 }
 
 // db.group_aggregate splits its columns into keyCount grouping keys followed by

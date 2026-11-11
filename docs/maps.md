@@ -84,6 +84,14 @@ or two strings, booleans, datetimes or durations, compares the typed column itse
 `WHERE n[k] = 'Remy'` plans the `db.scan_nodes_by_property_value` that `WHERE n.name = 'Remy'`
 plans. A name the graph does not type, one only the query creates included, stays a read by name.
 
+A key read over constants holds one value in every row, and `fold_constant_map_keys` plans that
+value in its place. `RETURN {k: 't'}.k` plans `db.constant("t" : !storage.string) : !db.column<!storage.any>`,
+a constant in the read's own column of tagged cells, which lowering lays out as one cell. A key the
+map lacks plans the null `db.constant(unit) : !db.column<!storage.any>`. A read that raises on its
+constants is left to raise when it runs: `RETURN {k: 5}.k.j` keeps its `db.static_map_key` over the
+integer. A read of a list element keeps its read: lowering types `[1, 2][0]` as an integer and
+`[1, 'a'][0]` as a tagged cell from the list it reads, which the element alone does not say.
+
 An index held in a tagged cell can be a position on one row and a key on the next, so `c[i]` with
 such an `i` emits `db.container_index` where `c` is a list, a map, a node, a relationship or a
 tagged cell. Neo4j's ContainerIndex expression reads it the same way. A row whose base holds a list

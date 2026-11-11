@@ -3294,18 +3294,39 @@ class BinaryFunctionOp<string mnemonic> : TuringOp<mnemonic, [Pure, ConstantThro
 def CosineSimilarity : BinaryFunctionOp<"cosine_similarity">;
 def EuclideanDistance : BinaryFunctionOp<"euclidean_distance">;
 
-def ConstantOp : TuringOp<"constant", [Pure, ConstantLike, DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
+def ConstantOp : TuringOp<"constant", [Pure, ConstantLike]> {
   let summary = "Produces a constant value in a column";
+  let description = [{
+    The column holds the type its literal names: the attribute's own type for a scalar, an
+    embedding for a dense f32 array, a map for a dictionary, and for an array of per-element
+    attributes a list of the homogeneity verdict over the elements - which is why a list
+    needs no separate op.
 
-  // A typed attribute for a scalar, a dense f32 array for an embedding, an array of
-  // per-element attributes for a list literal, or a dictionary for map literals.
-  // Neither array carries a type of its own, so the column's element type is what
-  // inferReturnTypes reads off them: an embedding for the dense array, the homogeneity
-  // verdict over the elements for the list - which is why a list needs no separate op.
-  let arguments = (ins AnyAttrOf<[TypedAttrInterface, DenseF32ArrayAttr, ArrayAttr, DictionaryAttr]>: $value);
+      %c = db.constant(1 : i64)
+      %l = db.constant([1, 2])
+
+    A column of tagged cells holds any literal a cell holds, and null as a unit. A key read
+    over constants folds to such a constant, whose type is then written after the literal:
+
+      %v = db.constant("t" : !storage.string) : !db.column<!storage.any>
+      %n = db.constant(unit) : !db.column<!storage.any>
+  }];
+
+  let arguments = (ins AnyAttrOf<[TypedAttrInterface, DenseF32ArrayAttr, ArrayAttr, DictionaryAttr, UnitAttr]>: $value);
   let results = (outs Column : $result);
 
-  let assemblyFormat = "`(` $value `)` attr-dict";
+  let builders = [
+    OpBuilder<(ins "::mlir::Attribute":$value)>
+  ];
+
+  let extraClassDeclaration = [{
+    static bool isBuildableWith(::mlir::Attribute value, ::mlir::Type type);
+  }];
+
+  let hasFolder = 1;
+  let hasVerifier = 1;
+
+  let assemblyFormat = "`(` $value `)` attr-dict `` custom<ConstantResultType>(type($result), ref($value))";
 }
 
 def BroadcastConstant : TuringOp<"broadcast_constant", [Pure, AllTypesMatch<["value", "result"]>, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns"]>]> {

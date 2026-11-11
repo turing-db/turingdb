@@ -2575,17 +2575,32 @@ def AggregateResult : NLOp<"aggregate_result", []> {
   let hasVerifier = 1;
 }
 
-def Constant : NLOp<"constant", [Pure, ConstantLike, InferTypeOpAdaptor]> {
+def Constant : NLOp<"constant", [Pure, ConstantLike]> {
   let summary = "Materialize a constant scalar as a single-row chunk";
   let description = [{
-      Represents a ColumnVector<T> with a single row
-      %c = nl.constant(30 : i64) : !nl.chunk<i64>
+      Represents a ColumnVector<T> with a single row, of the type the literal names, as
+      db.constant's column does:
+      %c = nl.constant(30 : i64)
+
+      A chunk of tagged cells holds any literal a cell holds, the unit a null is included,
+      as the one cell of a ColumnConst:
+      %v = nl.constant("t" : !storage.string) : !nl.chunk<!storage.any>
   }];
 
-  let arguments = (ins AnyAttrOf<[TypedAttrInterface, DenseF32ArrayAttr, ArrayAttr, DictionaryAttr]>: $value);
+  let arguments = (ins AnyAttrOf<[TypedAttrInterface, DenseF32ArrayAttr, ArrayAttr, DictionaryAttr, UnitAttr]>: $value);
   let results   = (outs NLChunk:$result);
 
-  let assemblyFormat = "`(` $value `)` attr-dict";
+  let builders = [
+    OpBuilder<(ins "::mlir::Attribute":$value)>
+  ];
+
+  let extraClassDeclaration = [{
+    static bool isBuildableWith(::mlir::Attribute value, ::mlir::Type type);
+  }];
+
+  let hasVerifier = 1;
+
+  let assemblyFormat = "`(` $value `)` attr-dict `` custom<ConstantChunkType>(type($result), ref($value))";
 }
 
 def BroadcastConstant : NLOp<"broadcast_constant", [Pure, RowAlignedThroughOperands]> {

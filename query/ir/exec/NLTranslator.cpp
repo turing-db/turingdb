@@ -3772,6 +3772,17 @@ void NLTranslator::translateConstant(nl::Constant constant) {
 
     const mlir::Attribute value = constant.getValue();
 
+    // A cell views tagged bytes a buffer owns, here those of a list of its one literal
+    if (llvm::isa<storage::AnyType>(elementType)) {
+        const ListView held = materializeListView(mlir::ArrayAttr::get(constant.getContext(), {value}));
+
+        ColumnConst<CellView>* cell = _memory->alloc<ColumnConst<CellView>>();
+        cell->set(held.front());
+
+        _valueSlots[res] = cell;
+        return;
+    }
+
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         if (mlir::isa<mlir::NoneType>(nullableType.getValueType())) {
             _valueSlots[res] = _memory->alloc<ColumnConst<PropertyNull>>();

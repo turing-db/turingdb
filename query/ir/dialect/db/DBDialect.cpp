@@ -13,3 +13,11 @@ void DB::initialize() {
     >();
     registerTypes();
 }
+
+Operation* DB::materializeConstant(OpBuilder& builder, Attribute value, Type type, Location loc) {
+    if (!ConstantOp::isBuildableWith(value, type)) {
+        return nullptr;
+    }
+
+    return builder.create<ConstantOp>(loc, type, value);
+}

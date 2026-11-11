@@ -3973,7 +3973,6 @@ struct FuseLabelPredicates : public impl::FuseLabelPredicatesBase<FuseLabelPredi
         // region simplification would otherwise rewrite the rest of the program as well.
         mlir::GreedyRewriteConfig config;
         config.setStrictness(mlir::GreedyRewriteStrictness::ExistingAndNewOps);
-        config.enableFolding(false);
         config.enableConstantCSE(false);
         config.setRegionSimplificationLevel(mlir::GreedySimplifyRegionLevel::Disabled);
 
@@ -7534,7 +7533,6 @@ struct CanonicalizeCoalesce : public impl::CanonicalizeCoalesceBase<Canonicalize
         // erase an op an inlined argument held, a Pure CASE holding a division included
         mlir::GreedyRewriteConfig config;
         config.setStrictness(mlir::GreedyRewriteStrictness::ExistingOps);
-        config.enableFolding(false);
         config.enableConstantCSE(false);
         config.setRegionSimplificationLevel(mlir::GreedySimplifyRegionLevel::Disabled);
 
@@ -7820,6 +7818,16 @@ struct CompareTypedColumns : public mlir::OpRewritePattern<Comparison> {
     }
 };
 
+// An op without a body that its constant operands alone determine, which a fold replaces by a
+// constant
+bool foldsOverItsConstants(Operation* op) {
+    const bool readsConstantsAlone = op->getNumOperands() > 0 && llvm::all_of(op->getOperands(), [](Value operand) {
+        return static_cast<bool>(operand.getDefiningOp<ConstantOp>());
+    });
+
+    return readsConstantsAlone && op->getNumRegions() == 0 && op->hasTrait<OpTrait::ConstantThroughOperands>();
+}
+
 struct FoldConstantMapKeys : public impl::FoldConstantMapKeysBase<FoldConstantMapKeys> {
     FoldConstantMapKeys() {}
 
@@ -7848,7 +7856,6 @@ struct FoldConstantMapKeys : public impl::FoldConstantMapKeysBase<FoldConstantMa
 
         mlir::GreedyRewriteConfig config;
         config.setStrictness(mlir::GreedyRewriteStrictness::ExistingOps);
-        config.enableFolding(false);
         config.enableConstantCSE(false);
         config.setRegionSimplificationLevel(mlir::GreedySimplifyRegionLevel::Disabled);
 
@@ -7856,14 +7863,24 @@ struct FoldConstantMapKeys : public impl::FoldConstantMapKeysBase<FoldConstantMa
         // its result directly: a read carried from a folded one is tried in the next round
         bool folded = true;
         while (folded) {
-            llvm::SmallVector<Operation*> reads;
-            getOperation()->walk([&reads](Operation* op) {
-                if (isa<DynamicMapKey, ContainerIndex, StaticMapKey, EqOp, NeqOp, LtOp, GtOp, LteOp, GteOp>(op)) {
-                    reads.push_back(op);
+            llvm::SmallVector<Operation*> candidates;
+            getOperation()->walk([&candidates](Operation* op) {
+                const bool matchedByAPattern = isa<DynamicMapKey, ContainerIndex, StaticMapKey, EqOp, NeqOp, LtOp, GtOp, LteOp, GteOp>(op);
+                if (!matchedByAPattern && !foldsOverItsConstants(op)) {
+                    return;
+                }
+
+                candidates.push_back(op);
+
+                // The driver erases a constant a fold leaves unread only if the constant is on its list
+                for (const Value operand : op->getOperands()) {
+                    if (ConstantOp constant = operand.getDefiningOp<ConstantOp>()) {
+                        candidates.push_back(constant);
+                    }
                 }
             });
 
-            if (failed(mlir::applyOpPatternsGreedily(reads, frozenPatterns, config, &folded))) {
+            if (failed(mlir::applyOpPatternsGreedily(candidates, frozenPatterns, config, &folded))) {
                 signalPassFailure();
                 return;
             }

@@ -28,9 +28,6 @@ using namespace mlir::nl;
 
 namespace storage = mlir::storage;
 
-#define GET_OP_CLASSES
-#include "NLOps.cpp.inc"
-
 namespace {
 
 Type getNodeIDChunkType(MLIRContext* context) {
@@ -221,7 +218,34 @@ bool holdsNullableBooleans(Value chunk) {
 
     return nullableType && nullableType.getValueType().isInteger(1);
 }
+
+ParseResult parseConstantChunkType(OpAsmParser& parser, Type& resultType, Attribute value) {
+    if (succeeded(parser.parseOptionalColon())) {
+        return parser.parseType(resultType);
+    }
+
+    const Type named = ::db::literalValueType(value);
+    if (!named) {
+        return parser.emitError(parser.getCurrentLocation(), "an nl.constant of ") << value << " needs a result type";
+    }
+
+    resultType = ChunkType::get(parser.getContext(), named);
+    return success();
 }
+
+void printConstantChunkType(OpAsmPrinter& printer, Operation* op, Type resultType, Attribute value) {
+    const Type named = ::db::literalValueType(value);
+    if (named && resultType == ChunkType::get(op->getContext(), named)) {
+        return;
+    }
+
+    printer << " : " << resultType;
+}
+
+}
+
+#define GET_OP_CLASSES
+#include "NLOps.cpp.inc"
 
 // A node scan always produces one chunk of node IDs per step
 LogicalResult ScanNodes::inferReturnTypes(MLIRContext* context,
@@ -625,43 +649,30 @@ LogicalResult EachRow::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
-LogicalResult Constant::inferReturnTypes(MLIRContext* context,
-                                         std::optional<Location> location,
-                                         Constant::Adaptor adaptor,
-                                         SmallVectorImpl<Type>& inferredReturnTypes) {
-    // An array of per-element attributes is a list literal; it carries no type of its own,
-    // so the element type is the homogeneity verdict over the elements.
-    if (const auto elements = dyn_cast<ArrayAttr>(adaptor.getValue())) {
-        const Type listType = storage::ListType::get(context, ::db::sharedLiteralElementType(elements));
+void Constant::build(OpBuilder& builder, OperationState& state, Attribute value) {
+    const Type named = ::db::literalValueType(value);
+    const Type element = named ? named : Type(storage::AnyType::get(builder.getContext()));
 
-        inferredReturnTypes.push_back(ChunkType::get(context, listType));
-        return success();
+    build(builder, state, ChunkType::get(builder.getContext(), element), value);
+}
+
+bool Constant::isBuildableWith(Attribute value, Type type) {
+    const ChunkType chunk = dyn_cast<ChunkType>(type);
+    if (!chunk) {
+        return false;
     }
 
-    // The db-dialect sibling's rule: a dense f32 array is an embedding, a type the attribute
-    // itself does not carry.
-    if (isa<DenseF32ArrayAttr>(adaptor.getValue())) {
-        inferredReturnTypes.push_back(ChunkType::get(context, storage::EmbeddingType::get(context)));
-        return success();
+    const Type element = chunk.getElementType();
+    const bool holdsACell = isa<storage::AnyType>(element);
+
+    return element == ::db::literalValueType(value) || (holdsACell && ::db::isCellLiteral(value));
+}
+
+LogicalResult Constant::verify() {
+    if (!isBuildableWith(getValue(), getType())) {
+        return emitOpError("cannot hold ") << getValue() << " in a " << getType();
     }
 
-    if (llvm::isa<mlir::DictionaryAttr>(adaptor.getValue())) {
-        const mlir::Type mapType = storage::MapType::get(context);
-
-        inferredReturnTypes.emplace_back(ChunkType::get(context, mapType));
-        return success();
-    }
-
-    // Inference runs during parsing, ahead of the operand constraint, so an attribute that
-    // is neither typed nor an array is rejected here rather than cast blindly.
-    const auto value = dyn_cast<TypedAttr>(adaptor.getValue());
-    if (!value) {
-        return emitOptionalError(location,
-                                 "nl.constant carries a typed value, a dense f32 array or "
-                                 "an array of literals, not ", adaptor.getValue());
-    }
-
-    inferredReturnTypes.push_back(ChunkType::get(context, value.getType()));
     return success();
 }
 
