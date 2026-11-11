@@ -62,3 +62,7 @@ add_call_v3_test(test_query_ir_embedding_dimension_mismatch EmbeddingDimensionMi
 add_turing_test(test_query_ir_embedding_property_dimension EmbeddingPropertyDimensionTest.cpp)
 target_sources(test_query_ir_embedding_property_dimension PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
 target_include_directories(test_query_ir_embedding_property_dimension PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_vector_search_expression VectorSearchExpressionTest.cpp)
+target_sources(test_query_ir_vector_search_expression PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_vector_search_expression PRIVATE ${IR_TEST_DIR})

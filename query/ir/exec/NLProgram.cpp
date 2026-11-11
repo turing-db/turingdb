@@ -239,6 +239,24 @@ NLExploreStep::NLExploreStep(PathExplorationDir direction,
 NLExploreStep::~NLExploreStep() {
 }
 
+bool NLVectorSearchLoopData::hasSearched(std::string_view indexName,
+                                         size_t neighbourCount,
+                                         std::span<const float> queryVector) const {
+    return _searched
+        && _searchedIndexName == indexName
+        && _searchedNeighbourCount == neighbourCount
+        && std::ranges::equal(_searchedVector, queryVector);
+}
+
+void NLVectorSearchLoopData::markSearched(std::string_view indexName,
+                                          size_t neighbourCount,
+                                          std::span<const float> queryVector) {
+    _searchedIndexName = indexName;
+    _searchedNeighbourCount = neighbourCount;
+    _searchedVector.assign(queryVector.begin(), queryVector.end());
+    _searched = true;
+}
+
 NLExploreStep* NLExplorePathsLoopData::addStep(PathExplorationDir direction,
                                                bool filtersByType,
                                                std::span<const EdgeTypeID> edgeTypes,

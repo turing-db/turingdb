@@ -1298,7 +1298,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
         } else if (nl::VectorSearch vectorSearch = mlir::dyn_cast<nl::VectorSearch>(operation)) {
             IteratorConfig config;
             config._kind = IteratorKind::VectorSearch;
-            config._indexName = vectorSearch.getIndexName();
+            config._indexName = vectorSearch.getIndexName().value_or(llvm::StringRef());
+            config._boundIndexName = vectorSearch.getBoundIndexName();
             config._neighbourCount = vectorSearch.getK().value_or(0);
             config._boundNeighbourCount = vectorSearch.getBoundK();
             config._queryVector = vectorSearch.getQueryVector().value_or(llvm::ArrayRef<float>());
@@ -2181,19 +2182,13 @@ void NLTranslator::translateVectorSearchLoop(const IteratorConfig& config,
                                                                                           queryVector);
     loopData->setLimit(limit);
 
+    const mlir::Value boundIndexName = config._boundIndexName;
     const mlir::Value boundCount = config._boundNeighbourCount;
-    if (boundCount) {
-        const Column* column = getColumn(boundCount);
-        bioassert(column->getKind() == ColumnConst<types::Int64::Primitive>::staticKind(), "A bound neighbour count holds one value for the run");
-        loopData->setBoundNeighbourCount(static_cast<const ColumnConst<types::Int64::Primitive>*>(column));
-    }
-
     const mlir::Value boundQueryVector = config._boundQueryVector;
-    if (boundQueryVector) {
-        const Column* column = getColumn(boundQueryVector);
-        bioassert(column->getKind() == ColumnConst<types::Embedding::Primitive>::staticKind(), "A bound query vector holds one value for the run");
-        loopData->setBoundQueryVector(static_cast<const ColumnConst<types::Embedding::Primitive>*>(column));
-    }
+
+    loopData->setBoundIndexName(boundIndexName ? getColumn(boundIndexName) : nullptr);
+    loopData->setBoundNeighbourCount(boundCount ? getColumn(boundCount) : nullptr);
+    loopData->setBoundQueryVector(boundQueryVector ? getColumn(boundQueryVector) : nullptr);
 
     body->emplaceStmt(&NLExecutor::runVectorSearchLoop, loopData);
 

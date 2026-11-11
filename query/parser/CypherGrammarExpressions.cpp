@@ -402,10 +402,10 @@ Expr* CypherGrammar::parseAtomicExpr() {
     if (!opensKeywordConstruct && checkSymbol()) {
         Symbol* symbol = parseSymbol();
 
-        if (check(CypherTokenKind::DOT) || check(CypherTokenKind::OPAREN)) {
+        if (check(CypherTokenKind::DOT) || continuesOperand(CypherTokenKind::OPAREN)) {
             QualifiedName* name = parseQualifiedName(symbol);
 
-            if (check(CypherTokenKind::OPAREN)) {
+            if (continuesOperand(CypherTokenKind::OPAREN)) {
                 FunctionInvocation* invocation = parseFunctionInvocation(name, start);
                 value = FunctionInvocationExpr::create(_ast, invocation);
                 locate(value, start);
@@ -431,7 +431,7 @@ Expr* CypherGrammar::parseAtomicExpr() {
         const bool looksUp = kind == AtomicValue::LOOKUP && check(CypherTokenKind::DOT);
         const bool testsLabels = kind == AtomicValue::PROPERTY || kind == AtomicValue::LOOKUP;
 
-        if (check(CypherTokenKind::OBRACK) || looksUp) {
+        if (continuesOperand(CypherTokenKind::OBRACK) || looksUp) {
             value = parseLookupOperand(value, start);
             kind = AtomicValue::LOOKUP;
         } else if (testsLabels && (check(CypherTokenKind::COLON) || check(CypherTokenKind::IS))) {
@@ -1577,6 +1577,21 @@ CypherGrammar::ParenthesizedAtom CypherGrammar::classifyParenthesis() {
     }
 
     return ParenthesizedAtom::EXPRESSION;
+}
+
+// VECTOR SEARCH spells its query vector right after its neighbour count, so a bracket YIELD
+// follows there opens the query vector rather than the arguments of a call or a lookup: in
+// `FOR k (1.0, 0.0) YIELD`, k is the count
+bool CypherGrammar::continuesOperand(CypherTokenKind opener) {
+    if (!check(opener)) {
+        return false;
+    } else if (!isFollowedBy(ExprFollower::QUERY_VECTOR)) {
+        return true;
+    }
+
+    const size_t afterBracket = skipBalanced(0);
+
+    return afterBracket == 0 || peek(afterBracket)._kind != CypherTokenKind::YIELD;
 }
 
 bool CypherGrammar::startsPredicate() {

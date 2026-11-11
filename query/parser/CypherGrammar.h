@@ -130,6 +130,7 @@ private:
         NONE,
         AS,
         PIPE,
+        QUERY_VECTOR,
     };
 
     enum class PipeReading : uint8_t {
@@ -269,8 +270,8 @@ private:
     // Frame address of parseScript(), from which enterNesting() measures the stack in use
     uintptr_t _stackBase {0};
 
-    // What may follow the current expression: AS before an alias, or the PIPE of a
-    // comprehension, reduce or FOREACH
+    // What may follow the current expression: AS before an alias, the PIPE of a
+    // comprehension, reduce or FOREACH, or the query vector of a VECTOR SEARCH
     ExprFollower _follower {ExprFollower::NONE};
 
     // Nesting depth where _follower was set; _follower applies only at that depth
@@ -424,6 +425,7 @@ private:
     UnwindStmt* parseUnwindStmt();
     LoadCSVStmt* parseLoadCSVStmt();
     VectorSearchStmt* parseVectorSearchStmt();
+    Expr* parseVectorIndexExpr();
     CallStmt* parseCallStmt();
     CallSubqueryStmt* parseCallSubqueryStmt();
     void parseCallScope(std::vector<const Symbol*>& imports);
@@ -576,6 +578,7 @@ private:
     bool isOpensDetailLabels(size_t offset);
     bool pipeDisjoinsLabels();
     ParenthesizedAtom classifyParenthesis();
+    bool continuesOperand(CypherTokenKind opener);
     bool startsPredicate();
     bool startsComparison();
     size_t skipBalanced(size_t offset);

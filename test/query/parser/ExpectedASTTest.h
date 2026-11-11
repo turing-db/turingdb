@@ -127,7 +127,7 @@ protected:
     };
 
     struct VectorSearchFields {
-        std::string_view _index;
+        db::Expr* _index {nullptr};
         db::Expr* _neighbours {nullptr};
         db::Expr* _queryVector {nullptr};
         db::YieldClause* _yield {nullptr};

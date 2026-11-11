@@ -4257,65 +4257,99 @@ void DBProgramGenerator::publishLoadCSVFields(const LoadCSVStmt* loadCSVStmt,
 }
 
 void DBProgramGenerator::generateVectorSearch(const VectorSearchStmt* vectorSearchStmt) {
-    const Expr* queryVector = vectorSearchStmt->getQueryVector();
-    if (!queryVector) {
-        throwError("VECTOR SEARCH statement has no query vector.", vectorSearchStmt);
-    }
-
     const YieldClause* yield = vectorSearchStmt->getYield();
     const YieldItems* yieldItems = yield ? yield->getItems() : nullptr;
     if (!yieldItems || yieldItems->getItems().empty()) {
         throwError("VECTOR SEARCH statement names no yielded value.", vectorSearchStmt);
     }
 
-    mlir::DenseF32ArrayAttr queryVectorAttr;
-    mlir::Value boundQueryVector;
-    if (queryVector->getKind() == Expr::Kind::PARAMETER) {
-        boundQueryVector = translateParameterExpr(static_cast<const ParameterExpr*>(queryVector));
-    } else {
-        const Literal* literal = static_cast<const LiteralExpr*>(queryVector)->getLiteral();
-        queryVectorAttr = embeddingLiteralAttr(static_cast<const EmbeddingLiteral*>(literal));
+    VectorSearchOperands operands;
+    translateVectorSearchOperands(vectorSearchStmt, operands);
+
+    llvm::SmallVector<mlir::Value, 3> rowValues;
+    for (const mlir::Value bound : {operands._boundIndexName, operands._boundNeighbourCount, operands._boundQueryVector}) {
+        const bool readsTheRow = bound && !::db::readsNoRow(bound) && !yieldsConstantColumn(bound, _constantColumns);
+        if (readsTheRow) {
+            rowValues.push_back(bound);
+        }
     }
-
-    const std::string_view searchedIndex = vectorSearchStmt->getIndexName();
-    const llvm::StringRef indexName {searchedIndex.data(), searchedIndex.size()};
-
-    const Expr* neighbourCount = vectorSearchStmt->getK();
-
-    mlir::IntegerAttr countAttr;
-    mlir::Value boundCount;
-    if (neighbourCount->getKind() == Expr::Kind::PARAMETER) {
-        boundCount = translateParameterExpr(static_cast<const ParameterExpr*>(neighbourCount));
-    } else {
-        const Literal* literal = static_cast<const LiteralExpr*>(neighbourCount)->getLiteral();
-        const int64_t spelled = static_cast<const IntegerLiteral*>(literal)->getValue();
-        countAttr = mlir::IntegerAttr::get(_opBuilder.getIntegerType(64, /*isSigned=*/false), spelled);
-    }
-
-    const mlir::db::ColumnType idType = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
-    const mlir::db::ColumnType scoreType = allocColumnType(_opBuilder.getF64Type());
-    const mlir::Location loc = _opBuilder.getUnknownLoc();
 
     InFlightColumns inFlight;
     collectInFlightColumns(inFlight);
 
-    if (inFlight._columns.empty()) {
-        mlir::db::VectorSearch search = _opBuilder.create<mlir::db::VectorSearch>(loc,
-                                                                                  idType,
-                                                                                  scoreType,
-                                                                                  indexName,
-                                                                                  countAttr,
-                                                                                  boundCount,
-                                                                                  queryVectorAttr,
-                                                                                  boundQueryVector);
-
+    if (!rowValues.empty()) {
+        generatePerRowVectorSearch(yieldItems, operands, rowValues, inFlight);
+    } else if (!inFlight._columns.empty()) {
+        generateCrossedVectorSearch(yieldItems, operands, inFlight);
+    } else {
+        mlir::db::VectorSearch search = createVectorSearch(operands);
         publishVectorSearchYields(yieldItems, search.getIds(), search.getScores());
-        generateYieldFilter(yieldItems);
-        return;
     }
 
-    // The search takes no column at all, so it produces the same neighbours for every row
-    // already in flight: their cartesian product, which is what a call reading none of
+    generateYieldFilter(yieldItems);
+}
+
+void DBProgramGenerator::translateVectorSearchOperands(const VectorSearchStmt* vectorSearchStmt,
+                                                       VectorSearchOperands& operands) {
+    const auto literalOf = [](const Expr* expr, Literal::Kind kind) -> const Literal* {
+        if (expr->getKind() != Expr::Kind::LITERAL) {
+            return nullptr;
+        }
+
+        const Literal* literal = static_cast<const LiteralExpr*>(expr)->getLiteral();
+
+        return literal->getKind() == kind ? literal : nullptr;
+    };
+
+    const auto translateOperand = [this](const Expr* expr) {
+        translateExpr(expr);
+        return _part._exprMap.at(expr);
+    };
+
+    const Expr* index = vectorSearchStmt->getIndex();
+    if (const Literal* literal = literalOf(index, Literal::Kind::STRING)) {
+        const std::string_view name = static_cast<const StringLiteral*>(literal)->getValue();
+        operands._indexName = _opBuilder.getStringAttr(llvm::StringRef {name.data(), name.size()});
+    } else {
+        operands._boundIndexName = translateOperand(index);
+    }
+
+    const Expr* neighbourCount = vectorSearchStmt->getK();
+    if (const Literal* literal = literalOf(neighbourCount, Literal::Kind::INTEGER)) {
+        const int64_t spelled = static_cast<const IntegerLiteral*>(literal)->getValue();
+        operands._neighbourCount = mlir::IntegerAttr::get(_opBuilder.getIntegerType(64, /*isSigned=*/false), spelled);
+    } else {
+        operands._boundNeighbourCount = translateOperand(neighbourCount);
+    }
+
+    const Expr* queryVector = vectorSearchStmt->getQueryVector();
+    if (const Literal* literal = literalOf(queryVector, Literal::Kind::EMBEDDING)) {
+        operands._queryVector = embeddingLiteralAttr(static_cast<const EmbeddingLiteral*>(literal));
+    } else {
+        operands._boundQueryVector = translateOperand(queryVector);
+    }
+}
+
+mlir::db::VectorSearch DBProgramGenerator::createVectorSearch(const VectorSearchOperands& operands) {
+    const mlir::db::ColumnType idType = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
+    const mlir::db::ColumnType scoreType = allocColumnType(_opBuilder.getF64Type());
+
+    return _opBuilder.create<mlir::db::VectorSearch>(_opBuilder.getUnknownLoc(),
+                                                     idType,
+                                                     scoreType,
+                                                     operands._indexName,
+                                                     operands._boundIndexName,
+                                                     operands._neighbourCount,
+                                                     operands._boundNeighbourCount,
+                                                     operands._queryVector,
+                                                     operands._boundQueryVector);
+}
+
+void DBProgramGenerator::generateCrossedVectorSearch(const YieldItems* yieldItems,
+                                                     const VectorSearchOperands& operands,
+                                                     const InFlightColumns& inFlight) {
+    // The search reads none of the rows already in flight, so it produces the same neighbours
+    // for every one of them: their cartesian product, which is what a call reading none of
     // them is paired with too.
     mlir::Block* const currentBlock = _opBuilder.getInsertionBlock();
 
@@ -4324,9 +4358,10 @@ void DBProgramGenerator::generateVectorSearch(const VectorSearchStmt* vectorSear
         resultTypes.push_back(column.getType());
     }
 
-    resultTypes.push_back(idType);
-    resultTypes.push_back(scoreType);
+    resultTypes.push_back(allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt)));
+    resultTypes.push_back(allocColumnType(_opBuilder.getF64Type()));
 
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
     _opBuilder.setInsertionPointToEnd(currentBlock);
     mlir::db::CrossProduct crossProduct = _opBuilder.create<mlir::db::CrossProduct>(loc, resultTypes);
 
@@ -4336,18 +4371,20 @@ void DBProgramGenerator::generateVectorSearch(const VectorSearchStmt* vectorSear
     moveDataflowIntoLeftFactor(crossProduct);
     hoistConstantsOutOfLeftFactor(crossProduct);
 
+    llvm::SmallVector<mlir::Value, 3> boundValues;
+    for (const mlir::Value bound : {operands._boundIndexName, operands._boundNeighbourCount, operands._boundQueryVector}) {
+        if (bound) {
+            boundValues.push_back(bound);
+        }
+    }
+
+    moveIntoRightFactor(crossProduct, boundValues);
+
     _opBuilder.setInsertionPointToEnd(leftBlock);
     _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {inFlight._columns});
 
     _opBuilder.setInsertionPointToEnd(rightBlock);
-    mlir::db::VectorSearch search = _opBuilder.create<mlir::db::VectorSearch>(loc,
-                                                                              idType,
-                                                                              scoreType,
-                                                                              indexName,
-                                                                              countAttr,
-                                                                              boundCount,
-                                                                              queryVectorAttr,
-                                                                              boundQueryVector);
+    mlir::db::VectorSearch search = createVectorSearch(operands);
     _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {search.getIds(), search.getScores()});
 
     // Anything generated from here on reads the product's results, not the factors'.
@@ -4358,8 +4395,65 @@ void DBProgramGenerator::generateVectorSearch(const VectorSearchStmt* vectorSear
 
     const size_t searchOffset = inFlight._columns.size();
     publishVectorSearchYields(yieldItems, results[searchOffset], results[searchOffset + 1]);
+}
 
-    generateYieldFilter(yieldItems);
+void DBProgramGenerator::generatePerRowVectorSearch(const YieldItems* yieldItems,
+                                                    const VectorSearchOperands& operands,
+                                                    llvm::ArrayRef<mlir::Value> rowValues,
+                                                    const InFlightColumns& inFlight) {
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    mlir::Block* const outerBlock = _opBuilder.getInsertionBlock();
+
+    llvm::SmallVector<mlir::Value> inputColumns(inFlight._columns.begin(), inFlight._columns.end());
+    for (const mlir::Value rowValue : rowValues) {
+        if (!llvm::is_contained(inputColumns, rowValue)) {
+            inputColumns.push_back(rowValue);
+        }
+    }
+
+    llvm::SmallVector<mlir::Type> resultTypes;
+    for (const mlir::Value column : inputColumns) {
+        resultTypes.push_back(column.getType());
+    }
+
+    resultTypes.push_back(allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt)));
+    resultTypes.push_back(allocColumnType(_opBuilder.getF64Type()));
+
+    mlir::db::CallSubquery callOp = _opBuilder.create<mlir::db::CallSubquery>(loc,
+                                                                             resultTypes,
+                                                                             inputColumns,
+                                                                             /*unit=*/false,
+                                                                             /*carriesScope=*/false,
+                                                                             /*optional=*/false);
+
+    mlir::Block* const bodyBlock = &callOp.getBody().emplaceBlock();
+    for (const mlir::Value column : inputColumns) {
+        bodyBlock->addArgument(column.getType(), loc);
+    }
+
+    _opBuilder.setInsertionPointToStart(bodyBlock);
+
+    VectorSearchOperands bodyOperands = operands;
+    for (mlir::Value* bound : {&bodyOperands._boundIndexName, &bodyOperands._boundNeighbourCount, &bodyOperands._boundQueryVector}) {
+        if (!llvm::is_contained(rowValues, *bound)) {
+            continue;
+        }
+
+        const size_t inputIndex = static_cast<size_t>(llvm::find(inputColumns, *bound) - inputColumns.begin());
+        const mlir::BlockArgument argument = bodyBlock->getArgument(static_cast<unsigned>(inputIndex));
+        *bound = _opBuilder.create<mlir::db::RowConstant>(loc, argument).getResult();
+    }
+
+    mlir::db::VectorSearch search = createVectorSearch(bodyOperands);
+    _opBuilder.create<mlir::db::SubqueryYield>(loc, mlir::Value(), mlir::ValueRange {search.getIds(), search.getScores()});
+
+    _opBuilder.setInsertionPointToEnd(outerBlock);
+
+    const mlir::ResultRange results = callOp.getResults();
+    rebindInFlightColumns(results, /*firstResult=*/0, inFlight);
+
+    const size_t searchOffset = inputColumns.size();
+    publishVectorSearchYields(yieldItems, results[searchOffset], results[searchOffset + 1]);
 }
 
 void DBProgramGenerator::publishVectorSearchYields(const YieldItems* yieldItems,
@@ -4466,6 +4560,25 @@ void DBProgramGenerator::hoistConstantsOutOfLeftFactor(mlir::db::CrossProduct cr
     }
 }
 
+void DBProgramGenerator::moveIntoRightFactor(mlir::db::CrossProduct crossProduct, mlir::ValueRange values) {
+    mlir::Block* const leftBlock = &crossProduct.getLeftFactor().front();
+    mlir::Block* const rightBlock = &crossProduct.getRightFactor().front();
+
+    llvm::DenseSet<mlir::Operation*> definingOps;
+    collectDefiningOps(values, definingOps);
+
+    llvm::SmallVector<mlir::Operation*> definingOpsInOrder;
+    for (mlir::Operation& op : *leftBlock) {
+        if (definingOps.contains(&op)) {
+            definingOpsInOrder.push_back(&op);
+        }
+    }
+
+    for (mlir::Operation* op : definingOpsInOrder) {
+        op->moveBefore(rightBlock, rightBlock->end());
+    }
+}
+
 void DBProgramGenerator::generateCrossedCall(std::string_view procedureName,
                                              llvm::ArrayRef<mlir::Attribute> yieldedNames,
                                              llvm::SmallVectorImpl<YieldedColumn>& yielded,
@@ -4494,25 +4607,7 @@ void DBProgramGenerator::generateCrossedCall(std::string_view procedureName,
     mlir::Block* const rightBlock = &crossProduct.getRightFactor().front();
 
     moveDataflowIntoLeftFactor(crossProduct);
-
-    // The argument columns were built into the block that has just become the left factor,
-    // but the call reading them is the right one and a value cannot cross a region
-    // boundary. None of them reads what the left factor yields - that is what makes this a
-    // product - so the whole chain behind them moves across intact, in its original order.
-    llvm::DenseSet<mlir::Operation*> argumentOps;
-    collectDefiningOps(inputs, argumentOps);
-
-    llvm::SmallVector<mlir::Operation*> argumentOpsInOrder;
-    for (mlir::Operation& op : *leftBlock) {
-        if (argumentOps.contains(&op)) {
-            argumentOpsInOrder.push_back(&op);
-        }
-    }
-
-    for (mlir::Operation* op : argumentOpsInOrder) {
-        op->moveBefore(rightBlock, rightBlock->end());
-    }
-
+    moveIntoRightFactor(crossProduct, inputs);
     hoistConstantsOutOfLeftFactor(crossProduct);
 
     _opBuilder.setInsertionPointToEnd(leftBlock);

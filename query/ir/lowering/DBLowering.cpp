@@ -1267,7 +1267,7 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
         _valueMap[dbArgument] = nlArgument;
     }
 
-    lowerBoundCountsAhead(dbFunction);
+    lowerBoundValuesAhead(dbFunction);
 
     // Find ORDER BY ... LIMIT k: a db.limit capping a db.sort's result fuses into
     // a bounded top-K, so the limit gets no streaming handle and the sort carries
@@ -1567,22 +1567,26 @@ void DBLowering::moveAheadOfLoops(mlir::Operation* computation) {
     }
 }
 
-void DBLowering::lowerBoundCountsAhead(mlir::func::FuncOp dbFunction) {
+void DBLowering::lowerBoundValuesAhead(mlir::func::FuncOp dbFunction) {
     dbFunction.walk([this](mlir::Operation* op) {
-        mlir::Value boundCount;
+        llvm::SmallVector<mlir::Value, 3> boundValues;
         if (mlir::db::Limit limit = mlir::dyn_cast<mlir::db::Limit>(op)) {
-            boundCount = limit.getBoundCount();
+            boundValues.push_back(limit.getBoundCount());
         } else if (mlir::db::Skip skip = mlir::dyn_cast<mlir::db::Skip>(op)) {
-            boundCount = skip.getBoundCount();
+            boundValues.push_back(skip.getBoundCount());
+        } else if (mlir::db::VectorSearch search = mlir::dyn_cast<mlir::db::VectorSearch>(op)) {
+            boundValues.append({search.getBoundIndexName(), search.getBoundK(), search.getBoundQueryVector()});
         }
 
-        if (boundCount) {
-            lowerCountAhead(boundCount);
+        for (const mlir::Value bound : boundValues) {
+            if (bound && readsNoRow(bound)) {
+                lowerValueAhead(bound);
+            }
         }
     });
 }
 
-void DBLowering::lowerCountAhead(mlir::Value count) {
+void DBLowering::lowerValueAhead(mlir::Value bound) {
     llvm::SmallVector<mlir::Operation*> ahead;
     llvm::SmallVector<std::pair<mlir::Operation*, bool>, 8> worklist;
     llvm::SmallPtrSet<mlir::Operation*, 8> visited;
@@ -1594,7 +1598,7 @@ void DBLowering::lowerCountAhead(mlir::Value count) {
         }
     };
 
-    pushDefinition(count);
+    pushDefinition(bound);
 
     while (!worklist.empty()) {
         const auto [op, operandsPushed] = worklist.back();
@@ -2085,11 +2089,13 @@ void DBLowering::lowerVectorSearch(mlir::db::VectorSearch vectorSearch) {
     // type is inferred rather than spelled.
     setInsertionInto(_rootBlock);
 
+    const mlir::Value boundIndexName = vectorSearch.getBoundIndexName();
     const mlir::Value boundCount = vectorSearch.getBoundK();
     const mlir::Value boundQueryVector = vectorSearch.getBoundQueryVector();
 
     nl::VectorSearch neighbours = _builder.create<nl::VectorSearch>(_builder.getUnknownLoc(),
                                                                     vectorSearch.getIndexNameAttr(),
+                                                                    boundIndexName ? mapValue(boundIndexName) : mlir::Value(),
                                                                     vectorSearch.getKAttr(),
                                                                     boundCount ? mapValue(boundCount) : mlir::Value(),
                                                                     vectorSearch.getQueryVectorAttr(),

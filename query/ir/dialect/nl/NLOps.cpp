@@ -269,6 +269,17 @@ LogicalResult verifyBoundCount(Operation* op, Value boundCount) {
 
     return success();
 }
+
+// A value an nl.vector_search reads when its loop starts: the element it searches with, null
+// where an expression made it one, or a cell the loop checks when it starts
+LogicalResult verifySearchedValue(Operation* op, llvm::StringRef name, Value bound, Type element) {
+    const Type boundElement = bound ? valueElementOf(bound.getType()) : Type();
+    if (boundElement && boundElement != element && !isa<storage::AnyType>(boundElement)) {
+        return op->emitOpError("requires a bound ") << name << " of type " << element << " or !storage.any, got " << boundElement;
+    }
+
+    return success();
+}
 }
 
 // A node scan always produces one chunk of node IDs per step
@@ -396,17 +407,17 @@ LogicalResult LoadCSV::verify() {
 // search reporting no neighbour sizes its result buffers at zero, and a query vector of
 // no dimension has nothing to score the neighbours against.
 LogicalResult VectorSearch::verify() {
+    const Value boundIndexName = getBoundIndexName();
+    if (getIndexName().has_value() == static_cast<bool>(boundIndexName)) {
+        return emitOpError("requires either an index name or a bound one");
+    }
+
     const std::optional<uint64_t> neighbourCount = getK();
     const Value boundCount = getBoundK();
     if (neighbourCount.has_value() == static_cast<bool>(boundCount)) {
         return emitOpError("requires either a neighbour count or a bound one");
     } else if (neighbourCount == 0) {
         return emitOpError("must report at least one neighbour");
-    }
-
-    const Type boundType = boundCount ? cast<ChunkType>(boundCount.getType()).getElementType() : Type();
-    if (boundType && !boundType.isSignlessInteger(64)) {
-        return emitOpError("requires a bound neighbour count of type i64, got ") << boundType;
     }
 
     const std::optional<llvm::ArrayRef<float>> queryVector = getQueryVector();
@@ -417,12 +428,14 @@ LogicalResult VectorSearch::verify() {
         return emitOpError("must search for a vector of at least one dimension");
     }
 
-    const Type queryVectorType = boundQueryVector ? cast<ChunkType>(boundQueryVector.getType()).getElementType() : Type();
-    if (queryVectorType && !isa<storage::EmbeddingType>(queryVectorType)) {
-        return emitOpError("requires a bound query vector of type !storage.embedding, got ") << queryVectorType;
-    }
+    Operation* const op = getOperation();
+    MLIRContext* const context = getContext();
 
-    return success();
+    const bool boundValuesVerify = succeeded(verifySearchedValue(op, "index name", boundIndexName, storage::StringType::get(context)))
+                                && succeeded(verifySearchedValue(op, "neighbour count", boundCount, IntegerType::get(context, 64)))
+                                && succeeded(verifySearchedValue(op, "query vector", boundQueryVector, storage::EmbeddingType::get(context)));
+
+    return success(boundValuesVerify);
 }
 
 // An edge scan produces the same four fixed edge chunks per step as an

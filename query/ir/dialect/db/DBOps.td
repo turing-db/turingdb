@@ -412,7 +412,7 @@ def LoadCSV : TuringOp<"load_csv", [Pure]> {
   // it, as db.count's do. The result types follow, qualified, as db.scan_nodes prints
   // its one.
   let assemblyFormat = [{
-    `(` custom<CSVPath>($path, $bound_path, type($bound_path)) `,` $fields `)`
+    `(` custom<BoundString>($path, $bound_path, type($bound_path)) `,` $fields `)`
     (`with_headers` $with_headers^)? (`skip_on_error` $skip_on_error^)?
     attr-dict `:` qualified(type($results))
   }];
@@ -426,28 +426,29 @@ def VectorSearch : TuringOp<"vector_search", [Pure, AttrSizedOperandSegments]> {
 
   let description = [{
     The source op for `VECTOR SEARCH IN vec1 FOR 3 (1.0, 0.0) YIELD ids, score`. The
-    index, the neighbour count and the query vector are all fixed for the whole run, so it
-    reads no row and opens a dataflow of its own, the way db.unwind_const opens one from a
-    literal list:
+    index, the neighbour count and the query vector each hold one value for every row the
+    search is paired with, so it reads no row and opens a dataflow of its own, the way
+    db.unwind_const opens one from a literal list:
 
       %ids, %scores = db.vector_search("vec1", 3, [1.000000e+00, 0.000000e+00])
         : !db.column<!storage.node_id>, !db.column<f64>
 
-    The neighbour count is either `k`, the one the query spells, or `bound_k`, an i64
-    column holding one value for the whole run, which the search reads when it starts. A
-    parameter is one, so `VECTOR SEARCH IN vec1 FOR $k (1.0, 0.0)` searches
+    Each of the three is either the value the query spells, `index_name`, `k` or
+    `query_vector`, or a column holding it, `bound_index_name`, `bound_k` or
+    `bound_query_vector`, which the search reads when it starts. A parameter is one, so
+    `VECTOR SEARCH IN $idx FOR $k $v` searches
 
-      %ids, %scores = db.vector_search("vec1", %k : !db.column<i64>, [1.000000e+00, 0.000000e+00])
+      %ids, %scores = db.vector_search(%idx : !db.column<!storage.string>, %k : !db.column<i64>,
+                                       %v : !db.column<!storage.embedding>)
         : !db.column<!storage.node_id>, !db.column<f64>
 
-    Exactly one of the two is given. A bound count below 1 fails the search when it runs.
-
-    The query vector is likewise either `query_vector` or `bound_query_vector`, an
-    embedding column holding one value for the whole run, so `VECTOR SEARCH IN vec1 FOR 3
-    $v` searches
-
-      %ids, %scores = db.vector_search("vec1", 3, %v : !db.column<!storage.embedding>)
-        : !db.column<!storage.node_id>, !db.column<f64>
+    Exactly one of each pair is given. A bound column is computed from parameters and
+    literals, by ops that may raise, or holds one value for every row, as the db.row_constant
+    reading an argument of a body run once per row does. A search reading a value of each
+    row runs in such a body: `MATCH (n) VECTOR SEARCH IN vec1 FOR 3 n.e` hands n.e to a
+    db.call_subquery and searches once per row it is handed. A bound index name that is no
+    string naming an index, a bound count that is no integer of at least 1, and a bound
+    query vector that is no embedding fail the search when it runs.
 
     The two results are row-aligned, one row per neighbour, ordered nearest first:
     `ids` is the node the index holds each vector under - the ID a `LOAD VECTOR` row
@@ -467,11 +468,12 @@ def VectorSearch : TuringOp<"vector_search", [Pure, AttrSizedOperandSegments]> {
     holds rather than the IR, so the search itself reports a mismatch. Reading the index
     is a deterministic read, so the op is Pure. With incoming rows
     (VECTOR SEARCH ... YIELD ids MATCH (n)) it is crossed with them through
-    db.cross_product; there is no variant of this op that searches once per row.
+    db.cross_product.
   }];
 
   // The index to search, how many neighbours to report, and the vector to search for.
-  let arguments = (ins StrAttr:$index_name,
+  let arguments = (ins OptionalAttr<StrAttr>:$index_name,
+                       Optional<Column>:$bound_index_name,
                        OptionalAttr<UI64Attr>:$k,
                        Optional<Column>:$bound_k,
                        OptionalAttr<DenseF32ArrayAttr>:$query_vector,
@@ -482,7 +484,8 @@ def VectorSearch : TuringOp<"vector_search", [Pure, AttrSizedOperandSegments]> {
   // The parameters print inside the parens ahead of the colon, as db.const_scan_nodes
   // prints its IDs; the two result types follow, qualified, as db.scan_edges prints its.
   let assemblyFormat = [{
-    `(` $index_name `,` custom<BoundCount>($k, $bound_k, type($bound_k)) `,`
+    `(` custom<BoundString>($index_name, $bound_index_name, type($bound_index_name)) `,`
+    custom<BoundCount>($k, $bound_k, type($bound_k)) `,`
     custom<QueryVector>($query_vector, $bound_query_vector, type($bound_query_vector)) `)`
     attr-dict `:` qualified(type($ids)) `,` qualified(type($scores))
   }];

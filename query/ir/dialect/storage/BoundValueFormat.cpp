@@ -23,25 +23,25 @@ OptionalParseResult parseBoundValue(OpAsmParser& parser,
 
 }
 
-ParseResult mlir::parseCSVPath(OpAsmParser& parser,
-                               StringAttr& path,
-                               std::optional<OpAsmParser::UnresolvedOperand>& boundPath,
-                               Type& boundType) {
-    const OptionalParseResult parsedBound = parseBoundValue(parser, boundPath, boundType);
+ParseResult mlir::parseBoundString(OpAsmParser& parser,
+                                   StringAttr& string,
+                                   std::optional<OpAsmParser::UnresolvedOperand>& boundString,
+                                   Type& boundType) {
+    const OptionalParseResult parsedBound = parseBoundValue(parser, boundString, boundType);
     if (parsedBound.has_value()) {
         return *parsedBound;
     }
 
-    return parser.parseAttribute(path);
+    return parser.parseAttribute(string);
 }
 
-void mlir::printCSVPath(OpAsmPrinter& printer, Operation* op, StringAttr path, Value boundPath, Type boundType) {
-    if (boundPath) {
-        printer << boundPath << " : " << boundType;
+void mlir::printBoundString(OpAsmPrinter& printer, Operation* op, StringAttr string, Value boundString, Type boundType) {
+    if (boundString) {
+        printer << boundString << " : " << boundType;
         return;
     }
 
-    printer.printAttribute(path);
+    printer.printAttribute(string);
 }
 
 ParseResult mlir::parseBoundCount(OpAsmParser& parser,

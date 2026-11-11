@@ -201,6 +201,7 @@ private:
         // and _listedIDs, views into the op's interned attribute storage, which the
         // MLIRContext keeps alive for the whole execution.
         llvm::StringRef _indexName;
+        mlir::Value _boundIndexName;
         size_t _neighbourCount {0};
         mlir::Value _boundNeighbourCount;
         llvm::ArrayRef<float> _queryVector;

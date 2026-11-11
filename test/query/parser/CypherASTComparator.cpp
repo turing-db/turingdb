@@ -1440,7 +1440,7 @@ bool CypherASTComparator::compareLoadCSVStmt(const LoadCSVStmt* expected, const 
 }
 
 bool CypherASTComparator::compareVectorSearchStmt(const VectorSearchStmt* expected, const VectorSearchStmt* actual) {
-    return compareString("indexName", expected->getIndexName(), actual->getIndexName())
+    return compareExpr("index", expected->getIndex(), actual->getIndex())
            && compareExpr("k", expected->getK(), actual->getK())
            && compareExpr("queryVector", expected->getQueryVector(), actual->getQueryVector())
            && compareYieldClause("yield", expected->getYield(), actual->getYield());

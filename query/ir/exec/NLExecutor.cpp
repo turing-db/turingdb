@@ -1546,18 +1546,73 @@ void appendBoundIDs(std::span<const Column* const> boundIDs,
     }
 }
 
+// The value of T a search reads off @param bound when its loop starts: a T, or a cell of
+// @param tag holding one. A null, and a cell of another kind, fail the search, naming
+// @param operand and the @param type it must be.
+template <typename T>
+T readSearchedValue(const Column* bound, CellTag tag, std::string_view operand, std::string_view type) {
+    std::optional<T> value;
+    std::optional<CellView> cell;
+    CellTag held = CellTag::Null;
+
+    if (readBoundConstant(bound, cell)) {
+        held = cell ? cell->getTag() : CellTag::Null;
+        if (held == tag) {
+            value = cell->getAs<T>();
+        }
+    } else {
+        const bool readsAValue = readBoundConstant(bound, value);
+        bioassert(readsAValue, "A bound {} holds one value or one cell for the run", operand);
+    }
+
+    if (!value) {
+        throw IRException(fmt::format("VECTOR SEARCH {} must be {}, got {}", operand, type, queryTypeName(held)));
+    }
+
+    return *value;
+}
+
+std::string_view searchedIndexName(const NLVectorSearchLoopData& loopData) {
+    const Column* bound = loopData.getBoundIndexName();
+    if (!bound) {
+        return loopData.getIndexName();
+    }
+
+    return readSearchedValue<types::String::Primitive>(bound, CellTag::String, "index name", "a String");
+}
+
 size_t searchedNeighbourCount(const NLVectorSearchLoopData& loopData) {
-    const ColumnConst<types::Int64::Primitive>* bound = loopData.getBoundNeighbourCount();
+    const Column* bound = loopData.getBoundNeighbourCount();
     if (!bound) {
         return loopData.getNeighbourCount();
     }
 
-    const int64_t count = bound->getRaw();
+    std::optional<CellView> cell;
+    const bool holdsAnUnsignedCell = readBoundConstant(bound, cell) && cell && cell->getTag() == CellTag::UInt;
+    if (holdsAnUnsignedCell) {
+        const types::UInt64::Primitive count = cell->getAs<types::UInt64::Primitive>();
+        if (count == 0) {
+            throw IRException("VECTOR SEARCH k value must be greater than 0, got 0");
+        }
+
+        return static_cast<size_t>(count);
+    }
+
+    const types::Int64::Primitive count = readSearchedValue<types::Int64::Primitive>(bound, CellTag::Int, "k value", "an integer");
     if (count < 1) {
         throw IRException(fmt::format("VECTOR SEARCH k value must be greater than 0, got {}", count));
     }
 
     return static_cast<size_t>(count);
+}
+
+std::span<const float> searchedQueryVector(const NLVectorSearchLoopData& loopData) {
+    const Column* bound = loopData.getBoundQueryVector();
+    if (!bound) {
+        return loopData.getQueryVector();
+    }
+
+    return readSearchedValue<types::Embedding::Primitive>(bound, CellTag::Embedding, "query vector", "an Embedding");
 }
 
 // The position of each field a CSV load produces, in field order: the one it named, or
@@ -8490,7 +8545,13 @@ void NLExecutor::runLoadCSVLoop(NLExecutionContext* context, NLFunctionData* dat
 }
 
 void NLExecutor::searchVectorIndex(NLExecutionContext* context, NLVectorSearchLoopData* loopData) {
-    const std::string_view indexName = loopData->getIndexName();
+    const std::string_view indexName = searchedIndexName(*loopData);
+    const size_t neighbourCount = searchedNeighbourCount(*loopData);
+    const std::span<const float> queryVector = searchedQueryVector(*loopData);
+
+    if (loopData->hasSearched(indexName, neighbourCount, queryVector)) {
+        return;
+    }
 
     vec::VectorDatabase* const vectorDatabase = context->getVectorDatabase();
     if (!vectorDatabase) {
@@ -8505,7 +8566,6 @@ void NLExecutor::searchVectorIndex(NLExecutionContext* context, NLVectorSearchLo
     // The index reads the query vector as a flat span of exactly its dimension, so a
     // shorter one would be read past its end rather than rejected further down.
     const vec::Dimension dimension = accessor.metadata()->_dimension;
-    const std::span<const float> queryVector = loopData->getQueryVector();
     if (queryVector.size() != dimension) {
         throw IRException(fmt::format("Vector index '{}' holds vectors of dimension {}, but the "
                                       "query searches for one of dimension {}",
@@ -8516,7 +8576,7 @@ void NLExecutor::searchVectorIndex(NLExecutionContext* context, NLVectorSearchLo
 
     vec::VectorSearchQuery query(dimension);
     query.setVector(queryVector);
-    query.setMaxResultCount(searchedNeighbourCount(*loopData));
+    query.setMaxResultCount(neighbourCount);
 
     vec::VectorSearchResult result;
     const vec::VectorResult<void> searched = accessor.search(&query, &result);
@@ -8545,7 +8605,7 @@ void NLExecutor::searchVectorIndex(NLExecutionContext* context, NLVectorSearchLo
     neighbourScores.resize(distances.size());
     std::copy(distances.begin(), distances.end(), neighbourScores.begin());
 
-    loopData->markSearched();
+    loopData->markSearched(indexName, neighbourCount, queryVector);
 }
 
 void NLExecutor::runVectorSearchLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -8563,9 +8623,7 @@ void NLExecutor::runVectorSearchLoop(NLExecutionContext* context, NLFunctionData
     // The reader lock the accessor holds lives no longer than the search itself, so a
     // concurrent LOAD VECTOR into this index waits for the search rather than for the
     // whole query the neighbours feed.
-    if (!loopData->hasSearched()) {
-        searchVectorIndex(context, loopData);
-    }
+    searchVectorIndex(context, loopData);
 
     const std::span<const NodeID> ids = loopData->neighbourIDs();
     const std::span<const std::optional<types::Double::Primitive>> scores = loopData->neighbourScores();

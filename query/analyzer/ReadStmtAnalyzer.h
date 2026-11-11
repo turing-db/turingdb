@@ -102,6 +102,8 @@ private:
     // by every statement that yields, since what a yield binds is what the predicate reads.
     void analyzeYieldFilter(const YieldItems* yieldItems);
 
+    void analyzeVectorSearchOperand(Expr* operand, const VectorSearchStmt* stmt);
+
     // Rejects a FOREACH over a literal that is no list, which Neo4j types as an error
     // where UNWIND spreads the value into one row. A null iterates no row.
     void throwOnNonListForeachLiteral(const Expr* arg) const;

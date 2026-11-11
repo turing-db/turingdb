@@ -239,7 +239,7 @@ private:
     llvm::DenseMap<mlir::Operation*, mlir::db::Limit> _sortTopK;   // db.sort -> fused db.limit
     llvm::DenseSet<mlir::Operation*> _fusedLimits;                  // db.limits fused into a sort
 
-    // The db ops lowerBoundCountsAhead lowered before the walk over their block reached them
+    // The db ops lowerBoundValuesAhead lowered before the walk over their block reached them
     llvm::DenseSet<mlir::Operation*> _loweredAhead;
 
     void lowerOperation(mlir::Operation& operation);
@@ -283,12 +283,13 @@ private:
 
     void eraseOp(mlir::Operation* operation);
 
-    // Lowers the ops computing the bound count of every db.limit and db.skip at the top of
-    // the function, each once, before the walk reaches them. A count reads no row and the
-    // handle reading it sits above the loops it cuts, and an op of it that raises raises
-    // there, whatever rows the query reads.
-    void lowerBoundCountsAhead(mlir::func::FuncOp dbFunction);
-    void lowerCountAhead(mlir::Value count);
+    // Lowers the ops computing the bound count of every db.limit and db.skip, and every
+    // bound value of a db.vector_search that reads no row, at the top of the function, each
+    // once, before the walk reaches them. Such a value holds one value for the run, read by
+    // a handle or a loop above the rows, and an op of it that raises raises there, whatever
+    // rows the query reads.
+    void lowerBoundValuesAhead(mlir::func::FuncOp dbFunction);
+    void lowerValueAhead(mlir::Value bound);
 
     // Point the builder at the start of @param block, past the op defining @param count
     // where @param block holds it

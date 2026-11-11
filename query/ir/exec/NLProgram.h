@@ -702,12 +702,13 @@ private:
     NLStmtContainer _stmts;
 };
 
-// The neighbour sibling of NLUnwindConstLoopData: runs one search against a vector index
-// and streams the neighbours it found one chunk at a time, into the node ID column of the
-// nodes the index holds the vectors under and a nullable f64 column of the distances they
-// scored. The index name and the query vector, unless bound when the query runs, are views
-// into the module's attribute storage, which the MLIRContext keeps alive for the whole
-// execution. A plain source, so a downstream LIMIT can bound it.
+// The neighbour sibling of NLUnwindConstLoopData: runs a search against a vector index and
+// streams the neighbours it found one chunk at a time, into the node ID column of the nodes
+// the index holds the vectors under and a nullable f64 column of the distances they scored.
+// The index name, the neighbour count and the query vector are the ones the query spells -
+// views into the module's attribute storage, which the MLIRContext keeps alive for the whole
+// execution - or the values the bound columns hold when the loop starts. A plain source, so
+// a downstream LIMIT can bound it.
 class NLVectorSearchLoopData : public NLFunctionData {
 public:
     NLVectorSearchLoopData(ColumnNodeIDs* ids,
@@ -727,11 +728,16 @@ public:
     Column* getScores() const { return _scores; }
     std::string_view getIndexName() const { return _indexName; }
     size_t getNeighbourCount() const { return _neighbourCount; }
-    std::span<const float> getQueryVector() const { return _boundQueryVector ? _boundQueryVector->getRaw() : _queryVector; }
-    void setBoundQueryVector(const ColumnConst<types::Embedding::Primitive>* queryVector) { _boundQueryVector = queryVector; }
+    std::span<const float> getQueryVector() const { return _queryVector; }
 
-    const ColumnConst<types::Int64::Primitive>* getBoundNeighbourCount() const { return _boundNeighbourCount; }
-    void setBoundNeighbourCount(const ColumnConst<types::Int64::Primitive>* count) { _boundNeighbourCount = count; }
+    const Column* getBoundIndexName() const { return _boundIndexName; }
+    void setBoundIndexName(const Column* indexName) { _boundIndexName = indexName; }
+
+    const Column* getBoundNeighbourCount() const { return _boundNeighbourCount; }
+    void setBoundNeighbourCount(const Column* count) { _boundNeighbourCount = count; }
+
+    const Column* getBoundQueryVector() const { return _boundQueryVector; }
+    void setBoundQueryVector(const Column* queryVector) { _boundQueryVector = queryVector; }
 
     NLLimitState* getLimit() const { return _limit; }
     void setLimit(NLLimitState* limit) { _limit = limit; }
@@ -739,12 +745,12 @@ public:
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
 
-    // The neighbours the index reported, nearest first, in the types the two chunks
-    // carry. The search reads no column and its op is Pure, so one search answers every
-    // step: a loop re-entered from an enclosing cross product slices these again rather
-    // than asking the index a second time.
-    bool hasSearched() const { return _searched; }
-    void markSearched() { _searched = true; }
+    // The neighbours the last search reported, nearest first, in the types the two chunks
+    // carry. The search is a function of what it searches with, so a loop re-entered over
+    // the same index name, count and vector - from an enclosing cross product, or a row
+    // holding the same ones - slices these again rather than asking the index a second time.
+    bool hasSearched(std::string_view indexName, size_t neighbourCount, std::span<const float> queryVector) const;
+    void markSearched(std::string_view indexName, size_t neighbourCount, std::span<const float> queryVector);
 
     std::vector<NodeID>& neighbourIDs() { return _neighbourIDs; }
     std::vector<std::optional<types::Double::Primitive>>& neighbourScores() { return _neighbourScores; }
@@ -754,12 +760,16 @@ private:
     Column* _scores {nullptr};
     std::string_view _indexName;
     size_t _neighbourCount {0};
-    const ColumnConst<types::Int64::Primitive>* _boundNeighbourCount {nullptr};
     std::span<const float> _queryVector;
-    const ColumnConst<types::Embedding::Primitive>* _boundQueryVector {nullptr};
+    const Column* _boundIndexName {nullptr};
+    const Column* _boundNeighbourCount {nullptr};
+    const Column* _boundQueryVector {nullptr};
     NLLimitState* _limit {nullptr};
     std::vector<NodeID> _neighbourIDs;
     std::vector<std::optional<types::Double::Primitive>> _neighbourScores;
+    std::string _searchedIndexName;
+    size_t _searchedNeighbourCount {0};
+    std::vector<float> _searchedVector;
     bool _searched {false};
     NLStmtContainer _stmts;
 };

@@ -657,16 +657,27 @@ VarDecl* ReadStmtAnalyzer::declareGroupVariable(DeclContext* outer, EvaluatedTyp
 }
 
 void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
-    Expr* neighbourCount = stmt->getK();
-    _exprAnalyzer->analyzeRootExpr(neighbourCount);
+    Expr* index = stmt->getIndex();
+    analyzeVectorSearchOperand(index, stmt);
 
-    if (neighbourCount->getType() != EvaluatedType::Integer) {
+    const EvaluatedType indexType = index->getType();
+    if (indexType != EvaluatedType::String && indexType != EvaluatedType::Any) {
+        throwError(fmt::format("VECTOR SEARCH index name must be a String, got {}",
+                               EvaluatedTypeName::value(indexType)),
+                   stmt);
+    }
+
+    Expr* neighbourCount = stmt->getK();
+    analyzeVectorSearchOperand(neighbourCount, stmt);
+
+    const EvaluatedType neighbourCountType = neighbourCount->getType();
+    if (neighbourCountType != EvaluatedType::Integer && neighbourCountType != EvaluatedType::Any) {
         throwError("VECTOR SEARCH k value must be an integer", stmt);
     }
 
     if (neighbourCount->getKind() == Expr::Kind::LITERAL) {
         const Literal* literal = static_cast<const LiteralExpr*>(neighbourCount)->getLiteral();
-        if (static_cast<const IntegerLiteral*>(literal)->getValue() == 0) {
+        if (static_cast<const IntegerLiteral*>(literal)->getValue() < 1) {
             throwError("VECTOR SEARCH k value must be greater than 0", stmt);
         }
     }
@@ -676,10 +687,10 @@ void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
         throwError("VECTOR SEARCH query vector cannot be empty", stmt);
     }
 
-    _exprAnalyzer->analyzeRootExpr(queryVector);
+    analyzeVectorSearchOperand(queryVector, stmt);
 
     const EvaluatedType queryVectorType = queryVector->getType();
-    if (queryVectorType != EvaluatedType::Embedding) {
+    if (queryVectorType != EvaluatedType::Embedding && queryVectorType != EvaluatedType::Any) {
         throwError(fmt::format("VECTOR SEARCH query vector must be an Embedding, got {}",
                                EvaluatedTypeName::value(queryVectorType)),
                    stmt);
@@ -736,6 +747,14 @@ void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
     }
 
     analyzeYieldFilter(yieldItems);
+}
+
+void ReadStmtAnalyzer::analyzeVectorSearchOperand(Expr* operand, const VectorSearchStmt* stmt) {
+    _exprAnalyzer->analyzeRootExpr(operand);
+
+    if (operand->isAggregate()) {
+        throwError("Invalid use of aggregate expression in this context", stmt);
+    }
 }
 
 void ReadStmtAnalyzer::analyze(ShortestPathStmt* spSt) {

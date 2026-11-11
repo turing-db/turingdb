@@ -16,6 +16,7 @@
 #include "expr/EntityTypeExpr.h"
 #include "expr/ExprChain.h"
 #include "expr/FunctionInvocationExpr.h"
+#include "expr/LiteralExpr.h"
 #include "expr/PropertyExpr.h"
 #include "expr/SymbolExpr.h"
 #include "stmt/CallStmt.h"
@@ -488,22 +489,39 @@ VectorSearchStmt* CypherGrammar::parseVectorSearchStmt() {
     expect(CypherTokenKind::SEARCH);
     expect(CypherTokenKind::IN);
 
-    Symbol* index = parseName();
+    Expr* index = parseVectorIndexExpr();
 
     expect(CypherTokenKind::FOR);
-    Expr* neighbourCount = parseLiteralOrParameterExpr(CypherTokenKind::DIGIT);
+    Expr* neighbourCount = parseExpr(ExprFollower::QUERY_VECTOR);
 
-    Expr* queryVector = parseLiteralOrParameterExpr(CypherTokenKind::OPAREN);
+    Expr* queryVector = parseExpr(ExprFollower::NONE);
     YieldClause* yield = parseYieldClause();
 
     VectorSearchStmt* stmt = VectorSearchStmt::create(_ast);
-    stmt->setIndexName(index->getName());
+    stmt->setIndex(index);
     stmt->setK(neighbourCount);
     stmt->setQueryVector(queryVector);
     stmt->setYield(yield);
     locate(stmt, start);
 
     return stmt;
+}
+
+// A bare name is the index's own name, as LOAD VECTOR spells it, whatever variable it may
+// also name. Anything else is an expression the name is computed from.
+Expr* CypherGrammar::parseVectorIndexExpr() {
+    const bool namesTheIndex = checkName() && peek(1)._kind == CypherTokenKind::FOR;
+    if (!namesTheIndex) {
+        return parseExpr(ExprFollower::NONE);
+    }
+
+    const SourcePosition start = currentPosition();
+    Symbol* name = parseName();
+
+    Expr* index = LiteralExpr::create(_ast, StringLiteral::create(_ast, name->getName()));
+    locate(index, start);
+
+    return index;
 }
 
 CallStmt* CypherGrammar::parseCallStmt() {

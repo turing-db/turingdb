@@ -656,6 +656,24 @@ LogicalResult verifyCutCount(Operation* op, std::optional<uint64_t> count, Value
     return success();
 }
 
+// A value a db.vector_search reads when it starts: one value for every row the search is
+// paired with, computed from parameters and literals or read off the row a body runs for.
+// A cell, or an element lowering resolves, is checked when the search starts.
+LogicalResult verifySearchedValue(Operation* op, llvm::StringRef name, Value bound, Type element) {
+    if (!bound) {
+        return success();
+    }
+
+    const Type boundElement = columnElement(bound);
+    if (boundElement != element && !isa<NoneType, storage::AnyType>(boundElement)) {
+        return op->emitOpError("requires a bound ") << name << " of type " << element << " or !storage.any, got " << boundElement;
+    } else if (!::db::readsNoRow(bound) && !::db::yieldsConstantColumn(bound)) {
+        return op->emitOpError("requires a bound ") << name << " holding one value for every row";
+    }
+
+    return success();
+}
+
 // The hop region of one step of an explore_paths: one block over the nodes and edges of the
 // repetition up to the step's end node yielding a boolean column, reading nothing defined
 // outside it but constants
@@ -2776,17 +2794,17 @@ LogicalResult LoadCSV::verify() {
 // nothing: neither is a shape the index can be asked for, so both are rejected here rather
 // than left to return an empty result the query would read as "no match".
 LogicalResult VectorSearch::verify() {
+    const Value boundIndexName = getBoundIndexName();
+    if (getIndexName().has_value() == static_cast<bool>(boundIndexName)) {
+        return emitOpError("requires either an index name or a bound one");
+    }
+
     const std::optional<uint64_t> neighbourCount = getK();
     const Value boundCount = getBoundK();
     if (neighbourCount.has_value() == static_cast<bool>(boundCount)) {
         return emitOpError("requires either a neighbour count or a bound one");
     } else if (neighbourCount == 0) {
         return emitOpError("must report at least one neighbour");
-    }
-
-    const Type boundType = boundCount ? cast<ColumnType>(boundCount.getType()).getType() : Type();
-    if (boundType && !boundType.isSignlessInteger(64)) {
-        return emitOpError("requires a bound neighbour count of type i64, got ") << boundType;
     }
 
     const std::optional<llvm::ArrayRef<float>> queryVector = getQueryVector();
@@ -2797,12 +2815,14 @@ LogicalResult VectorSearch::verify() {
         return emitOpError("must search for a vector of at least one dimension");
     }
 
-    const Type queryVectorType = boundQueryVector ? cast<ColumnType>(boundQueryVector.getType()).getType() : Type();
-    if (queryVectorType && !isa<storage::EmbeddingType>(queryVectorType)) {
-        return emitOpError("requires a bound query vector of type !storage.embedding, got ") << queryVectorType;
-    }
+    Operation* const op = getOperation();
+    MLIRContext* const context = getContext();
 
-    return success();
+    const bool boundValuesVerify = succeeded(verifySearchedValue(op, "index name", boundIndexName, storage::StringType::get(context)))
+                                && succeeded(verifySearchedValue(op, "neighbour count", boundCount, IntegerType::get(context, 64)))
+                                && succeeded(verifySearchedValue(op, "query vector", boundQueryVector, storage::EmbeddingType::get(context)));
+
+    return success(boundValuesVerify);
 }
 
 // The region's entry block stands for the rows in flight: one argument per input

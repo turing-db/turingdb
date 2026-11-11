@@ -615,7 +615,7 @@ LoadCSVStmt* ExpectedASTTest::loadCSV(const LoadCSVFields& fields) {
 
 VectorSearchStmt* ExpectedASTTest::vectorSearch(const VectorSearchFields& fields) {
     VectorSearchStmt* stmt = VectorSearchStmt::create(_expected.get());
-    stmt->setIndexName(fields._index);
+    stmt->setIndex(fields._index);
     stmt->setK(fields._neighbours);
     stmt->setQueryVector(fields._queryVector);
     stmt->setYield(fields._yield);

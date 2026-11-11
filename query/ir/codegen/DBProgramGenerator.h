@@ -924,7 +924,29 @@ private:
     void generateMatchWindow(const MatchStmt* matchStmt);
     void generateCall(const CallStmt* callStmt);
 
+    // What a db.vector_search searches with: the index name, the neighbour count and the
+    // query vector, each the attribute a literal spells or the column computing it
+    struct VectorSearchOperands {
+        mlir::StringAttr _indexName;
+        mlir::IntegerAttr _neighbourCount;
+        mlir::DenseF32ArrayAttr _queryVector;
+        mlir::Value _boundIndexName;
+        mlir::Value _boundNeighbourCount;
+        mlir::Value _boundQueryVector;
+    };
+
+    // A search whose operands read no row is crossed with the rows in flight. One reading
+    // the row runs once per row, in the body of a db.call_subquery handed its operands.
     void generateVectorSearch(const VectorSearchStmt* vectorSearchStmt);
+    void translateVectorSearchOperands(const VectorSearchStmt* vectorSearchStmt, VectorSearchOperands& operands);
+    mlir::db::VectorSearch createVectorSearch(const VectorSearchOperands& operands);
+    void generateCrossedVectorSearch(const YieldItems* yieldItems,
+                                     const VectorSearchOperands& operands,
+                                     const InFlightColumns& inFlight);
+    void generatePerRowVectorSearch(const YieldItems* yieldItems,
+                                    const VectorSearchOperands& operands,
+                                    llvm::ArrayRef<mlir::Value> rowValues,
+                                    const InFlightColumns& inFlight);
 
     // Emits the source op a LOAD CSV opens its rows with, one column per field the query
     // reads, and names each of them as the query knows it. A load reading a file that the
@@ -961,6 +983,11 @@ private:
     // carries no column for it and its definition has to stay where the ops after the
     // product can still read it.
     void hoistConstantsOutOfLeftFactor(mlir::db::CrossProduct crossProduct);
+
+    // Move the ops computing @param values that the left factor swallowed into the right
+    // factor, which reads them. None of them reads what the left factor yields, so the
+    // chains behind them move across intact, in their original order.
+    void moveIntoRightFactor(mlir::db::CrossProduct crossProduct, mlir::ValueRange values);
 
     // Whether a column holds the rows flowing past the current insertion point, which is
     // what an op consuming a whole row set needs of each of its operands.

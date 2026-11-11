@@ -189,7 +189,7 @@ def LoadCSV : NLOp<"load_csv", [Pure]> {
   let results   = (outs NLIterator:$result);
   let hasVerifier = 1;
   let assemblyFormat = [{
-    `(` custom<CSVPath>($path, $bound_path, type($bound_path)) `,` $fields `)`
+    `(` custom<BoundString>($path, $bound_path, type($bound_path)) `,` $fields `)`
     (`with_headers` $with_headers^)? (`skip_on_error` $skip_on_error^)?
     attr-dict `:` qualified(type($result))
   }];
@@ -210,9 +210,13 @@ def VectorSearch : NLOp<"vector_search", [Pure, InferTypeOpAdaptor, AttrSizedOpe
         : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<f64>>>
 
     The parameters are the ones db.vector_search carried, forwarded as-is, a bound
-    neighbour count or query vector as the chunk holding it:
+    index name, neighbour count or query vector as the chunk holding it:
 
-      %n = nl.vector_search("vec1", %k : !nl.chunk<i64>, %v : !nl.chunk<!storage.embedding>)
+      %n = nl.vector_search(%idx : !nl.chunk<!storage.string>, %k : !nl.chunk<i64>,
+                            %v : !nl.chunk<!storage.embedding>)
+
+    The search runs again when the loop starts over values other than the last search's,
+    as it does once per row in the body of a subquery run once per row.
 
     The search runs against the session's vector indexes, which is the one thing a loop
     of this family reads outside the graph. Like nl.unwind_const it reads no row and
@@ -223,14 +227,16 @@ def VectorSearch : NLOp<"vector_search", [Pure, InferTypeOpAdaptor, AttrSizedOpe
     than spelled.
   }];
 
-  let arguments = (ins StrAttr:$index_name,
+  let arguments = (ins OptionalAttr<StrAttr>:$index_name,
+                       Optional<NLChunk>:$bound_index_name,
                        OptionalAttr<UI64Attr>:$k,
                        Optional<NLChunk>:$bound_k,
                        OptionalAttr<DenseF32ArrayAttr>:$query_vector,
                        Optional<NLChunk>:$bound_query_vector);
   let results   = (outs NLIterator:$result);
   let assemblyFormat = [{
-    `(` $index_name `,` custom<BoundCount>($k, $bound_k, type($bound_k)) `,`
+    `(` custom<BoundString>($index_name, $bound_index_name, type($bound_index_name)) `,`
+    custom<BoundCount>($k, $bound_k, type($bound_k)) `,`
     custom<QueryVector>($query_vector, $bound_query_vector, type($bound_query_vector)) `)`
     attr-dict `:` qualified(type($result))
   }];

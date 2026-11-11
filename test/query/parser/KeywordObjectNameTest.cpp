@@ -18,9 +18,11 @@
 #include "LoadGraphQuery.h"
 #include "LoadJsonlQuery.h"
 #include "LoadParquetQuery.h"
+#include "Literal.h"
 #include "LoadVectorQuery.h"
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
+#include "expr/LiteralExpr.h"
 #include "stmt/StmtContainer.h"
 #include "stmt/VectorSearchStmt.h"
 
@@ -116,7 +118,12 @@ TEST_F(KeywordObjectNameTest, searchesAVectorIndexS3) {
     const QueryCommand* command = parseCommand("VECTOR SEARCH IN s3 FOR 1 (0.1, 0.2) YIELD ids RETURN ids", QueryCommand::Kind::SINGLE_PART_QUERY);
     const Stmt* search = static_cast<const SinglePartQuery*>(command)->getStmts()->stmts().front();
 
-    EXPECT_EQ(static_cast<const VectorSearchStmt*>(search)->getIndexName(), "s3");
+    const Expr* index = static_cast<const VectorSearchStmt*>(search)->getIndex();
+    ASSERT_EQ(index->getKind(), Expr::Kind::LITERAL);
+
+    const Literal* name = static_cast<const LiteralExpr*>(index)->getLiteral();
+    ASSERT_EQ(name->getKind(), Literal::Kind::STRING);
+    EXPECT_EQ(static_cast<const StringLiteral*>(name)->getValue(), "s3");
 }
 
 TEST_F(KeywordObjectNameTest, installsAnExtensionGraph) {

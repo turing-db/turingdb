@@ -3184,38 +3184,75 @@ TEST_F(ParseEdgeCaseTest, parsesEntityDetailsAndReadingClauses) {
                 "-------* syntax error, unexpected MATCH, expecting RETURN");
 
     expectParse("VECTOR SEARCH IN v FOR 3 (1, 2) YIELD ids RETURN ids",
-                {query({vectorSearch({._index = "v",
+                {query({vectorSearch({._index = string("v"),
                                       ._neighbours = integer(3),
                                       ._queryVector = literal(embedding({1.0f, 2.0f})),
                                       ._yield = yield({symbol("ids")})})},
                        returning({symbol("ids")}))});
 
     expectParse("VECTOR SEARCH IN v FOR $k (1, 2) YIELD ids RETURN ids",
-                {query({vectorSearch({._index = "v",
+                {query({vectorSearch({._index = string("v"),
                                       ._neighbours = parameter("k"),
                                       ._queryVector = literal(embedding({1.0f, 2.0f})),
                                       ._yield = yield({symbol("ids")})})},
                        returning({symbol("ids")}))});
 
     expectParse("VECTOR SEARCH IN v FOR 3 $q YIELD ids RETURN ids",
-                {query({vectorSearch({._index = "v",
+                {query({vectorSearch({._index = string("v"),
                                       ._neighbours = integer(3),
                                       ._queryVector = parameter("q"),
                                       ._yield = yield({symbol("ids")})})},
                        returning({symbol("ids")}))});
 
-    expectError("VECTOR SEARCH IN v FOR 3 [1, 2] YIELD ids",
-                "     1 | VECTOR SEARCH IN v FOR 3 [1, 2] YIELD ids\n"
-                "       |                          ^\n"
-                "-------* syntax error, unexpected OBRACK, expecting OPAREN or DOLLAR");
+    expectParse("VECTOR SEARCH IN v FOR 3 [1, 2] YIELD ids RETURN ids",
+                {query({vectorSearch({._index = string("v"),
+                                      ._neighbours = integer(3),
+                                      ._queryVector = list({integer(1), integer(2)}),
+                                      ._yield = yield({symbol("ids")})})},
+                       returning({symbol("ids")}))});
 
-    expectError("VECTOR SEARCH IN v FOR 3 (1) YIELD ids",
-                "     1 | VECTOR SEARCH IN v FOR 3 (1) YIELD ids\n"
-                "       |                            ^\n"
-                "-------* syntax error, unexpected CPAREN, expecting COMMA");
+    expectParse("VECTOR SEARCH IN $idx FOR $k + 1 $m.v YIELD ids RETURN ids",
+                {query({vectorSearch({._index = parameter("idx"),
+                                      ._neighbours = binary(BinaryOperator::Add, parameter("k"), integer(1)),
+                                      ._queryVector = lookup(parameter("m"), "v"),
+                                      ._yield = yield({symbol("ids")})})},
+                       returning({symbol("ids")}))});
+
+    expectParse("VECTOR SEARCH IN n.idx FOR k w YIELD ids RETURN ids",
+                {query({vectorSearch({._index = property({"n", "idx"}),
+                                      ._neighbours = symbol("k"),
+                                      ._queryVector = symbol("w"),
+                                      ._yield = yield({symbol("ids")})})},
+                       returning({symbol("ids")}))});
+
+    expectParse("VECTOR SEARCH IN v FOR k (1, 2) YIELD ids RETURN ids",
+                {query({vectorSearch({._index = string("v"),
+                                      ._neighbours = symbol("k"),
+                                      ._queryVector = literal(embedding({1.0f, 2.0f})),
+                                      ._yield = yield({symbol("ids")})})},
+                       returning({symbol("ids")}))});
+
+    expectParse("VECTOR SEARCH IN v FOR n.k (1, 2) YIELD ids RETURN ids",
+                {query({vectorSearch({._index = string("v"),
+                                      ._neighbours = property({"n", "k"}),
+                                      ._queryVector = literal(embedding({1.0f, 2.0f})),
+                                      ._yield = yield({symbol("ids")})})},
+                       returning({symbol("ids")}))});
+
+    expectParse("VECTOR SEARCH IN v FOR toInteger(k) (1, 2) YIELD ids RETURN ids",
+                {query({vectorSearch({._index = string("v"),
+                                      ._neighbours = invocation({"toInteger"}, {symbol("k")}),
+                                      ._queryVector = literal(embedding({1.0f, 2.0f})),
+                                      ._yield = yield({symbol("ids")})})},
+                       returning({symbol("ids")}))});
+
+    expectError("VECTOR SEARCH IN v FOR 3 (1, YIELD ids",
+                "     1 | VECTOR SEARCH IN v FOR 3 (1, YIELD ids\n"
+                "       |                              ^^^^^\n"
+                "-------* syntax error, unexpected YIELD, expecting SUB or DIGIT or DOUBLE");
 
     expectParse("VECTOR SEARCH IN v FOR 3 (-1.5, 2e3) YIELD *",
-                {query({vectorSearch({._index = "v",
+                {query({vectorSearch({._index = string("v"),
                                       ._neighbours = integer(3),
                                       ._queryVector = literal(embedding({-1.5f, 2000.0f})),
                                       ._yield = yieldAll()})})});

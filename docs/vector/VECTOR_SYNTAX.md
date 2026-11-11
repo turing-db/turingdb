@@ -75,15 +75,18 @@ Searches for the k nearest neighbors of a query vector in the specified index. T
 
 **Syntax:**
 ```
-VECTOR SEARCH IN <index_name> FOR <k> (<vector>) YIELD <variable> [, score]
+VECTOR SEARCH IN <index> FOR <k> <vector> YIELD <variable> [, score]
 ```
 
 **Parameters:**
-- `<index_name>` - Name of the vector index to search
-- `<k>` - Number of nearest neighbors to return (positive integer), or a parameter holding one
-- `<vector>` - Query vector as a parenthesised list of float values, or a parameter holding
-  an embedding. The Python clients send a 1-dimensional `numpy.float32` array as an
-  embedding and the JS client a `Float32Array`; a list of numbers is not an embedding
+- `<index>` - Name of the vector index to search, or an expression that evaluates to a
+  string naming one. A bare name is the index name, even where a variable has that name
+- `<k>` - Number of nearest neighbors to return: an expression that evaluates to a
+  positive integer
+- `<vector>` - Query vector: an expression that evaluates to an embedding, such as a
+  parenthesised list of float values, a parameter, a variable or a property. The Python
+  clients send a 1-dimensional `numpy.float32` array as an embedding and the JS client a
+  `Float32Array`; a list of numbers is not an embedding
 - `<variable>` - Variable name to hold the result nodes (typically `ids`)
 - `score` - Optional second yielded variable, the distance each neighbor scored
 
@@ -92,6 +95,13 @@ directly and an equality can compare a matched node to it. The query vector must
 as many elements as the index' dimension. A `YIELD ids AS <name>` renames what the
 search reports, which is what lets several searches stand side by side in one query.
 
+An index name, a `k` and a query vector computed from parameters and literals alone are
+computed once, and the search runs once for the whole query. One that reads a variable
+runs one search per row, and each row is paired with its own neighbors. A row whose
+search finds no neighbor produces no row. A null index name, `k` or query vector is an
+error. A `k` that is a variable directly before a parenthesised query vector is the count,
+not a function call: `FOR k (1.0, 0.0)`.
+
 **Examples:**
 ```cypher
 -- Find 10 nearest neighbors for a 4-dimensional query vector
@@ -99,6 +109,14 @@ VECTOR SEARCH IN test_index FOR 10 (0.256, 0.12, 0.12345, 0.89) YIELD ids RETURN
 
 -- The neighbour count and the query vector bound as parameters
 VECTOR SEARCH IN test_index FOR $k $vector YIELD ids RETURN ids
+
+-- The index name and the neighbour count computed from parameters
+VECTOR SEARCH IN $index FOR $k + 1 $vector YIELD ids RETURN ids
+
+-- One search per matched node, for the vector the node holds
+MATCH (d:Document)
+VECTOR SEARCH IN embeddings FOR 3 d.embedding YIELD ids
+RETURN d.title, ids
 
 -- Report the distance each neighbor scored alongside it
 VECTOR SEARCH IN test_index FOR 10 (0.256, 0.12, 0.12345, 0.89) YIELD ids, score

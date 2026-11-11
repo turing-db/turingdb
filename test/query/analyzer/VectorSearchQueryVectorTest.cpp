@@ -39,7 +39,7 @@ protected:
         CypherAST ast(_procedures.get(), "");
 
         VectorSearchStmt* statement = VectorSearchStmt::create(&ast);
-        statement->setIndexName(indexName);
+        statement->setIndex(LiteralExpr::create(&ast, StringLiteral::create(&ast, indexName)));
         statement->setK(LiteralExpr::create(&ast, IntegerLiteral::create(&ast, 3)));
         statement->setQueryVector(queryVector);
 
