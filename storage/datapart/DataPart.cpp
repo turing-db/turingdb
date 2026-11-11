@@ -51,7 +51,6 @@ DataPart::~DataPart() = default;
 CommitResult<void> DataPart::load(const GraphView& view, JobSystem& jobSystem, DataPartBuilder& builder) {
     Profile profile("DataPart::load");
 
-    JobGroup jobs = jobSystem.newGroup();
     const auto reader = view.read();
 
     std::vector<LabelSetHandle>& coreNodeLabelSets = builder.coreNodeLabelSets();
@@ -130,6 +129,8 @@ CommitResult<void> DataPart::load(const GraphView& view, JobSystem& jobSystem, D
     _nodeStrPropIdx->buildIndex(nodesToIndex, tmpToFinalNodeIDs);
     _nodeStrPropIdx->setInitialised();
 #endif
+
+    JobGroup jobs = jobSystem.newGroup();
 
     for (const auto& [ptID, props] : *_nodeProperties) {
         jobs.submit<void>([&, ptID, props = props.get()] {
@@ -214,7 +215,7 @@ CommitResult<void> DataPart::load(const GraphView& view, JobSystem& jobSystem, D
             props->sort();
 
             LabelSetHandle prevLabelset;
-            auto& indexer = _edgeProperties->addIndexer(ptID);
+            auto& indexer = _edgeProperties->getIndexer(ptID);
             for (const auto& [offset, edgeID] : props->ids() | rv::enumerate) {
                 LabelSetHandle labelset;
                 if (edgeID >= _firstEdgeID.getValue()) {

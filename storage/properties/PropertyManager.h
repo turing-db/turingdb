@@ -215,8 +215,8 @@ public:
         return _containers.at(ptID)->ids();
     }
 
-    LabelSetPropertyIndexer& addIndexer(PropertyTypeID ptID) {
-        return _indexers.emplace(ptID, LabelSetPropertyIndexer {}).first->second;
+    void addIndexer(PropertyTypeID ptID) {
+        _indexers.emplace(ptID, LabelSetPropertyIndexer {});
     }
 
     LabelSetPropertyIndexer& getIndexer(PropertyTypeID ptID) {
