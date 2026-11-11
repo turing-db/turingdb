@@ -44,8 +44,10 @@ public:
 
         _buffer = other._buffer;
         _size = other._size;
+        _capacity = other._capacity;
         other._buffer = nullptr;
         other._size = 0;
+        other._capacity = 0;
     }
 
     AlignedBuffer& operator=(AlignedBuffer&& other) noexcept {
@@ -53,10 +55,14 @@ public:
             return *this;
         }
 
+        free(_buffer);
+
         _buffer = other._buffer;
         _size = other._size;
+        _capacity = other._capacity;
         other._buffer = nullptr;
         other._size = 0;
+        other._capacity = 0;
 
         return *this;
     }
