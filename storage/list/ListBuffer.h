@@ -82,6 +82,12 @@ public:
     ListView reverse(ListView list);
 
     /**
+     * @brief Stores @param elements, which may come from several lists, in their order as
+     * one new list in contiguous storage and returns a @ref ListView over it.
+     */
+    ListView gather(std::span<const CellView> elements);
+
+    /**
      * @brief Stores the elements of @param list - the elements of a nested list among them
      * - as one new list in this buffer and returns a @ref ListView over the copy.
      *
@@ -107,6 +113,9 @@ private:
 
     /// Returns the value @param element holds, a nested list copied into this buffer
     ListItemVariant ownedItem(CellView element);
+
+    template <typename Elements>
+    ListView writeElements(const Elements& elements);
 };
 
 // Default size; alias to avoid ugly empty template

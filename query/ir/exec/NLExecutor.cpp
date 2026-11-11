@@ -5944,6 +5944,65 @@ std::optional<ListView> optConstTaggedListRead(const Column* input, size_t) {
     return cellListRead(*cell);
 }
 
+struct SortField {
+    std::string_view _key;
+    bool _ascending {false};
+};
+
+void readSortFields(const ListView names, std::vector<SortField>& fields) {
+    fields.clear();
+
+    for (const CellView name : names) {
+        if (name.getTag() != CellTag::String) {
+            throw IRException("coll.sortMulti sorts on fields named by strings");
+        }
+
+        const std::string_view text = name.getAs<types::String::Primitive>();
+        const bool ascending = text.starts_with('^');
+
+        fields.push_back(SortField {._key = ascending ? text.substr(1) : text, ._ascending = ascending});
+    }
+}
+
+std::optional<CellView> sortKey(const MapView map, const std::string_view key) {
+    MapEntryView entry;
+    if (!findMapEntry(map, key, entry)) {
+        return std::nullopt;
+    }
+
+    const CellView value = entry.getValue();
+    if (value.getTag() == CellTag::Null) {
+        return std::nullopt;
+    }
+
+    return value;
+}
+
+// A missing key is a null, which APOC's sortMulti orders before every value
+std::strong_ordering orderOnKeys(std::span<const std::optional<CellView>> lhs,
+                                 std::span<const std::optional<CellView>> rhs,
+                                 std::span<const SortField> fields) {
+    for (size_t field = 0; field < fields.size(); field++) {
+        const std::optional<CellView>& lhsKey = lhs[field];
+        const std::optional<CellView>& rhsKey = rhs[field];
+
+        std::strong_ordering order = std::strong_ordering::equal;
+        if (lhsKey && rhsKey) {
+            order = *lhsKey <=> *rhsKey;
+        } else if (lhsKey) {
+            order = std::strong_ordering::greater;
+        } else if (rhsKey) {
+            order = std::strong_ordering::less;
+        }
+
+        if (order != 0) {
+            return fields[field]._ascending ? order : 0 <=> order;
+        }
+    }
+
+    return std::strong_ordering::equal;
+}
+
 template <typename ColumnT>
 NLContainer listContainer(const Column* input, size_t row) {
     const std::optional<ListView> list = (*static_cast<const ColumnT*>(input))[row];
@@ -9757,6 +9816,111 @@ void NLExecutor::runListSlice(NLExecutionContext*, NLFunctionData* data) {
         const size_t count = end > first ? static_cast<size_t>(end - first) : 0;
 
         outputRaw.push_back(elements->slice(static_cast<size_t>(first), count));
+    }
+}
+
+void NLExecutor::runSortMulti(NLExecutionContext*, NLFunctionData* data) {
+    const NLSortMultiData* sortMulti = static_cast<NLSortMultiData*>(data);
+
+    const Column* const list = sortMulti->getList();
+    const NLListReadFunction listRead = sortMulti->getListRead();
+    const Column* const fields = sortMulti->getFields();
+    const NLListReadFunction fieldsRead = sortMulti->getFieldsRead();
+    const NLRangeBound& limit = sortMulti->getLimit();
+    const NLRangeBound& skip = sortMulti->getSkip();
+
+    NLStepBuffers* const stepBuffers = sortMulti->getStepBuffers();
+    stepBuffers->clear();
+
+    ListBuffer<>& listBuffer = stepBuffers->listBuffer();
+
+    const size_t rowCount = list->size();
+
+    std::vector<std::optional<ListView>>& outputRaw =
+        static_cast<ColumnOptVector<ListView>*>(sortMulti->getResult())->getRaw();
+    outputRaw.resize(rowCount);
+
+    std::vector<SortField> sortFields;
+    std::span<const CellView> parsedNames;
+    std::vector<std::optional<CellView>> sortKeys;
+    std::vector<size_t> order;
+    std::vector<CellView> sorted;
+
+    for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        const std::optional<ListView> elements = listRead(list, rowIndex);
+        const std::optional<ListView> names = fields ? fieldsRead(fields, rowIndex) : std::optional<ListView> {ListView {}};
+
+        const std::optional<types::Int64::Primitive> kept =
+            limit._column ? limit._read(limit._column, rowIndex) : std::optional<types::Int64::Primitive> {-1};
+
+        const std::optional<types::Int64::Primitive> skipped =
+            skip._column ? skip._read(skip._column, rowIndex) : std::optional<types::Int64::Primitive> {0};
+
+        const bool readsANull = !elements || !names || !kept || !skipped;
+        if (readsANull) {
+            outputRaw[rowIndex] = std::nullopt;
+            continue;
+        } else if (*skipped < 0) {
+            throw IRException("coll.sortMulti cannot skip a negative count");
+        }
+
+        const std::span<const CellView> nameElements = names->elements();
+        const bool namesOtherFields = nameElements.data() != parsedNames.data() || nameElements.size() != parsedNames.size();
+        if (namesOtherFields) {
+            readSortFields(*names, sortFields);
+            parsedNames = nameElements;
+        }
+
+        const std::span<const CellView> maps = elements->elements();
+        const size_t size = maps.size();
+        const size_t fieldCount = sortFields.size();
+
+        const size_t first = std::min(size, static_cast<size_t>(*skipped));
+        const size_t remaining = size - first;
+        const size_t count = *kept < 0 ? remaining : std::min(remaining, static_cast<size_t>(*kept));
+
+        if (fieldCount == 0) {
+            outputRaw[rowIndex] = elements->slice(first, count);
+            continue;
+        }
+
+        sortKeys.resize(size * fieldCount);
+
+        for (size_t position = 0; position < size; position++) {
+            const CellView element = maps[position];
+            const CellTag tag = element.getTag();
+            const std::span<std::optional<CellView>> keysOfElement {sortKeys.data() + position * fieldCount, fieldCount};
+
+            // A key read off null is null, as `null.a` is
+            if (tag == CellTag::Null) {
+                std::ranges::fill(keysOfElement, std::nullopt);
+                continue;
+            } else if (tag != CellTag::MapView) {
+                throw IRException(fmt::format("coll.sortMulti sorts a list of maps, not of '{}'", queryTypeName(tag)));
+            }
+
+            const MapView map = element.getAs<MapView>();
+            for (size_t field = 0; field < fieldCount; field++) {
+                keysOfElement[field] = sortKey(map, sortFields[field]._key);
+            }
+        }
+
+        order.resize(size);
+        std::iota(order.begin(), order.end(), size_t {0});
+
+        const std::span<const std::optional<CellView>> keys {sortKeys};
+        std::ranges::stable_sort(order, [&keys, &sortFields, fieldCount](size_t lhs, size_t rhs) {
+            return orderOnKeys(keys.subspan(lhs * fieldCount, fieldCount),
+                               keys.subspan(rhs * fieldCount, fieldCount),
+                               sortFields) < 0;
+        });
+
+        sorted.resize(count);
+        for (size_t position = 0; position < count; position++) {
+            sorted[position] = maps[order[first + position]];
+        }
+
+        outputRaw[rowIndex] = listBuffer.gather(sorted);
     }
 }
 

@@ -988,6 +988,20 @@ void FunctionDecls::initCollectionFunctions() {
         indexOf->setReturnTypes({{EvaluatedType::Integer}});
         indexOf->setSearchesItsList(true);
     }
+
+    const PossibleArgTypes listOrCell {EvaluatedType::List, EvaluatedType::Any};
+    const PossibleArgTypes integerOrCell {EvaluatedType::Integer, EvaluatedType::Any};
+
+    std::vector<FunctionSignature*> sortMultis;
+    coll->createOverloads("sortMulti", {listOrCell, listOrCell, integerOrCell, integerOrCell}, sortMultis);
+
+    for (FunctionSignature* sortMulti : sortMultis) {
+        const bool sortsAList = sortMulti->argumentTypes().front().getType() == EvaluatedType::List;
+
+        sortMulti->setRequiredArgCount(1);
+        sortMulti->setReturnTypes({{EvaluatedType::List}});
+        sortMulti->setReturnsItsArgumentShape(sortsAList);
+    }
 }
 
 void FunctionDecls::initSpatialFunctions() {

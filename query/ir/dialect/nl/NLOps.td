@@ -517,6 +517,40 @@ def ListSlice : NLOp<"list_slice", [Pure, RowAlignedThroughOperands, AttrSizedOp
 }
 
 /**
+* SortMulti
+*/
+def SortMulti : NLOp<"sort_multi", [Pure, RowAlignedThroughOperands, AttrSizedOperandSegments]> {
+  let summary = "Row-wise sort of a list of maps on the values of some keys";
+
+  let description = [{
+    Imperative counterpart of db.sort_multi. Row r of the result holds the maps of row r's
+    list in the order row r's fields sort them, cut by its skip and its limit. A sorted list
+    lives in the step's own buffer, which the next run of the step clears; with no field the
+    row is a slice of its input list, which copies nothing.
+
+      %sorted = nl.sort_multi %maps fields %fields limit %limit skip %skip
+                  : (!nl.chunk<!storage.nullable<!storage.list<!storage.any>>>,
+                     !nl.chunk<!storage.nullable<!storage.list<!storage.string>>>,
+                     !nl.chunk<!storage.nullable<i64>>,
+                     !nl.chunk<!storage.nullable<i64>>)
+                  -> !nl.chunk<!storage.nullable<!storage.list<!storage.any>>>
+
+    Every operand carries rows - lowering lays a constant one out over them first. The
+    limit and the skip are read as nullable value chunks, or as chunks of type-erased
+    cells whose integer each row reads out of its cell.
+  }];
+
+  let arguments = (ins NLChunk:$list, Optional<NLChunk>:$fields, Optional<NLChunk>:$limit, Optional<NLChunk>:$skip);
+  let results   = (outs NLChunk:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    $list (`fields` $fields^)? (`limit` $limit^)? (`skip` $skip^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+/**
 * PercentileCont / PercentileDisc
 */
 // Imperative counterparts of db.percentile_cont and db.percentile_disc. Row r of the

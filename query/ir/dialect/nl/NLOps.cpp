@@ -1013,6 +1013,39 @@ LogicalResult DynamicMapKey::verify() {
     return success();
 }
 
+LogicalResult SortMulti::verify() {
+    const Value fields = getFields();
+    const Value limit = getLimit();
+    const Value skip = getSkip();
+
+    const auto readsAList = [](Value chunk) {
+        return isa<storage::ListType, storage::AnyType>(valueElementOf(chunk.getType()));
+    };
+
+    const auto readsAnInteger = [](Value chunk) {
+        return isa<IntegerType, storage::AnyType>(valueElementOf(chunk.getType()));
+    };
+
+    const Type list = valueElementOf(getList().getType());
+    const Type sorted = isa<storage::AnyType>(list) ? storage::ListType::get(getContext(), list) : list;
+    const Type result = cast<ChunkType>(getResult().getType()).getElementType();
+    const auto nullableResult = dyn_cast<storage::NullableType>(result);
+
+    const bool readsLists = readsAList(getList()) && (!fields || readsAList(fields));
+    const bool readsIntegerBounds = (!limit || readsAnInteger(limit)) && (!skip || readsAnInteger(skip));
+    const bool answersTheInputList = nullableResult && nullableResult.getValueType() == sorted;
+
+    if (!readsLists) {
+        return emitOpError("sorts a chunk of lists or of tagged cells on one of lists of fields, optionally nullable");
+    } else if (!readsIntegerBounds) {
+        return emitOpError("reads its limit and its skip out of chunks of integers or of tagged cells");
+    } else if (!answersTheInputList) {
+        return emitOpError("result must be a chunk of nullable lists of the input list's elements");
+    }
+
+    return success();
+}
+
 LogicalResult ContainerIndex::verify() {
     const Type base = valueElementOf(getBase().getType());
     if (!isa<storage::ListType, storage::MapType, storage::AnyType>(base)) {

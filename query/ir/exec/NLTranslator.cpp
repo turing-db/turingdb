@@ -1432,6 +1432,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateMakeList(makeList, body);
         } else if (nl::ListSlice listSlice = mlir::dyn_cast<nl::ListSlice>(operation)) {
             translateListSlice(listSlice, body);
+        } else if (nl::SortMulti sortMulti = mlir::dyn_cast<nl::SortMulti>(operation)) {
+            translateSortMulti(sortMulti, body);
         } else if (mlir::isa<nl::PercentileCont, nl::PercentileDisc>(operation)) {
             translatePercentile(&operation, body);
         } else if (nl::MakeMap makeMap = mlir::dyn_cast<nl::MakeMap>(operation)) {
@@ -4339,6 +4341,30 @@ void NLTranslator::translateListSlice(nl::ListSlice slice, NLStmtContainer* body
                                                                          result);
 
     body->emplaceStmt(&NLExecutor::runListSlice, data);
+}
+
+void NLTranslator::translateSortMulti(nl::SortMulti sortMulti, NLStmtContainer* body) {
+    const mlir::Value resultValue = sortMulti.getResult();
+
+    Column* const result = allocColumnForChunkType(resultValue.getType());
+    _valueSlots[resultValue] = result;
+
+    const Column* const list = getColumn(sortMulti.getList());
+
+    const mlir::Value fieldsValue = sortMulti.getFields();
+    const Column* const fields = fieldsValue ? getColumn(fieldsValue) : nullptr;
+    const NLListReadFunction fieldsRead = fields ? NLExecutor::selectListRead(fields) : nullptr;
+
+    NLSortMultiData* data = _program->allocFunctionData<NLSortMultiData>(list,
+                                                                         NLExecutor::selectListRead(list),
+                                                                         fields,
+                                                                         fieldsRead,
+                                                                         rangeBound(sortMulti.getLimit()),
+                                                                         rangeBound(sortMulti.getSkip()),
+                                                                         _program->allocStepBuffers(),
+                                                                         result);
+
+    body->emplaceStmt(&NLExecutor::runSortMulti, data);
 }
 
 void NLTranslator::translatePercentile(mlir::Operation* operation, NLStmtContainer* body) {

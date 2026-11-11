@@ -103,15 +103,26 @@ ListView ListBuffer<N>::concatenate(ListView a, ListView b) {
 
 template <size_t N>
 ListView ListBuffer<N>::reverse(ListView list) {
+    return writeElements(std::views::reverse(list.elements()));
+}
+
+template <size_t N>
+ListView ListBuffer<N>::gather(std::span<const CellView> elements) {
+    return writeElements(elements);
+}
+
+template <size_t N>
+template <typename Elements>
+ListView ListBuffer<N>::writeElements(const Elements& elements) {
     size_t valueBytes = 0;
-    for (const CellView element : list) {
+    for (const CellView element : elements) {
         valueBytes += elementValueSize(element);
     }
 
-    ListWriteCursor cursor = reserveList(list.size(), valueBytes);
+    ListWriteCursor cursor = reserveList(std::ranges::size(elements), valueBytes);
     constexpr size_t tagSize = decltype(_elements)::tagSize();
 
-    for (const CellView element : std::views::reverse(list.elements())) {
+    for (const CellView element : elements) {
         const size_t numBytes = tagSize + elementValueSize(element);
         cursor.writeRaw(element.getData(), numBytes);
     }

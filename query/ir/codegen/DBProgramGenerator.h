@@ -1391,6 +1391,7 @@ private:
 
     void translateRange(const Expr* expr, const ExprChain* args);
     void translateSubstring(const Expr* expr, const ExprChain* args);
+    void translateSortMulti(const Expr* expr, const ExprChain* args);
     void translateSplit(const Expr* expr, const ExprChain* args);
     void translateReplace(const Expr* expr, const ExprChain* args);
     void translatePointDistance(const Expr* expr, const ExprChain* args);

@@ -2547,6 +2547,24 @@ LogicalResult Range::verify() {
     return success();
 }
 
+LogicalResult SortMulti::verify() {
+    const Value fields = getFields();
+    const Value limit = getLimit();
+    const Value skip = getSkip();
+
+    const bool readsLists = isColumnOf<storage::ListType>(getList().getType())
+                         && (!fields || isColumnOf<storage::ListType>(fields.getType()));
+    const bool readsIntegerBounds = (!limit || isIntegerColumn(limit)) && (!skip || isIntegerColumn(skip));
+
+    if (!readsLists) {
+        return emitOpError("sorts a column of lists on a column of lists of fields");
+    } else if (!readsIntegerBounds) {
+        return emitOpError("limit and skip must be integer columns");
+    }
+
+    return success();
+}
+
 LogicalResult Replace::verify() {
     const bool readsStrings = llvm::all_of(getOperation()->getOperands(), [](Value operand) {
         return isColumnOf<storage::StringType>(operand.getType());
@@ -3285,6 +3303,61 @@ Speculation::Speculatability ListSlice::getSpeculatability() {
     const bool readsIntegerBounds = (!from || holdsOnlyIntegers(from)) && (!to || holdsOnlyIntegers(to));
 
     return speculatableWhen(holdsOnlyLists(getList()) && readsIntegerBounds);
+}
+
+// A key is sorted on in the order <=> gives cells, which raises on an embedding, and a list
+// or a map may hold one at any depth. With no field the list is kept as it is.
+Speculation::Speculatability SortMulti::getSpeculatability() {
+    const Value list = getList();
+    const Value fields = getFields();
+    const Value limit = getLimit();
+    const Value skip = getSkip();
+
+    int64_t skipped = 0;
+    const bool skipsALiteralCount = !skip || (matchIntegerLiteral(skip, skipped) && skipped >= 0);
+    const bool readsIntegerLimit = !limit || holdsOnlyIntegers(limit);
+
+    ConstantOp fieldsLiteral = fields ? fields.getDefiningOp<ConstantOp>() : ConstantOp {};
+    const ArrayAttr names = fieldsLiteral ? dyn_cast<ArrayAttr>(fieldsLiteral.getValue()) : ArrayAttr {};
+
+    if (!skipsALiteralCount || !readsIntegerLimit || !holdsOnlyLists(list)) {
+        return Speculation::NotSpeculatable;
+    } else if (!fields || (names && names.empty())) {
+        return Speculation::Speculatable;
+    } else if (!names || !::db::readsHoldOnlyNullOr(list, {StringAttr {}}, {::db::CellTag::MapView})) {
+        return Speculation::NotSpeculatable;
+    }
+
+    for (const Attribute name : names) {
+        const StringAttr field = dyn_cast<StringAttr>(name);
+        if (!field) {
+            return Speculation::NotSpeculatable;
+        }
+
+        const StringRef text = field.getValue();
+        const StringAttr key = StringAttr::get(getContext(), text.starts_with("^") ? text.drop_front() : text);
+        const StringAttr keyOfEachElement[] = {StringAttr {}, key};
+
+        const bool keyHasAnOrder = ::db::readsHoldOnlyNullOr(list,
+                                                             keyOfEachElement,
+                                                             {::db::CellTag::Int,
+                                                              ::db::CellTag::UInt,
+                                                              ::db::CellTag::Double,
+                                                              ::db::CellTag::String,
+                                                              ::db::CellTag::Bool,
+                                                              ::db::CellTag::DateTime,
+                                                              ::db::CellTag::Duration,
+                                                              ::db::CellTag::Point,
+                                                              ::db::CellTag::NodeID,
+                                                              ::db::CellTag::EdgeID,
+                                                              ::db::CellTag::Path});
+
+        if (!keyHasAnOrder) {
+            return Speculation::NotSpeculatable;
+        }
+    }
+
+    return Speculation::Speculatable;
 }
 
 Speculation::Speculatability ListIndex::getSpeculatability() {

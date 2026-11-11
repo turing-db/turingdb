@@ -50,6 +50,31 @@ namespace storage = mlir::storage;
 
 namespace {
 
+void collectPresentChunks(llvm::ArrayRef<mlir::Value> chunks, llvm::SmallVectorImpl<mlir::Value>& present) {
+    present.clear();
+
+    for (const mlir::Value chunk : chunks) {
+        if (chunk) {
+            present.push_back(chunk);
+        }
+    }
+}
+
+// A list over the elements @param listChunk's lists hold, read as nullable: a row with no
+// list gets none. A type-erased cell holds a list of cells in its turn.
+nl::ChunkType listOfSameElementsChunkType(mlir::MLIRContext* context, mlir::Value listChunk) {
+    const mlir::Type listElement = mlir::cast<nl::ChunkType>(listChunk.getType()).getElementType();
+    const auto nullable = mlir::dyn_cast<storage::NullableType>(listElement);
+    const mlir::Type value = nullable ? nullable.getValueType() : listElement;
+
+    const mlir::Type list =
+        mlir::isa<storage::AnyType>(value)
+            ? storage::ListType::get(context, storage::AnyType::get(context))
+            : value;
+
+    return nl::ChunkType::get(context, storage::NullableType::get(context, list));
+}
+
 bool isDefinedWithin(mlir::Value value, mlir::Operation* operation) {
     mlir::Operation* const definingOp = value.getDefiningOp();
     mlir::Operation* const definer = definingOp ? definingOp : value.getParentBlock()->getParentOp();
@@ -1571,6 +1596,8 @@ void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
         lowerPointFunction<nl::PointWithinBBox>(&operation, _builder.getI1Type());
     } else if (mlir::db::ListSlice listSlice = mlir::dyn_cast<mlir::db::ListSlice>(operation)) {
         lowerListSlice(listSlice);
+    } else if (mlir::db::SortMulti sortMulti = mlir::dyn_cast<mlir::db::SortMulti>(operation)) {
+        lowerSortMulti(sortMulti);
     } else if (mlir::isa<mlir::db::PercentileCont, mlir::db::PercentileDisc>(operation)) {
         lowerPercentile(&operation);
     } else if (mlir::db::ListComprehension listComprehension = mlir::dyn_cast<mlir::db::ListComprehension>(operation)) {
@@ -2687,71 +2714,92 @@ void DBLowering::lowerMakeList(mlir::db::MakeList makeList) {
     _valueMap[makeList.getResult()] = lists.getResult();
 }
 
+void DBLowering::rowAlignOptionalChunks(llvm::MutableArrayRef<mlir::Value> chunks) {
+    llvm::SmallVector<mlir::Value, 4> present;
+    collectPresentChunks(chunks, present);
+
+    const mlir::Value cardinality = cardinalityDriver(present);
+
+    for (mlir::Value& chunk : chunks) {
+        if (chunk) {
+            chunk = rowAlignedChunk(chunk, cardinality);
+        }
+    }
+}
+
 void DBLowering::lowerListSlice(mlir::db::ListSlice slice) {
     const mlir::Location loc = _builder.getUnknownLoc();
     mlir::MLIRContext* const context = _builder.getContext();
 
-    mlir::Value listChunk = mapValue(slice.getList());
-
-    llvm::SmallVector<mlir::Value, 3> operands {listChunk};
-
-    mlir::Value fromChunk = slice.getFrom() ? mapValue(slice.getFrom()) : mlir::Value {};
-    mlir::Value toChunk = slice.getTo() ? mapValue(slice.getTo()) : mlir::Value {};
-
-    if (fromChunk) {
-        operands.push_back(fromChunk);
-    }
-
-    if (toChunk) {
-        operands.push_back(toChunk);
-    }
+    const mlir::Value from = slice.getFrom();
+    const mlir::Value to = slice.getTo();
 
     // A list or a bound holding one value for every row rather than one per row is laid
     // out over the rows the others carry, as lowerRange lays its bounds out
-    const mlir::Value cardinality = cardinalityDriver(operands);
+    std::array<mlir::Value, 3> chunks {
+        mapValue(slice.getList()),
+        from ? mapValue(from) : mlir::Value {},
+        to ? mapValue(to) : mlir::Value {},
+    };
+    rowAlignOptionalChunks(chunks);
 
-    listChunk = rowAlignedChunk(listChunk, cardinality);
+    auto& [listChunk, fromChunk, toChunk] = chunks;
 
     if (fromChunk) {
-        fromChunk = numberOperandChunk(rowAlignedChunk(fromChunk, cardinality));
+        fromChunk = numberOperandChunk(fromChunk);
     }
 
     if (toChunk) {
-        toChunk = numberOperandChunk(rowAlignedChunk(toChunk, cardinality));
+        toChunk = numberOperandChunk(toChunk);
     }
 
-    // The slice holds the elements the sliced value holds, and is read as nullable: a row
-    // whose list or whose bound is null gets no slice. Slicing a type-erased cell answers
-    // the list its tag says it holds, whose elements are cells in their turn
-    const mlir::Type listElement = mlir::cast<nl::ChunkType>(listChunk.getType()).getElementType();
-    const auto nullable = mlir::dyn_cast<storage::NullableType>(listElement);
-    const mlir::Type value = nullable ? nullable.getValueType() : listElement;
-
-    const mlir::Type sliced =
-        mlir::isa<storage::AnyType>(value)
-            ? storage::ListType::get(context, storage::AnyType::get(context))
-            : value;
-
-    const nl::ChunkType resultType = nl::ChunkType::get(context,
-                                                        storage::NullableType::get(context, sliced));
+    const nl::ChunkType resultType = listOfSameElementsChunkType(context, listChunk);
 
     // The op goes where the chunks it reads stand, which are the laid-out ones
-    operands.clear();
-    operands.push_back(listChunk);
-
-    if (fromChunk) {
-        operands.push_back(fromChunk);
-    }
-
-    if (toChunk) {
-        operands.push_back(toChunk);
-    }
-
+    llvm::SmallVector<mlir::Value, 3> operands;
+    collectPresentChunks(chunks, operands);
     setInsertionForNaryOp(operands);
 
     nl::ListSlice run = _builder.create<nl::ListSlice>(loc, resultType, listChunk, fromChunk, toChunk);
 
     _valueMap[slice.getResult()] = run.getResult();
+}
+
+void DBLowering::lowerSortMulti(mlir::db::SortMulti sortMulti) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+    mlir::MLIRContext* const context = _builder.getContext();
+
+    const mlir::Value fields = sortMulti.getFields();
+    const mlir::Value limit = sortMulti.getLimit();
+    const mlir::Value skip = sortMulti.getSkip();
+
+    std::array<mlir::Value, 4> chunks {
+        mapValue(sortMulti.getList()),
+        fields ? mapValue(fields) : mlir::Value {},
+        limit ? mapValue(limit) : mlir::Value {},
+        skip ? mapValue(skip) : mlir::Value {},
+    };
+    rowAlignOptionalChunks(chunks);
+
+    auto& [listChunk, fieldsChunk, limitChunk, skipChunk] = chunks;
+
+    if (limitChunk) {
+        limitChunk = numberOperandChunk(limitChunk);
+    }
+
+    if (skipChunk) {
+        skipChunk = numberOperandChunk(skipChunk);
+    }
+
+    const nl::ChunkType resultType = listOfSameElementsChunkType(context, listChunk);
+
+    llvm::SmallVector<mlir::Value, 4> operands;
+    collectPresentChunks(chunks, operands);
+    setInsertionForNaryOp(operands);
+
+    nl::SortMulti sorted = _builder.create<nl::SortMulti>(loc, resultType, listChunk, fieldsChunk, limitChunk, skipChunk);
+
+    _valueMap[sortMulti.getResult()] = sorted.getResult();
 }
 
 void DBLowering::lowerPercentile(mlir::Operation* operation) {
