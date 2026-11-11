@@ -50,6 +50,12 @@ std::strong_ordering operator<=>(ListView lhs, ListView rhs);
 std::strong_ordering operator<=>(MapView lhs, MapView rhs);
 
 /**
+ * @brief Orders two paths by their IDs in path order, so a path sorts before every longer
+ * path it starts.
+ */
+std::strong_ordering operator<=>(PathView lhs, PathView rhs);
+
+/**
  * @brief Cypher's equality of two cells, lists or maps, at any depth: unknown where a null
  * meets a value and no other pair differs. == is equivalence instead, under which two nulls
  * agree, which is what DISTINCT and grouping key on.

@@ -116,8 +116,9 @@ out of the tag. An index takes a cell column the same way, and the result is the
 `nullable<any>` every index gives.
 
 A map held in a list reads through those same two paths, since `xs[0]` hands back a
-`!storage.any` whose `MapView` tag is the map. An `UNWIND` of such a list binds its
-variable to the same cell, so `UNWIND [{a: 1}] AS m RETURN m.a` reads through one too. The
+`!storage.any` whose `MapView` tag is the map. An `UNWIND` of a list of maps binds its
+variable to a map column instead, as for every list whose element type is known, so
+`UNWIND [{a: 1}] AS m RETURN m.a` reads a map; `UNWIND [{a: 1}, 2] AS m` binds cells. The
 dotted form `xs[0].a` needs a parser rule of its own (`propertyLookupExpr`), because a `.`
 after a `]` is otherwise no expression.
 

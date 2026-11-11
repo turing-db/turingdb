@@ -2697,6 +2697,34 @@ int compareContainerColumn(const Column* column, size_t a, size_t b) {
     return 0;
 }
 
+// 3-way compare two rows of a path column. The empty path a null is spelled as sorts after
+// every path, as compareOptColumn places a null after every value.
+int comparePathColumn(const Column* column, size_t a, size_t b) {
+    const std::vector<GraphPath>& raw = static_cast<const ColumnVector<GraphPath>*>(column)->getRaw();
+    const GraphPath& pathA = raw[a];
+    const GraphPath& pathB = raw[b];
+
+    const bool aNull = pathA.isNull();
+    const bool bNull = pathB.isNull();
+    if (aNull || bNull) {
+        if (aNull && bNull) {
+            return 0;
+        }
+
+        return aNull ? 1 : -1;
+    }
+
+    const std::strong_ordering order = PathView {pathA.getIDs()} <=> PathView {pathB.getIDs()};
+
+    if (order == std::strong_ordering::less) {
+        return -1;
+    } else if (order == std::strong_ordering::greater) {
+        return 1;
+    }
+
+    return 0;
+}
+
 // The nullable sibling, for a list or a map read out of a property: a row holding none
 // sorts after every value, as compareOptColumn places a null after every value.
 template <typename View>
@@ -14236,7 +14264,7 @@ NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
         break;
 
         case NLChunkKind::Path:
-            throw IRException("A path column cannot be a sort key: a path has no order here");
+            return &comparePathColumn;
         break;
 
         case NLChunkKind::DateTime:

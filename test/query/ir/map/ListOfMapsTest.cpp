@@ -170,6 +170,11 @@ std::string renderCell(const Column* column, size_t row) {
         return list.has_value() ? renderList(*list) : "null";
     }
 
+    if (const auto* optMaps = dynamic_cast<const ColumnOptVector<MapView>*>(column)) {
+        const std::optional<MapView>& map = (*optMaps)[row];
+        return map.has_value() ? renderMap(*map) : "null";
+    }
+
     throw TuringException("ListOfMapsTest: unsupported output column type");
 }
 
@@ -193,7 +198,7 @@ private:
 
 // A list may hold a map, the way a map already holds a list. The map rides the list as the
 // one tagged cell it is, so it survives nesting, neighbours of other types and an UNWIND
-// that spreads the list back out.
+// that spreads the list back out into a map column, or into cells beside other types.
 class ListOfMapsTest : public TuringTest {
 protected:
     void initialize() override {
@@ -286,8 +291,6 @@ TEST_F(ListOfMapsTest, holdsAnEmptyMap) {
     expectRows("RETURN [{}]", {"[{}]"});
 }
 
-// An UNWIND spreads the list back out, so each map comes back as the one tagged cell it
-// was stored as
 TEST_F(ListOfMapsTest, unwindsToItsMaps) {
     expectRows("UNWIND [{a: 1}, {b: 2}] AS x RETURN x", {"{a: 1}", "{b: 2}"});
 }

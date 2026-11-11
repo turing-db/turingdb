@@ -24,7 +24,7 @@
 using namespace db;
 using namespace turing::test;
 
-// A unit read off a duration an UNWIND handed on as a type-erased cell.
+// A unit read off an unwound duration, and off a duration a type-erased cell holds.
 class DurationComponentCellTest : public TuringTest {
 protected:
     void initialize() override {
@@ -144,4 +144,10 @@ TEST_F(DurationComponentCellTest, readsARemainderOfAnUnwoundDuration) {
     expectRows("UNWIND [duration(90061123456), duration(-90000000), null] AS d "
                "RETURN d.minutesOfHour, d.secondsOfMinute",
                {{"1", "1"}, {"-1", "-30"}, {"null", "null"}});
+}
+
+TEST_F(DurationComponentCellTest, readsAUnitOfADurationHeldInACell) {
+    expectRows("WITH {a: duration(90061000000)} AS m, [duration(2000000), 'x'] AS l "
+               "RETURN m.a.hours, l[0].seconds",
+               {{"25", "2"}});
 }

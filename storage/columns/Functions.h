@@ -477,10 +477,10 @@ private:
     std::vector<QueryListBuffer::ListItemVariant> _elements;
 };
 
-// The field of an instant a type-erased cell carries, which is what an UNWIND of a list of
-// instants hands each row. A cell holding a null answers null, as every function over a
-// cell does; one holding no instant is a type error only the row it is in can find out
-// about, so it throws.
+// The field of an instant a type-erased cell carries, as a map value or an element of a
+// mixed list does. A cell holding a null answers null, as every function over a cell does;
+// one holding no instant is a type error only the row it is in can find out about, so it
+// throws.
 template <DateTimePart part>
 class TaggedDateTimeComponentFunction {
 public:

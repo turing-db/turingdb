@@ -209,18 +209,20 @@ def Unwind : NLOp<"unwind", [Pure]> {
 
       %rows = nl.unwind(%names, {%nodes})
                 : (!nl.chunk<!storage.list<!storage.string>>, !nl.chunk<!storage.node_id>)
-                -> !nl.iter<!nl.chunk<!storage.any>, !nl.chunk<!storage.node_id>>
-      nl.for %x, %n in %rows : !nl.iter<!nl.chunk<!storage.any>, !nl.chunk<!storage.node_id>> {
-        nl.output(%x, %n) : !nl.chunk<!storage.any>, !nl.chunk<!storage.node_id>
+                -> !nl.iter<!nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.node_id>>
+      nl.for %x, %n in %rows : !nl.iter<!nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.node_id>> {
+        nl.output(%x, %n) : !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.node_id>
       }
 
     A list cell contributes one row per element, a null cell none, and any other cell
     the single row it is - a tagged scalar included, so a !storage.any cell that is
     itself a list unwinds one level deeper. Unlike nl.unwind_const it reads an input
     chunk, so it nests in the loop that binds it, the way nl.get_out_edges nests in the
-    loop binding its nodes. The element chunk type follows the source's - a list unwinds
-    into the type-erased !storage.any chunk, a scalar column into its own - and, like
-    nl.collect's, is spelled out rather than inferred.
+    loop binding its nodes. The element chunk type follows the source's
+    (`unwoundElementType`) - a list of IDs or paths unwinds into a chunk of them, a list
+    of values into a nullable chunk of their type, any other list into the type-erased
+    !storage.any chunk, a scalar column into its own - and, like nl.collect's, is
+    spelled out rather than inferred.
   }];
 
   // `columns_to_filter`: the variadic carry set, after the fixed source, mirroring

@@ -364,11 +364,13 @@ def Unwind : TuringOp<"unwind", [Pure, DeclareOpInterfaceMethods<ColumnCarrierOp
     row-aligned with the elements. A constant source stands for every carried row, so it
     expands each of them.
 
-    The element column's type is the source's to decide and is resolved during
-    lowering, as a property fetch's value column is: unwinding a list yields a
-    type-erased !storage.any column of tagged scalars, matching Cypher's LIST
-    OF ANY, while a source that is already a scalar column keeps its own type - the
-    singleton is the value it already holds.
+    The element column's type is the source's to decide (`unwoundElementType`):
+    unwinding a list of IDs or paths yields a column of them, a list of values a
+    nullable column of their type, and a list whose elements share no type a
+    type-erased !storage.any column of tagged scalars, matching Cypher's LIST OF ANY,
+    as does a list of nulls alone.
+    A source that is already a scalar column keeps its own type - the singleton is the
+    value it already holds.
   }];
 
   let arguments = (ins Column:$source, Variadic<Column>:$columns_to_filter);

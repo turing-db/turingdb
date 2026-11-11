@@ -11,10 +11,10 @@ namespace db {
 
 inline mlir::Type sharedLiteralElementType(mlir::ArrayAttr elements);
 
-// The type one literal list element carries: its own for a typed attribute, and the list
-// type its own verdict names for a nested list. A null names none, and an embedding (a
-// dense f32 array attr) or a map carries no type a list element is read under. A string
-// written in IR text parses with no type of its own, and is a string all the same.
+// The type one literal list element carries: its own for a typed attribute, the list type
+// its own verdict names for a nested list, a map for a dictionary and an embedding for a
+// dense f32 array. A null names none. A string written in IR text parses with no type of
+// its own, and is a string all the same.
 inline mlir::Type literalElementType(mlir::Attribute element) {
     mlir::MLIRContext* const context = element.getContext();
 
@@ -24,6 +24,10 @@ inline mlir::Type literalElementType(mlir::Attribute element) {
         return mlir::NoneType::get(context);
     } else if (mlir::isa<mlir::StringAttr>(element)) {
         return mlir::storage::StringType::get(context);
+    } else if (mlir::isa<mlir::DictionaryAttr>(element)) {
+        return mlir::storage::MapType::get(context);
+    } else if (mlir::isa<mlir::DenseF32ArrayAttr>(element)) {
+        return mlir::storage::EmbeddingType::get(context);
     }
 
     const auto typed = mlir::dyn_cast<mlir::TypedAttr>(element);
