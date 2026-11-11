@@ -8,23 +8,27 @@
 namespace mlir::db {
 
 // _count operands from _operandOffset, each coming back as the result at the same position
-// from _resultOffset
+// from _resultOffset. An op that _repeatsRows may give one operand row several result rows,
+// as a hop gives one per edge.
 struct CarrySet {
     size_t _operandOffset {0};
     size_t _resultOffset {0};
     size_t _count {0};
+    bool _repeatsRows {false};
 };
 
 // _count operands from _operandOffset, each coming into a region as the argument at the same
 // position from _argumentOffset. An op that _handsBack those columns leads its results with
 // them: as the region left them where it _yieldsBack, the region then leading its yield with
-// them, and as the operands hold them otherwise.
+// them, and as the operands hold them otherwise. An op that _repeatsRows may run the region
+// more than once for one operand row, as a body runs once per element of a list.
 struct RegionCarrySet {
     size_t _operandOffset {0};
     size_t _argumentOffset {0};
     size_t _count {0};
     bool _handsBack {false};
     bool _yieldsBack {false};
+    bool _repeatsRows {false};
 };
 
 // The operand of @param op's carry set that @param result comes back from, null for a result

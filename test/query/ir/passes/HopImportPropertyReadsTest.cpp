@@ -36,7 +36,7 @@ using namespace turing::test;
 
 // A hop predicate reading a property of a node or edge the walk imports shares the read of
 // that property made before the walk, which comes into every hop region as an import of its
-// own. A property nothing reads before the walk is still read in the hop region alone.
+// own. A property nothing reads before the walk is read there too, once per seed.
 class HopImportPropertyReadsTest : public TuringTest {
 public:
     void initialize() override {
@@ -225,13 +225,13 @@ TEST_F(HopImportPropertyReadsTest, readsTheTypeOfAnImportedEdgeOnce) {
                                             0);
 }
 
-TEST_F(HopImportPropertyReadsTest, keepsTheReadInTheHopRegionWhenNothingReadsItBefore) {
+TEST_F(HopImportPropertyReadsTest, readsAnImportedPropertyOnceWhenNothingReadsItBefore) {
     expectNodePropertyReads("MATCH (n:Person) MATCH (n)(()-[e]->() WHERE e.duration < n.age){1,2}(m) RETURN m",
                             "age",
                             1,
-                            1);
+                            0);
     expectEdgePropertyReads("MATCH (a)-[r]->(n:Person) MATCH (n)(()-[e]->() WHERE e.duration < r.duration){1,2}(m) RETURN a, m",
                             "duration",
                             2,
-                            2);
+                            1);
 }

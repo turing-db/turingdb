@@ -197,10 +197,9 @@ TEST_F(TrimUnreadSubqueryInputsTest, collectsReadingNoElementOncePerRow) {
                        {"Cyrus", "[[], []]"}, {"Doruk", "[[], []]"}});
 }
 
-// The dedup is not known to run without raising, so the hoist leaves the count in the body
 TEST_F(TrimUnreadSubqueryInputsTest, dropsTheElementFromABodyRunOncePerRow) {
     const std::string_view query = "MATCH (n:Person) RETURN n.name, [x IN [1, 2] | COUNT { MATCH (n)-->(m) RETURN DISTINCT m }]";
-    expectShape<mlir::db::CountSubquery>(query, {._count = 1, ._inElementBodies = 1, ._inputs = 1, ._unreadInputs = 0});
+    expectShape<mlir::db::CountSubquery>(query, {._count = 1, ._inElementBodies = 0, ._inputs = 1, ._unreadInputs = 0});
 
     expectRows(query, {{"Remy", "[4, 4]"}, {"Adam", "[3, 3]"}, {"Maxime", "[2, 2]"}, {"Luc", "[2, 2]"},
                        {"Martina", "[1, 1]"}, {"Suhas", "[2, 2]"}, {"Cyrus", "[2, 2]"}, {"Doruk", "[1, 1]"}});

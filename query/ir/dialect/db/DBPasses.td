@@ -227,8 +227,8 @@ def HoistUnconditionalRegions : Pass<"hoist_unconditional_regions"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
-def HoistElementInvariantOps : Pass<"hoist_element_invariant_ops"> {
-    let summary = "Compute an op of the body of a list comprehension, a list predicate, a reduce or an allReduce that reads no element, accumulator or row tag, and raises on no value, once per row in front of the op, as a column it carries in";
+def HoistRepeatedRegionInvariantOps : Pass<"hoist_repeated_region_invariant_ops"> {
+    let summary = "Compute an op that reads only the columns carried into a region running more than once per row - a body over the elements of a list, the hop of a walk, a body behind a hop - and that raises on no row and has no effect, once per row in front of the op holding the region, its column carried back in through the CASE branches and hops between";
     let dependentDialects = ["mlir::db::DB"];
 }
 

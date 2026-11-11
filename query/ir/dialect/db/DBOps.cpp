@@ -213,7 +213,7 @@ void collectCarriedArgument(Value value, ValueRange carriedColumns, llvm::SmallV
 }
 
 bool fillHopCarrySet(Operation* hop, CarrySet& carrySet) {
-    carrySet = CarrySet {._operandOffset = 1, ._resultOffset = HOP_FIXED_RESULT_COUNT, ._count = hop->getNumOperands() - 1};
+    carrySet = CarrySet {._operandOffset = 1, ._resultOffset = HOP_FIXED_RESULT_COUNT, ._count = hop->getNumOperands() - 1, ._repeatsRows = true};
     return true;
 }
 
@@ -3027,13 +3027,13 @@ bool FetchNodes::getCarrySet(CarrySet& carrySet) {
 }
 
 bool Unwind::getCarrySet(CarrySet& carrySet) {
-    carrySet = CarrySet {._operandOffset = 1, ._resultOffset = 1, ._count = getColumnsToFilter().size()};
+    carrySet = CarrySet {._operandOffset = 1, ._resultOffset = 1, ._count = getColumnsToFilter().size(), ._repeatsRows = true};
     return true;
 }
 
 bool UnwindRange::getCarrySet(CarrySet& carrySet) {
     const MutableOperandRange carried = getCarrySetMutable();
-    carrySet = CarrySet {._operandOffset = operandRunOffset(carried), ._resultOffset = 1, ._count = carried.size()};
+    carrySet = CarrySet {._operandOffset = operandRunOffset(carried), ._resultOffset = 1, ._count = carried.size(), ._repeatsRows = true};
     return true;
 }
 
@@ -3042,7 +3042,7 @@ MutableOperandRange UnwindRange::getCarrySetMutable() {
 }
 
 bool UnwindComputed::getCarrySet(CarrySet& carrySet) {
-    carrySet = CarrySet {._resultOffset = 1, ._count = getColumnsToFilter().size()};
+    carrySet = CarrySet {._resultOffset = 1, ._count = getColumnsToFilter().size(), ._repeatsRows = true};
     return true;
 }
 
@@ -3055,7 +3055,8 @@ bool CallProcedure::getCarrySet(CarrySet& carrySet) {
     const MutableOperandRange carried = getCarrySetMutable();
     carrySet = CarrySet {._operandOffset = operandRunOffset(carried),
                          ._resultOffset = getYields().size(),
-                         ._count = carried.size()};
+                         ._count = carried.size(),
+                         ._repeatsRows = true};
     return true;
 }
 
@@ -3137,7 +3138,7 @@ Value GetInEdgesByTypeAndLabel::getRowSource(OpResult result) {
 
 bool ExplorePaths::getCarrySet(CarrySet& carrySet) {
     const MutableOperandRange carried = getCarrySetMutable();
-    carrySet = CarrySet {._operandOffset = operandRunOffset(carried), ._resultOffset = PATH_FIXED_RESULT_COUNT, ._count = carried.size()};
+    carrySet = CarrySet {._operandOffset = operandRunOffset(carried), ._resultOffset = PATH_FIXED_RESULT_COUNT, ._count = carried.size(), ._repeatsRows = true};
     return true;
 }
 
@@ -3149,7 +3150,8 @@ bool ExplorePaths::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
     const MutableOperandRange carried = getRegionCarrySetMutable();
     carrySet = RegionCarrySet {._operandOffset = operandRunOffset(carried),
                                ._argumentOffset = hopWalkArgumentCount(region.getRegionNumber()),
-                               ._count = carried.size()};
+                               ._count = carried.size(),
+                               ._repeatsRows = true};
     return true;
 }
 
@@ -3187,6 +3189,7 @@ bool HashJoin::getYieldedResultOffset(Region& region, size_t& resultOffset) {
 
 bool ListComprehension::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
     fillTrailingRegionCarrySet(getOperation(), region, getColumnsToFilter().size(), carrySet);
+    carrySet._repeatsRows = true;
     return true;
 }
 
@@ -3202,6 +3205,7 @@ Value ListComprehension::getListedValue(OpResult result) {
 
 bool ListPredicate::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
     fillTrailingRegionCarrySet(getOperation(), region, getColumnsToFilter().size(), carrySet);
+    carrySet._repeatsRows = true;
     return true;
 }
 
@@ -3212,6 +3216,7 @@ Value ListPredicate::getRegionElementSource(Region& region, size_t& elementArgum
 
 bool Reduce::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
     fillTrailingRegionCarrySet(getOperation(), region, getColumnsToFilter().size(), carrySet);
+    carrySet._repeatsRows = true;
     return true;
 }
 
@@ -3234,6 +3239,7 @@ void Reduce::collectAccumulatedValues(Value value, llvm::SmallVectorImpl<Value>&
 
 bool AllReduce::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
     fillTrailingRegionCarrySet(getOperation(), region, getColumnsToFilter().size(), carrySet);
+    carrySet._repeatsRows = true;
     return true;
 }
 

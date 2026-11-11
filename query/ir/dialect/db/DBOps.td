@@ -2540,8 +2540,9 @@ def Sort : TuringOp<"sort", [Pure, DeclareOpInterfaceMethods<ColumnCarrierOpInte
 * RemoveDuplicates
 */
 // NOT Pure: it records each row it emits in a seen-set, so it must run where it sits and
-// must not be hoisted, CSE'd or eliminated (like nl.distinct_filter, which it lowers to).
-def RemoveDuplicates : TuringOp<"remove_duplicates", [AttrSizedOperandSegments, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getCarrySetMutable"]>]> {
+// must not be hoisted, CSE'd or eliminated (like nl.distinct_filter, which it lowers to). It
+// raises on no row, so an op holding it may still run speculatively.
+def RemoveDuplicates : TuringOp<"remove_duplicates", [AlwaysSpeculatable, AttrSizedOperandSegments, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getCarrySetMutable"]>]> {
   let summary = "Emit each distinct row of a column set once";
   let description = [{
     The declarative counterpart of a Cypher RETURN DISTINCT / WITH DISTINCT. Takes

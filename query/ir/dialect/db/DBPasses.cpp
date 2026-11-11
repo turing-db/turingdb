@@ -96,7 +96,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_CANONICALIZECOALESCE
 #define GEN_PASS_DEF_FOLDCONSTANTMAPKEYS
 #define GEN_PASS_DEF_HOISTUNCONDITIONALREGIONS
-#define GEN_PASS_DEF_HOISTELEMENTINVARIANTOPS
+#define GEN_PASS_DEF_HOISTREPEATEDREGIONINVARIANTOPS
 #include "DBPasses.h.inc"
 
 namespace {
@@ -109,14 +109,16 @@ void eraseIfUnused(Operation* op) {
     }
 }
 
-// The ops of one kind a pass has left to try. It listens to the rewriter, so it queues every
-// such op a rewrite creates and drops every op a rewrite erases.
-template <typename... OpTypes>
+// The ops a pass has left to try, the ones @param isQueued picks. It listens to the rewriter,
+// so it queues every such op a rewrite creates or moves and drops every op a rewrite erases.
+template <typename IsQueued>
 class OpWorklist : public mlir::RewriterBase::Listener {
 public:
-    explicit OpWorklist(Operation* root) {
+    OpWorklist(Operation* root, IsQueued isQueued)
+        : _isQueued(isQueued)
+    {
         root->walk([this](Operation* op) {
-            if (isa<OpTypes...>(op)) {
+            if (_isQueued(op)) {
                 push(op);
             }
         });
@@ -135,7 +137,7 @@ public:
     }
 
     void notifyOperationInserted(Operation* op, mlir::OpBuilder::InsertPoint previous) override {
-        if (isa<OpTypes...>(op)) {
+        if (_isQueued(op)) {
             push(op);
         }
     }
@@ -149,6 +151,7 @@ public:
     }
 
 private:
+    IsQueued _isQueued;
     std::vector<Operation*> _ops;
     llvm::DenseMap<Operation*, size_t> _positions;
     size_t _next {0};
@@ -162,13 +165,13 @@ private:
 
 // A match can read IR far above its op, so a rewrite can make an op it never touched match.
 // The worklist runs again until a round rewrites nothing, as MLIR's greedy driver does.
-template <typename... OpTypes, typename RewriteOp>
-void runWorklist(Operation* root, RewriteOp rewriteOp) {
+template <typename IsQueued, typename RewriteOp>
+void runWorklistOver(Operation* root, IsQueued isQueued, RewriteOp rewriteOp) {
     bool rewritten = true;
     while (rewritten) {
         rewritten = false;
 
-        OpWorklist<OpTypes...> worklist(root);
+        OpWorklist<IsQueued> worklist(root, isQueued);
         mlir::IRRewriter rewriter(root->getContext(), &worklist);
 
         while (Operation* op = worklist.pop()) {
@@ -177,6 +180,15 @@ void runWorklist(Operation* root, RewriteOp rewriteOp) {
             }
         }
     }
+}
+
+template <typename... OpTypes, typename RewriteOp>
+void runWorklist(Operation* root, RewriteOp rewriteOp) {
+    const auto isQueued = [](Operation* op) {
+        return isa<OpTypes...>(op);
+    };
+
+    runWorklistOver(root, isQueued, rewriteOp);
 }
 
 template <typename Match, typename MatchFilter, typename RewriteFilter>
@@ -9448,10 +9460,6 @@ struct CarryLabelAndTypeReads : public impl::CarryLabelAndTypeReadsBase<CarryLab
     }
 };
 
-bool runsItsRegionsPerElement(Operation* op) {
-    return isa<ListComprehension, ListPredicate, Reduce, AllReduce>(op);
-}
-
 // The column in front of the op holding @param body that @param rows holds row for row, and
 // the ops of @param body mapping its rows down to @param rows, nearest them first. False for
 // an element, an accumulator, a row tag and what is computed from them.
@@ -9478,84 +9486,147 @@ bool matchOuterColumn(Value rows, Block& body, Value& outer, llvm::SmallVectorIm
     }
 }
 
-// The ops of @param body computing @param constants, in block order
-void collectConstantCone(llvm::ArrayRef<Value> constants, Block& body, llvm::SmallVectorImpl<Operation*>& cone) {
-    llvm::SmallPtrSet<Operation*, 8> inCone;
-    llvm::SmallVector<Value> pending(constants.begin(), constants.end());
+// The ops inside @param region computing @param constants, each after the ones it reads
+void collectConstantCone(llvm::ArrayRef<Value> constants, Region& region, llvm::SmallVectorImpl<Operation*>& cone) {
+    const auto definerInRegion = [&region](Value value) -> Operation* {
+        Operation* const definer = value.getDefiningOp();
+        return definer && region.isAncestor(definer->getParentRegion()) ? definer : nullptr;
+    };
+
+    llvm::SmallPtrSet<Operation*, 8> visited;
+    llvm::SmallVector<std::pair<Operation*, bool>> pending;
+    for (const Value constant : constants) {
+        if (Operation* const definer = definerInRegion(constant)) {
+            pending.emplace_back(definer, false);
+        }
+    }
 
     while (!pending.empty()) {
-        Operation* const op = pending.pop_back_val().getDefiningOp();
-        if (!op || op->getBlock() != &body || !inCone.insert(op).second) {
+        const auto [op, readsDone] = pending.pop_back_val();
+        if (readsDone) {
+            cone.push_back(op);
+            continue;
+        } else if (!visited.insert(op).second) {
             continue;
         }
 
-        cone.push_back(op);
-        llvm::append_range(pending, op->getOperands());
+        pending.emplace_back(op, true);
 
-        llvm::SetVector<Value> readAbove;
-        mlir::getUsedValuesDefinedAbove(op->getRegions(), readAbove);
-        llvm::append_range(pending, readAbove);
+        llvm::SetVector<Value> reads(op->operand_begin(), op->operand_end());
+        mlir::getUsedValuesDefinedAbove(op->getRegions(), reads);
+        for (const Value read : reads) {
+            Operation* const definer = definerInRegion(read);
+            if (definer && !visited.contains(definer)) {
+                pending.emplace_back(definer, false);
+            }
+        }
     }
-
-    llvm::sort(cone, [](Operation* lhs, Operation* rhs) {
-        return lhs->isBeforeInBlock(rhs);
-    });
 }
 
-// An op of a body over the elements of a list computing one value per row out of the columns
-// carried in and constants alone. _operands are its operands in front of the op holding the
-// body, _steps the ops of the body mapping its rows down to it, nearest it first, and
-// _constants the ops of the body computing the constants it reads.
-struct ElementInvariantOp {
+bool repeatsRows(Operation* op) {
+    CarrySet carrySet;
+    return matchCarrySet(op, carrySet) && carrySet._repeatsRows;
+}
+
+// One region an op climbs out of, and the ops of its block mapping the rows its arguments hold
+// down to the rows the op reads, nearest the op first
+struct HoistLevel {
+    Region* _region {nullptr};
+    llvm::SmallVector<Operation*> _steps;
+};
+
+// An op computing one value per row out of the columns carried into the regions it sits in,
+// and constants. _levels are the regions it climbs out of, innermost first, _operands its
+// operands in front of the op holding the last one, and _constants the ops of that region
+// computing the constants it reads, each after the ones it reads.
+struct RowInvariantOp {
     Operation* _op {nullptr};
     llvm::SmallVector<Value> _operands;
-    llvm::SmallVector<Operation*> _steps;
+    llvm::SmallVector<HoistLevel> _levels;
     llvm::SmallVector<Operation*> _constants;
 };
 
-// Computed once per row, an op runs on rows whose list holds no element reaching it, so one
-// that may raise stays in the body
-bool matchElementInvariantOp(Operation* op, Block& body, ElementInvariantOp& invariant) {
-    const bool computesOneValuePerRow = computesAValuePerRow(op) && op->getNumResults() == 1;
-    if (!computesOneValuePerRow || op->use_empty() || !::db::runsWithoutRaising(op)) {
+bool computesOneValuePerRow(Operation* op) {
+    return computesAValuePerRow(op) && op->getNumResults() == 1;
+}
+
+// In front of a region an op also runs on the rows the region would not have run it on, so
+// one that may raise there or has an effect stays where it is
+bool isSafeToSpeculate(Operation* op) {
+    return ::db::runsWithoutRaising(op) && ::db::hasNoEffectButRaising(op);
+}
+
+// Climbs from @param block out of the regions the columns @param operands reads are carried
+// into, through the ops of each block mapping rows, until a region runs more than once for a
+// row of the op holding it or an op on the way repeats rows. A region whose op hands back what
+// it carries in, or has an effect besides raising, stops the climb.
+bool matchHoistLevels(Block* block, llvm::SmallVectorImpl<Value>& operands, llvm::SmallVectorImpl<Value>& constants, llvm::SmallVectorImpl<HoistLevel>& levels) {
+    while (true) {
+        Region& region = *block->getParent();
+        Operation* const holder = region.getParentOp();
+
+        RegionCarrySet carrySet;
+        const bool carriesIn = matchRegionCarrySet(region, carrySet) && !carrySet._handsBack;
+        if (!carriesIn || !::db::hasNoEffectButRaising(holder)) {
+            return false;
+        }
+
+        HoistLevel level {._region = &region};
+        bool readsACarriedColumn = false;
+
+        for (Value& operand : operands) {
+            if (::db::yieldsConstantColumn(operand)) {
+                constants.push_back(operand);
+                continue;
+            } else if (!region.isAncestor(operand.getParentRegion())) {
+                continue;
+            }
+
+            Value outer;
+            llvm::SmallVector<Operation*> steps;
+            if (!matchOuterColumn(operand, *block, outer, steps)) {
+                return false;
+            } else if (readsACarriedColumn && steps != level._steps) {
+                return false;
+            }
+
+            level._steps = steps;
+            operand = outer;
+            readsACarriedColumn = true;
+        }
+
+        if (!readsACarriedColumn) {
+            return false;
+        }
+
+        const bool repeats = carrySet._repeatsRows || llvm::any_of(level._steps, repeatsRows);
+        levels.push_back(level);
+
+        if (repeats) {
+            return true;
+        }
+
+        block = holder->getBlock();
+    }
+}
+
+bool matchRowInvariantOp(Operation* op, RowInvariantOp& invariant) {
+    if (op->use_empty() || !isSafeToSpeculate(op)) {
         return false;
     }
 
-    Region& region = *body.getParent();
+    llvm::SmallVector<Value> operands(op->getOperands());
     llvm::SmallVector<Value> constants;
-    bool readsACarriedColumn = false;
-
-    for (Value operand : op->getOperands()) {
-        const bool definedAboveTheBody = !region.isAncestor(operand.getParentRegion());
-        if (definedAboveTheBody || ::db::yieldsConstantColumn(operand)) {
-            invariant._operands.push_back(operand);
-            constants.push_back(operand);
-            continue;
-        }
-
-        Value outer;
-        llvm::SmallVector<Operation*> steps;
-        if (!matchOuterColumn(operand, body, outer, steps)) {
-            return false;
-        }
-
-        if (readsACarriedColumn && steps != invariant._steps) {
-            return false;
-        }
-
-        invariant._operands.push_back(outer);
-        invariant._steps = steps;
-        readsACarriedColumn = true;
-    }
-
-    if (!readsACarriedColumn) {
+    if (!matchHoistLevels(op->getBlock(), operands, constants, invariant._levels)) {
         return false;
     }
+
+    Region& outerRegion = *invariant._levels.back()._region;
 
     llvm::SetVector<Value> readAbove;
     mlir::getUsedValuesDefinedAbove(op->getRegions(), readAbove);
     for (Value value : readAbove) {
-        if (region.isAncestor(value.getParentRegion()) && !::db::yieldsConstantColumn(value)) {
+        if (outerRegion.isAncestor(value.getParentRegion()) && !::db::yieldsConstantColumn(value)) {
             return false;
         }
 
@@ -9563,14 +9634,16 @@ bool matchElementInvariantOp(Operation* op, Block& body, ElementInvariantOp& inv
     }
 
     invariant._op = op;
-    collectConstantCone(constants, body, invariant._constants);
+    invariant._operands = operands;
+    collectConstantCone(constants, outerRegion, invariant._constants);
 
     return true;
 }
 
-void hoistElementInvariantOp(const ElementInvariantOp& invariant, Region& region, mlir::RewriterBase& rewriter) {
-    Operation* const holder = region.getParentOp();
+void hoistRowInvariantOp(const RowInvariantOp& invariant, mlir::RewriterBase& rewriter) {
     Operation* const op = invariant._op;
+    Region& innerRegion = *invariant._levels.front()._region;
+    Operation* const holder = invariant._levels.back()._region->getParentOp();
 
     for (Operation* const constant : invariant._constants) {
         rewriter.moveOpBefore(constant, holder);
@@ -9583,47 +9656,31 @@ void hoistElementInvariantOp(const ElementInvariantOp& invariant, Region& region
 
     const Value result = op->getResult(0);
 
-    Value column = carryIntoRegion(region, result, rewriter);
-    for (Operation* const step : llvm::reverse(invariant._steps)) {
-        column = carryThrough(step, column, rewriter);
+    Value column = result;
+    for (const HoistLevel& level : llvm::reverse(invariant._levels)) {
+        column = carryIntoRegion(*level._region, column, rewriter);
+
+        for (Operation* const step : llvm::reverse(level._steps)) {
+            column = carryThrough(step, column, rewriter);
+        }
     }
 
-    rewriter.replaceUsesWithIf(result, column, [&region](OpOperand& use) {
-        return region.isAncestor(use.getOwner()->getParentRegion());
+    rewriter.replaceUsesWithIf(result, column, [&innerRegion](OpOperand& use) {
+        return innerRegion.isAncestor(use.getOwner()->getParentRegion());
     });
 }
 
-void hoistElementInvariantOps(Operation* holder, mlir::RewriterBase& rewriter) {
-    for (Region& region : holder->getRegions()) {
-        Block& body = region.front();
-
-        Operation* op = &body.front();
-        while (op) {
-            Operation* const next = op->getNextNode();
-
-            ElementInvariantOp invariant;
-            if (matchElementInvariantOp(op, body, invariant)) {
-                hoistElementInvariantOp(invariant, region, rewriter);
-            }
-
-            op = next;
-        }
-    }
-}
-
-struct HoistElementInvariantOps : public impl::HoistElementInvariantOpsBase<HoistElementInvariantOps> {
+struct HoistRepeatedRegionInvariantOps : public impl::HoistRepeatedRegionInvariantOpsBase<HoistRepeatedRegionInvariantOps> {
     void runOnOperation() override {
-        llvm::SmallVector<Operation*> holders;
-        getOperation()->walk([&holders](Operation* op) {
-            if (runsItsRegionsPerElement(op)) {
-                holders.push_back(op);
+        runWorklistOver(getOperation(), computesOneValuePerRow, [](Operation* op, mlir::RewriterBase& rewriter) {
+            RowInvariantOp invariant;
+            if (!matchRowInvariantOp(op, invariant)) {
+                return false;
             }
-        });
 
-        mlir::IRRewriter rewriter(&getContext());
-        for (Operation* const holder : holders) {
-            hoistElementInvariantOps(holder, rewriter);
-        }
+            hoistRowInvariantOp(invariant, rewriter);
+            return true;
+        });
     }
 };
 

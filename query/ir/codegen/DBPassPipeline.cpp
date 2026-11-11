@@ -63,7 +63,7 @@ const std::array<DBPassFactory, DB_PASS_COUNT> dbPassPipeline = {
     [](const mlir::db::DBPassContext*) { return mlir::db::createMergeFilters(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseScanByNodeIDs(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseScanByPropertyValue(); },
-    [](const mlir::db::DBPassContext*) { return mlir::db::createHoistElementInvariantOps(); },
+    [](const mlir::db::DBPassContext*) { return mlir::db::createHoistRepeatedRegionInvariantOps(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createReusePropertyReads(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createCountPathRows(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseFetchNodes(); },
