@@ -42,6 +42,16 @@ def ColumnCarrierOpInterface : OpInterface<"ColumnCarrierOpInterface"> {
       (ins "::mlir::Region&":$region, "size_t&":$elementArgument), [{}],
       [{ return {}; }]>,
     InterfaceMethod<
+      "The value a region of the op yields whose values, one per row the region yields, are the elements of the lists `result` holds; null where `result` holds no such list",
+      "::mlir::Value", "getListedValue",
+      (ins "::mlir::OpResult":$result), [{}],
+      [{ return {}; }]>,
+    InterfaceMethod<
+      "Append the values `value`, the accumulator of a fold as an argument of one of the op's regions or as a result, takes one of in each row: its initial value, or a value the fold's body yields, a number among them promoted to the one number type the fold converts them all to; none where `value` is no accumulator",
+      "void", "collectAccumulatedValues",
+      (ins "::mlir::Value":$value, "::llvm::SmallVectorImpl<::mlir::Value>&":$accumulated), [{}],
+      [{ return; }]>,
+    InterfaceMethod<
       "Set `resultOffset` to the result the first column `region` yields comes out as, each next one coming out as the next result with the rows the region left it; false where the op pads or merges what its regions yield",
       "bool", "getYieldedResultOffset",
       (ins "::mlir::Region&":$region, "size_t&":$resultOffset), [{}],

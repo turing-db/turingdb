@@ -264,7 +264,7 @@ TEST_F(ListBodyArgumentHeldTagsTest, bindsTheElementOfAReduce) {
     EXPECT_FALSE(isKeyReadSpeculatable("[[{t = 1 : i64}, 5 : i64]]", ops));
 }
 
-TEST_F(ListBodyArgumentHeldTagsTest, leavesTheAccumulatorOfAReduceUnknown) {
+TEST_F(ListBodyArgumentHeldTagsTest, readsNoKeyOffAnAccumulatorStartingAtAnInteger) {
     const std::string_view ops = R"mlir(
   %xs = db.constant([1, 2])
   %r = db.reduce(%xs, %rows, {}) {

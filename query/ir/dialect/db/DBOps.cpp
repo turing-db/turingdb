@@ -191,6 +191,7 @@ void fillTrailingRegionCarrySet(Operation* op, Region& region, size_t count, Reg
 
 constexpr size_t HOP_FIXED_RESULT_COUNT = 4;
 constexpr size_t PATH_FIXED_RESULT_COUNT = 3;
+constexpr unsigned FOLD_ACCUMULATOR_ARGUMENT = 1;
 
 void collectCarriedResult(Value value, size_t firstCarriedResult, ValueRange carriedColumns, llvm::SmallVectorImpl<Value>& carried) {
     const OpResult result = dyn_cast<OpResult>(value);
@@ -3194,6 +3195,11 @@ Value ListComprehension::getRegionElementSource(Region& region, size_t& elementA
     return getSource();
 }
 
+Value ListComprehension::getListedValue(OpResult result) {
+    ComprehensionYield yield = cast<ComprehensionYield>(getBody().front().getTerminator());
+    return yield.getValue();
+}
+
 bool ListPredicate::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
     fillTrailingRegionCarrySet(getOperation(), region, getColumnsToFilter().size(), carrySet);
     return true;
@@ -3214,6 +3220,18 @@ Value Reduce::getRegionElementSource(Region& region, size_t& elementArgument) {
     return getSource();
 }
 
+void Reduce::collectAccumulatedValues(Value value, llvm::SmallVectorImpl<Value>& accumulated) {
+    Block& body = getBody().front();
+    const bool holdsTheAccumulator = value == getResult() || value == body.getArgument(FOLD_ACCUMULATOR_ARGUMENT);
+    if (!holdsTheAccumulator) {
+        return;
+    }
+
+    ReduceYield yield = cast<ReduceYield>(body.getTerminator());
+    accumulated.push_back(getInitialValue());
+    accumulated.push_back(yield.getValue());
+}
+
 bool AllReduce::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
     fillTrailingRegionCarrySet(getOperation(), region, getColumnsToFilter().size(), carrySet);
     return true;
@@ -3224,9 +3242,28 @@ Value AllReduce::getRegionElementSource(Region& region, size_t& elementArgument)
     return getSource();
 }
 
+// The predicate tests the accumulator each step of the body leaves, never the initial value
+void AllReduce::collectAccumulatedValues(Value value, llvm::SmallVectorImpl<Value>& accumulated) {
+    Block& body = getBody().front();
+    Block& predicate = getPredicate().front();
+    ReduceYield yield = cast<ReduceYield>(body.getTerminator());
+
+    if (value == body.getArgument(FOLD_ACCUMULATOR_ARGUMENT)) {
+        accumulated.push_back(getInitialValue());
+        accumulated.push_back(yield.getValue());
+    } else if (value == predicate.getArgument(FOLD_ACCUMULATOR_ARGUMENT)) {
+        accumulated.push_back(yield.getValue());
+    }
+}
+
 bool PatternComprehension::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
     carrySet = RegionCarrySet {._count = getInputColumns().size()};
     return true;
+}
+
+Value PatternComprehension::getListedValue(OpResult result) {
+    ComprehensionYield yield = cast<ComprehensionYield>(getPattern().front().getTerminator());
+    return yield.getValue();
 }
 
 bool OptionalMatch::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
@@ -3300,6 +3337,11 @@ void CollectSubquery::collectCarriedColumns(Value value, llvm::SmallVectorImpl<V
 bool CollectSubquery::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
     carrySet = RegionCarrySet {._count = getInputColumns().size()};
     return true;
+}
+
+Value CollectSubquery::getListedValue(OpResult result) {
+    CollectSubqueryYield yield = cast<CollectSubqueryYield>(getBody().front().getTerminator());
+    return yield.getValue();
 }
 
 void Union::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {

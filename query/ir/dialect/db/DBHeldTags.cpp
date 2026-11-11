@@ -7,6 +7,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
@@ -26,6 +27,7 @@ namespace {
 using TagMask = uint32_t;
 
 constexpr size_t NO_READ = 0;
+constexpr size_t NO_REACH = SIZE_MAX;
 
 TagMask tagBit(CellTag tag) {
     return TagMask {1} << static_cast<uint8_t>(tag);
@@ -46,16 +48,13 @@ mlir::Type stripNullable(mlir::Type element) {
     return nullable ? nullable.getValueType() : element;
 }
 
-void collectCarriedColumns(mlir::Value value, llvm::SmallVectorImpl<mlir::Value>& carried) {
+mlir::db::ColumnCarrierOpInterface carrierOf(mlir::Value value) {
     mlir::Operation* owner = value.getDefiningOp();
     if (const mlir::BlockArgument argument = mlir::dyn_cast<mlir::BlockArgument>(value)) {
         owner = argument.getOwner()->getParentOp();
     }
 
-    mlir::db::ColumnCarrierOpInterface carrier = mlir::dyn_cast_or_null<mlir::db::ColumnCarrierOpInterface>(owner);
-    if (carrier) {
-        carrier.collectCarriedColumns(value, carried);
-    }
+    return mlir::dyn_cast_or_null<mlir::db::ColumnCarrierOpInterface>(owner);
 }
 
 mlir::IntegerAttr literalPosition(mlir::Value index) {
@@ -72,6 +71,7 @@ struct ReadStep {
     mlir::StringAttr _key;
     mlir::IntegerAttr _position;
     size_t _rest {NO_READ};
+    size_t _depth {0};
 };
 
 // Walks a column back to where its values were made, through the ops carrying it and from
@@ -90,7 +90,9 @@ public:
         reach(column, NO_READ);
 
         while (!_worklist.empty()) {
-            const Reach next = _worklist.pop_back_val();
+            _current = _worklist.pop_back_val();
+
+            const Reach next = _reaches[_current];
             const bool holds = next._value ? walkValue(next._value, next._path) : walkLiteral(next._literal, next._path);
             if (!holds) {
                 return false;
@@ -105,6 +107,7 @@ private:
         mlir::Value _value;
         mlir::Attribute _literal;
         size_t _path {NO_READ};
+        size_t _parent {NO_REACH};
     };
 
     using ReachKey = std::pair<const void*, size_t>;
@@ -112,8 +115,10 @@ private:
     TagMask _tags {0};
     std::vector<ReadStep> _steps;
     llvm::DenseMap<ReachKey, size_t> _paths;
-    llvm::SmallVector<Reach> _worklist;
+    std::vector<Reach> _reaches;
+    llvm::SmallVector<size_t> _worklist;
     llvm::DenseSet<ReachKey> _reached;
+    size_t _current {NO_REACH};
 
     bool holds(CellTag tag) const {
         return tag == CellTag::Null || (_tags & tagBit(tag)) != 0;
@@ -124,6 +129,7 @@ private:
         const auto [entry, inserted] = _paths.try_emplace(ReachKey {read.getAsOpaquePointer(), step._rest}, _steps.size());
         if (inserted) {
             _steps.push_back(step);
+            _steps.back()._depth = _steps[step._rest]._depth + 1;
         }
 
         return entry->second;
@@ -160,14 +166,48 @@ private:
 
     void reach(mlir::Value value, size_t path) {
         if (_reached.insert(ReachKey {value.getAsOpaquePointer(), path}).second) {
-            _worklist.push_back(Reach {._value = value, ._path = path});
+            pushReach(Reach {._value = value, ._path = path, ._parent = _current});
         }
     }
 
     void reach(mlir::Attribute literal, size_t path) {
         if (_reached.insert(ReachKey {literal.getAsOpaquePointer(), path}).second) {
-            _worklist.push_back(Reach {._literal = literal, ._path = path});
+            pushReach(Reach {._literal = literal, ._path = path, ._parent = _current});
         }
+    }
+
+    void pushReach(const Reach& next) {
+        _worklist.push_back(_reaches.size());
+        _reaches.push_back(next);
+    }
+
+    // A body reading into its accumulator reads deeper at each step of the fold, so a walk
+    // around the fold never ends. Every cycle the walk follows runs through an accumulator.
+    bool readsDeeperAtEachStep(mlir::Value accumulator, size_t path) const {
+        const size_t depth = _steps[path]._depth;
+
+        for (size_t earlier = _reaches[_current]._parent; earlier != NO_REACH; earlier = _reaches[earlier]._parent) {
+            const Reach& reached = _reaches[earlier];
+            if (reached._value == accumulator && _steps[reached._path]._depth < depth) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // A fold promotes a number it takes only to the type of another number it takes, so the
+    // accumulator holds no tag the values it takes do not
+    bool reachAccumulatedValues(mlir::Value accumulator, llvm::ArrayRef<mlir::Value> accumulated, size_t path) {
+        if (readsDeeperAtEachStep(accumulator, path)) {
+            return false;
+        }
+
+        for (const mlir::Value value : accumulated) {
+            reach(value, path);
+        }
+
+        return true;
     }
 
     bool reachRegionInput(mlir::BlockArgument argument, size_t path) {
@@ -201,8 +241,13 @@ private:
             return true;
         }
 
+        mlir::db::ColumnCarrierOpInterface carrier = carrierOf(value);
+        if (!carrier) {
+            return walkMadeValue(value, element, path);
+        }
+
         llvm::SmallVector<mlir::Value, 4> carried;
-        collectCarriedColumns(value, carried);
+        carrier.collectCarriedColumns(value, carried);
 
         for (const mlir::Value carriedColumn : carried) {
             reach(carriedColumn, path);
@@ -210,6 +255,18 @@ private:
 
         if (!carried.empty()) {
             return true;
+        }
+
+        llvm::SmallVector<mlir::Value, 2> accumulated;
+        carrier.collectAccumulatedValues(value, accumulated);
+
+        const mlir::OpResult result = mlir::dyn_cast<mlir::OpResult>(value);
+        const mlir::Value listed = result ? carrier.getListedValue(result) : mlir::Value();
+
+        if (!accumulated.empty()) {
+            return reachAccumulatedValues(value, accumulated, path);
+        } else if (listed) {
+            return walkListedValues(listed, path);
         }
 
         return walkMadeValue(value, element, path);
@@ -263,6 +320,22 @@ private:
         }
 
         reachElements(list.getElements(), step);
+
+        return true;
+    }
+
+    // A position reads a value the body yields, or null past the end of the list
+    bool walkListedValues(mlir::Value listed, size_t path) {
+        if (path == NO_READ) {
+            return holds(CellTag::ListView);
+        }
+
+        const ReadStep step = _steps[path];
+        if (step._key) {
+            return false;
+        }
+
+        reach(listed, step._rest);
 
         return true;
     }

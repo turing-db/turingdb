@@ -717,7 +717,7 @@ def PercentileDisc : PercentileOp<"percentile_disc">;
 /**
 * ListComprehension
 */
-def ListComprehension : TuringOp<"list_comprehension", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet", "getRegionElementSource"]>]> {
+def ListComprehension : TuringOp<"list_comprehension", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet", "getRegionElementSource", "getListedValue"]>]> {
   let summary = "Build one list per row out of the elements of that row's list, filtered and projected";
 
   let description = [{
@@ -813,7 +813,7 @@ def ListPredicate : TuringOp<"list_predicate", [Pure, ConstantThroughOperands, D
 /**
 * Reduce
 */
-def Reduce : TuringOp<"reduce", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet", "getRegionElementSource"]>]> {
+def Reduce : TuringOp<"reduce", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet", "getRegionElementSource", "collectAccumulatedValues"]>]> {
   let summary = "Fold the elements of each row's list into one value per row";
 
   let description = [{
@@ -867,7 +867,7 @@ def ReduceYield : TuringOp<"reduce_yield", [Pure, Terminator, ParentOneOf<["Redu
 /**
 * AllReduce
 */
-def AllReduce : TuringOp<"all_reduce", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet", "getRegionElementSource"]>]> {
+def AllReduce : TuringOp<"all_reduce", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet", "getRegionElementSource", "collectAccumulatedValues"]>]> {
   let summary = "Decide, per row, whether a predicate holds after every step of a fold over that row's list";
 
   let description = [{
@@ -924,7 +924,7 @@ def AllReduceYield : TuringOp<"all_reduce_yield", [Pure, Terminator, HasParent<"
 /**
 * PatternComprehension
 */
-def PatternComprehension : TuringOp<"pattern_comprehension", [Pure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet"]>]> {
+def PatternComprehension : TuringOp<"pattern_comprehension", [Pure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet", "getListedValue"]>]> {
   let summary = "Build one list per row out of the matches a pattern finds for that row";
 
   let description = [{
@@ -4716,7 +4716,7 @@ def CountSubqueryYield : TuringOp<"count_subquery_yield", [Pure, Terminator, Att
 /**
 * CollectSubquery
 */
-def CollectSubquery : TuringOp<"collect_subquery", [Pure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet"]>]> {
+def CollectSubquery : TuringOp<"collect_subquery", [Pure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet", "getListedValue"]>]> {
   let summary = "Build, per row in flight, the list of what a body returns for it";
 
   let description = [{
