@@ -3,6 +3,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <algorithm>
+
 #include "BioAssert.h"
 
 using namespace fs;
@@ -80,9 +82,6 @@ void FilePageWriter::finish() {
     }
 
     if (_buffer.size() > 0) {
-        if (_buffer.size() != _buffer.capacity()) {
-            std::memset(_buffer.data() + _buffer.size(), 0, _buffer.avail());
-        }
         flush();
         sync();
     }
@@ -92,10 +91,6 @@ void FilePageWriter::finish() {
 }
 
 void FilePageWriter::nextPage() {
-    if (_buffer.size() != _buffer.capacity()) {
-        std::memset(_buffer.data() + _buffer.size(), 0, _buffer.avail());
-    }
-
     flush();
 }
 
@@ -114,6 +109,8 @@ void FilePageWriter::reserveSpace(size_t byteCount) {
 }
 
 void FilePageWriter::flush() {
+    std::fill_n(_buffer.data() + _buffer.size(), _buffer.avail(), 0);
+
     ssize_t remainingBytes = buffer().capacity();
     ssize_t bytesWritten = 0;
 
