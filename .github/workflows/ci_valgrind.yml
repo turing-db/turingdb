@@ -1,0 +1,113 @@
+name: CI Valgrind
+
+on:
+  schedule:
+    - cron: '0 9,12,17 * * 1-5'
+      timezone: 'Europe/Paris'
+
+  workflow_dispatch:
+
+
+concurrency:
+  group: ci-valgrind-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+
+jobs:
+  memcheck:
+    name: Valgrind memcheck unit tests
+    strategy:
+      matrix:
+        os: [ "ubuntu-24.04-turing" ]
+    runs-on: ${{ matrix.os }}
+
+    # RELDEBUG keeps the test binaries' symbols, which the suppressions match by name.
+    # CMake reads it from the environment, so every cmake and ninja call needs it.
+    env:
+      BUILD_JOBS: 4
+      CMAKE_BUILD_PARALLEL_LEVEL: 4
+      CTEST_PARALLEL_LEVEL: 4
+      PYTHON_VERSION: '3.14'
+      RELDEBUG: 1
+
+    steps:
+    - name: Use the host's build parallelism
+      run: |
+        if [ -n "${HOST_BUILD_JOBS:-}" ]; then
+          echo "BUILD_JOBS=$HOST_BUILD_JOBS" >> "$GITHUB_ENV"
+          echo "CMAKE_BUILD_PARALLEL_LEVEL=$HOST_BUILD_JOBS" >> "$GITHUB_ENV"
+          echo "CTEST_PARALLEL_LEVEL=$HOST_BUILD_JOBS" >> "$GITHUB_ENV"
+        fi
+
+    - name: Install valgrind
+      run: |
+        if ! command -v valgrind > /dev/null; then
+          sudo apt-get update
+          sudo apt-get install -y valgrind
+        fi
+        valgrind --version
+
+    - uses: actions/checkout@v4
+      with:
+        lfs: true
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+
+    - name: Build dependencies
+      uses: ./.github/actions/build-dependencies
+      with:
+        os: ${{ matrix.os }}
+
+    - name: Setup Python
+      run: uv python install "$PYTHON_VERSION"
+
+    - name: Configure
+      run: |
+        mkdir -p build
+        cd build
+        cmake -G Ninja -DPython_EXECUTABLE="$(uv python find "$PYTHON_VERSION")" ..
+
+    - name: Build
+      run: ninja -C build -j "$BUILD_JOBS"
+
+    # TuringTestMain turns shuffle on. test_query_parser_mutant takes 21 minutes under
+    # memcheck and test_query_ir_fuzz_hang hits its own 120 s timeout. JobSystemTest
+    # starts 1024 workers, above valgrind's default limit of 500 threads.
+    - name: Run unit tests under memcheck
+      run: |
+        cd build
+        ctest -T memcheck --output-on-failure --timeout 7200 --test-output-truncation head \
+          -E '^(test_query_parser_mutant|test_query_ir_fuzz_hang)$' \
+          --overwrite MemoryCheckCommand="$(command -v valgrind)" \
+          --overwrite "MemoryCheckCommandOptions=--tool=memcheck --error-exitcode=99 --num-callers=40 --max-threads=2048" \
+          --overwrite MemoryCheckSuppressionFile="$GITHUB_WORKSPACE/test/valgrind_suppressions.supp"
+
+    - name: Print memcheck reports
+      if: failure()
+      run: |
+        cd build/Testing/Temporary || exit 0
+        for log in MemoryChecker.*.log; do
+          if ! grep -q "ERROR SUMMARY: 0 errors" "$log"; then
+            echo "::group::$log"
+            cat "$log"
+            echo "::endgroup::"
+          fi
+        done
+
+    - name: Upload memcheck logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: valgrind-memcheck-logs
+        path: |
+          build/Testing/Temporary/MemoryChecker.*.log
+          build/Testing/Temporary/LastTest*.log
+          build/Testing/Temporary/LastDynamicAnalysis*.log
+
+    - name: Reclaim disk (self-hosted)
+      if: always()
+      uses: ./.github/actions/clean-self-hosted-runner
