@@ -5,8 +5,5 @@
 using namespace mlir;
 
 bool mlir::storage::isBoundNodeIDsType(Type type) {
-    const storage::ListType list = dyn_cast<storage::ListType>(type);
-    const Type element = list ? list.getElementType() : type;
-
-    return element.isSignlessInteger(64);
+    return type.isSignlessInteger(64) || type.isF64() || isa<storage::ListType>(type);
 }

@@ -397,10 +397,17 @@ TEST_F(FuseScanByNodeIDsCodegenTest, labelledMembershipKeepsALabelCheck) {
     EXPECT_EQ(countOps<mlir::db::ScanNodesByLabel>(*module), 0u);
 }
 
-TEST_F(FuseScanByNodeIDsCodegenTest, membershipOfANonIDKeepsItsFilter) {
+TEST_F(FuseScanByNodeIDsCodegenTest, membershipOfADoubleKeepsItsFilter) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (n) WHERE n IN [1, 2.0] RETURN n");
+
+    EXPECT_EQ(countOps<mlir::db::ConstScanNodes>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 1u);
+}
+
+TEST_F(FuseScanByNodeIDsCodegenTest, membershipListsTheIDsBesideOtherValues) {
     const char* const queries[] = {
         "MATCH (n) WHERE n IN [1, 'Remy'] RETURN n",
-        "MATCH (n) WHERE n IN [1, 2.0] RETURN n",
         "MATCH (n) WHERE n IN [1, -2] RETURN n",
         "MATCH (n) WHERE n IN [1, [2]] RETURN n",
     };
@@ -408,8 +415,15 @@ TEST_F(FuseScanByNodeIDsCodegenTest, membershipOfANonIDKeepsItsFilter) {
     for (const char* const query : queries) {
         const mlir::OwningOpRef<mlir::ModuleOp> module = generate(query);
 
-        EXPECT_EQ(countOps<mlir::db::ConstScanNodes>(*module), 0u) << query;
-        EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 1u) << query;
-        EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 1u) << query;
+        llvm::SmallVector<mlir::db::ConstScanNodes> constScans = collect<mlir::db::ConstScanNodes>(*module);
+        ASSERT_EQ(constScans.size(), 1u) << query;
+
+        std::vector<int64_t> nodeIDs;
+        nodeIDsOf(constScans.front(), nodeIDs);
+        const std::vector<int64_t> expected {1};
+        EXPECT_EQ(nodeIDs, expected) << query;
+
+        EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 0u) << query;
+        EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 0u) << query;
     }
 }

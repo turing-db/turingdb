@@ -1789,6 +1789,9 @@ void NLTranslator::translateConstScanLoop(const IteratorConfig& config,
         if (mlir::isa<storage::ListType>(boundType)) {
             bioassert(column->getKind() == ColumnConst<ListView>::staticKind(), "Bound node IDs hold one list for the run");
             loopData->addBoundIDList(static_cast<const ColumnConst<ListView>*>(column));
+        } else if (boundType.isF64()) {
+            bioassert(column->getKind() == ColumnConst<types::Double::Primitive>::staticKind(), "A bound node ID holds one value for the run");
+            loopData->addBoundDoubleID(static_cast<const ColumnConst<types::Double::Primitive>*>(column));
         } else {
             bioassert(column->getKind() == ColumnConst<types::Int64::Primitive>::staticKind(), "A bound node ID holds one value for the run");
             loopData->addBoundID(static_cast<const ColumnConst<types::Int64::Primitive>*>(column));

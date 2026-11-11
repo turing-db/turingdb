@@ -20,6 +20,7 @@
 #include <llvm/Support/MathExtras.h>
 
 #include "NumberOrder.h"
+#include "NodeIDOfNumber.h"
 #include "TypeUtils.h"
 #include "columns/ContainerKind.h"
 #include "iterators/GetEdgesIterator.h"
@@ -1423,10 +1424,11 @@ bool readBoundPropertyValue(const Column* bound, ValueType boundType, NLScanByPr
 }
 
 // Appends to @param listed the nodes a scan produces that the bound IDs of a const scan
-// name: a null or a negative ID names none
+// name: the numbers they hold, each naming the node whose ID it equals
 void appendBoundNodeIDs(const NLConstScanLoopData& loopData, const ScannedNodes& scanned, std::vector<NodeID>& listed) {
-    const auto appendNodeID = [&scanned, &listed](int64_t nodeID) {
-        if (nodeID < 0) {
+    const auto appendNodeID = [&scanned, &listed]<Number T>(T number) {
+        int64_t nodeID = 0;
+        if (!nodeIDOfNumber(number, nodeID)) {
             return;
         }
 
@@ -1440,10 +1442,24 @@ void appendBoundNodeIDs(const NLConstScanLoopData& loopData, const ScannedNodes&
         appendNodeID(bound->getRaw());
     }
 
+    for (const ColumnConst<types::Double::Primitive>* bound : loopData.getBoundDoubleIDs()) {
+        appendNodeID(bound->getRaw());
+    }
+
     for (const ColumnConst<ListView>* bound : loopData.getBoundIDLists()) {
         for (const CellView element : bound->getRaw()) {
-            if (element.getTag() == CellTag::Int) {
-                appendNodeID(element.getAs<types::Int64::Primitive>());
+            switch (element.getTag()) {
+                case CellTag::Int:
+                    appendNodeID(element.getAs<types::Int64::Primitive>());
+                break;
+                case CellTag::UInt:
+                    appendNodeID(element.getAs<types::UInt64::Primitive>());
+                break;
+                case CellTag::Double:
+                    appendNodeID(element.getAs<types::Double::Primitive>());
+                break;
+                default:
+                break;
             }
         }
     }
@@ -1599,16 +1615,14 @@ std::optional<NodeID> namedNode(NodeID node) {
     return node;
 }
 
-std::optional<NodeID> namedNode(types::Int64::Primitive id) {
-    if (id < 0) {
+template <std::integral Integer>
+std::optional<NodeID> namedNode(Integer id) {
+    int64_t nodeID = 0;
+    if (!nodeIDOfNumber(id, nodeID)) {
         return std::nullopt;
     }
 
-    return NodeID(static_cast<uint64_t>(id));
-}
-
-std::optional<NodeID> namedNode(types::UInt64::Primitive id) {
-    return NodeID(id);
+    return NodeID(static_cast<uint64_t>(nodeID));
 }
 
 std::optional<NodeID> namedNode(CellView cell) {

@@ -63,11 +63,11 @@ def ConstScanNodes : NLOp<"const_scan_nodes", [Pure, InferTypeOpAdaptor]> {
 
     `nodeIDs` is the same constant list db.const_scan_nodes carried; translation
     turns each entry into a storage NodeID. The bound IDs are read when the loop
-    starts, each node emitted once, in ID order. The loop drops, when it starts,
-    any ID naming no node a scan would produce. Emitting a known set needs no graph
-    walk, but it narrows only which rows are produced, never their shape, so - like
-    nl.scan_nodes - the result is always !nl.iter<!nl.chunk<!storage.node_id>> and
-    is inferred, not spelled out.
+    starts, as db.const_scan_nodes reads them, each node emitted once, in ID order.
+    The loop drops, when it starts, any ID naming no node a scan would produce.
+    Emitting a known set needs no graph walk, but it narrows only which rows are
+    produced, never their shape, so - like nl.scan_nodes - the result is always
+    !nl.iter<!nl.chunk<!storage.node_id>> and is inferred, not spelled out.
   }];
   let arguments = (ins DenseI64ArrayAttr:$nodeIDs, Variadic<NLChunk>:$boundIDs);
   let results   = (outs NLIterator:$result);

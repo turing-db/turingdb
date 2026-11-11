@@ -1235,6 +1235,25 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n) WHERE id(n) = 3 OR id(n) = $id OR id(n) IN $ids RETURN n, with $id a double
+// and $ids a list of mixed values
+const char* const boundConstScanNodesProgram = R"mlir(
+func.func @main(%id: !db.column<f64>, %ids: !db.column<!storage.list<!storage.any>>) {
+  %a = db.const_scan_nodes([3], %id, %ids : !db.column<f64>, !db.column<!storage.list<!storage.any>>) : !db.column<!storage.node_id>
+  db.output(%a) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// A const scan of a bound string, which names no node: rejected by the verifier.
+const char* const stringBoundConstScanNodesProgram = R"mlir(
+func.func @main(%id: !db.column<!storage.string>) {
+  %a = db.const_scan_nodes([], %id : !db.column<!storage.string>) : !db.column<!storage.node_id>
+  db.output(%a) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // LOAD CSV 'people.csv' AS row RETURN row[0], row[2]: a source over the records of a
 // file, one string column per field the query names.
 const char* const loadCSVProgram = R"mlir(
@@ -1619,6 +1638,17 @@ TEST_F(DBDialectTest, constScanNodesWithoutNodeIDsIsValid) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyConstScanNodesProgram);
     ASSERT_TRUE(module);
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*module)));
+}
+
+TEST_F(DBDialectTest, constScanNodesReadsBoundNumbersAndLists) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(boundConstScanNodesProgram);
+    ASSERT_TRUE(module);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*module)));
+}
+
+TEST_F(DBDialectTest, rejectsAConstScanOfABoundString) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(stringBoundConstScanNodesProgram);
+    EXPECT_FALSE(module);
 }
 
 TEST_F(DBDialectTest, parsesLoadCSV) {

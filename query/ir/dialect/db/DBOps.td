@@ -83,10 +83,11 @@ def ConstScanNodes : TuringOp<"const_scan_nodes", [Pure]> {
     op is Pure.
 
     `nodeIDs` lists the IDs the query spells. `boundIDs` are the IDs bound when the
-    query runs, each a column holding one value for the whole run: an integer, or a
-    list of integers. A parameter is one, so `id(n) = $id OR id(n) IN $ids` scans
+    query runs, each a column holding one value for the whole run: a number, or a
+    list whose numbers are the IDs. A parameter is one, so
+    `id(n) = $id OR id(n) IN $ids` scans
 
-      %a = db.const_scan_nodes([], %id, %ids : !db.column<i64>, !db.column<!storage.list<i64>>)
+      %a = db.const_scan_nodes([], %id, %ids : !db.column<f64>, !db.column<!storage.list<!storage.any>>)
         : !db.column<!storage.node_id>
 
     The scan reads the bound IDs when it starts, so the program does not depend on
@@ -97,9 +98,11 @@ def ConstScanNodes : TuringOp<"const_scan_nodes", [Pure]> {
     the index list db.sort carries; each entry is a storage NodeID once lowered.
     An ID that names no node in the graph matches nothing, so it is dropped and the
     scan yields only the nodes that exist - the same set-membership semantics as
-    the WHERE id(n) IN ... it models. A null or a negative bound ID names no node
-    either. No ID at all yields no row - not an error, matching that same
-    set-membership.
+    the WHERE id(n) IN ... it models. A bound value names the node whose ID it
+    equals, as id(n) = value compares them: an integer, or a double holding one.
+    Any other value - a null, a negative or fractional number, a string, a list
+    inside the list - names no node. No ID at all yields no row - not an error,
+    matching that same set-membership.
   }];
 
   let arguments = (ins DenseI64ArrayAttr:$nodeIDs, Variadic<Column>:$boundIDs);

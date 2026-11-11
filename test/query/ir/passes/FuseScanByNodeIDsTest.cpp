@@ -55,6 +55,16 @@ protected:
         EXPECT_EQ(countOps<mlir::db::ScanNodes>(module) + countOps<mlir::db::ScanNodesByLabel>(module), 1u);
     }
 
+    void expectNoNodeListed(mlir::ModuleOp module) {
+        llvm::SmallVector<mlir::db::ConstScanNodes> constScans = collect<mlir::db::ConstScanNodes>(module);
+        ASSERT_EQ(constScans.size(), 1u);
+        EXPECT_TRUE(constScans.front().getNodeIDs().empty());
+        EXPECT_TRUE(constScans.front().getBoundIDs().empty());
+
+        EXPECT_EQ(countOps<mlir::db::FilterOp>(module), 0u);
+        EXPECT_EQ(countOps<mlir::db::ScanNodes>(module) + countOps<mlir::db::ScanNodesByLabel>(module), 0u);
+    }
+
     mlir::MLIRContext _context;
 };
 
@@ -238,13 +248,13 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(FuseScanByNodeIDsTest, leavesNegativeLiteralAlone) {
+TEST_F(FuseScanByNodeIDsTest, listsNoNodeForANegativeLiteral) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(negativeLiteral);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runFuse(*module));
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
 
-    expectUntouched(*module);
+    expectNoNodeListed(*module);
 }
 
 // MATCH (n) WHERE n = true RETURN n
@@ -259,13 +269,13 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(FuseScanByNodeIDsTest, leavesBoolLiteralAlone) {
+TEST_F(FuseScanByNodeIDsTest, listsNoNodeForABoolLiteral) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(boolLiteral);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runFuse(*module));
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
 
-    expectUntouched(*module);
+    expectNoNodeListed(*module);
 }
 
 // MATCH (n:Person) WHERE n = 3 RETURN n

@@ -35,6 +35,7 @@
 #include "metadata/GraphMetadata.h"
 #include "metadata/LabelSet.h"
 #include "views/GraphView.h"
+#include "NodeIDOfNumber.h"
 
 #include "IRConstantColumn.h"
 #include "IRRaiseEffect.h"
@@ -269,6 +270,7 @@ Value productFactorColumn(CrossProduct product, size_t resultIndex) {
 using ColumnEquality = std::pair<Value, Value>;
 
 void collectConjuncts(Value mask, llvm::SmallVectorImpl<Value>& conjuncts);
+bool isUntypedNullMask(Value mask);
 
 bool isNodeColumn(Value column) {
     const ColumnType type = dyn_cast<ColumnType>(column.getType());
@@ -727,15 +729,24 @@ Value comparedNodeColumn(Value side) {
     return isNodeColumn(side) ? side : Value();
 }
 
+// The ID of the node a literal names, as id(n) = literal compares them
 bool nodeIDOfLiteral(Attribute literal, int64_t& nodeID) {
     const IntegerAttr integer = dyn_cast<IntegerAttr>(literal);
-    if (!integer || !integer.getType().isSignlessInteger(64)) {
-        return false;
+    const FloatAttr floating = dyn_cast<FloatAttr>(literal);
+
+    if (integer && integer.getType().isSignlessInteger(64)) {
+        return ::db::nodeIDOfNumber(integer.getInt(), nodeID);
+    } else if (floating) {
+        return ::db::nodeIDOfNumber(floating.getValueAsDouble(), nodeID);
     }
 
-    nodeID = integer.getInt();
+    return false;
+}
 
-    return nodeID >= 0;
+// The lookups compare as id() does, which a node compared to itself agrees with on every
+// value but a double: n = 3.0 holds of no node, id(n) = 3.0 of node 3
+bool mayHoldADouble(Type element) {
+    return isa<Float64Type, storage::AnyType>(element);
 }
 
 // The IDs a disjunction over a node column names: the ones the query spells, and the columns
@@ -745,7 +756,7 @@ struct NodeIDList {
     llvm::SmallVector<Value, 2> _bound;
 };
 
-bool matchBoundNodeIDs(Value side, bool listsIDs, NodeIDList& nodeIDs) {
+bool matchBoundNodeIDs(Value side, bool listsIDs, bool comparesTheID, NodeIDList& nodeIDs) {
     if (!isBoundBeforeTheRun(side)) {
         return false;
     }
@@ -753,9 +764,14 @@ bool matchBoundNodeIDs(Value side, bool listsIDs, NodeIDList& nodeIDs) {
     const Type element = cast<ColumnType>(side.getType()).getType();
     const storage::ListType list = dyn_cast<storage::ListType>(element);
 
-    const bool holdsAnID = !listsIDs && element.isSignlessInteger(64);
-    const bool holdsIDs = listsIDs && list && list.getElementType().isSignlessInteger(64);
-    if (!holdsAnID && !holdsIDs) {
+    const bool holdsANumber = !listsIDs && (element.isSignlessInteger(64) || element.isF64());
+    const bool holdsAList = listsIDs && list;
+    if (!holdsANumber && !holdsAList) {
+        return false;
+    }
+
+    const Type value = list ? list.getElementType() : element;
+    if (!comparesTheID && mayHoldADouble(value)) {
         return false;
     }
 
@@ -775,26 +791,34 @@ bool matchNodeIDEquality(Value mask, Value scanColumn, NodeIDList& nodeIDs) {
     const Value lhs = equality.getLhs();
     const Value rhs = equality.getRhs();
 
+    Value nodeSide;
     Value constantSide;
     if (comparedNodeColumn(lhs) == scanColumn) {
+        nodeSide = lhs;
         constantSide = rhs;
     } else if (comparedNodeColumn(rhs) == scanColumn) {
+        nodeSide = rhs;
         constantSide = lhs;
     } else {
         return false;
     }
 
+    const bool comparesTheID = static_cast<bool>(nodeSide.getDefiningOp<ElementID>());
+
     ConstantOp constant = constantSide.getDefiningOp<ConstantOp>();
     if (!constant) {
-        return matchBoundNodeIDs(constantSide, false, nodeIDs);
+        return matchBoundNodeIDs(constantSide, false, comparesTheID, nodeIDs);
     }
 
-    int64_t nodeID = 0;
-    if (!nodeIDOfLiteral(constant.getValue(), nodeID)) {
+    const Attribute literal = constant.getValue();
+    if (!comparesTheID && isa<FloatAttr>(literal)) {
         return false;
     }
 
-    nodeIDs._literals.push_back(nodeID);
+    int64_t nodeID = 0;
+    if (nodeIDOfLiteral(literal, nodeID)) {
+        nodeIDs._literals.push_back(nodeID);
+    }
 
     return true;
 }
@@ -805,10 +829,12 @@ bool matchNodeIDMembership(Value mask, Value scanColumn, NodeIDList& nodeIDs) {
         return false;
     }
 
+    const bool comparesTheID = static_cast<bool>(membership.getLhs().getDefiningOp<ElementID>());
+
     const Value list = membership.getRhs();
     ConstantOp constant = list.getDefiningOp<ConstantOp>();
     if (!constant) {
-        return matchBoundNodeIDs(list, true, nodeIDs);
+        return matchBoundNodeIDs(list, true, comparesTheID, nodeIDs);
     }
 
     const ArrayAttr elements = dyn_cast<ArrayAttr>(constant.getValue());
@@ -816,20 +842,36 @@ bool matchNodeIDMembership(Value mask, Value scanColumn, NodeIDList& nodeIDs) {
         return false;
     }
 
+    const bool listsADouble = llvm::any_of(elements, [](Attribute element) {
+        return isa<FloatAttr>(element);
+    });
+
+    if (!comparesTheID && listsADouble) {
+        return false;
+    }
+
     for (const Attribute element : elements) {
-        if (isa<UnitAttr>(element)) {
-            continue;
-        }
-
         int64_t nodeID = 0;
-        if (!nodeIDOfLiteral(element, nodeID)) {
-            return false;
+        if (nodeIDOfLiteral(element, nodeID)) {
+            nodeIDs._literals.push_back(nodeID);
         }
-
-        nodeIDs._literals.push_back(nodeID);
     }
 
     return true;
+}
+
+// A mask a filter keeps no row on: one of its conjuncts is false, or null on every row
+bool isNeverTrue(Value mask) {
+    llvm::SmallVector<Value> conjuncts;
+    collectConjuncts(mask, conjuncts);
+
+    return llvm::any_of(conjuncts, [](Value conjunct) {
+        ConstantOp constant = conjunct.getDefiningOp<ConstantOp>();
+        const BoolAttr truth = constant ? dyn_cast<BoolAttr>(constant.getValue()) : BoolAttr();
+        const bool isFalse = truth && !truth.getValue();
+
+        return isFalse || isUntypedNullMask(conjunct);
+    });
 }
 
 // An UNWIND of N elements folds into a chain of N - 1 ORs, so the walk keeps its own stack:
@@ -846,7 +888,8 @@ bool collectNodeIDDisjunction(Value mask, Value scanColumn, NodeIDList& nodeIDs)
         }
 
         const bool listsNodes = matchNodeIDEquality(disjunct, scanColumn, nodeIDs)
-                             || matchNodeIDMembership(disjunct, scanColumn, nodeIDs);
+                             || matchNodeIDMembership(disjunct, scanColumn, nodeIDs)
+                             || isNeverTrue(disjunct);
         if (!listsNodes) {
             return false;
         }
@@ -3093,15 +3136,21 @@ struct NodeIDScanChain {
 };
 
 Value disjunctionColumn(Value mask) {
-    while (OrOp disjunction = mask.getDefiningOp<OrOp>()) {
-        mask = disjunction.getLhs();
-    }
+    llvm::SmallVector<Value> pending {mask};
+    while (!pending.empty()) {
+        const Value disjunct = pending.pop_back_val();
 
-    if (InOp membership = mask.getDefiningOp<InOp>()) {
-        return comparedNodeColumn(membership.getLhs());
-    } else if (EqOp equality = mask.getDefiningOp<EqOp>()) {
-        const Value lhsColumn = comparedNodeColumn(equality.getLhs());
-        return lhsColumn ? lhsColumn : comparedNodeColumn(equality.getRhs());
+        if (OrOp disjunction = disjunct.getDefiningOp<OrOp>()) {
+            pending.push_back(disjunction.getRhs());
+            pending.push_back(disjunction.getLhs());
+        } else if (InOp membership = disjunct.getDefiningOp<InOp>()) {
+            return comparedNodeColumn(membership.getLhs());
+        } else if (EqOp equality = disjunct.getDefiningOp<EqOp>()) {
+            const Value lhsColumn = comparedNodeColumn(equality.getLhs());
+            return lhsColumn ? lhsColumn : comparedNodeColumn(equality.getRhs());
+        } else if (!isNeverTrue(disjunct)) {
+            return {};
+        }
     }
 
     return {};
@@ -3179,16 +3228,21 @@ bool matchPatternScanSource(FilterOp filter, Value column, LineageClimbs& climbs
 bool matchNodeIDConjunct(FilterOp filter, Value conjunct, LineageClimbs& climbs, OpAnswers& reaching, NodeIDScanChain& chain) {
     chain._nodeIDs._literals.clear();
     chain._nodeIDs._bound.clear();
-
-    const Value column = disjunctionColumn(conjunct);
-    if (!column || !collectNodeIDDisjunction(conjunct, column, chain._nodeIDs)) {
-        return false;
-    }
-
     chain._filter = filter;
     chain._conjunct = conjunct;
 
-    return matchPatternScanSource(filter, column, climbs, reaching, chain._source);
+    const Value column = disjunctionColumn(conjunct);
+    if (column) {
+        return collectNodeIDDisjunction(conjunct, column, chain._nodeIDs)
+            && matchPatternScanSource(filter, column, climbs, reaching, chain._source);
+    }
+
+    // A disjunction comparing no node, every disjunct of it never true, keeps no row of the
+    // scan the filter reads
+    const bool listsNoNode = matchSoleScanSource(filter, chain._source)
+                          && collectNodeIDDisjunction(conjunct, chain._source._column, chain._nodeIDs);
+
+    return listsNoNode && readsOnlyIntoTheFilter(chain._source._op, filter);
 }
 
 bool matchNodeIDScanChain(FilterOp filter, LineageClimbs& climbs, NodeIDScanChain& chain) {
