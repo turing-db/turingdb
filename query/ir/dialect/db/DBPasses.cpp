@@ -91,6 +91,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSEEXPLOREDISTINCTENDS
 #define GEN_PASS_DEF_COUNTPATHROWS
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
+#define GEN_PASS_DEF_ERASEUNREADVALUES
 #define GEN_PASS_DEF_COUNTFROMMETADATA
 #define GEN_PASS_DEF_CANONICALIZECOALESCE
 #define GEN_PASS_DEF_FOLDCONSTANTMAPKEYS
@@ -7379,7 +7380,10 @@ void trimCarriedColumns(Operation* op, const CarrySet& carrySet, mlir::OpBuilder
 // @param erased, tells a freed op from a live one: the caller's set can hold an address a
 // later op was allocated at, and nothing is allocated while this runs.
 template <typename Erasable>
-bool eraseUnreadOps(llvm::SmallVectorImpl<Operation*>& pending, Erasable erasable, llvm::SmallPtrSetImpl<Operation*>& erased) {
+bool eraseUnreadOps(llvm::SmallVectorImpl<Operation*>& pending,
+                    Erasable erasable,
+                    mlir::RewriterBase& rewriter,
+                    llvm::SmallPtrSetImpl<Operation*>& erased) {
     llvm::SmallPtrSet<Operation*, 16> freed;
 
     while (!pending.empty()) {
@@ -7398,7 +7402,7 @@ bool eraseUnreadOps(llvm::SmallVectorImpl<Operation*>& pending, Erasable erasabl
             freed.insert(nested);
         });
 
-        op->erase();
+        rewriter.eraseOp(op);
     }
 
     erased.insert(freed.begin(), freed.end());
@@ -7419,7 +7423,8 @@ void eraseUnreadInPattern(llvm::ArrayRef<Value> dropped, Region& pattern, llvm::
         return pattern.isAncestor(op->getParentRegion());
     };
 
-    eraseUnreadOps(producers, inPattern, erased);
+    mlir::IRRewriter rewriter(pattern.getContext());
+    eraseUnreadOps(producers, inPattern, rewriter, erased);
 }
 
 // An optional match pads and carries the variables its pattern binds for what reads them
@@ -7479,17 +7484,19 @@ void trimUnreadColumnsOf(Operation* op, mlir::OpBuilder& builder, llvm::SmallPtr
     }
 }
 
-// Lowering runs every op it is handed, so a value computed per row that nothing reads goes,
-// and so do the ones only it read. Unlike a filter or a hop nothing reads, it shapes no row
-// a constant could be laid out over.
-bool eraseUnreadRowValues(Operation* root) {
+// Lowering runs every op it is handed, so an op @param erasable accepts that nothing reads
+// goes, and so do the ones only it read
+template <typename Erasable>
+bool eraseUnreadOpsUnder(Operation* root, Erasable erasable) {
     llvm::SmallVector<Operation*> ops;
     root->walk([&ops](Operation* op) {
         ops.push_back(op);
     });
 
+    mlir::IRRewriter rewriter(root->getContext());
     llvm::SmallPtrSet<Operation*, 16> erased;
-    return eraseUnreadOps(ops, computesAValuePerRow, erased);
+
+    return eraseUnreadOps(ops, erasable, rewriter, erased);
 }
 
 struct TrimUnreadColumns : public impl::TrimUnreadColumnsBase<TrimUnreadColumns> {
@@ -7510,8 +7517,23 @@ struct TrimUnreadColumns : public impl::TrimUnreadColumnsBase<TrimUnreadColumns>
                 }
             }
 
-            erasedRowValues = eraseUnreadRowValues(getOperation());
+            erasedRowValues = eraseUnreadOpsUnder(getOperation(), computesAValuePerRow);
         }
+    }
+};
+
+// A constant holds one value for every row and an op computing a value per row one for each
+// row it reads. Unlike a filter or a hop nothing reads, neither shapes the rows lowering lays
+// a constant out over.
+bool shapesNoRows(Operation* op) {
+    const bool holdsOneValue = op->hasTrait<OpTrait::ConstantLike>() || op->hasTrait<OpTrait::ConstantResult>();
+
+    return holdsOneValue || computesAValuePerRow(op);
+}
+
+struct EraseUnreadValues : public impl::EraseUnreadValuesBase<EraseUnreadValues> {
+    void runOnOperation() override {
+        eraseUnreadOpsUnder(getOperation(), shapesNoRows);
     }
 };
 

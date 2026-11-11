@@ -237,4 +237,9 @@ def TrimUnreadColumns : Pass<"trim_unread_columns"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def EraseUnreadValues : Pass<"erase_unread_values"> {
+    let summary = "Erase the constants and the values computed per row that nothing reads, in any region, and then the ones only they read, keeping every op that may raise. A scan, a hop, a filter or an unwind nothing reads stays: it shapes the rows lowering lays a constant out over";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 #endif // TURINGDB_PASSES
