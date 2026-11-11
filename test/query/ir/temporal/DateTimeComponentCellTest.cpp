@@ -24,9 +24,8 @@
 using namespace db;
 using namespace turing::test;
 
-// An UNWIND hands its elements on as type-erased cells, which carry their type per row
-// rather than per column. A calendar field read off one has to read the instant out of the
-// cell, as size() and id() read a list and an entity out of one.
+// A calendar field read off an unwound instant, and off a type-erased cell, which carries
+// its type per row rather than per column: a map value or a list element.
 class DateTimeComponentCellTest : public TuringTest {
 protected:
     void initialize() override {
@@ -142,4 +141,10 @@ TEST_F(DateTimeComponentCellTest, filtersOnAFieldOfAnUnwoundInstant) {
     expectRows("UNWIND [datetime('2026-01-15T00:00:00Z'), datetime('2019-03-02T00:00:00Z')] AS d "
                "WITH d WHERE d.year > 2020 RETURN d.month",
                {{"1"}});
+}
+
+TEST_F(DateTimeComponentCellTest, readsAFieldOfAnInstantHeldInACell) {
+    expectRows("WITH {a: datetime('2026-01-15T00:00:00Z')} AS m, [datetime('2019-03-02T00:00:00Z'), 1] AS l "
+               "RETURN m.a.year, l[0].month",
+               {{"2026", "3"}});
 }

@@ -228,12 +228,8 @@ std::strong_ordering compareValues(const Lhs lhs, const Rhs rhs) {
             return valueOf<ListView>(lhs) <=> valueOf<ListView>(rhs);
         break;
 
-        case CellOrderClass::Path: {
-            const std::span<const uint64_t> lhsIDs = valueOf<PathView>(lhs).getIDs();
-            const std::span<const uint64_t> rhsIDs = valueOf<PathView>(rhs).getIDs();
-
-            return std::lexicographical_compare_three_way(lhsIDs.begin(), lhsIDs.end(), rhsIDs.begin(), rhsIDs.end());
-        }
+        case CellOrderClass::Path:
+            return valueOf<PathView>(lhs) <=> valueOf<PathView>(rhs);
         break;
 
         case CellOrderClass::Point:
@@ -472,6 +468,13 @@ std::strong_ordering db::operator<=>(const MapView lhs, const MapView rhs) {
     }
 
     return std::strong_ordering::equal;
+}
+
+std::strong_ordering db::operator<=>(const PathView lhs, const PathView rhs) {
+    const std::span<const uint64_t> lhsIDs = lhs.getIDs();
+    const std::span<const uint64_t> rhsIDs = rhs.getIDs();
+
+    return std::lexicographical_compare_three_way(lhsIDs.begin(), lhsIDs.end(), rhsIDs.begin(), rhsIDs.end());
 }
 
 bool db::operator==(const MapView lhs, const MapView rhs) {

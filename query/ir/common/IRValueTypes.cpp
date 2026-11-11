@@ -3,33 +3,13 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Builders.h"
 
+#include "NullLiteralType.h"
 #include "StorageEnums.h"
 #include "StorageTypes.h"
 
 #include "IRException.h"
 
 using namespace db;
-
-namespace {
-
-// The list element types an unwind can drain into a column of that very type: the entity
-// IDs, the value types a nullable value chunk is laid out for, the schema IDs, and a nested
-// list, which drains into a list column one level shallower. An unresolved element, an
-// embedding, or the !storage.any a heterogeneous list holds drains as tagged scalars instead -
-// none of them names a column shape the drain could fill.
-bool drainsToItsOwnElementType(mlir::Type listElement) {
-    if (mlir::isa<mlir::storage::NodeIDType, mlir::storage::EdgeIDType, mlir::storage::StringType, mlir::storage::ListType>(listElement)) {
-        return true;
-    } else if (mlir::isa<mlir::Float64Type>(listElement) || mlir::storage::namesASchemaID(listElement)) {
-        return true;
-    }
-
-    const auto intType = mlir::dyn_cast<mlir::IntegerType>(listElement);
-
-    return intType && (intType.getWidth() == 1 || intType.getWidth() == 64);
-}
-
-}
 
 mlir::Type db::valueTypeToElementType(mlir::OpBuilder& builder, ValueType valueType) {
     switch (valueType) {
@@ -180,21 +160,17 @@ mlir::Type db::unwoundElementType(mlir::MLIRContext* context, mlir::Type sourceE
         return sourceElement;
     }
 
-    // The elements of a list whose type is known are that type, so the unwind hands the
-    // rest of the query a column it can read as one - a node stays a node, an integer an
-    // integer. Only a list whose elements share no such type drains into the type-erased
-    // column of tagged scalars.
+    // A column that spells a null as a value of its own rides a plain chunk, and one of a
+    // property value type or a schema ID the nullable chunk every value-chunk consumer
+    // reads. Any other list, one of mixed elements or of nulls alone, drains into tagged
+    // scalars.
     const mlir::Type listElement = listType.getElementType();
-    if (!drainsToItsOwnElementType(listElement)) {
-        return mlir::storage::AnyType::get(context);
-    }
-
-    // An entity ID column spells a null entity as an invalid ID, so an entity rides a
-    // plain chunk; a value or a nested list, either of which may be a tagged null, rides
-    // the nullable one every value-chunk consumer dispatches on, as lowerUnwindConst's
-    // homogeneous list does.
-    if (mlir::isa<mlir::storage::NodeIDType, mlir::storage::EdgeIDType>(listElement)) {
+    const bool drainsToANullableChunk = elementTypeToValueType(listElement) != ValueType::Invalid
+                                     || mlir::storage::namesASchemaID(listElement);
+    if (mlir::holdsItsOwnNull(listElement)) {
         return listElement;
+    } else if (!drainsToANullableChunk) {
+        return mlir::storage::AnyType::get(context);
     }
 
     return mlir::storage::NullableType::get(context, listElement);
