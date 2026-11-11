@@ -28,12 +28,16 @@ def ConstantResult : NativeOpTrait<"ConstantResult">;
 // NoMemoryEffect op nothing reads as dead, and its error would go with it
 def MayRaise : TraitList<[MemoryEffectsOpInterface, NativeOpTrait<"MayRaise">]>;
 
+// In place of Pure on an op holding a body: it raises where an op the body holds may, however
+// deep, and has no other effect. What its body keeps between rows, a seen-set, is its own.
+def RecursivelyPure : TraitList<[RecursivelySpeculatable, MayRaise]>;
+
 // Base, from which all TuringDB dialects are derived.
 //
 // Pure on an op here says it reads the graph and writes nothing - not that it keeps the
 // row count. db.limit, db.sort, db.cross_product and db.optional_match all change the
-// number of rows and all carry Pure, so a canonicalizer added to the pass pipeline has to
-// be told to leave them alone.
+// number of rows and all carry Pure or RecursivelyPure, so a canonicalizer added to the
+// pass pipeline has to be told to leave them alone.
 class TuringOp<string mnemonic, list<Trait> traits = []>
     : Op<DB, mnemonic, traits>;
 

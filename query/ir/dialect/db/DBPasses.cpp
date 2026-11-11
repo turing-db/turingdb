@@ -490,7 +490,7 @@ struct ConeFrame {
 // raise on some row's value - any op not declared speculatable, or holding one - stays out
 // of it, as one of the cone's inputs
 bool raisesOnSomeRows(Operation* op) {
-    return !::db::runsWithoutRaising(op);
+    return !mlir::isSpeculatable(op);
 }
 
 // Gathers the mask's compute cone, the ops @param joinsTheCone accepts, and the external
@@ -7465,7 +7465,7 @@ bool eraseUnreadOps(llvm::SmallVectorImpl<Operation*>& pending,
         Operation* const op = pending.pop_back_val();
 
         const bool unread = op && !freed.contains(op) && erasable(op) && mlir::isOpTriviallyDead(op);
-        if (!unread || raisesOnSomeRows(op)) {
+        if (!unread) {
             continue;
         }
 
@@ -7624,8 +7624,7 @@ struct CanonicalizeCoalesce : public impl::CanonicalizeCoalesceBase<Canonicalize
         const mlir::FrozenRewritePatternSet frozenPatterns(std::move(patterns));
 
         // Kept to the coalesces: the driver's folding and region simplification would
-        // otherwise rewrite the rest of the program as well, and its dead-op removal would
-        // erase an op an inlined argument held, a Pure CASE holding a division included
+        // otherwise rewrite the rest of the program as well
         mlir::GreedyRewriteConfig config;
         config.setStrictness(mlir::GreedyRewriteStrictness::ExistingOps);
         config.enableConstantCSE(false);
@@ -9550,12 +9549,6 @@ bool computesOneValuePerRow(Operation* op) {
     return computesAValuePerRow(op) && op->getNumResults() == 1;
 }
 
-// In front of a region an op also runs on the rows the region would not have run it on, so
-// one that may raise there or has an effect stays where it is
-bool isSafeToSpeculate(Operation* op) {
-    return ::db::runsWithoutRaising(op) && ::db::hasNoEffectButRaising(op);
-}
-
 // Climbs from @param block out of the regions the columns @param operands reads are carried
 // into, through the ops of each block mapping rows, until a region runs more than once for a
 // row of the op holding it or an op on the way repeats rows. A region whose op hands back what
@@ -9610,8 +9603,10 @@ bool matchHoistLevels(Block* block, llvm::SmallVectorImpl<Value>& operands, llvm
     }
 }
 
+// In front of a region an op also runs on the rows the region would not have run it on, so
+// one that may raise there or has an effect stays where it is
 bool matchRowInvariantOp(Operation* op, RowInvariantOp& invariant) {
-    if (op->use_empty() || !isSafeToSpeculate(op)) {
+    if (op->use_empty() || !mlir::isPure(op)) {
         return false;
     }
 

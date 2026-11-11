@@ -435,7 +435,7 @@ def UnwindRange : TuringOp<"unwind_range", [MayRaise, AttrSizedOperandSegments, 
 /**
 * UnwindComputed
 */
-def UnwindComputed : TuringOp<"unwind_computed", [Pure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "collectCarriedColumns"]>]> {
+def UnwindComputed : TuringOp<"unwind_computed", [RecursivelyPure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "collectCarriedColumns"]>]> {
   let summary = "Produce one row per element of a value its region computes for each input row";
 
   let description = [{
@@ -717,7 +717,7 @@ def PercentileDisc : PercentileOp<"percentile_disc">;
 /**
 * ListComprehension
 */
-def ListComprehension : TuringOp<"list_comprehension", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet", "getRegionElementSource", "getListedValue"]>]> {
+def ListComprehension : TuringOp<"list_comprehension", [RecursivelyPure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet", "getRegionElementSource", "getListedValue"]>]> {
   let summary = "Build one list per row out of the elements of that row's list, filtered and projected";
 
   let description = [{
@@ -772,7 +772,7 @@ def ListComprehension : TuringOp<"list_comprehension", [Pure, ConstantThroughOpe
 /**
 * ListPredicate
 */
-def ListPredicate : TuringOp<"list_predicate", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet", "getRegionElementSource"]>]> {
+def ListPredicate : TuringOp<"list_predicate", [RecursivelyPure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet", "getRegionElementSource"]>]> {
   let summary = "Decide, per row, whether a predicate holds for the elements of that row's list";
 
   let description = [{
@@ -813,7 +813,7 @@ def ListPredicate : TuringOp<"list_predicate", [Pure, ConstantThroughOperands, D
 /**
 * Reduce
 */
-def Reduce : TuringOp<"reduce", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet", "getRegionElementSource", "collectAccumulatedValues"]>]> {
+def Reduce : TuringOp<"reduce", [RecursivelyPure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet", "getRegionElementSource", "collectAccumulatedValues"]>]> {
   let summary = "Fold the elements of each row's list into one value per row";
 
   let description = [{
@@ -867,7 +867,7 @@ def ReduceYield : TuringOp<"reduce_yield", [Pure, Terminator, ParentOneOf<["Redu
 /**
 * AllReduce
 */
-def AllReduce : TuringOp<"all_reduce", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet", "getRegionElementSource", "collectAccumulatedValues"]>]> {
+def AllReduce : TuringOp<"all_reduce", [RecursivelyPure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet", "getRegionElementSource", "collectAccumulatedValues"]>]> {
   let summary = "Decide, per row, whether a predicate holds after every step of a fold over that row's list";
 
   let description = [{
@@ -924,7 +924,7 @@ def AllReduceYield : TuringOp<"all_reduce_yield", [Pure, Terminator, HasParent<"
 /**
 * PatternComprehension
 */
-def PatternComprehension : TuringOp<"pattern_comprehension", [Pure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet", "getListedValue"]>]> {
+def PatternComprehension : TuringOp<"pattern_comprehension", [RecursivelyPure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet", "getListedValue"]>]> {
   let summary = "Build one list per row out of the matches a pattern finds for that row";
 
   let description = [{
@@ -1653,7 +1653,7 @@ def GetInEdgesByTypeAndLabel : TuringOp<"get_in_edges_by_type_and_label", [Pure,
 /**
 * ExplorePaths
 */
-def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRowSource", "getRegionCarrySet", "getCarrySetMutable", "getRegionCarrySetMutable"]>]> {
+def ExplorePaths : TuringOp<"explore_paths", [RecursivelyPure, AttrSizedOperandSegments, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRowSource", "getRegionCarrySet", "getCarrySetMutable", "getRegionCarrySetMutable"]>]> {
   let summary = "Enumerate the variable-length paths leaving each input node, filtering carried columns alongside";
 
   let description = [{
@@ -1935,7 +1935,7 @@ def MakePath : TuringOp<"make_path", [Pure]> {
 /**
 * PathElements
 */
-def PathElements : TuringOp<"path_elements", [NoMemoryEffect,
+def PathElements : TuringOp<"path_elements", [MayRaise,
                                                DeclareOpInterfaceMethods<ConditionallySpeculatable>,
                                                ConstantThroughOperands]> {
   let summary = "Read the nodes, the relationships or the length of each named path";
@@ -2167,7 +2167,7 @@ def CheckEdgeTypeConstraint : TuringOp<"check_edge_type_constraint", [Pure]> {
 /**
 * CrossProduct
 */
-def CrossProduct : TuringOp<"cross_product", [Pure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRowSource", "getYieldedResultOffset"]>]> {
+def CrossProduct : TuringOp<"cross_product", [RecursivelyPure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRowSource", "getYieldedResultOffset"]>]> {
   let summary = "Cross every row of one column dataflow with every row of another";
 
   let description = [{
@@ -2196,7 +2196,7 @@ def CrossProduct : TuringOp<"cross_product", [Pure, DeclareOpInterfaceMethods<Co
 
     The result types are not spelled after the regions; the parser recovers them
     from the two yields and the verifier checks they line up. Reading the graph
-    is deterministic, so the op is Pure.
+    is deterministic, so the op is Pure but for a raise an op of a factor may make.
   }];
 
   // The results are the concatenation of the two factors' yielded columns; the
@@ -2222,7 +2222,7 @@ def CrossProduct : TuringOp<"cross_product", [Pure, DeclareOpInterfaceMethods<Co
 /**
 * HashJoin
 */
-def HashJoin : TuringOp<"hash_join", [Pure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRowSource", "getYieldedResultOffset"]>]> {
+def HashJoin : TuringOp<"hash_join", [RecursivelyPure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRowSource", "getYieldedResultOffset"]>]> {
   let summary = "Cross two column dataflows, keeping the rows their key columns agree on";
 
   let description = [{
@@ -2260,7 +2260,8 @@ def HashJoin : TuringOp<"hash_join", [Pure, DeclareOpInterfaceMethods<ColumnCarr
 
     As on db.cross_product the result types are not spelled after the regions;
     the parser recovers them from the two yields and the verifier checks they line
-    up. Reading the graph is deterministic, so the op is Pure.
+    up. Reading the graph is deterministic, so the op is Pure but for a raise an op
+    of a factor may make.
   }];
 
   // Which column of each factor's yield carries the join key: the left factor's,
@@ -3433,7 +3434,7 @@ def ToAny : TuringOp<"to_any", [Pure, ConstantThroughOperands, DeclareOpInterfac
   let hasVerifier = 1;
 }
 
-def CheckedCast : TuringOp<"checked_cast", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def CheckedCast : TuringOp<"checked_cast", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Read the node or the relationship each row's value holds";
   let description = [{
     A pattern naming a variable whose type is known per row - a value read out of a map, a
@@ -3756,7 +3757,7 @@ def Case : TuringOp<"case", [Pure, ConstantThroughOperands, AttrSizedOperandSegm
   }];
 }
 
-def LazyCase : TuringOp<"lazy_case", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet", "forwardsColumns", "getForwardedColumnsMutable"]>]> {
+def LazyCase : TuringOp<"lazy_case", [RecursivelyPure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet", "forwardsColumns", "getForwardedColumnsMutable"]>]> {
   let summary = "A Cypher CASE, whose conditions and values are computed only over the rows reaching them";
 
   let description = [{
@@ -3835,7 +3836,7 @@ def LazyCase : TuringOp<"lazy_case", [Pure, ConstantThroughOperands, DeclareOpIn
   }];
 }
 
-def Coalesce : TuringOp<"coalesce", [RecursiveMemoryEffects, MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet", "forwardsColumns", "getForwardedColumnsMutable"]>]> {
+def Coalesce : TuringOp<"coalesce", [RecursivelyPure, ConstantThroughOperands, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet", "forwardsColumns", "getForwardedColumnsMutable"]>]> {
   let summary = "A coalesce(), whose arguments are computed only over the rows every earlier one left null";
 
   let description = [{
@@ -3859,10 +3860,9 @@ def Coalesce : TuringOp<"coalesce", [RecursiveMemoryEffects, MayRaise, DeclareOp
     yields null. Every region but the last may forward columns to the regions after it,
     as a condition region of db.lazy_case does.
 
-    The result is typed as db.case's is, over the values the regions yield. The op has the
-    effects of its regions, and raises where any op nested in them may, however deep: a
-    Pure db.lazy_case reports no raise of the ops it holds. So one nothing reads stays
-    where a row may raise on an argument it reaches.
+    The result is typed as db.case's is, over the values the regions yield. The op raises
+    where any op nested in its regions may, however deep, so one nothing reads stays where
+    a row may raise on an argument it reaches.
 
     The canonical form holds no region yielding the null literal, but for one holding an
     op that may raise, and, where the result names its element, none behind a region
@@ -4411,7 +4411,7 @@ def ShortestPath : TuringOp<"shortest_path", [Pure]> {
 /**
 * OptionalMatch
 */
-def OptionalMatch : TuringOp<"optional_match", [Pure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet"]>]> {
+def OptionalMatch : TuringOp<"optional_match", [RecursivelyPure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet"]>]> {
   let summary = "Match a pattern against the rows in flight, keeping the rows it does not match";
 
   let description = [{
@@ -4451,8 +4451,9 @@ def OptionalMatch : TuringOp<"optional_match", [Pure, DeclareOpInterfaceMethods<
     variable is, so the padding carries its result rather than the list or path.
     trim_unread_columns drops a variable nothing past the op reads.
 
-    Reading the graph is deterministic and the op writes nothing, so it is Pure -
-    which says nothing about the row count, and this op changes it.
+    Reading the graph is deterministic and the op writes nothing, so it is Pure but
+    for a raise an op of its pattern may make - which says nothing about the row
+    count, and this op changes it.
   }];
 
   let arguments = (ins Variadic<Column>:$input_columns);
@@ -4581,7 +4582,7 @@ def SubqueryYield : TuringOp<"subquery_yield", [Pure, Terminator, AttrSizedOpera
 /**
 * ExistsSubquery
 */
-def ExistsSubquery : TuringOp<"exists_subquery", [Pure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet"]>]> {
+def ExistsSubquery : TuringOp<"exists_subquery", [RecursivelyPure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet"]>]> {
   let summary = "Answer, per row in flight, whether a body produces a row of its own for it";
 
   let description = [{
@@ -4613,7 +4614,8 @@ def ExistsSubquery : TuringOp<"exists_subquery", [Pure, DeclareOpInterfaceMethod
     answered from. A body with no tag names the columns it holds instead, which carry the
     row count it answers from.
 
-    Reading the graph is deterministic and an EXISTS body writes nothing, so it is Pure.
+    Reading the graph is deterministic and an EXISTS body writes nothing, so it is Pure
+    but for a raise an op of its body may make.
   }];
 
   let arguments = (ins Variadic<Column>:$input_columns, UnitAttr:$carries_scope);
@@ -4656,7 +4658,7 @@ def ExistsYield : TuringOp<"exists_yield", [Pure, Terminator, AttrSizedOperandSe
 /**
 * CountSubquery
 */
-def CountSubquery : TuringOp<"count_subquery", [Pure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet"]>]> {
+def CountSubquery : TuringOp<"count_subquery", [RecursivelyPure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet"]>]> {
   let summary = "Answer, per row in flight, how many rows a body produces for it";
 
   let description = [{
@@ -4677,7 +4679,8 @@ def CountSubquery : TuringOp<"count_subquery", [Pure, DeclareOpInterfaceMethods<
           db.count_subquery_yield %tag2, {}
       }) : (!db.column<!storage.node_id>) -> !db.column<ui64>
 
-    Reading the graph is deterministic and a COUNT body writes nothing, so it is Pure.
+    Reading the graph is deterministic and a COUNT body writes nothing, so it is Pure
+    but for a raise an op of its body may make.
   }];
 
   let arguments = (ins Variadic<Column>:$input_columns, UnitAttr:$carries_scope);
@@ -4717,7 +4720,7 @@ def CountSubqueryYield : TuringOp<"count_subquery_yield", [Pure, Terminator, Att
 /**
 * CollectSubquery
 */
-def CollectSubquery : TuringOp<"collect_subquery", [Pure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet", "getListedValue"]>]> {
+def CollectSubquery : TuringOp<"collect_subquery", [RecursivelyPure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet", "getListedValue"]>]> {
   let summary = "Build, per row in flight, the list of what a body returns for it";
 
   let description = [{
@@ -4744,7 +4747,8 @@ def CollectSubquery : TuringOp<"collect_subquery", [Pure, DeclareOpInterfaceMeth
     db.pattern_comprehension's is: the list is of whatever the body yields. A null the
     body returns is an element of the list, as it is in Neo4j.
 
-    Reading the graph is deterministic and a COLLECT body writes nothing, so it is Pure.
+    Reading the graph is deterministic and a COLLECT body writes nothing, so it is Pure
+    but for a raise an op of its body may make.
   }];
 
   let arguments = (ins Variadic<Column>:$input_columns, UnitAttr:$carries_scope);

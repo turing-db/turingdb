@@ -235,3 +235,5 @@ add_ir_tests(test_query_ir_materialize_folded_constants MaterializeFoldedConstan
 add_ir_tests(test_query_ir_erase_unread_values EraseUnreadValuesTest.cpp)
 
 add_ir_tests(test_query_ir_trim_unread_subquery_inputs TrimUnreadSubqueryInputsTest.cpp)
+
+add_ir_tests(test_query_ir_region_body_effects RegionBodyEffectsTest.cpp)

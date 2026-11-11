@@ -56,7 +56,7 @@ bool isConstantColumn(mlir::Value root, llvm::DenseMap<mlir::Value, bool>& class
                                          || definingOp->hasTrait<mlir::OpTrait::ConstantResult>()));
         const bool constantThroughOperands = definingOp
                                           && definingOp->hasTrait<mlir::OpTrait::ConstantThroughOperands>()
-                                          && runsWithoutRaising(definingOp);
+                                          && mlir::isSpeculatable(definingOp);
         const bool dependsOnOperands = !isConstantLike && constantThroughOperands;
 
         if (!dependsOnOperands) {
@@ -124,12 +124,4 @@ void db::forgetErasedValues(mlir::Operation* operation, llvm::DenseMap<mlir::Val
             }
         }
     });
-}
-
-bool db::runsWithoutRaising(mlir::Operation* operation) {
-    const mlir::WalkResult walked = operation->walk([](mlir::Operation* nested) {
-        return mlir::isSpeculatable(nested) ? mlir::WalkResult::advance() : mlir::WalkResult::interrupt();
-    });
-
-    return !walked.wasInterrupted();
 }

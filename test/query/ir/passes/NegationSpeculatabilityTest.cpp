@@ -12,7 +12,6 @@
 
 #include "DBDialect.h"
 #include "DBOps.h"
-#include "IRConstantColumn.h"
 #include "StorageDialect.h"
 
 using mlir::Speculation::NotSpeculatable;
@@ -75,7 +74,7 @@ TEST_F(NegationSpeculatabilityTest, mayRaiseOverAnIntegerOrADuration) {
 TEST_F(NegationSpeculatabilityTest, isNotComputedOnceOverTheLowestInteger) {
     mlir::Operation* const negation = lastOp("%r = db.negate(%lowest) : (!i64s) -> !unresolved");
     ASSERT_TRUE(negation);
-    EXPECT_FALSE(db::runsWithoutRaising(negation));
+    EXPECT_FALSE(mlir::isSpeculatable(negation));
 }
 
 TEST_F(NegationSpeculatabilityTest, isSpeculatableOverADouble) {

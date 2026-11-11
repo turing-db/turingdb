@@ -914,7 +914,7 @@ bool givesNoRowAValue(Region& argument) {
     }
 
     return llvm::all_of(argument.front().without_terminator(), [](Operation& op) {
-        return ::db::runsWithoutRaising(&op);
+        return isSpeculatable(&op);
     });
 }
 
@@ -2010,17 +2010,6 @@ LogicalResult Coalesce::verifyRegions() {
     collectSelectedValues(selected);
 
     return verifySelectedResult(getOperation(), getResult(), selected);
-}
-
-// A nested coalesce is not asked: its answer is its own ops', which this walk reaches
-// anyway, and asking it would walk them again at every level of the nesting
-Speculation::Speculatability Coalesce::getSpeculatability() {
-    const WalkResult walked = getOperation()->walk([](Operation* nested) {
-        const bool runsWithoutRaising = isa<Coalesce>(nested) || isSpeculatable(nested);
-        return runsWithoutRaising ? WalkResult::advance() : WalkResult::interrupt();
-    });
-
-    return speculatableWhen(!walked.wasInterrupted());
 }
 
 void Coalesce::getCanonicalizationPatterns(RewritePatternSet& patterns, MLIRContext* context) {

@@ -42,8 +42,4 @@ bool yieldsConstantColumn(mlir::Value value, llvm::DenseMap<mlir::Value, bool>& 
 // erased one's answer
 void forgetErasedValues(mlir::Operation* operation, llvm::DenseMap<mlir::Value, bool>& classified);
 
-// Whether @param operation, and every op nested in it, runs on any value it reads without
-// raising, so it can run where no row has asked for it
-bool runsWithoutRaising(mlir::Operation* operation);
-
 }

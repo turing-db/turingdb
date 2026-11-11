@@ -71,7 +71,6 @@ TEST_F(CoalesceRaiseEffectTest, keepsAnUnreadCoalesceWhoseArgumentMayRaise) {
 
     EXPECT_FALSE(mlir::isOpTriviallyDead(coalesce));
     EXPECT_FALSE(mlir::isSpeculatable(coalesce));
-    EXPECT_FALSE(db::runsWithoutRaising(coalesce));
     EXPECT_TRUE(db::hasNoEffectButRaising(coalesce));
 }
 
@@ -81,7 +80,6 @@ TEST_F(CoalesceRaiseEffectTest, dropsAnUnreadCoalesceNoArgumentRaisesOn) {
 
     EXPECT_TRUE(mlir::isOpTriviallyDead(coalesce));
     EXPECT_TRUE(mlir::isSpeculatable(coalesce));
-    EXPECT_TRUE(db::runsWithoutRaising(coalesce));
     EXPECT_TRUE(db::hasNoEffectButRaising(coalesce));
 }
 

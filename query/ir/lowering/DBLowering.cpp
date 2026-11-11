@@ -1445,7 +1445,7 @@ bool DBLowering::raisesOverConstants(mlir::Operation& operation) {
         return yieldsConstantColumn(mapValue(operand), _constantColumns);
     });
 
-    return readsConstantsAlone && !runsWithoutRaising(&operation);
+    return readsConstantsAlone && !mlir::isSpeculatable(&operation);
 }
 
 void DBLowering::lowerOverReachingRows(mlir::Operation& operation) {
