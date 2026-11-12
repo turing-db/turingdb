@@ -28,6 +28,11 @@ DBWrittenOrder::~DBWrittenOrder() {
 }
 
 void DBWrittenOrder::build(Operation* function) {
+    _positions.clear();
+    _lastHeldPositions.clear();
+    _writePositions.clear();
+    _count = 0;
+
     function->walk([this](Operation* op, const mlir::WalkStage& stage) {
         if (stage.isBeforeAllRegions()) {
             const size_t position = _count++;

@@ -3030,14 +3030,14 @@ class ListFunctionOp<string mnemonic> : TypedUnaryFunctionOp<mnemonic, "::mlir::
 
 def Labels : TypedUnaryFunctionOp<"labels", "::mlir::storage::NodeIDType", [DeclareOpInterfaceMethods<RowCostOpInterface>]>;
 def EdgeType : TypedUnaryFunctionOp<"edge_type", "::mlir::storage::EdgeIDType", [DeclareOpInterfaceMethods<RowCostOpInterface>]>;
-def Keys : TypedUnaryFunctionOp<"keys", "::mlir::storage::NodeIDType, ::mlir::storage::EdgeIDType, ::mlir::storage::MapType">;
-def PropertyMap : TypedUnaryFunctionOp<"properties", "::mlir::storage::NodeIDType, ::mlir::storage::EdgeIDType, ::mlir::storage::MapType">;
+def Keys : TypedUnaryFunctionOp<"keys", "::mlir::storage::NodeIDType, ::mlir::storage::EdgeIDType, ::mlir::storage::MapType", [DeclareOpInterfaceMethods<RowCostOpInterface>]>;
+def PropertyMap : TypedUnaryFunctionOp<"properties", "::mlir::storage::NodeIDType, ::mlir::storage::EdgeIDType, ::mlir::storage::MapType", [DeclareOpInterfaceMethods<RowCostOpInterface>]>;
 
 // The two ends of each edge of a column, as node columns of their own. The edge is read as
 // the graph stores it, so a hop that walked it backwards or undirected reports the same
 // pair rather than the one its own direction suggests.
-def StartNode : TypedUnaryFunctionOp<"start_node", "::mlir::storage::EdgeIDType">;
-def EndNode : TypedUnaryFunctionOp<"end_node", "::mlir::storage::EdgeIDType">;
+def StartNode : TypedUnaryFunctionOp<"start_node", "::mlir::storage::EdgeIDType", [DeclareOpInterfaceMethods<RowCostOpInterface>]>;
+def EndNode : TypedUnaryFunctionOp<"end_node", "::mlir::storage::EdgeIDType", [DeclareOpInterfaceMethods<RowCostOpInterface>]>;
 
 def ToInteger : ConversionFunctionOp<"to_integer">;
 def ToFloat : ConversionFunctionOp<"to_float">;

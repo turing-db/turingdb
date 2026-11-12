@@ -2466,16 +2466,23 @@ void cutFactor(CrossProduct product,
 }
 
 void eraseUnusedConjunction(Value mask, mlir::RewriterBase& rewriter) {
-    llvm::SmallVector<Value> pending {mask};
+    llvm::SmallPtrSet<Operation*, 8> erased;
+    llvm::SmallVector<Operation*> pending {mask.getDefiningOp()};
     while (!pending.empty()) {
-        AndOp conjunction = pending.pop_back_val().getDefiningOp<AndOp>();
+        Operation* const op = pending.pop_back_val();
+        if (!op || erased.contains(op)) {
+            continue;
+        }
+
+        AndOp conjunction = dyn_cast<AndOp>(op);
         const bool unusedConjunction = conjunction && conjunction.getResult().use_empty();
         if (!unusedConjunction) {
             continue;
         }
 
-        pending.push_back(conjunction.getLhs());
-        pending.push_back(conjunction.getRhs());
+        pending.push_back(conjunction.getLhs().getDefiningOp());
+        pending.push_back(conjunction.getRhs().getDefiningOp());
+        erased.insert(op);
         rewriter.eraseOp(conjunction);
     }
 }
@@ -12720,7 +12727,6 @@ private:
 void stageConjuncts(const DBStagePlanner::FilterStages& stages, mlir::RewriterBase& rewriter) {
     FilterOp filter = stages._filter;
     const Location location = filter.getLoc();
-    const Value mask = filter.getMask();
     const Operation::operand_range columns = filter.getColumnsToFilter();
     const llvm::ArrayRef<Value> conjuncts = stages._conjuncts;
     const llvm::ArrayRef<Operation*> moved = stages._moved;
@@ -12776,7 +12782,10 @@ void stageConjuncts(const DBStagePlanner::FilterStages& stages, mlir::RewriterBa
     }
 
     rewriter.replaceOp(filter, stageFilter.getResults());
-    eraseUnusedConjunction(mask, rewriter);
+    for (Operation* const joint : stages._joints) {
+        eraseIfUnused(joint, rewriter);
+    }
+
     eraseUnusedRowCone(moved, rewriter);
 }
 
@@ -12796,7 +12805,15 @@ struct StageFilterConjuncts : public impl::StageFilterConjunctsBase<StageFilterC
         Operation* const root = getOperation();
 
         llvm::SmallVector<FilterOp> candidates;
-        root->walk([&candidates](FilterOp filter) {
+        bool holdsAWrite = false;
+        root->walk([&candidates, &holdsAWrite](Operation* op) {
+            holdsAWrite = holdsAWrite || isGraphWrite(op);
+
+            FilterOp filter = dyn_cast<FilterOp>(op);
+            if (!filter) {
+                return;
+            }
+
             const Value mask = filter.getMask();
             const bool readOnlyByTheFilter = mask.hasOneUse();
             if (readOnlyByTheFilter && mask.getDefiningOp<AndOp>()) {
@@ -12809,7 +12826,7 @@ struct StageFilterConjuncts : public impl::StageFilterConjunctsBase<StageFilterC
         }
 
         DBWrittenOrder writtenOrder;
-        if (writesTheGraph(root)) {
+        if (holdsAWrite) {
             writtenOrder.build(root);
         }
 
