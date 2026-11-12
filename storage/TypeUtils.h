@@ -3,11 +3,11 @@
 #include <concepts>
 #include <optional>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
 #include <variant>
 
 #include "columns/ColumnMask.h"
-#include "columns/KindTypes.h"
 #include "metadata/PropertyType.h"
 
 namespace db {
