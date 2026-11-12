@@ -6,6 +6,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "FileTransfer.h"
+
 using namespace fs;
 
 File::~File() {
@@ -105,34 +107,18 @@ Result<void> File::seekEnd(off_t offset) const {
 }
 
 Result<void> File::read(void* buf, size_t size) const {
-    ssize_t remainingBytes = size;
-    while (remainingBytes > 0) {
-        const ssize_t nbytes = ::read(_fd, buf, remainingBytes);
+    size_t bytesRead = 0;
 
-        if (nbytes < 0) {
-            return Error::result(ErrorType::READ_FILE, errno);
-        }
-
-        if (nbytes == 0) {
-            // EOF
-            break;
-        }
-
-        remainingBytes -= nbytes;
+    if (const int error = readAll(_fd, static_cast<uint8_t*>(buf), size, bytesRead); error != 0) {
+        return Error::result(ErrorType::READ_FILE, error);
     }
 
     return {};
 }
 
 Result<void> File::write(void* data, size_t size) {
-    while (size != 0) {
-        const ssize_t nbytes = ::write(_fd, data, size);
-
-        if (nbytes < 0) {
-            return Error::result(ErrorType::WRITE_FILE, errno);
-        }
-
-        size -= nbytes;
+    if (const int error = writeAll(_fd, static_cast<const uint8_t*>(data), size); error != 0) {
+        return Error::result(ErrorType::WRITE_FILE, error);
     }
 
     return refreshInfo();

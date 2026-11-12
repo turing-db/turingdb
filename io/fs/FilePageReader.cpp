@@ -3,7 +3,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include "BioAssert.h"
+#include "FileTransfer.h"
 
 using namespace fs;
 
@@ -43,31 +43,18 @@ Result<FilePageReader> FilePageReader::openNoDirect(const Path& path, size_t pag
 }
 
 Result<void> FilePageReader::nextPage() {
-    ssize_t remainingBytes = _buffer.capacity();
-    ssize_t bytesRead = 0;
+    const size_t capacity = _buffer.capacity();
+    size_t bytesRead = 0;
 
-    while (remainingBytes > 0) {
-        const ssize_t nbytes = ::read(_fd, _buffer.data() + bytesRead, remainingBytes);
-
-        if (nbytes == -1) {
-            if (errno == EAGAIN) {
-                continue;
-            }
-
-            return Error::result(ErrorType::READ_PAGE, errno);
-        }
-
-        if (nbytes == 0) {
-            _reachedEnd = true;
-            break; // Finished reading file
-        }
-
-        bytesRead += nbytes;
-        remainingBytes -= nbytes;
+    if (const int error = readAll(_fd, _buffer.data(), capacity, bytesRead); error != 0) {
+        return Error::result(ErrorType::READ_PAGE, error);
     }
 
-    bioassert(remainingBytes >= 0, "remainingBytes became negative");
-    _buffer.resize(_buffer.capacity() - remainingBytes);
+    if (bytesRead < capacity) {
+        _reachedEnd = true;
+    }
+
+    _buffer.resize(bytesRead);
 
     return {};
 }
