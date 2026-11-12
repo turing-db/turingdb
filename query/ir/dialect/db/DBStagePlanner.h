@@ -14,6 +14,7 @@
 
 #include "DBOps.h"
 #include "DBRowCone.h"
+#include "DBWrittenOrder.h"
 #include "SegmentationSolver.h"
 
 namespace mlir::db {
@@ -23,7 +24,6 @@ namespace mlir::db {
 // filter between two stages saves more than it costs. One planner plans filter after filter.
 class DBStagePlanner {
 public:
-    // Where a stage ends in each list of its filter's stages
     struct StageEnd {
         size_t _conjuncts {0};
         size_t _ops {0};
@@ -35,22 +35,18 @@ public:
     struct FilterStages {
         FilterOp _filter;
         llvm::SmallVector<Value, 4> _conjuncts;
-        MaskCone _moved;
+        llvm::SmallVector<Operation*> _moved;
         llvm::SmallVector<Value, 4> _carried;
         llvm::SmallVector<StageEnd, 2> _stageEnds;
     };
 
-    // @param selectivityOf gives the share of the rows it tests a predicate keeps, and outlives
-    // the planner
-    explicit DBStagePlanner(llvm::function_ref<double(Value)> selectivityOf);
+    explicit DBStagePlanner(const DBWrittenOrder* writtenOrder);
     ~DBStagePlanner();
 
-    // False where the filter stays one stage
-    bool plan(FilterOp filter, FilterStages& stages);
+    // @param selectivityOf gives the share of the rows it tests a predicate keeps
+    bool plan(FilterOp filter, llvm::function_ref<double(Value)> selectivityOf, FilterStages& stages);
 
 private:
-    // A conjunct of the mask: the share of rows it keeps, its rank, and the cost of the ops it
-    // is the first conjunct to need. Its cone is a run of `_cones`.
     struct RankedConjunct {
         Value _value;
         double _selectivity {1.0};
@@ -61,7 +57,8 @@ private:
     };
 
     // Where an op of the cones is computed: in the stage of the first conjunct needing it, or
-    // before the filter when an op besides the conjuncts reads it or one of the ops it feeds
+    // before the filter when an op besides the conjuncts reads it or one of the ops it feeds, or
+    // when a graph write lies between it and the filter
     struct ConePlacement {
         size_t _position {0};
         bool _computedBefore {false};
@@ -77,13 +74,12 @@ private:
         bool _carriable {false};
     };
 
-    // How the count of values crossing a boundary changes from the boundary before
     struct CrossingChange {
         int64_t _carried {0};
         int64_t _blocked {0};
     };
 
-    llvm::function_ref<double(Value)> _selectivityOf;
+    const DBWrittenOrder* _writtenOrder {nullptr};
     ::db::SegmentationSolver _solver;
     llvm::DenseMap<Value, bool> _constantColumns;
     llvm::SmallPtrSet<Operation*, 8> _conjunction;
@@ -97,18 +93,22 @@ private:
     llvm::SmallVector<CrossingChange> _crossingChanges;
     std::vector<size_t> _stageStarts;
 
-    bool collectConjunction(Value mask);
-    void rankConjuncts(Block* block);
+    void collectConjunction(Value mask);
+    void collectCones(Block* block);
+    void markComputedBefore(Operation* filter);
+    void rankConjuncts(llvm::function_ref<double(Value)> selectivityOf);
     void placeConeOps();
-    void collectCrossings(FilterOp filter);
+    void collectCrossings(Block* block, Operation::operand_range columns);
     void chooseStageStarts(size_t columnCount);
     void fillStages(FilterOp filter, FilterStages& stages);
+    double rowCostOf(Operation* op);
 
     llvm::ArrayRef<Operation*> getCone(const RankedConjunct& conjunct) const;
 
-    // The position of the conjunct whose stage computes @param op, false where none does
     bool findStageOf(Operation* op, size_t& position) const;
+    bool isComputedAt(Operation* op, size_t position) const;
 
+    static size_t getFirstCrossedBoundary(const StageCrossing& crossing);
     static bool crossesBoundary(const StageCrossing& crossing, size_t boundary);
 };
 

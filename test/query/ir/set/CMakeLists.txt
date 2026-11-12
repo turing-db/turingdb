@@ -50,3 +50,5 @@ add_turing_test(test_query_ir_set_reads_property_it_creates SetReadsPropertyItCr
 add_ir_tests(test_query_ir_set_mutate_properties SetMutatePropertiesTest.cpp)
 
 add_ir_tests(test_query_ir_set_replace_properties SetReplacePropertiesTest.cpp)
+
+add_turing_test(test_query_ir_where_over_values_read_before_set WhereOverValuesReadBeforeSetTest.cpp)

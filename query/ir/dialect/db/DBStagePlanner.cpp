@@ -17,37 +17,32 @@ constexpr double FILTER_ROW_COST = 1.0;
 constexpr double FILTER_COPY_COST = 1.0;
 constexpr double FILTER_STAGE_COST = 0.05;
 
-// A constant is computed once, not per row
-double rowCost(Operation* op) {
-    if (op->hasTrait<OpTrait::ConstantLike>()) {
-        return 0;
-    } else if (RowCostOpInterface costed = dyn_cast<RowCostOpInterface>(op)) {
-        return costed.getRowCost();
-    }
-
-    return 1;
 }
 
-}
-
-DBStagePlanner::DBStagePlanner(llvm::function_ref<double(Value)> selectivityOf)
-    : _selectivityOf(selectivityOf)
+DBStagePlanner::DBStagePlanner(const DBWrittenOrder* writtenOrder)
+    : _writtenOrder(writtenOrder)
 {
 }
 
 DBStagePlanner::~DBStagePlanner() {
 }
 
-bool DBStagePlanner::plan(FilterOp filter, FilterStages& stages) {
-    const Value mask = filter.getMask();
-    if (!mask.hasOneUse() || !collectConjunction(mask) || _conjuncts.size() < 2) {
+bool DBStagePlanner::plan(FilterOp filter, llvm::function_ref<double(Value)> selectivityOf, FilterStages& stages) {
+    collectConjunction(filter.getMask());
+    if (_conjuncts.size() < 2) {
         return false;
     }
 
-    rankConjuncts(filter->getBlock());
+    Operation* const filterOp = filter.getOperation();
+    Block* const block = filterOp->getBlock();
+    const Operation::operand_range columns = filter.getColumnsToFilter();
+
+    collectCones(block);
+    markComputedBefore(filterOp);
+    rankConjuncts(selectivityOf);
     placeConeOps();
-    collectCrossings(filter);
-    chooseStageStarts(filter.getColumnsToFilter().size());
+    collectCrossings(block, columns);
+    chooseStageStarts(columns.size());
     if (_stageStarts.size() < 2) {
         return false;
     }
@@ -56,10 +51,9 @@ bool DBStagePlanner::plan(FilterOp filter, FilterStages& stages) {
     return true;
 }
 
-// The conjuncts of @param mask, left to right, and the `and`s joining them. False where one of
-// the `and`s has a reader besides the filter: its conjuncts are then computed on every row
-// whatever the filter keeps.
-bool DBStagePlanner::collectConjunction(Value mask) {
+// The conjuncts of @param mask, left to right, and the `and`s joining them. An `and` with a reader
+// besides the filter is computed on every row whatever the filter keeps, so it is one conjunct.
+void DBStagePlanner::collectConjunction(Value mask) {
     _conjunction.clear();
     _conjuncts.clear();
 
@@ -67,41 +61,38 @@ bool DBStagePlanner::collectConjunction(Value mask) {
     while (!pending.empty()) {
         const Value conjunct = pending.pop_back_val();
         AndOp conjunction = conjunct.getDefiningOp<AndOp>();
-        if (!conjunction) {
+        if (!conjunction || !conjunct.hasOneUse()) {
             _conjuncts.push_back(RankedConjunct {conjunct});
             continue;
-        } else if (!conjunct.hasOneUse()) {
-            return false;
         }
 
         _conjunction.insert(conjunction);
         pending.push_back(conjunction.getRhs());
         pending.push_back(conjunction.getLhs());
     }
-
-    return true;
 }
 
-// Orders the conjuncts by (selectivity - 1) / cost, which puts the cheap and selective ones first
-void DBStagePlanner::rankConjuncts(Block* block) {
-    const auto computedInTheBlock = [block](Operation* op) {
-        return op->getBlock() == block && computesFromTheRow(op) && !raisesOnSomeRows(op);
-    };
-
+void DBStagePlanner::collectCones(Block* block) {
     _cones._ops.clear();
     _cones._inputs.clear();
     for (RankedConjunct& conjunct : _conjuncts) {
-        _visited.clear();
         conjunct._coneBegin = _cones._ops.size();
-        collectConePostOrder(conjunct._value, computedInTheBlock, _visited, _cones);
+        collectRowCone({conjunct._value}, block, _cones);
         conjunct._coneEnd = _cones._ops.size();
+    }
+}
 
+// Orders the conjuncts by (selectivity - 1) / cost, which puts the cheap and selective ones first
+void DBStagePlanner::rankConjuncts(llvm::function_ref<double(Value)> selectivityOf) {
+    for (RankedConjunct& conjunct : _conjuncts) {
         double cost = 0;
         for (Operation* const op : getCone(conjunct)) {
-            cost += rowCost(op);
+            if (!_placements.find(op)->second._computedBefore) {
+                cost += rowCostOf(op);
+            }
         }
 
-        conjunct._selectivity = _selectivityOf(conjunct._value);
+        conjunct._selectivity = selectivityOf(conjunct._value);
         conjunct._rank = cost == 0 ? -std::numeric_limits<double>::infinity() : (conjunct._selectivity - 1.0) / cost;
     }
 
@@ -110,30 +101,27 @@ void DBStagePlanner::rankConjuncts(Block* block) {
     });
 }
 
-void DBStagePlanner::placeConeOps() {
+void DBStagePlanner::markComputedBefore(Operation* filter) {
     _placements.clear();
-    for (size_t position = 0; position < _conjuncts.size(); position++) {
-        for (Operation* const op : getCone(_conjuncts[position])) {
-            _placements.try_emplace(op, ConePlacement {position, false});
-        }
+    for (Operation* const op : _cones._ops) {
+        _placements.try_emplace(op, ConePlacement {});
     }
 
+    _visited.clear();
     _pending.clear();
-    for (size_t position = 0; position < _conjuncts.size(); position++) {
-        for (Operation* const op : getCone(_conjuncts[position])) {
-            ConePlacement& placement = _placements.find(op)->second;
-            if (placement._position != position || placement._computedBefore) {
-                continue;
-            }
+    for (Operation* const op : _cones._ops) {
+        if (!_visited.insert(op).second) {
+            continue;
+        }
 
-            const bool readByAnotherOp = llvm::any_of(op->getUsers(), [this](Operation* user) {
-                return !_placements.contains(user) && !_conjunction.contains(user);
-            });
+        const bool readByAnotherOp = llvm::any_of(op->getUsers(), [this](Operation* user) {
+            return !_placements.contains(user) && !_conjunction.contains(user);
+        });
 
-            if (readByAnotherOp) {
-                placement._computedBefore = true;
-                _pending.push_back(op);
-            }
+        const bool computedBeforeAWrite = _writtenOrder->writesBetween(op, filter);
+        if (readByAnotherOp || computedBeforeAWrite) {
+            _placements.find(op)->second._computedBefore = true;
+            _pending.push_back(op);
         }
     }
 
@@ -147,13 +135,22 @@ void DBStagePlanner::placeConeOps() {
             }
         }
     }
+}
 
-    for (size_t position = 0; position < _conjuncts.size(); position++) {
+void DBStagePlanner::placeConeOps() {
+    const size_t count = _conjuncts.size();
+    for (size_t index = 0; index < count; index++) {
+        const size_t position = count - 1 - index;
+        for (Operation* const op : getCone(_conjuncts[position])) {
+            _placements.find(op)->second._position = position;
+        }
+    }
+
+    for (size_t position = 0; position < count; position++) {
         RankedConjunct& conjunct = _conjuncts[position];
         for (Operation* const op : getCone(conjunct)) {
-            size_t stage = 0;
-            if (findStageOf(op, stage) && stage == position) {
-                conjunct._ownCost += rowCost(op);
+            if (isComputedAt(op, position)) {
+                conjunct._ownCost += rowCostOf(op);
             }
         }
     }
@@ -161,14 +158,14 @@ void DBStagePlanner::placeConeOps() {
 
 // The values a conjunct reads, through its own value or the ops its stage computes for it, that
 // a conjunct before it or the code before the filter computes
-void DBStagePlanner::collectCrossings(FilterOp filter) {
+void DBStagePlanner::collectCrossings(Block* block, Operation::operand_range columns) {
     _crossings.clear();
     _crossingIndices.clear();
 
-    Block* const block = filter->getBlock();
-    const Operation::operand_range columns = filter.getColumnsToFilter();
     const auto noteRead = [this, block, &columns](Value value, size_t position) {
-        if (::db::yieldsConstantColumn(value, _constantColumns) || llvm::is_contained(columns, value)) {
+        const bool constant = ::db::yieldsConstantColumn(value, _constantColumns);
+        const bool filtered = llvm::is_contained(columns, value);
+        if (constant || filtered) {
             return;
         }
 
@@ -193,8 +190,7 @@ void DBStagePlanner::collectCrossings(FilterOp filter) {
         noteRead(conjunct._value, position);
 
         for (Operation* const op : getCone(conjunct)) {
-            size_t stage = 0;
-            if (!findStageOf(op, stage) || stage != position) {
+            if (!isComputedAt(op, position)) {
                 continue;
             }
 
@@ -213,7 +209,7 @@ void DBStagePlanner::chooseStageStarts(size_t columnCount) {
 
     _crossingChanges.assign(count + 1, CrossingChange {});
     for (const StageCrossing& crossing : _crossings) {
-        const size_t first = std::max<size_t>(1, crossing._crossesFrom);
+        const size_t first = getFirstCrossedBoundary(crossing);
         if (first > crossing._lastRead) {
             continue;
         }
@@ -262,19 +258,17 @@ void DBStagePlanner::fillStages(FilterOp filter, FilterStages& stages) {
         stages._conjuncts.push_back(conjunct._value);
     }
 
-    _visited.clear();
     for (size_t index = 0; index < _stageStarts.size(); index++) {
         const size_t begin = _stageStarts[index];
         const size_t end = index + 1 < _stageStarts.size() ? _stageStarts[index + 1] : _conjuncts.size();
 
         if (begin > 0) {
-            const auto computedInTheStage = [this, begin, end](Operation* op) {
-                size_t stage = 0;
-                return findStageOf(op, stage) && stage >= begin && stage < end;
-            };
-
             for (size_t position = begin; position < end; position++) {
-                collectConePostOrder(_conjuncts[position]._value, computedInTheStage, _visited, stages._moved);
+                for (Operation* const op : getCone(_conjuncts[position])) {
+                    if (isComputedAt(op, position)) {
+                        stages._moved.push_back(op);
+                    }
+                }
             }
         }
 
@@ -286,8 +280,18 @@ void DBStagePlanner::fillStages(FilterOp filter, FilterStages& stages) {
             }
         }
 
-        stages._stageEnds.push_back(StageEnd {end, stages._moved._ops.size(), stages._carried.size()});
+        stages._stageEnds.push_back(StageEnd {end, stages._moved.size(), stages._carried.size()});
     }
+}
+
+double DBStagePlanner::rowCostOf(Operation* op) {
+    if (::db::yieldsConstantColumn(op->getResult(0), _constantColumns)) {
+        return 0;
+    } else if (RowCostOpInterface costed = dyn_cast<RowCostOpInterface>(op)) {
+        return costed.getRowCost();
+    }
+
+    return 1;
 }
 
 llvm::ArrayRef<Operation*> DBStagePlanner::getCone(const RankedConjunct& conjunct) const {
@@ -304,6 +308,15 @@ bool DBStagePlanner::findStageOf(Operation* op, size_t& position) const {
     return true;
 }
 
+bool DBStagePlanner::isComputedAt(Operation* op, size_t position) const {
+    size_t stage = 0;
+    return findStageOf(op, stage) && stage == position;
+}
+
+size_t DBStagePlanner::getFirstCrossedBoundary(const StageCrossing& crossing) {
+    return std::max<size_t>(1, crossing._crossesFrom);
+}
+
 bool DBStagePlanner::crossesBoundary(const StageCrossing& crossing, size_t boundary) {
-    return std::max<size_t>(1, crossing._crossesFrom) <= boundary && boundary <= crossing._lastRead;
+    return getFirstCrossedBoundary(crossing) <= boundary && boundary <= crossing._lastRead;
 }

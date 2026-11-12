@@ -560,7 +560,7 @@ def MakeMap : TuringOp<"make_map", [Pure, ConstantThroughOperands, DeclareOpInte
 /**
 * MergeMaps
 */
-def MergeMaps : TuringOp<"merge_maps", [Pure, ConstantThroughOperands]> {
+def MergeMaps : TuringOp<"merge_maps", [Pure, ConstantThroughOperands, DeclareOpInterfaceMethods<RowCostOpInterface>]> {
   let summary = "Merge the maps of each row, a later operand's entry replacing an earlier one's";
 
   let description = [{
@@ -617,7 +617,7 @@ def StaticMapKey : TuringOp<"static_map_key", [MayRaise, ConstantThroughOperands
 /**
 * Range
 */
-def Range : TuringOp<"range", [MayRaise, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def Range : TuringOp<"range", [MayRaise, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>, DeclareOpInterfaceMethods<RowCostOpInterface>]> {
   let summary = "Build one list of the integers a row's bounds span";
 
   let description = [{
@@ -653,7 +653,7 @@ def Range : TuringOp<"range", [MayRaise, ConstantThroughOperands, DeclareOpInter
 /**
 * ListSlice
 */
-def ListSlice : TuringOp<"list_slice", [MayRaise, ConstantThroughOperands, AttrSizedOperandSegments, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def ListSlice : TuringOp<"list_slice", [MayRaise, ConstantThroughOperands, AttrSizedOperandSegments, DeclareOpInterfaceMethods<ConditionallySpeculatable>, DeclareOpInterfaceMethods<RowCostOpInterface>]> {
   let summary = "Read the run of each row's list that its bounds span";
 
   let description = [{
@@ -3004,8 +3004,8 @@ class UnaryFunctionOp<string mnemonic, list<Trait> traits>
 // A unary function reading values of some types raises on a row holding another, which a
 // column of type-erased cells or of an unresolved type can: it is speculatable over a
 // column of the types it reads alone
-class TypedUnaryFunctionOp<string mnemonic, string readTypes>
-    : UnaryFunctionOp<mnemonic, [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+class TypedUnaryFunctionOp<string mnemonic, string readTypes, list<Trait> traits = []>
+    : UnaryFunctionOp<mnemonic, !listconcat([MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>], traits)> {
   let extraClassDefinition = [{
     ::mlir::Speculation::Speculatability $cppClass::getSpeculatability() {
       return speculatableOverElement<}] # readTypes # [{>(getInput());
@@ -3028,8 +3028,8 @@ class NumberFunctionOp<string mnemonic> : TypedUnaryFunctionOp<mnemonic, "::mlir
 class TextFunctionOp<string mnemonic> : TypedUnaryFunctionOp<mnemonic, "::mlir::storage::StringType">;
 class ListFunctionOp<string mnemonic> : TypedUnaryFunctionOp<mnemonic, "::mlir::storage::ListType">;
 
-def Labels : TypedUnaryFunctionOp<"labels", "::mlir::storage::NodeIDType">;
-def EdgeType : TypedUnaryFunctionOp<"edge_type", "::mlir::storage::EdgeIDType">;
+def Labels : TypedUnaryFunctionOp<"labels", "::mlir::storage::NodeIDType", [DeclareOpInterfaceMethods<RowCostOpInterface>]>;
+def EdgeType : TypedUnaryFunctionOp<"edge_type", "::mlir::storage::EdgeIDType", [DeclareOpInterfaceMethods<RowCostOpInterface>]>;
 def Keys : TypedUnaryFunctionOp<"keys", "::mlir::storage::NodeIDType, ::mlir::storage::EdgeIDType, ::mlir::storage::MapType">;
 def PropertyMap : TypedUnaryFunctionOp<"properties", "::mlir::storage::NodeIDType, ::mlir::storage::EdgeIDType, ::mlir::storage::MapType">;
 

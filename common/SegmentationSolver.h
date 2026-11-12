@@ -23,19 +23,15 @@ public:
     SegmentationSolver();
     ~SegmentationSolver();
 
-    // Forgets the boundaries, keeping the memory for the next sequence
     void clear();
 
     // A segment starts at the first boundary and one ends at the last. In between, a segment
     // may start where `_cuttable` is set.
     void addBoundary(const Boundary& boundary);
 
-    // The boundary each segment of the cheapest segmentation starts at, in order
     void getSegmentStarts(std::vector<size_t>& starts) const;
 
 private:
-    // A segment starting at `_boundary`: its cost, plus the cheapest segmentation before it, is
-    // `_slope * position + _intercept` for an end at `position`
     struct StartLine {
         double _slope {0};
         double _intercept {0};

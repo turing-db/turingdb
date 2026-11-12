@@ -3521,6 +3521,26 @@ double MakeMap::getRowCost() {
     return CONTAINER_BUILD_ROW_COST;
 }
 
+double MergeMaps::getRowCost() {
+    return CONTAINER_BUILD_ROW_COST;
+}
+
+double Range::getRowCost() {
+    return CONTAINER_BUILD_ROW_COST;
+}
+
+double ListSlice::getRowCost() {
+    return CONTAINER_BUILD_ROW_COST;
+}
+
+double Labels::getRowCost() {
+    return STORAGE_READ_ROW_COST + CONTAINER_BUILD_ROW_COST;
+}
+
+double EdgeType::getRowCost() {
+    return STORAGE_READ_ROW_COST;
+}
+
 double CosineSimilarity::getRowCost() {
     return VECTOR_FUNCTION_ROW_COST;
 }

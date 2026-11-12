@@ -22,6 +22,10 @@ bool mlir::db::raisesOnSomeRows(Operation* op) {
 }
 
 bool mlir::db::isRowWiseOp(Operation* op) {
+    if (BroadcastConstant broadcast = dyn_cast<BroadcastConstant>(op)) {
+        return static_cast<bool>(broadcast.getDriver());
+    }
+
     return isa<EqOp, NeqOp, GtOp, LtOp, GteOp, LteOp,
                StartsWithOp, EndsWithOp, ContainsOp, InOp,
                AndOp, OrOp, XorOp, NotOp, IsNullOp, IsNotNullOp,
@@ -30,7 +34,7 @@ bool mlir::db::isRowWiseOp(Operation* op) {
                GetNodeProperties, GetEdgeProperties, ElementID,
                GetNodeLabelSet, CheckLabelConstraint, CheckEdgeTypeConstraint,
                Labels, EdgeType, ToInteger, ToFloat, ToBoolean,
-               CosineSimilarity, EuclideanDistance, BroadcastConstant>(op);
+               CosineSimilarity, EuclideanDistance>(op);
 }
 
 bool mlir::db::computesPerRow(Operation* op) {
@@ -46,6 +50,17 @@ bool mlir::db::computesFromTheRow(Operation* op) {
                                 || op->hasTrait<OpTrait::ConstantThroughOperands>();
 
     return computesAValue || computesPerRow(op) || isa<Range, MakeList, MakeMap, ListSlice>(op);
+}
+
+void mlir::db::collectRowCone(llvm::ArrayRef<Value> roots, Block* block, MaskCone& cone) {
+    const auto computedInTheBlock = [block](Operation* op) {
+        return op->getBlock() == block && computesFromTheRow(op) && !raisesOnSomeRows(op);
+    };
+
+    llvm::SmallPtrSet<Operation*, 8> visited;
+    for (const Value root : roots) {
+        collectConePostOrder(root, computedInTheBlock, visited, cone);
+    }
 }
 
 void mlir::db::collectConePostOrder(Value mask,
