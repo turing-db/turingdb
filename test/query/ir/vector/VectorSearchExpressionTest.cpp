@@ -208,8 +208,8 @@ TEST_F(VectorSearchExpressionTest, searchesForANeighbourCountComputedFromParamet
     parameters.insert("s").setString("3");
     setEmbedding(parameters.insert("v"), {1.0f, 0.0f});
 
-    expectRows("VECTOR SEARCH IN idx FOR $k + 1 $v YIELD ids RETURN ids", parameters, {{"0"}, {"2"}});
-    expectRows("VECTOR SEARCH IN idx FOR toInteger($s) $v YIELD ids RETURN ids", parameters, {{"0"}, {"2"}, {"1"}});
+    expectRows("VECTOR SEARCH IN idx FOR ($k + 1) $v YIELD ids RETURN ids", parameters, {{"0"}, {"2"}});
+    expectRows("VECTOR SEARCH IN idx FOR (toInteger($s)) $v YIELD ids RETURN ids", parameters, {{"0"}, {"2"}, {"1"}});
 }
 
 TEST_F(VectorSearchExpressionTest, readsAComputedNeighbourCountWhenTheSearchStarts) {
@@ -217,7 +217,7 @@ TEST_F(VectorSearchExpressionTest, readsAComputedNeighbourCountWhenTheSearchStar
     parameters.insert("k").setInt64(1);
 
     std::string program;
-    dbProgramOf("VECTOR SEARCH IN idx FOR $k + 1 (1.0, 0.0) YIELD ids RETURN ids", parameters, program);
+    dbProgramOf("VECTOR SEARCH IN idx FOR ($k + 1) (1.0, 0.0) YIELD ids RETURN ids", parameters, program);
 
     EXPECT_TRUE(contains(program, "db.vector_search(\"idx\", %")) << program;
     EXPECT_FALSE(contains(program, "db.call_subquery")) << program;
@@ -231,7 +231,7 @@ TEST_F(VectorSearchExpressionTest, crossesTheMatchedRowsWithASearchForAComputedN
     parameters.insert("s").setString("2");
     setEmbedding(parameters.insert("v"), {1.0f, 0.0f});
 
-    expectRows("MATCH (n:X) VECTOR SEARCH IN idx FOR toInteger($s) $v YIELD ids, score "
+    expectRows("MATCH (n:X) VECTOR SEARCH IN idx FOR (toInteger($s)) $v YIELD ids, score "
                "RETURN n.name, ids ORDER BY n.name, score",
                parameters,
                {{"a", "0"}, {"a", "2"}, {"b", "0"}, {"b", "2"}, {"c", "0"}, {"c", "2"}});

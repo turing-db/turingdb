@@ -81,8 +81,8 @@ VECTOR SEARCH IN <index> FOR <k> <vector> YIELD <variable> [, score]
 **Parameters:**
 - `<index>` - Name of the vector index to search, or an expression that evaluates to a
   string naming one. A bare name is the index name, even where a variable has that name
-- `<k>` - Number of nearest neighbors to return: an expression that evaluates to a
-  positive integer
+- `<k>` - Number of nearest neighbors to return, a positive integer: a literal, a
+  parameter, a variable, a property of one, or any other expression in parentheses
 - `<vector>` - Query vector: an expression that evaluates to an embedding, such as a
   parenthesised list of float values, a parameter, a variable or a property. The Python
   clients send a 1-dimensional `numpy.float32` array as an embedding and the JS client a
@@ -99,8 +99,9 @@ An index name, a `k` and a query vector computed from parameters and literals al
 computed once, and the search runs once for the whole query. One that reads a variable
 runs one search per row, and each row is paired with its own neighbors. A row whose
 search finds no neighbor produces no row. A null index name, `k` or query vector is an
-error once a row reaches the search, a property no node holds included. A `k` that is a variable directly before a parenthesised query vector is the count,
-not a function call: `FOR k (1.0, 0.0)`.
+error once a row reaches the search, a property no node holds included. `k` and the
+query vector are written side by side, so a bracket, a parenthesis or a sign after `k`
+opens the vector: `FOR k (1.0, 0.0)` and `FOR k [w][0]` search for 1.0, 0.0 and for w.
 
 **Examples:**
 ```cypher
@@ -111,7 +112,7 @@ VECTOR SEARCH IN test_index FOR 10 (0.256, 0.12, 0.12345, 0.89) YIELD ids RETURN
 VECTOR SEARCH IN test_index FOR $k $vector YIELD ids RETURN ids
 
 -- The index name and the neighbour count computed from parameters
-VECTOR SEARCH IN $index FOR $k + 1 $vector YIELD ids RETURN ids
+VECTOR SEARCH IN $index FOR ($k + 1) $vector YIELD ids RETURN ids
 
 -- One search per matched node, for the vector the node holds
 MATCH (d:Document)

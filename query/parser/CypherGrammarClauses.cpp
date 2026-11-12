@@ -6,6 +6,7 @@
 #include "Pattern.h"
 #include "PatternElement.h"
 #include "Projection.h"
+#include "QualifiedName.h"
 #include "RegularQuery.h"
 #include "SinglePartQuery.h"
 #include "SourceManager.h"
@@ -492,7 +493,7 @@ VectorSearchStmt* CypherGrammar::parseVectorSearchStmt() {
     Expr* index = parseVectorIndexExpr();
 
     expect(CypherTokenKind::FOR);
-    Expr* neighbourCount = parseExpr(ExprFollower::QUERY_VECTOR);
+    Expr* neighbourCount = parseNeighbourCountExpr();
 
     Expr* queryVector = parseExpr(ExprFollower::NONE);
     YieldClause* yield = parseYieldClause();
@@ -522,6 +523,47 @@ Expr* CypherGrammar::parseVectorIndexExpr() {
     locate(index, start);
 
     return index;
+}
+
+// The neighbour count is written right before the query vector, so it is a primary: a
+// literal, a parameter, a variable, a property read of one, or a parenthesized expression.
+// A bracket, a parenthesis or a sign after it opens the vector.
+Expr* CypherGrammar::parseNeighbourCountExpr() {
+    const SourcePosition start = currentPosition();
+
+    const bool startsScalarLiteral = check(CypherTokenKind::DIGIT)
+                                  || check(CypherTokenKind::DOUBLE)
+                                  || check(CypherTokenKind::STRING_LITERAL)
+                                  || check(CypherTokenKind::NULL_)
+                                  || check(CypherTokenKind::TRUE)
+                                  || check(CypherTokenKind::FALSE);
+
+    Expr* count = nullptr;
+    if (checkSymbol()) {
+        Symbol* symbol = parseSymbol();
+
+        if (check(CypherTokenKind::DOT)) {
+            QualifiedName* name = parseQualifiedName(symbol);
+            count = ParserUtils::createPropertyChain(_ast, name, locationFrom(start));
+        } else {
+            count = SymbolExpr::create(_ast, symbol);
+            locate(count, start);
+        }
+    } else if (check(CypherTokenKind::OPAREN)) {
+        count = parseParenthesizedExpr();
+    } else if (check(CypherTokenKind::DOLLAR)) {
+        count = parseParameterExpr();
+    } else if (startsScalarLiteral) {
+        count = parseLiteralExpr();
+    } else {
+        throwUnexpectedToken();
+    }
+
+    while (check(CypherTokenKind::DOT)) {
+        count = parseLookupOperand(count, start);
+    }
+
+    return count;
 }
 
 CallStmt* CypherGrammar::parseCallStmt() {

@@ -130,7 +130,6 @@ private:
         NONE,
         AS,
         PIPE,
-        QUERY_VECTOR,
     };
 
     enum class PipeReading : uint8_t {
@@ -426,6 +425,7 @@ private:
     LoadCSVStmt* parseLoadCSVStmt();
     VectorSearchStmt* parseVectorSearchStmt();
     Expr* parseVectorIndexExpr();
+    Expr* parseNeighbourCountExpr();
     CallStmt* parseCallStmt();
     CallSubqueryStmt* parseCallSubqueryStmt();
     void parseCallScope(std::vector<const Symbol*>& imports);
@@ -578,7 +578,6 @@ private:
     bool isOpensDetailLabels(size_t offset);
     bool pipeDisjoinsLabels();
     ParenthesizedAtom classifyParenthesis();
-    bool continuesOperand(CypherTokenKind opener);
     bool startsPredicate();
     bool startsComparison();
     size_t skipBalanced(size_t offset);

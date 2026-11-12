@@ -3211,9 +3211,9 @@ TEST_F(ParseEdgeCaseTest, parsesEntityDetailsAndReadingClauses) {
                                       ._yield = yield({symbol("ids")})})},
                        returning({symbol("ids")}))});
 
-    expectParse("VECTOR SEARCH IN $idx FOR $k + 1 $m.v YIELD ids RETURN ids",
+    expectParse("VECTOR SEARCH IN $idx FOR ($k + 1) $m.v YIELD ids RETURN ids",
                 {query({vectorSearch({._index = parameter("idx"),
-                                      ._neighbours = binary(BinaryOperator::Add, parameter("k"), integer(1)),
+                                      ._neighbours = parenthesized(binary(BinaryOperator::Add, parameter("k"), integer(1))),
                                       ._queryVector = lookup(parameter("m"), "v"),
                                       ._yield = yield({symbol("ids")})})},
                        returning({symbol("ids")}))});
@@ -3239,9 +3239,9 @@ TEST_F(ParseEdgeCaseTest, parsesEntityDetailsAndReadingClauses) {
                                       ._yield = yield({symbol("ids")})})},
                        returning({symbol("ids")}))});
 
-    expectParse("VECTOR SEARCH IN v FOR toInteger(k) (1, 2) YIELD ids RETURN ids",
+    expectParse("VECTOR SEARCH IN v FOR (toInteger(k)) (1, 2) YIELD ids RETURN ids",
                 {query({vectorSearch({._index = string("v"),
-                                      ._neighbours = invocation({"toInteger"}, {symbol("k")}),
+                                      ._neighbours = parenthesized(invocation({"toInteger"}, {symbol("k")})),
                                       ._queryVector = literal(embedding({1.0f, 2.0f})),
                                       ._yield = yield({symbol("ids")})})},
                        returning({symbol("ids")}))});
