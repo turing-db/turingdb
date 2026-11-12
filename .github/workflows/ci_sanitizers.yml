@@ -99,11 +99,11 @@ jobs:
       if: failure() && steps.tests.outcome == 'failure' && github.ref == 'refs/heads/main'
       uses: actions/setup-node@v4
       with:
-        node-version: 20
+        node-version: 22
 
     - name: Install Claude Code
       if: failure() && steps.tests.outcome == 'failure' && github.ref == 'refs/heads/main'
-      run: npm install -g @anthropic-ai/claude-code
+      run: npm install -g --engine-strict @anthropic-ai/claude-code@latest
 
     # Fixes the simple findings as stacked sanitizers/* branches and files Linear tickets for
     # the others. The open-prs job pushes the branches, so this job never holds a write token.

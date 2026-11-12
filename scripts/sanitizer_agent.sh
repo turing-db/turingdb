@@ -58,7 +58,8 @@ timeout 170m claude -p "/sanitizer-triage build/Testing/Temporary/LastTest.log $
     < /dev/null > "$SANITIZER_OUT/transcript.jsonl" || agent_status=$?
 
 if [ "$agent_status" -ne 0 ]; then
-    echo "::error::The sanitizer agent exited with status $agent_status; its committed fixes are still bundled"
+    echo "::error::The sanitizer agent exited with status $agent_status"
+    tail -n 1 "$SANITIZER_OUT/transcript.jsonl"
 fi
 
 if [ -s "$SANITIZER_OUT/summary.md" ]; then
@@ -73,7 +74,7 @@ fi
 manifest="$SANITIZER_OUT/prs.tsv"
 if [ ! -s "$manifest" ]; then
     echo "has_prs=false" >> "$GITHUB_OUTPUT"
-    exit 0
+    exit "$agent_status"
 fi
 
 parent=$base
