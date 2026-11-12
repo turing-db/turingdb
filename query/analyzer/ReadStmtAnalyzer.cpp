@@ -469,16 +469,6 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
     const int64_t lhs = qp->getLhs();
     const int64_t rhs = qp->getRhs();
 
-    if (lhs < 0) {
-        throwError("Variable-length path minimum hops must be greater than or equal to 0",
-                   edgePattern);
-    }
-
-    if (rhs < 1) {
-        throwError("Variable-length path maximum hops must be greater than or equal to 1",
-                   edgePattern);
-    }
-
     if (!qp->isRhsUnbounded()) {
         if (rhs < lhs) {
             throwError("Variable-length path maximum hops must be "
