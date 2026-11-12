@@ -6,6 +6,7 @@
 #include <algorithm>
 
 #include "BioAssert.h"
+#include "FileTransfer.h"
 
 using namespace fs;
 
@@ -111,24 +112,8 @@ void FilePageWriter::reserveSpace(size_t byteCount) {
 void FilePageWriter::flush() {
     std::fill_n(_buffer.data() + _buffer.size(), _buffer.avail(), 0);
 
-    ssize_t remainingBytes = buffer().capacity();
-    ssize_t bytesWritten = 0;
-
-    while (remainingBytes > 0) {
-        const ssize_t nbytes = ::write(_fd, _buffer.data() + bytesWritten, remainingBytes);
-
-        if (nbytes == -1) {
-            if (errno == EAGAIN) {
-                continue;
-            }
-
-            _error = Error(ErrorType::WRITE_PAGE, errno);
-            _buffer.resize(0);
-            return;
-        }
-
-        bytesWritten += nbytes;
-        remainingBytes -= nbytes;
+    if (const int error = writeAll(_fd, _buffer.data(), _buffer.capacity()); error != 0) {
+        _error = Error(ErrorType::WRITE_PAGE, error);
     }
 
     _buffer.resize(0);

@@ -13,3 +13,6 @@ add_turing_test(test_io_agingrincache AgingRingCacheTest.cpp)
 add_turing_test(test_io_parquet_reader ParquetReaderTest.cpp)
 add_turing_test(test_io_parquet_embedding_reader ParquetEmbeddingReaderTest.cpp)
 
+if(NOT APPLE)
+    add_turing_test(test_io_file_transfer FileTransferTest.cpp)
+endif()
