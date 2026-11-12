@@ -9,7 +9,6 @@
 #include "ChangeManager.h"
 #include "EmbeddingsSpec.h"
 #include "GraphFileType.h"
-#include "GraphLoadStatus.h"
 #include "ObjectMap.h"
 #include "Path.h"
 #include "TypedPropertySpec.h"
@@ -55,7 +54,7 @@ public:
 
     GraphFileType getGraphFileType(const fs::Path& graphPath) const;
 
-    // Is a graph currently being loaded from a file
+    // Is a graph being loaded or created: its name is reserved and not yet published
     bool isGraphLoading(std::string_view graphName) const;
 
     // Change management
@@ -74,7 +73,6 @@ private:
     std::atomic<Graph*> _defaultGraph {nullptr};
 
     ChangeManager _changes;
-    GraphLoadStatus _graphLoadStatus;
 
     // The directory of a graph. Throws on a name that is empty or could reach outside the
     // graphs directory
