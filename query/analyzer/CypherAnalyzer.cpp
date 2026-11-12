@@ -1887,10 +1887,10 @@ void CypherAnalyzer::analyze(LoadJsonlQuery* loadJsonl) {
     throwIfInvalidGraphName(graphName, loadJsonl);
 
     const auto& embDims = loadJsonl->getEmbeddingSpecs();
-    const bool validDims =
-        std::ranges::all_of(embDims, [](const auto& kv) { return kv.second > 1; });
-    if (!validDims) {
-        throwError("All embedding properties must have dimension greater than 1.");
+    for (const auto& [name, dimension] : embDims) {
+        if (dimension == 0) {
+            throwError(fmt::format("Embedding property '{}' must have dimension greater than 0", name), loadJsonl);
+        }
     }
 
     const TypedPropertySpec& typedProperties = loadJsonl->getTypedPropertySpec();

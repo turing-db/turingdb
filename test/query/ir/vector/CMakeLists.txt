@@ -74,3 +74,7 @@ target_include_directories(test_query_ir_embedding_dimension_rebased_property PR
 add_turing_test(test_query_ir_embedding_dimension_kept EmbeddingDimensionKeptTest.cpp)
 target_sources(test_query_ir_embedding_dimension_kept PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
 target_include_directories(test_query_ir_embedding_dimension_kept PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_smallest_embedding_dimension SmallestEmbeddingDimensionTest.cpp)
+target_sources(test_query_ir_smallest_embedding_dimension PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_smallest_embedding_dimension PRIVATE ${IR_TEST_DIR})
