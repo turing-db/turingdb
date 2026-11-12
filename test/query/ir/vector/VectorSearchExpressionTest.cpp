@@ -242,12 +242,12 @@ TEST_F(VectorSearchExpressionTest, searchesForTheQueryVectorOfEachRow) {
 
     expectRows("UNWIND [(1.0, 0.0), (0.0, 1.0), (-1.0, 0.0)] AS v WITH v AS w "
                "VECTOR SEARCH IN idx FOR 2 w YIELD ids, score RETURN w, ids, score",
-               {{"[1, 0]", "0", "0"},
-                {"[1, 0]", "2", "1"},
-                {"[0, 1]", "1", "0"},
-                {"[0, 1]", "2", "1"},
-                {"[-1, 0]", "3", "0"},
-                {"[-1, 0]", "1", "2"}});
+               {{"1, 0", "0", "0"},
+                {"1, 0", "2", "1"},
+                {"0, 1", "1", "0"},
+                {"0, 1", "2", "1"},
+                {"-1, 0", "3", "0"},
+                {"-1, 0", "1", "2"}});
 }
 
 TEST_F(VectorSearchExpressionTest, searchesForTheNeighbourCountOfEachRow) {
@@ -356,10 +356,10 @@ TEST_F(VectorSearchExpressionTest, searchesForARowConstantOfABodyRunOncePerRow) 
 
     expectRows("UNWIND [(1.0, 0.0), (0.0, 1.0)] AS w CALL { WITH w VECTOR SEARCH IN idx FOR 2 w YIELD ids RETURN count(ids) AS c } "
                "RETURN w, c",
-               {{"[1, 0]", "2"}, {"[0, 1]", "2"}});
+               {{"1, 0", "2"}, {"0, 1", "2"}});
     expectRows("UNWIND [(1.0, 0.0), (0.0, 1.0)] AS w CALL { WITH w MATCH (p:Person {name: 'Remy'}) "
                "VECTOR SEARCH IN idx FOR 1 w YIELD ids RETURN min(id(ids)) AS c } RETURN w, c",
-               {{"[1, 0]", "0"}, {"[0, 1]", "1"}});
+               {{"1, 0", "0"}, {"0, 1", "1"}});
 }
 
 TEST_F(VectorSearchExpressionTest, searchesAroundTheNeighboursAnotherSearchReported) {

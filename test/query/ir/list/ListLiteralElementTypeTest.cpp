@@ -148,6 +148,18 @@ TEST_F(ListLiteralElementTypeTest, typesABoolListAsBools) {
     expectListElementType("RETURN [true, false]", mlir::IntegerType::get(&_context, 1));
 }
 
+TEST_F(ListLiteralElementTypeTest, typesAnEmbeddingListAsEmbeddings) {
+    expectListElementType("RETURN [(1.0, 0.0), (0.0, 1.0)]", mlir::storage::EmbeddingType::get(&_context));
+}
+
+TEST_F(ListLiteralElementTypeTest, typesAMapListAsMaps) {
+    expectListElementType("RETURN [{a: 1}, {b: 'x'}]", mlir::storage::MapType::get(&_context));
+}
+
+TEST_F(ListLiteralElementTypeTest, typesAnEmbeddingBesideAMapAsTaggedScalars) {
+    expectListElementType("RETURN [(1.0, 0.0), {a: 1}]", listElementType());
+}
+
 TEST_F(ListLiteralElementTypeTest, typesASingleElementListAsThatElement) {
     // One element is enough to read a type from - the boundary of the rule that a typed
     // list carries at least one element.

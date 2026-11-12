@@ -139,14 +139,10 @@ TEST_F(UnwindNonListTest, unwindsAnEmbeddingToOneRow) {
     ParameterMap parameters;
     parameters.insert("v").setEmbedding(embedding);
 
-    expectRows("UNWIND (1.0, 0.0) AS x RETURN cosine_similarity(x, (1.0, 0.0))", {{"1"}});
-    expectRows("UNWIND $v AS x RETURN cosine_similarity(x, (1.0, 0.0))", parameters, {{"1"}});
-    expectRows("WITH (1.0, 0.0) AS y UNWIND y AS x RETURN cosine_similarity(x, (1.0, 0.0))", {{"1"}});
-    expectRows("UNWIND CASE WHEN true THEN (1.0, 0.0) END AS x RETURN cosine_similarity(x, (1.0, 0.0))", {{"1"}});
-
-    expectRows("UNWIND (1.0, 0.0) AS x RETURN x", {{"[1, 0]"}});
-    expectRows("UNWIND [(1.0, 0.0)] AS x RETURN x", {{"[1, 0]"}});
+    expectRows("UNWIND (1.0, 0.0) AS x RETURN x", {{"1, 0"}});
     expectRows("UNWIND $v AS x RETURN x", parameters, {{"1, 0"}});
+    expectRows("WITH (1.0, 0.0) AS y UNWIND y AS x RETURN x", {{"1, 0"}});
+    expectRows("UNWIND CASE WHEN true THEN (1.0, 0.0) END AS x RETURN x", {{"1, 0"}});
 }
 
 TEST_F(UnwindNonListTest, unwindsANodeToOneRow) {

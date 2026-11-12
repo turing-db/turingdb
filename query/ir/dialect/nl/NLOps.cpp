@@ -774,26 +774,9 @@ LogicalResult Constant::inferReturnTypes(MLIRContext* context,
                                          std::optional<Location> location,
                                          Constant::Adaptor adaptor,
                                          SmallVectorImpl<Type>& inferredReturnTypes) {
-    // An array of per-element attributes is a list literal; it carries no type of its own,
-    // so the element type is the homogeneity verdict over the elements.
-    if (const auto elements = dyn_cast<ArrayAttr>(adaptor.getValue())) {
-        const Type listType = storage::ListType::get(context, ::db::sharedLiteralElementType(elements));
-
-        inferredReturnTypes.push_back(ChunkType::get(context, listType));
-        return success();
-    }
-
-    // The db-dialect sibling's rule: a dense f32 array is an embedding, a type the attribute
-    // itself does not carry.
-    if (isa<DenseF32ArrayAttr>(adaptor.getValue())) {
-        inferredReturnTypes.push_back(ChunkType::get(context, storage::EmbeddingType::get(context)));
-        return success();
-    }
-
-    if (llvm::isa<mlir::DictionaryAttr>(adaptor.getValue())) {
-        const mlir::Type mapType = storage::MapType::get(context);
-
-        inferredReturnTypes.emplace_back(ChunkType::get(context, mapType));
+    // The db-dialect sibling's rule: a list, an embedding and a map are typed by literalType
+    if (isa<ArrayAttr, DenseF32ArrayAttr, DictionaryAttr>(adaptor.getValue())) {
+        inferredReturnTypes.push_back(ChunkType::get(context, ::db::literalType(adaptor.getValue())));
         return success();
     }
 

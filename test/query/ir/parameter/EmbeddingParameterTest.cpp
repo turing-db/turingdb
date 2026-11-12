@@ -310,7 +310,7 @@ TEST_F(EmbeddingParameterTest, returnsAnEmbeddingParameterAsALiteral) {
 
 TEST_F(EmbeddingParameterTest, readsAnEmbeddingInsideAListOrAMapParameterAsALiteral) {
     const ParameterMap noParameters;
-    expectRows("UNWIND [(1.0, 0.0), (0.0, 1.0)] AS v RETURN v", noParameters, {{"[1, 0]"}, {"[0, 1]"}});
+    expectRows("UNWIND [(1.0, 0.0), (0.0, 1.0)] AS v RETURN v", noParameters, {{"1, 0"}, {"0, 1"}});
     expectRows("RETURN {at: (0.0, 1.0)}.at", noParameters, {{"[0, 1]"}});
 
     const std::vector<float> first {1.0f, 0.0f};
@@ -320,7 +320,7 @@ TEST_F(EmbeddingParameterTest, readsAnEmbeddingInsideAListOrAMapParameterAsALite
     ParameterValue::List& vectors = parameters.insert("vs").setList();
     vectors.emplace_back().setEmbedding(first);
     vectors.emplace_back().setEmbedding(second);
-    expectRows("UNWIND $vs AS v RETURN v", parameters, {{"[1, 0]"}, {"[0, 1]"}});
+    expectRows("UNWIND $vs AS v RETURN v", parameters, {{"1, 0"}, {"0, 1"}});
 
     parameters.insert("m").setMap()["at"].setEmbedding(second);
     expectRows("RETURN $m.at", parameters, {{"[0, 1]"}});

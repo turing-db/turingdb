@@ -2252,28 +2252,12 @@ LogicalResult ConstantOp::inferReturnTypes(MLIRContext* context,
                                            SmallVectorImpl<Type>& inferredReturnTypes) {
     ConstantOpGenericAdaptor adaptor(operands, attributes, properties, regions);
 
-    // An array of per-element attributes is a list literal; it carries no type of its own,
-    // so the element type is the homogeneity verdict over the elements.
-    if (const auto elements = llvm::dyn_cast<ArrayAttr>(adaptor.getValue())) {
-        const mlir::Type listType = storage::ListType::get(context, ::db::sharedLiteralElementType(elements));
+    // A list, an embedding and a map carry no type of their own, so literalType reads one off
+    // the attribute's kind, and off the elements for a list
+    if (llvm::isa<ArrayAttr, mlir::DenseF32ArrayAttr, mlir::DictionaryAttr>(adaptor.getValue())) {
+        const mlir::Type valueType = ::db::literalType(adaptor.getValue());
 
-        inferredReturnTypes.emplace_back(mlir::db::ColumnType::get(context, listType));
-        return success();
-    }
-
-    // A dense f32 array is an embedding: a flat run of floats, which is the one attribute
-    // kind carrying no type of its own that still names its column's element type.
-    if (llvm::isa<mlir::DenseF32ArrayAttr>(adaptor.getValue())) {
-        const mlir::Type embeddingType = storage::EmbeddingType::get(context);
-
-        inferredReturnTypes.emplace_back(mlir::db::ColumnType::get(context, embeddingType));
-        return success();
-    }
-
-    if (llvm::isa<mlir::DictionaryAttr>(adaptor.getValue())) {
-        const mlir::Type mapType = storage::MapType::get(context);
-
-        inferredReturnTypes.emplace_back(mlir::db::ColumnType::get(context, mapType));
+        inferredReturnTypes.emplace_back(mlir::db::ColumnType::get(context, valueType));
         return success();
     }
 
