@@ -61,7 +61,8 @@ void DBStagePlanner::collectConjunction(Value mask) {
     while (!pending.empty()) {
         const Value conjunct = pending.pop_back_val();
         AndOp conjunction = conjunct.getDefiningOp<AndOp>();
-        if (!conjunction || !conjunct.hasOneUse()) {
+        const bool joint = conjunction && conjunct.hasOneUse();
+        if (!joint) {
             _conjuncts.push_back(RankedConjunct {conjunct});
             continue;
         }
@@ -129,7 +130,8 @@ void DBStagePlanner::markComputedBefore(Operation* filter) {
         Operation* const op = _pending.pop_back_val();
         for (const Value operand : op->getOperands()) {
             const auto found = _placements.find(operand.getDefiningOp());
-            if (found != _placements.end() && !found->second._computedBefore) {
+            const bool placedInAStage = found != _placements.end() && !found->second._computedBefore;
+            if (placedInAStage) {
                 found->second._computedBefore = true;
                 _pending.push_back(found->first);
             }
@@ -254,13 +256,16 @@ void DBStagePlanner::chooseStageStarts(size_t columnCount) {
 
 void DBStagePlanner::fillStages(FilterOp filter, FilterStages& stages) {
     stages._filter = filter;
+    stages._joints.assign(_conjunction.begin(), _conjunction.end());
     for (const RankedConjunct& conjunct : _conjuncts) {
         stages._conjuncts.push_back(conjunct._value);
     }
 
-    for (size_t index = 0; index < _stageStarts.size(); index++) {
+    const size_t count = _conjuncts.size();
+    const size_t stageCount = _stageStarts.size();
+    for (size_t index = 0; index < stageCount; index++) {
         const size_t begin = _stageStarts[index];
-        const size_t end = index + 1 < _stageStarts.size() ? _stageStarts[index + 1] : _conjuncts.size();
+        const size_t end = index + 1 < stageCount ? _stageStarts[index + 1] : count;
 
         if (begin > 0) {
             for (size_t position = begin; position < end; position++) {
@@ -272,7 +277,7 @@ void DBStagePlanner::fillStages(FilterOp filter, FilterStages& stages) {
             }
         }
 
-        if (end < _conjuncts.size()) {
+        if (end < count) {
             for (const StageCrossing& crossing : _crossings) {
                 if (crossesBoundary(crossing, end)) {
                     stages._carried.push_back(crossing._value);

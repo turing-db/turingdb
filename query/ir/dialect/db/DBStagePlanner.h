@@ -9,6 +9,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 
@@ -30,10 +31,12 @@ public:
         size_t _carried {0};
     };
 
-    // The stages of a filter: its conjuncts, the ops a later stage computes after the filter
-    // before it, and the columns each stage's filter carries beside the filter's own
+    // The stages of a filter: the `and`s joining its conjuncts, outermost first, its conjuncts,
+    // the ops a later stage computes after the filter before it, and the columns each stage's
+    // filter carries beside the filter's own
     struct FilterStages {
         FilterOp _filter;
+        llvm::SmallVector<Operation*, 4> _joints;
         llvm::SmallVector<Value, 4> _conjuncts;
         llvm::SmallVector<Operation*> _moved;
         llvm::SmallVector<Value, 4> _carried;
@@ -82,7 +85,7 @@ private:
     const DBWrittenOrder* _writtenOrder {nullptr};
     ::db::SegmentationSolver _solver;
     llvm::DenseMap<Value, bool> _constantColumns;
-    llvm::SmallPtrSet<Operation*, 8> _conjunction;
+    llvm::SmallSetVector<Operation*, 8> _conjunction;
     llvm::SmallVector<RankedConjunct, 4> _conjuncts;
     MaskCone _cones;
     llvm::SmallPtrSet<Operation*, 8> _visited;

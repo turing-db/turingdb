@@ -3541,6 +3541,22 @@ double EdgeType::getRowCost() {
     return STORAGE_READ_ROW_COST;
 }
 
+double Keys::getRowCost() {
+    return STORAGE_READ_ROW_COST + CONTAINER_BUILD_ROW_COST;
+}
+
+double PropertyMap::getRowCost() {
+    return STORAGE_READ_ROW_COST + CONTAINER_BUILD_ROW_COST;
+}
+
+double StartNode::getRowCost() {
+    return STORAGE_READ_ROW_COST;
+}
+
+double EndNode::getRowCost() {
+    return STORAGE_READ_ROW_COST;
+}
+
 double CosineSimilarity::getRowCost() {
     return VECTOR_FUNCTION_ROW_COST;
 }
