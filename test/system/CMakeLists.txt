@@ -9,3 +9,5 @@ add_turing_test(test_system_failed_import_clears_loading FailedImportClearsLoadi
 add_turing_test(test_system_directory_name_validation DirectoryNameValidationTest.cpp)
 
 add_turing_test(test_system_events_restart SystemEventsRestartTest.cpp)
+
+add_turing_test(test_system_load_graph_shows_loading LoadGraphShowsLoadingTest.cpp)
