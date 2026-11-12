@@ -209,12 +209,6 @@ TEST_F(EmbeddingParameterTest, refusesAQueryVectorParameterOfAnotherDimensionAsA
                 parameters,
                 "holds vectors of dimension 2, but the query searches for one of dimension 3",
                 QueryStatus::Status::EXEC_ERROR);
-
-    setEmbedding(parameters, "v", {});
-    expectError("VECTOR SEARCH IN idx FOR 2 $v YIELD ids RETURN ids",
-                parameters,
-                "holds vectors of dimension 2, but the query searches for one of dimension 0",
-                QueryStatus::Status::EXEC_ERROR);
 }
 
 TEST_F(EmbeddingParameterTest, refusesAQueryVectorParameterThatIsNotAnEmbedding) {

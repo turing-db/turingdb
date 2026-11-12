@@ -279,6 +279,19 @@ TEST_F(TuringProtoParametersTest, anEmbeddingParameterReachesTheEngine) {
     expectRows("RETURN cosine_similarity($v, (1.0, 0.0)), cosine_similarity($v, (0.0, 1.0))", &parameters, {{"1", "0"}});
 }
 
+TEST_F(TuringProtoParametersTest, anEmptyEmbeddingParameterIsAQueryError) {
+    ParameterMap parameters;
+    parameters.insert("v").setEmbedding(std::vector<float> {});
+
+    ResultRows rows;
+    QueryStatus status;
+    runQuery("RETURN $v", &parameters, rows, status);
+
+    const std::string error = status.getError();
+    EXPECT_EQ(status.getStatus(), QueryStatus::Status::ANALYZE_ERROR) << error;
+    EXPECT_NE(error.find("An embedding cannot be empty, and the value bound to $v holds one"), std::string::npos) << error;
+}
+
 TEST_F(TuringProtoParametersTest, aPointParameterReachesTheEngine) {
     ParameterMap parameters;
     parameters.insert("pt").setPoint(Point(PointCRS::Cartesian, 1.0, 2.0, 0.0));

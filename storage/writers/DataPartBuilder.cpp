@@ -282,6 +282,12 @@ bool DataPartBuilder::registerEmbeddingWrite(PropertyManager& properties,
 
     if (value.has_value()) {
         const size_t writtenDimension = value->size();
+
+        if (writtenDimension == 0) {
+            const std::optional<std::string_view> name = _metadata->findPropertyTypeName(ptID);
+            throw VersionControlException(fmt::format("Embedding property '{}' cannot take an empty embedding", name.value_or("")));
+        }
+
         dimension = _metadata->getOrSetEmbeddingDimension(ptID, writtenDimension);
 
         if (*dimension != writtenDimension) {

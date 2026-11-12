@@ -186,6 +186,32 @@ ListShape parameterListShape(const ParameterValue::List& elements) {
     return nested.at(&elements);
 }
 
+bool holdsAnEmptyEmbedding(const ParameterValue& root) {
+    std::vector<const ParameterValue*> values {&root};
+
+    while (!values.empty()) {
+        const ParameterValue* value = values.back();
+        values.pop_back();
+
+        const EvaluatedType type = ParameterDecl::evaluatedTypeOf(*value);
+        const bool isEmptyEmbedding = type == EvaluatedType::Embedding && value->getEmbedding().empty();
+
+        if (isEmptyEmbedding) {
+            return true;
+        } else if (type == EvaluatedType::List) {
+            for (const ParameterValue& element : value->getList()) {
+                values.push_back(&element);
+            }
+        } else if (type == EvaluatedType::Map) {
+            for (const auto& [key, entry] : value->getMap()) {
+                values.push_back(&entry);
+            }
+        }
+    }
+
+    return false;
+}
+
 // The shape of the list a COLLECT gathers its one column into, which every branch of a
 // UNION contributes to: what the lists each branch would gather join to
 ListShape collectedListShape(const RegularQuery* body) {
@@ -543,6 +569,8 @@ const ParameterValue& ExprAnalyzer::boundParameterValue(std::string_view name, c
     const ParameterValue* value = _parameters ? _parameters->get(name) : nullptr;
     if (!value) {
         throwError(fmt::format("Parameter ${} is not defined", name), obj);
+    } else if (holdsAnEmptyEmbedding(*value)) {
+        throwError(fmt::format("An embedding cannot be empty, and the value bound to ${} holds one", name), obj);
     }
 
     return *value;
