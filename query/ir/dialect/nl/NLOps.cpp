@@ -403,6 +403,14 @@ LogicalResult LoadCSV::verify() {
     return success();
 }
 
+LogicalResult CreateVectorIndex::verify() {
+    if (getDimension() == 0) {
+        return emitOpError("must hold vectors of at least one dimension");
+    }
+
+    return success();
+}
+
 // The parameters db.vector_search rejects reach the index through this op unchanged: a
 // search reporting no neighbour sizes its result buffers at zero, and a query vector of
 // no dimension has nothing to score the neighbours against.

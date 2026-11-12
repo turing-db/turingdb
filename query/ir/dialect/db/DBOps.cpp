@@ -2774,6 +2774,14 @@ LogicalResult LoadCSV::verify() {
     return success();
 }
 
+LogicalResult CreateVectorIndex::verify() {
+    if (getDimension() == 0) {
+        return emitOpError("must hold vectors of at least one dimension");
+    }
+
+    return success();
+}
+
 // A search reporting no neighbour, or searching for no vector, is a query that asked for
 // nothing: neither is a shape the index can be asked for, so both are rejected here rather
 // than left to return an empty result the query would read as "no match".

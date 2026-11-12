@@ -331,6 +331,7 @@ def CreateVectorIndex : SystemOp<"create_vector_index"> {
     `(` $index_name `,` $dimension `,` $metric `,` $index_kind `)`
     attr-dict `:` qualified(type($index))
   }];
+  let hasVerifier = 1;
 }
 
 /**
