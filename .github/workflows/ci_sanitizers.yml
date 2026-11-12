@@ -105,6 +105,10 @@ jobs:
       if: failure() && steps.tests.outcome == 'failure' && github.ref == 'refs/heads/main'
       run: npm install -g --engine-strict @anthropic-ai/claude-code@latest
 
+    - name: Install gh
+      if: failure() && steps.tests.outcome == 'failure' && github.ref == 'refs/heads/main'
+      uses: ./.github/actions/setup-gh
+
     # Fixes the simple findings as stacked sanitizers/* branches and files Linear tickets for
     # the others. The open-prs job pushes the branches, so this job never holds a write token.
     - name: Investigate the findings
@@ -163,6 +167,9 @@ jobs:
       with:
         name: sanitizer-agent
         path: ${{ runner.temp }}/sanitizer-agent
+
+    - name: Install gh
+      uses: ./.github/actions/setup-gh
 
     - name: Push the fix branches and open the PRs
       env:
