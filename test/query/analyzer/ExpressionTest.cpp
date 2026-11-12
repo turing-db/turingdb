@@ -245,21 +245,11 @@ TEST_F(ExpressionTest, BinaryExpressionTest) {
     EXPECT_BINARY_INVALID(CharLiteral::create(&_ast, 'c'), BinaryOperator::Div, DoubleLiteral::create(&_ast, 5.5));
 
     // In operator (membership testing)
-    /// Valid - assuming you have list and map literals
-    // EXPECT_BINARY_VALID(Literal {5}, BinaryOperator::In, ListLiteral {/* some list */});
-    // EXPECT_BINARY_VALID(Literal {"key"}, BinaryOperator::In, MapLiteral {/* some map */});
-    // EXPECT_BINARY_VALID(Literal {true}, BinaryOperator::In, ListLiteral {/* some list */});
-    // EXPECT_BINARY_VALID(Literal {'c'}, BinaryOperator::In, ListLiteral {/* some list */});
-    // EXPECT_BINARY_VALID(Literal {5.5}, BinaryOperator::In, MapLiteral {/* some map */});
     /// Invalid
     EXPECT_BINARY_INVALID(fiveLiteral, BinaryOperator::In, tenLiteral);
     EXPECT_BINARY_INVALID(StringLiteral::create(&_ast, "key"), BinaryOperator::In, StringLiteral::create(&_ast, "string"));
     EXPECT_BINARY_INVALID(trueLiteral, BinaryOperator::In, DoubleLiteral::create(&_ast, 5.5));
     EXPECT_BINARY_INVALID(CharLiteral::create(&_ast, 'c'), BinaryOperator::In, trueLiteral);
-    // EXPECT_BINARY_INVALID(ListLiteral {/* some list */}, BinaryOperator::In, ListLiteral {/* another list */});
-    // EXPECT_BINARY_INVALID(MapLiteral {/* some map */}, BinaryOperator::In, MapLiteral {/* another map */});
-    // EXPECT_BINARY_INVALID(ListLiteral {/* some list */}, BinaryOperator::In, Literal {5});
-    // EXPECT_BINARY_INVALID(MapLiteral {/* some map */}, BinaryOperator::In, Literal {"test"});
     EXPECT_BINARY_INVALID(DoubleLiteral::create(&_ast, 5.3), BinaryOperator::Equal, DoubleLiteral::create(&_ast, 5.3));
 }
 
