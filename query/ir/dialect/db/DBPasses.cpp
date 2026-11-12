@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <algorithm>
+#include <functional>
 #include <map>
 #include <memory>
 #include <numeric>
@@ -42,6 +43,7 @@
 #include "DBColumnElement.h"
 #include "DBHeldTags.h"
 #include "DBRowDependence.h"
+#include "DBRowSource.h"
 #include "StorageAttributes.h"
 #include "PropertyScanLiteral.h"
 #include "PathHopArguments.h"
@@ -253,6 +255,10 @@ bool isNodeSource(Operation* op) {
     return isa<ScanNodes, ScanNodesByLabel, ConstScanNodes, ScanNodesByPropertyValue>(op);
 }
 
+bool isFilterResult(Value column) {
+    return isa_and_present<FilterOp>(column.getDefiningOp());
+}
+
 bool isEdgeHop(Operation* op) {
     return isa<GetOutEdges,
                GetInEdges,
@@ -341,170 +347,196 @@ void collectColumnEqualities(FilterOp filter, llvm::SmallVectorImpl<ColumnEquali
     }
 }
 
-// One step of the climb from a column to the column its variable was bound at. It crosses a
-// row op where the op is not a filter: it builds, orders or groups the rows rather than only
-// dropping some
-struct LineageStep {
-    Value _next;
-    bool _isAnchor {false};
-    bool _crossesRowOp {false};
-};
-
 // A filter over the rows an op hands on can run on the rows it takes instead, unless the op
 // has an effect a row it drops would miss, or keeps the rows at some positions
 bool letsAFilterAcross(Operation* op) {
     return mlir::isMemoryEffectFree(op) && !op->hasTrait<OpTrait::KeepsRowsByPosition>();
 }
 
-// Sets _isAnchor where @param column is where its variable was bound: a node source, or an op
-// carrying the rows in flight that makes the column. Sets _next to the column the climb goes
-// on from, and neither where the climb cannot pass the op defining it
-void stepTowardLineageAnchor(Value column, LineageStep& step) {
+// The climb from a column to the column its variable was bound at goes on across an op a filter
+// can run before, up to a node source
+bool climbsTowardLineageAnchor(Value column) {
+    Operation* const def = column.getDefiningOp();
+    return def && !isNodeSource(def) && letsAFilterAcross(def);
+}
+
+// Whether @param column is where its variable was bound: a node source, or an op carrying the
+// rows in flight that makes the column
+bool isLineageAnchor(Value column) {
     Operation* const def = column.getDefiningOp();
     if (!def) {
-        return;
+        return false;
     } else if (isNodeSource(def)) {
-        step._isAnchor = true;
-        return;
+        return true;
     }
 
     ColumnCarrierOpInterface carrier = dyn_cast<ColumnCarrierOpInterface>(def);
-    if (!carrier) {
-        return;
-    }
-
     CarrySet carrySet;
-    const Value rowSource = carrier.getRowSource(cast<OpResult>(column));
 
-    if (rowSource && letsAFilterAcross(def)) {
-        step._next = rowSource;
-        step._crossesRowOp = !isa<FilterOp>(def);
-    } else if (!rowSource && carrier.getCarrySet(carrySet)) {
-        step._isAnchor = true;
-    }
+    return carrier && !carrier.getRowSource(cast<OpResult>(column)) && carrier.getCarrySet(carrySet);
 }
 
-// The climbs of one pass run, each built from the climb one step up. A push_down_filters push
-// moves a predicate onto the op making its anchors, which changes no anchor and crosses no row
-// op, so a climb stays true across pushes; its equalities are kept as their sides' anchors,
-// which a push never erases. A rewrite that replaces an anchor has to clear() them.
-class LineageClimbs {
+// The anchor of @param column, where its climb ends; null where the climb ends elsewhere
+Value lineageAnchorOf(Value column, RowSourceClimbs& anchorClimbs) {
+    const Value climbed = anchorClimbs.climb(column);
+    return isLineageAnchor(climbed) ? climbed : Value();
+}
+
+// Lists of distinct items, nearest first. A list joined onto another keeps that one as its rest
+// and adds a cell only for each item it lacks, so the lists of a chain repeating its items share
+// their cells.
+template <typename Item>
+class SharedTailLists {
 public:
-    Value anchorOf(Value column) {
-        computeClimb(column);
-        return _climbs.at(column)._anchor;
+    static constexpr size_t EMPTY = SIZE_MAX;
+
+    // The list of @param items, the last of two equal ones kept
+    size_t make(llvm::ArrayRef<Item> items) {
+        return prepend(items, EMPTY);
     }
 
-    Value climb(Value column, bool& crossedRowOp, llvm::SmallVectorImpl<ColumnEquality>& anchorEqualities) {
-        computeClimb(column);
+    // The list of the items of @param near then those of @param far, the farther of two equal
+    // ones kept
+    size_t join(size_t near, size_t far) {
+        llvm::SmallVector<Item, 4> nearItems;
+        collect(near, nearItems);
 
-        const Climb& climb = _climbs.at(column);
-        crossedRowOp = crossedRowOp || climb._crossedRowOp;
-
-        if (climb._equalities != NO_LIST) {
-            llvm::append_range(anchorEqualities, _equalityLists[climb._equalities]);
-        }
-
-        return climb._anchor;
+        return prepend(nearItems, far);
     }
 
-    void forget(Operation* op) {
-        for (const Value result : op->getResults()) {
-            _climbs.erase(result);
+    void collect(size_t list, llvm::SmallVectorImpl<Item>& items) const {
+        for (size_t cell = list; cell != EMPTY; cell = _cells[cell]._rest) {
+            items.push_back(_cells[cell]._item);
         }
     }
 
     void clear() {
-        _climbs.clear();
+        _cells.clear();
+    }
+
+private:
+    struct Cell {
+        Item _item;
+        size_t _rest {EMPTY};
+    };
+
+    std::vector<Cell> _cells;
+
+    bool contains(size_t list, const Item& item) const {
+        for (size_t cell = list; cell != EMPTY; cell = _cells[cell]._rest) {
+            if (_cells[cell]._item == item) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    size_t prepend(llvm::ArrayRef<Item> items, size_t rest) {
+        size_t list = rest;
+        for (const Item& item : llvm::reverse(items)) {
+            if (!contains(list, item)) {
+                _cells.push_back(Cell {item, list});
+                list = _cells.size() - 1;
+            }
+        }
+
+        return list;
+    }
+};
+
+// What a climb toward an anchor keeps of its steps: whether one crosses a row op, an op other
+// than a filter, which builds, orders or groups the rows rather than only dropping some, and the
+// equalities of the filters it crosses that relate two anchors, as those anchors
+class LineageFold {
+public:
+    struct Summary {
+        bool _crossesRowOp {false};
+        size_t _equalities {SharedTailLists<ColumnEquality>::EMPTY};
+    };
+
+    explicit LineageFold(RowSourceClimbs& anchorClimbs)
+        : _anchorClimbs(anchorClimbs)
+    {
+    }
+
+    Summary step(Value column) {
+        FilterOp filter = column.getDefiningOp<FilterOp>();
+        if (!filter) {
+            return Summary {._crossesRowOp = true};
+        }
+
+        llvm::SmallVector<ColumnEquality, 4> filterEqualities;
+        collectColumnEqualities(filter, filterEqualities);
+
+        llvm::SmallVector<ColumnEquality, 4> anchorEqualities;
+        for (const ColumnEquality& equality : filterEqualities) {
+            const ColumnEquality anchors {lineageAnchorOf(equality.first, _anchorClimbs), lineageAnchorOf(equality.second, _anchorClimbs)};
+            const bool relatesTwoAnchors = anchors.first && anchors.second && anchors.first != anchors.second;
+            if (relatesTwoAnchors) {
+                anchorEqualities.push_back(anchors);
+            }
+        }
+
+        return Summary {._equalities = _equalityLists.make(anchorEqualities)};
+    }
+
+    Summary combine(Summary near, Summary far) {
+        return Summary {._crossesRowOp = near._crossesRowOp || far._crossesRowOp,
+                        ._equalities = _equalityLists.join(near._equalities, far._equalities)};
+    }
+
+    void collectEqualities(Summary summary, llvm::SmallVectorImpl<ColumnEquality>& equalities) const {
+        _equalityLists.collect(summary._equalities, equalities);
+    }
+
+    void clear() {
         _equalityLists.clear();
     }
 
 private:
-    static constexpr size_t NO_LIST = SIZE_MAX;
+    RowSourceClimbs& _anchorClimbs;
+    SharedTailLists<ColumnEquality> _equalityLists;
+};
 
-    struct Climb {
-        Value _anchor;
-        bool _crossedRowOp {false};
-        size_t _equalities {NO_LIST};
-    };
-
-    // A climb's distinct equalities, nearest filter first. A filter whose equalities the climb
-    // one step up already holds shares that list, so a chain repeating one equality keeps one.
-    llvm::DenseMap<Value, Climb> _climbs;
-    std::vector<llvm::SmallVector<ColumnEquality, 2>> _equalityLists;
-
-    void computeClimb(Value column) {
-        llvm::SmallVector<Value> worklist {column};
-        llvm::SmallVector<ColumnEquality, 4> filterEqualities;
-
-        while (!worklist.empty()) {
-            const Value value = worklist.back();
-            if (_climbs.contains(value)) {
-                worklist.pop_back();
-                continue;
-            }
-
-            LineageStep step;
-            stepTowardLineageAnchor(value, step);
-
-            filterEqualities.clear();
-            if (FilterOp filter = value.getDefiningOp<FilterOp>()) {
-                collectColumnEqualities(filter, filterEqualities);
-            }
-
-            bool dependenciesPending = false;
-            const auto requireClimb = [this, &worklist, &dependenciesPending](Value dependency) {
-                if (dependency && !_climbs.contains(dependency)) {
-                    worklist.push_back(dependency);
-                    dependenciesPending = true;
-                }
-            };
-
-            requireClimb(step._next);
-            for (const ColumnEquality& equality : filterEqualities) {
-                requireClimb(equality.first);
-                requireClimb(equality.second);
-            }
-
-            if (dependenciesPending) {
-                continue;
-            }
-
-            Climb climb;
-            if (step._isAnchor) {
-                climb._anchor = value;
-            } else if (step._next) {
-                const Climb next = _climbs.at(step._next);
-                climb._anchor = next._anchor;
-                climb._crossedRowOp = next._crossedRowOp || step._crossesRowOp;
-                climb._equalities = next._equalities;
-
-                for (const ColumnEquality& equality : llvm::reverse(filterEqualities)) {
-                    const ColumnEquality anchors {_climbs.at(equality.first)._anchor, _climbs.at(equality.second)._anchor};
-                    const bool relatesTwoAnchors = anchors.first && anchors.second && anchors.first != anchors.second;
-                    if (!relatesTwoAnchors) {
-                        continue;
-                    }
-
-                    llvm::SmallVector<ColumnEquality, 2> equalities {anchors};
-                    if (climb._equalities != NO_LIST) {
-                        const llvm::SmallVector<ColumnEquality, 2>& held = _equalityLists[climb._equalities];
-                        if (llvm::is_contained(held, anchors)) {
-                            continue;
-                        }
-
-                        llvm::append_range(equalities, held);
-                    }
-
-                    _equalityLists.push_back(equalities);
-                    climb._equalities = _equalityLists.size() - 1;
-                }
-            }
-
-            _climbs[value] = climb;
-            worklist.pop_back();
-        }
+// The climbs of one pass run toward the anchors of columns. A push_down_filters push moves a
+// predicate onto the op making its anchors, which changes no anchor and crosses no row op, so a
+// climb stays true across pushes; its equalities are kept as their sides' anchors, which a push
+// never erases. A rewrite that replaces an anchor has to clear() them.
+class LineageClimbs {
+public:
+    LineageClimbs()
+        : _lineageClimbs(climbsTowardLineageAnchor, LineageFold(_anchorClimbs))
+    {
     }
+
+    Value anchorOf(Value column) {
+        return lineageAnchorOf(column, _anchorClimbs);
+    }
+
+    Value climb(Value column, bool& crossedRowOp, llvm::SmallVectorImpl<ColumnEquality>& anchorEqualities) {
+        LineageFold::Summary summary;
+        const Value climbed = _lineageClimbs.climb(column, summary);
+
+        crossedRowOp = crossedRowOp || summary._crossesRowOp;
+        _lineageClimbs.getFold().collectEqualities(summary, anchorEqualities);
+
+        return isLineageAnchor(climbed) ? climbed : Value();
+    }
+
+    void forget(Operation* op) {
+        _anchorClimbs.forget(op);
+        _lineageClimbs.forget(op);
+    }
+
+    void clear() {
+        _anchorClimbs.clear();
+        _lineageClimbs.clear();
+    }
+
+private:
+    RowSourceClimbs _anchorClimbs {climbsTowardLineageAnchor};
+    FoldedRowSourceClimbs<LineageFold> _lineageClimbs;
 };
 
 struct MaskCone {
@@ -1434,11 +1466,9 @@ struct FuseUnwindEquality : public impl::FuseUnwindEqualityBase<FuseUnwindEquali
 
 bool isHop(Operation* op);
 bool computesPerRow(Operation* op);
-Value climbFilters(Value column);
 void eraseIfUnused(Operation* op, mlir::RewriterBase& rewriter);
 Value appendCarriedColumn(Operation* op, Value column, mlir::RewriterBase& rewriter);
 BlockArgument carryIntoRegion(Region& region, Value column, mlir::RewriterBase& rewriter);
-Value seedColumnOf(ExplorePaths exploration, Value column);
 Type boolColumnType(mlir::MLIRContext* context);
 
 // What an unwound list is when it is a run of a range: the range, the one slice taken of it
@@ -1909,20 +1939,20 @@ public:
 
     const ConjunctCone& getConjunctCone(Value conjunct, CrossProduct product);
 
-    // Each filter column climbs once, so the columns of a stack of N filters cost N steps
-    // in all rather than N per column
-    Value climbFilters(Value column);
+    Value climbFilters(Value column) {
+        return _filterClimbs.climb(column);
+    }
 
     void clear() {
         _constantColumns.clear();
         _conjunctCones.clear();
-        _climbedColumns.clear();
+        _filterClimbs.clear();
     }
 
 private:
     llvm::DenseMap<Value, bool> _constantColumns;
     llvm::DenseMap<std::pair<Value, Operation*>, std::unique_ptr<ConjunctCone>> _conjunctCones;
-    llvm::DenseMap<Value, Value> _climbedColumns;
+    RowSourceClimbs _filterClimbs {isFilterResult};
 };
 
 void collectFactorReads(const MaskCone& cone, CrossProduct product, ConeCache& cache, FactorReads& reads) {
@@ -1956,27 +1986,6 @@ const ConjunctCone& ConeCache::getConjunctCone(Value conjunct, CrossProduct prod
     }
 
     return *cached;
-}
-
-Value ConeCache::climbFilters(Value column) {
-    llvm::SmallVector<Value> climbing;
-    Value climbed = column;
-    while (FilterOp filter = climbed.getDefiningOp<FilterOp>()) {
-        const auto climbedIt = _climbedColumns.find(climbed);
-        if (climbedIt != _climbedColumns.end()) {
-            climbed = climbedIt->second;
-            break;
-        }
-
-        climbing.push_back(climbed);
-        climbed = filter.getColumnsToFilter()[cast<OpResult>(climbed).getResultNumber()];
-    }
-
-    for (const Value filtered : climbing) {
-        _climbedColumns[filtered] = climbed;
-    }
-
-    return climbed;
 }
 
 void appendCone(const MaskCone& from, llvm::SmallPtrSetImpl<Operation*>& appended, MaskCone& cone) {
@@ -2239,7 +2248,7 @@ bool matchUnwindBesideItsRows(UnwindPlacement& placement, ConeCache& cache) {
     Unwind unwind = placement._unwind;
 
     for (const Value column : unwind.getColumnsToFilter()) {
-        if (cache.yieldsConstantColumn(column) || !climbFilters(column).getDefiningOp<CrossProduct>()) {
+        if (cache.yieldsConstantColumn(column) || !cache.climbFilters(column).getDefiningOp<CrossProduct>()) {
             return false;
         }
     }
@@ -4648,25 +4657,23 @@ struct FuseEdgesByEndpointLabel : public impl::FuseEdgesByEndpointLabelBase<Fuse
 
 // A label is known by its attribute: a name, or a parameter, which binds the same value
 // wherever the program writes it
-void addLabelNames(ArrayAttr names, llvm::DenseSet<Attribute>& labels) {
-    for (const Attribute name : names) {
-        labels.insert(name);
-    }
+void addLabelNames(ArrayAttr names, llvm::SmallVectorImpl<Attribute>& labels) {
+    llvm::append_range(labels, names);
 }
 
-void addSharedLabelNames(ArrayAttr alternatives, llvm::DenseSet<Attribute>& labels) {
+void addSharedLabelNames(ArrayAttr alternatives, llvm::SmallVectorImpl<Attribute>& labels) {
     for (const Attribute label : cast<ArrayAttr>(alternatives[0])) {
         const auto asksFor = [label](Attribute alternative) {
             return llvm::is_contained(cast<ArrayAttr>(alternative), label);
         };
 
         if (llvm::all_of(alternatives, asksFor)) {
-            labels.insert(label);
+            labels.push_back(label);
         }
     }
 }
 
-void addFilterLabels(FilterOp filter, Value filtered, llvm::DenseSet<Attribute>& labels) {
+void addFilterLabels(FilterOp filter, Value filtered, llvm::SmallVectorImpl<Attribute>& labels) {
     llvm::SmallVector<Value, 4> conjuncts;
     collectConjuncts(filter.getMask(), conjuncts);
 
@@ -4683,70 +4690,98 @@ void addFilterLabels(FilterOp filter, Value filtered, llvm::DenseSet<Attribute>&
     }
 }
 
-// The labels every node of a column carries, known from where its rows come from: the
-// by-label read that made them and each label filter they passed on the way.
-void collectKnownLabels(Value column, llvm::DenseSet<Attribute>& labels) {
+// The labels every node of @param column is known to carry from the op making or cutting it
+// alone: those it reads by, those a hop or a walk reaches it by, and those a filter checks of
+// the column it carries
+void collectLabelsAt(Value column, llvm::SmallVectorImpl<Attribute>& labels) {
     constexpr size_t srcResultIndex = 0;
     constexpr size_t tgtResultIndex = 3;
 
-    for (;;) {
-        Operation* const def = column.getDefiningOp();
-        if (!def) {
-            return;
+    const OpResult result = dyn_cast<OpResult>(column);
+    if (!result) {
+        return;
+    }
+
+    Operation* const def = result.getOwner();
+    const size_t resultIndex = result.getResultNumber();
+
+    if (ScanNodesByLabel scan = dyn_cast<ScanNodesByLabel>(def)) {
+        addLabelNames(scan.getLabels(), labels);
+    } else if (ScanNodesByPropertyValue scan = dyn_cast<ScanNodesByPropertyValue>(def)) {
+        if (const std::optional<ArrayAttr> scanLabels = scan.getLabels()) {
+            addLabelNames(*scanLabels, labels);
         }
-
-        const size_t resultIndex = cast<OpResult>(column).getResultNumber();
-
-        if (ScanNodesByLabel scan = dyn_cast<ScanNodesByLabel>(def)) {
-            addLabelNames(scan.getLabels(), labels);
-            return;
-        } else if (ScanNodesByPropertyValue scan = dyn_cast<ScanNodesByPropertyValue>(def)) {
-            if (const std::optional<ArrayAttr> scanLabels = scan.getLabels()) {
-                addLabelNames(*scanLabels, labels);
-            }
-            return;
-        } else if (EdgeScanLabels scanLabels; readEdgeScanLabels(def, scanLabels)) {
-            if (resultIndex == srcResultIndex && scanLabels._source) {
-                addLabelNames(scanLabels._source, labels);
-            } else if (resultIndex == tgtResultIndex && scanLabels._target) {
-                addLabelNames(scanLabels._target, labels);
-            }
-            return;
-        } else if (FilterOp filter = dyn_cast<FilterOp>(def)) {
-            const Value filtered = filter.getColumnsToFilter()[resultIndex];
-            addFilterLabels(filter, filtered, labels);
-            column = filtered;
-        } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(def)) {
-            const std::optional<ArrayAttr> endLabels = exploration.getEndLabels();
-            if (column == exploration.getTgtids() && endLabels) {
-                addLabelNames(*endLabels, labels);
-            }
-
-            const Value seed = seedColumnOf(exploration, column);
-            if (!seed) {
-                return;
-            }
-
-            column = seed;
-        } else if (isEdgeHop(def)) {
-            const size_t inputResultIndex = isReverseHop(def) ? tgtResultIndex : srcResultIndex;
-            const size_t reachedResultIndex = isReverseHop(def) ? srcResultIndex : tgtResultIndex;
-
-            if (resultIndex == inputResultIndex) {
-                column = def->getOperand(0);
-            } else if (resultIndex >= hopFixedResultCount) {
-                column = def->getOperand(1 + (resultIndex - hopFixedResultCount));
-            } else {
-                const ArrayAttr hopLabels = def->getAttrOfType<ArrayAttr>("labels");
-                if (resultIndex == reachedResultIndex && hopLabels) {
-                    addLabelNames(hopLabels, labels);
-                }
-                return;
-            }
-        } else {
-            return;
+    } else if (EdgeScanLabels scanLabels; readEdgeScanLabels(def, scanLabels)) {
+        if (resultIndex == srcResultIndex && scanLabels._source) {
+            addLabelNames(scanLabels._source, labels);
+        } else if (resultIndex == tgtResultIndex && scanLabels._target) {
+            addLabelNames(scanLabels._target, labels);
+        }
+    } else if (FilterOp filter = dyn_cast<FilterOp>(def)) {
+        addFilterLabels(filter, rowSourceOf(column), labels);
+    } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(def)) {
+        const std::optional<ArrayAttr> endLabels = exploration.getEndLabels();
+        if (column == exploration.getTgtids() && endLabels) {
+            addLabelNames(*endLabels, labels);
+        }
+    } else if (isEdgeHop(def)) {
+        const ArrayAttr hopLabels = def->getAttrOfType<ArrayAttr>("labels");
+        if (resultIndex == hopReachedResult(def) && hopLabels) {
+            addLabelNames(hopLabels, labels);
         }
     }
+}
+
+// A node column's labels are followed back through the filters, walks and hops carrying it
+bool carriesKnownLabels(Value column) {
+    Operation* const def = column.getDefiningOp();
+    return def && (isa<FilterOp, ExplorePaths>(def) || isEdgeHop(def));
+}
+
+// What a climb from a node column keeps of its steps: the labels known at each column it
+// climbs from
+class KnownLabelFold {
+public:
+    struct Summary {
+        size_t _labels {SharedTailLists<Attribute>::EMPTY};
+    };
+
+    Summary step(Value column) {
+        llvm::SmallVector<Attribute, 4> labels;
+        collectLabelsAt(column, labels);
+
+        return Summary {._labels = _labelLists.make(labels)};
+    }
+
+    Summary combine(Summary near, Summary far) {
+        return Summary {._labels = _labelLists.join(near._labels, far._labels)};
+    }
+
+    void collectLabels(Summary summary, llvm::SmallVectorImpl<Attribute>& labels) const {
+        _labelLists.collect(summary._labels, labels);
+    }
+
+    void clear() {
+        _labelLists.clear();
+    }
+
+private:
+    SharedTailLists<Attribute> _labelLists;
+};
+
+using KnownLabelClimbs = FoldedRowSourceClimbs<KnownLabelFold>;
+
+// The labels every node of a column carries, known from where its rows come from: the
+// by-label read that made them and each label filter they passed on the way.
+void collectKnownLabels(Value column, KnownLabelClimbs& climbs, llvm::DenseSet<Attribute>& labels) {
+    KnownLabelFold::Summary summary;
+    const Value climbed = climbs.climb(column, summary);
+
+    llvm::SmallVector<Attribute, 8> known;
+    climbs.getFold().collectLabels(summary, known);
+    collectLabelsAt(climbed, known);
+
+    labels.insert(known.begin(), known.end());
 }
 
 // A label check over nodes already known to carry every label of one of its alternatives
@@ -4756,7 +4791,7 @@ struct RedundantLabelChecks {
     llvm::SmallVector<Value, 2> _conjuncts;
 };
 
-bool isRedundantLabelCheck(Value conjunct) {
+bool isRedundantLabelCheck(Value conjunct, KnownLabelClimbs& climbs) {
     CheckLabelConstraint check = conjunct.getDefiningOp<CheckLabelConstraint>();
     if (!check) {
         return false;
@@ -4768,7 +4803,7 @@ bool isRedundantLabelCheck(Value conjunct) {
     }
 
     llvm::DenseSet<Attribute> knownLabels;
-    collectKnownLabels(labelSet.getInputNodes(), knownLabels);
+    collectKnownLabels(labelSet.getInputNodes(), climbs, knownLabels);
 
     const auto isKnown = [&knownLabels](Attribute label) {
         return knownLabels.contains(label);
@@ -4781,12 +4816,14 @@ bool isRedundantLabelCheck(Value conjunct) {
     return llvm::any_of(check.getAlternatives(), isGuaranteed);
 }
 
-bool matchRedundantLabelChecks(FilterOp filter, RedundantLabelChecks& redundant) {
+bool matchRedundantLabelChecks(FilterOp filter, KnownLabelClimbs& climbs, RedundantLabelChecks& redundant) {
     llvm::SmallVector<Value, 4> conjuncts;
     collectConjuncts(filter.getMask(), conjuncts);
 
     redundant._filter = filter;
-    llvm::copy_if(conjuncts, std::back_inserter(redundant._conjuncts), isRedundantLabelCheck);
+    llvm::copy_if(conjuncts, std::back_inserter(redundant._conjuncts), [&climbs](Value conjunct) {
+        return isRedundantLabelCheck(conjunct, climbs);
+    });
 
     return !redundant._conjuncts.empty();
 }
@@ -4797,7 +4834,20 @@ void removeRedundantLabelChecks(RedundantLabelChecks& redundant, mlir::RewriterB
 
 struct RemoveRedundantLabelChecks : public impl::RemoveRedundantLabelChecksBase<RemoveRedundantLabelChecks> {
     void runOnOperation() override {
-        runFilterWorklist<RedundantLabelChecks>(getOperation(), matchRedundantLabelChecks, removeRedundantLabelChecks);
+        KnownLabelClimbs climbs(carriesKnownLabels);
+
+        const auto match = [&climbs](FilterOp filter, RedundantLabelChecks& redundant) {
+            return matchRedundantLabelChecks(filter, climbs, redundant);
+        };
+
+        // A check the labels known above its filter guarantee adds none to them, so dropping it
+        // changes no climb's labels: only the filter's own climbs go, with the filter if it goes
+        const auto remove = [&climbs](RedundantLabelChecks& redundant, mlir::RewriterBase& rewriter) {
+            climbs.forget(redundant._filter.getOperation());
+            removeRedundantLabelChecks(redundant, rewriter);
+        };
+
+        runFilterWorklist<RedundantLabelChecks>(getOperation(), match, remove);
     }
 };
 
@@ -5796,9 +5846,9 @@ bool matchNodeScanPredicate(Value conjunct, NodeScanPredicate& predicate) {
 }
 
 // The labels every node of the column carries, as a by-label read asks for them, or null
-ArrayAttr knownLabelsOf(Value column, mlir::OpBuilder& builder) {
+ArrayAttr knownLabelsOf(Value column, KnownLabelClimbs& climbs, mlir::OpBuilder& builder) {
     llvm::DenseSet<Attribute> known;
-    collectKnownLabels(column, known);
+    collectKnownLabels(column, climbs, known);
     if (known.empty()) {
         return ArrayAttr();
     }
@@ -5872,7 +5922,8 @@ void deriveNodeSetChain(const NodeScanPredicate& predicate, LineageClimbs& climb
 // each node is walked back from once
 Value buildNodeSetChain(const NodeSetChain& chain, Location loc, mlir::OpBuilder& builder) {
     const NodeScanPredicate& predicate = chain._predicate;
-    Value nodes = buildNodeScan(predicate, knownLabelsOf(predicate._column, builder), loc, builder);
+    KnownLabelClimbs labelClimbs(carriesKnownLabels);
+    Value nodes = buildNodeScan(predicate, knownLabelsOf(predicate._column, labelClimbs, builder), loc, builder);
 
     for (size_t index = 0; index < chain._hops.size(); index++) {
         Operation* const hop = chain._hops[index];
@@ -5882,7 +5933,7 @@ Value buildNodeSetChain(const NodeSetChain& chain, Location loc, mlir::OpBuilder
             nodes = distinct.getResult(0);
         }
 
-        const ArrayAttr labels = knownLabelsOf(hop->getOperand(0), builder);
+        const ArrayAttr labels = knownLabelsOf(hop->getOperand(0), labelClimbs, builder);
         Operation* const reversed = createReversedHop(hop, nodes, labels, ValueRange(), builder);
         nodes = reversed->getResult(hopReachedResult(reversed));
     }
@@ -6042,14 +6093,6 @@ struct ExploreListPredicate {
     llvm::SmallVector<Value> _imports;
 };
 
-Value climbFilters(Value column) {
-    while (FilterOp filter = column.getDefiningOp<FilterOp>()) {
-        column = filter.getColumnsToFilter()[cast<OpResult>(column).getResultNumber()];
-    }
-
-    return column;
-}
-
 bool keepsTheWalkedRows(Operation& op) {
     return isa<FilterOp, ExpandPath, ListPredicate>(op) || computesPerRow(&op);
 }
@@ -6057,7 +6100,7 @@ bool keepsTheWalkedRows(Operation& op) {
 // The operand of the exploration a column of its rows repeats for every path of a seed, or
 // null for a column the walk binds
 Value seedColumnOf(ExplorePaths exploration, Value column) {
-    const Value climbed = climbFilters(column);
+    const Value climbed = climbRowSource(column, isFilterResult);
     if (climbed.getDefiningOp() != exploration.getOperation()) {
         return {};
     }
@@ -6147,7 +6190,7 @@ bool matchExploreListConjunct(FilterOp filter, Value conjunct, OpAnswers& reachi
         return false;
     }
 
-    const Value paths = climbFilters(expansion.getPaths());
+    const Value paths = climbRowSource(expansion.getPaths(), isFilterResult);
     ExplorePaths exploration = paths.getDefiningOp<ExplorePaths>();
     const bool walksThePaths = exploration && paths == exploration.getPaths();
     if (!walksThePaths) {
@@ -7767,27 +7810,48 @@ struct CanonicalizeCoalesce : public impl::CanonicalizeCoalesceBase<Canonicalize
     }
 };
 
-// The column whose value each row of @param column holds: null where an op makes the value,
-// or may pad it with null as a CASE with no ELSE does
-Value sameValueSource(Value column) {
-    if (BroadcastConstant laidOut = column.getDefiningOp<BroadcastConstant>()) {
-        return laidOut.getValue();
-    } else if (const BlockArgument argument = dyn_cast<BlockArgument>(column)) {
-        return carriedColumnOf(argument);
-    }
-
-    const OpResult result = cast<OpResult>(column);
-    ColumnCarrierOpInterface carrier = dyn_cast<ColumnCarrierOpInterface>(result.getOwner());
-
-    return carrier ? carrier.getRowSource(result) : Value();
+bool climbsFromAnyColumn(Value column) {
+    return true;
 }
 
+// Keeps the climbs a greedy rewrite shares between its matches true: every step of a climb
+// crosses an op carrying columns, so the climbs are cleared when the rewrite erases or changes
+// one, or erases a block
+class CarrierChangeListener : public mlir::RewriterBase::Listener {
+public:
+    explicit CarrierChangeListener(RowSourceClimbs& climbs)
+        : _climbs(climbs)
+    {
+    }
+
+    void notifyOperationModified(Operation* op) override {
+        clearOnCarrier(op);
+    }
+
+    void notifyOperationErased(Operation* op) override {
+        clearOnCarrier(op);
+    }
+
+    void notifyBlockErased(Block* block) override {
+        _climbs.clear();
+    }
+
+private:
+    RowSourceClimbs& _climbs;
+
+    void clearOnCarrier(Operation* op) {
+        if (isa<ColumnCarrierOpInterface>(op)) {
+            _climbs.clear();
+        }
+    }
+};
+
 // The column an op makes, or the argument nothing carries in, whose value each row of
-// @param column holds
-Value madeColumnOf(Value column) {
-    Value made = column;
-    while (const Value source = sameValueSource(made)) {
-        made = source;
+// @param column holds, a db.broadcast_constant holding the value of the column it lays out
+Value madeColumnOf(Value column, RowSourceClimbs& carriedClimbs) {
+    Value made = carriedClimbs.climb(column);
+    while (BroadcastConstant laidOut = made.getDefiningOp<BroadcastConstant>()) {
+        made = carriedClimbs.climb(laidOut.getValue());
     }
 
     return made;
@@ -7796,12 +7860,12 @@ Value madeColumnOf(Value column) {
 // The literal every row of @param column holds: a db.constant's, or the one the op making it
 // folds to over the literals of its operands. Null where the rows may hold different values,
 // and where the op raises on those literals
-Attribute literalOf(Value column) {
+Attribute literalOf(Value column, RowSourceClimbs& carriedClimbs) {
     llvm::DenseMap<Value, Attribute> literals;
     llvm::SmallVector<Attribute> operandLiterals;
     llvm::SmallVector<mlir::OpFoldResult> folded;
 
-    const Value root = madeColumnOf(column);
+    const Value root = madeColumnOf(column, carriedClimbs);
     llvm::SmallVector<Value> worklist {root};
 
     while (!worklist.empty()) {
@@ -7823,7 +7887,7 @@ Attribute literalOf(Value column) {
         operandLiterals.clear();
 
         for (const Value operand : maker->getOperands()) {
-            const Value operandMade = madeColumnOf(operand);
+            const Value operandMade = madeColumnOf(operand, carriedClimbs);
             const auto literalIt = literals.find(operandMade);
             if (literalIt == literals.end()) {
                 worklist.push_back(operandMade);
@@ -7847,8 +7911,8 @@ Attribute literalOf(Value column) {
     return literals.lookup(root);
 }
 
-StringAttr stringLiteralOf(Value column) {
-    const Attribute literal = literalOf(column);
+StringAttr stringLiteralOf(Value column, RowSourceClimbs& carriedClimbs) {
+    const Attribute literal = literalOf(column, carriedClimbs);
     const bool holdsAString = literal && ::db::literalTag(literal) == ::db::CellTag::String;
 
     return holdsAString ? cast<StringAttr>(literal) : StringAttr();
@@ -7878,13 +7942,17 @@ void eraseUnreadCone(Value column, mlir::RewriterBase& rewriter) {
 // On a datetime or a duration m.year reads a component m['year'] raises on, and on any other
 // value with no keys the two raise with different messages
 struct FoldConstantMapKey : public mlir::OpRewritePattern<DynamicMapKey> {
-    using OpRewritePattern::OpRewritePattern;
+    FoldConstantMapKey(MLIRContext* context, RowSourceClimbs* carriedClimbs)
+        : OpRewritePattern(context),
+        _carriedClimbs(carriedClimbs)
+    {
+    }
 
     LogicalResult matchAndRewrite(DynamicMapKey mapKey, mlir::PatternRewriter& rewriter) const override {
         const Value keyColumn = mapKey.getKey();
         const Value map = mapKey.getMap();
 
-        const StringAttr key = stringLiteralOf(keyColumn);
+        const StringAttr key = stringLiteralOf(keyColumn, *_carriedClimbs);
         if (!key || !::db::holdsOnlyKeyedValues(map)) {
             return failure();
         }
@@ -7896,19 +7964,26 @@ struct FoldConstantMapKey : public mlir::OpRewritePattern<DynamicMapKey> {
 
         return success();
     }
+
+private:
+    RowSourceClimbs* _carriedClimbs {nullptr};
 };
 
 // The op reading what the index reads keeps its untyped column, which the ops carrying the
 // column were typed by
 struct FoldConstantContainerIndex : public mlir::OpRewritePattern<ContainerIndex> {
-    using OpRewritePattern::OpRewritePattern;
+    FoldConstantContainerIndex(MLIRContext* context, RowSourceClimbs* carriedClimbs)
+        : OpRewritePattern(context),
+        _carriedClimbs(carriedClimbs)
+    {
+    }
 
     LogicalResult matchAndRewrite(ContainerIndex index, mlir::PatternRewriter& rewriter) const override {
         const Value indexColumn = index.getIndex();
         const Value base = index.getBase();
         const Type resultType = index.getResult().getType();
 
-        const Attribute literal = literalOf(indexColumn);
+        const Attribute literal = literalOf(indexColumn, *_carriedClimbs);
         const ::db::CellTag indexTag = literal ? ::db::literalTag(literal) : ::db::CellTag::INVALID;
 
         const bool readsAKey = indexTag == ::db::CellTag::String && ::db::holdsOnlyKeyedValues(base);
@@ -7929,6 +8004,9 @@ struct FoldConstantContainerIndex : public mlir::OpRewritePattern<ContainerIndex
 
         return success();
     }
+
+private:
+    RowSourceClimbs* _carriedClimbs {nullptr};
 };
 
 // The readers of the key read were built over its tagged cell, which the typed column is read
@@ -8063,9 +8141,11 @@ struct FoldConstantMapKeys : public impl::FoldConstantMapKeysBase<FoldConstantMa
 
     void runOnOperation() override {
         MLIRContext* const context = &getContext();
+        RowSourceClimbs carriedClimbs(climbsFromAnyColumn);
+        CarrierChangeListener carrierChanges(carriedClimbs);
 
         mlir::RewritePatternSet patterns(context);
-        patterns.add<FoldConstantMapKey, FoldConstantContainerIndex>(context);
+        patterns.add<FoldConstantMapKey, FoldConstantContainerIndex>(context, &carriedClimbs);
         patterns.add<CompareTypedColumns<EqOp>,
                      CompareTypedColumns<NeqOp>,
                      CompareTypedColumns<LtOp>,
@@ -8083,6 +8163,7 @@ struct FoldConstantMapKeys : public impl::FoldConstantMapKeysBase<FoldConstantMa
         config.setStrictness(mlir::GreedyRewriteStrictness::ExistingOps);
         config.enableConstantCSE(false);
         config.setRegionSimplificationLevel(mlir::GreedySimplifyRegionLevel::Disabled);
+        config.setListener(&carrierChanges);
 
         // The walk over a map stops at a dynamic read, and a fold requeues only the reads using
         // its result directly: a read carried from a folded one is tried in the next round
@@ -8976,24 +9057,12 @@ Value rowsOf(Value value, Block& body) {
 // The argument whose run constant @param column holds on every row, mapped down from it by the
 // ops of @param body; null where it holds none
 Value heldRunConstantArgument(Value column, Block& body) {
-    Value rows = column;
-    while (rows) {
-        if (const Value argument = runConstantArgument(rows)) {
-            return argument;
-        }
+    const auto mapsRowsInTheBody = [&body](Value rows) {
+        Operation* const op = rows.getDefiningOp();
+        return !runConstantArgument(rows) && op && op->getBlock() == &body && mapsRowsThrough(op);
+    };
 
-        const OpResult result = dyn_cast<OpResult>(rows);
-        Operation* const op = result ? result.getOwner() : nullptr;
-
-        const bool mapsRowsInTheBody = op && op->getBlock() == &body && mapsRowsThrough(op);
-        if (!mapsRowsInTheBody) {
-            return {};
-        }
-
-        rows = cast<ColumnCarrierOpInterface>(op).getRowSource(result);
-    }
-
-    return {};
+    return runConstantArgument(climbRowSource(column, mapsRowsInTheBody));
 }
 
 Value runConstantOf(Block& body, Value argument) {
@@ -12086,7 +12155,7 @@ private:
     }
 
     void addSharedLabels(ArrayAttr alternatives, ::db::LabelSet& labels) const {
-        llvm::DenseSet<Attribute> sharedNames;
+        llvm::SmallVector<Attribute, 4> sharedNames;
         addSharedLabelNames(alternatives, sharedNames);
 
         const ::db::LabelMap& labelMap = _metadata.labels();
@@ -12692,18 +12761,8 @@ bool collectRedrivenBroadcasts(Value column, Operation* reader, Value fallback, 
 // The column a result is, as handed on by its op: a column carried through a filter, an
 // unwind or a node fetch, or one a product's factor yields. Null for any other result.
 Value handedOnFrom(OpResult result) {
-    Operation* const op = result.getOwner();
-    const size_t resultIndex = result.getResultNumber();
-
-    if (isa<FilterOp>(op)) {
-        return op->getOperand(resultIndex + 1);
-    } else if (isa<Unwind, FetchNodes>(op)) {
-        return resultIndex == 0 ? Value() : op->getOperand(resultIndex);
-    } else if (CrossProduct product = dyn_cast<CrossProduct>(op)) {
-        return productFactorColumn(product, resultIndex);
-    }
-
-    return {};
+    const bool handsOn = isa<FilterOp, Unwind, FetchNodes, CrossProduct>(result.getOwner());
+    return handsOn ? rowSourceOf(result) : Value();
 }
 
 bool isFactorOfTheScanAlone(Block* block) {
@@ -13072,13 +13131,23 @@ struct PatternStep {
     Value _to;
 };
 
+// What planning a walk reads of a filter of a pattern: the pattern columns its mask reads, as
+// the columns they were bound as, and whether the mask may raise on a row's value
+struct PatternFilterReads {
+    llvm::SmallVector<Value, 2> _inputs;
+    bool _raises {false};
+};
+
 // The ops a pattern is built of, from the scan at its root: hops, walks, the filters
-// constraining what they bind, and the row-wise ops those filters read
+// constraining what they bind, and the row-wise ops those filters read. _origins holds the
+// column each column the ops hand on was bound as, and _filterReads[i] what _filters[i] reads.
 struct SeedPattern {
     Operation* _root {nullptr};
     llvm::SmallPtrSet<Operation*, 32> _ops;
     llvm::SmallVector<PatternStep> _steps;
     llvm::SmallVector<FilterOp> _filters;
+    llvm::DenseMap<Value, Value> _origins;
+    llvm::SmallVector<PatternFilterReads> _filterReads;
 };
 
 // Where a pattern's rows meet rows that are not its own: a cross product with the pattern
@@ -13172,12 +13241,14 @@ bool standsFromTheJunction(Operation* op, const PatternJunction& junction) {
 
 // A conjunct of a filter over a junction that reads both its sides, which the pattern's
 // walk can apply as soon as it has bound the pattern nodes and edges the conjunct reads.
-// _equatesKeys says it is an equality of a key of each side, and _hashes that
+// _junctionSources pairs each input of its cone with the value of the junction it is carried
+// from. _equatesKeys says it is an equality of a key of each side, and _hashes that
 // fuse_hash_join can then run a product crossed in right before it as a hash join.
 struct JoinConjunct {
     Value _conjunct;
     FilterOp _filter {nullptr};
     MaskCone _cone;
+    llvm::SmallVector<std::pair<Value, Value>, 4> _junctionSources;
     llvm::SmallPtrSet<void*, 4> _patternInputs;
     bool _equatesKeys {false};
     bool _hashes {false};
@@ -13211,27 +13282,28 @@ struct PatternSeed {
 
 // The value a pattern column was bound as, following the ops that only hand it on
 Value patternOrigin(Value column, const SeedPattern& pattern) {
-    for (;;) {
+    const auto originIt = pattern._origins.find(column);
+    return originIt == pattern._origins.end() ? column : originIt->second;
+}
+
+// The ops a pattern's rows are carried through: its filters, hops and walks
+bool carriesPatternRows(Operation* op) {
+    return isa<FilterOp, ExplorePaths>(op) || isHop(op);
+}
+
+void collectPatternOrigins(llvm::ArrayRef<Operation*> orderedOps, SeedPattern& pattern) {
+    const auto handsOn = [&pattern](Value column) {
         const OpResult result = dyn_cast<OpResult>(column);
-        if (!result || !pattern._ops.contains(result.getOwner())) {
-            return column;
-        }
+        return result && pattern._ops.contains(result.getOwner()) && carriesPatternRows(result.getOwner());
+    };
 
-        Operation* const op = result.getOwner();
-        const size_t resultIndex = result.getResultNumber();
-
-        if (FilterOp filter = dyn_cast<FilterOp>(op)) {
-            column = filter.getColumnsToFilter()[resultIndex];
-        } else if (isHop(op) && resultIndex >= hopFixedResultCount) {
-            column = op->getOperand(1 + resultIndex - hopFixedResultCount);
-        } else if (isHop(op) && resultIndex == hopInputResult(op)) {
-            column = op->getOperand(0);
-        } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op); exploration && resultIndex >= pathFixedResultCount) {
-            column = exploration.getColumnsToFilter()[resultIndex - pathFixedResultCount];
-        } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op); exploration && resultIndex == 0) {
-            column = exploration.getInputNodes();
-        } else {
-            return column;
+    RowSourceClimbs climbs(handsOn);
+    for (Operation* const op : orderedOps) {
+        for (const Value result : op->getResults()) {
+            const Value origin = climbs.climb(result);
+            if (origin != result) {
+                pattern._origins[result] = origin;
+            }
         }
     }
 }
@@ -13264,27 +13336,37 @@ void collectPatternInputs(Value value, const SeedPattern& pattern, llvm::SmallPt
     }
 }
 
-Operation* findPatternRoot(Value column) {
+bool comesOffPatternRows(Value column) {
+    Operation* const def = column.getDefiningOp();
+    return def && carriesPatternRows(def);
+}
+
+// The column whose rows an op carrying rows repeats: the row source of its first result
+// that has one
+Value repeatedRowsOf(Operation* op) {
+    for (const Value result : op->getResults()) {
+        if (const Value source = rowSourceOf(result)) {
+            return source;
+        }
+    }
+
+    return {};
+}
+
+// The scan the rows of @param column come off through the filters, hops and walks carrying them
+Operation* findPatternRoot(Value column, RowSourceClimbs& rowClimbs) {
+    Value climbed = rowClimbs.climb(column);
     for (;;) {
-        const OpResult result = dyn_cast<OpResult>(column);
-        if (!result) {
+        Operation* const op = climbed.getDefiningOp();
+        if (!op) {
             return nullptr;
-        }
-
-        Operation* const op = result.getOwner();
-        const size_t resultIndex = result.getResultNumber();
-
-        if (isa<ScanNodes, ScanNodesByLabel>(op)) {
+        } else if (isa<ScanNodes, ScanNodesByLabel>(op)) {
             return op;
-        } else if (FilterOp filter = dyn_cast<FilterOp>(op)) {
-            column = filter.getColumnsToFilter()[resultIndex];
-        } else if (isHop(op)) {
-            column = resultIndex >= hopFixedResultCount ? op->getOperand(1 + resultIndex - hopFixedResultCount) : op->getOperand(0);
-        } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op)) {
-            column = resultIndex >= pathFixedResultCount ? exploration.getColumnsToFilter()[resultIndex - pathFixedResultCount] : exploration.getInputNodes();
-        } else {
+        } else if (!carriesPatternRows(op)) {
             return nullptr;
         }
+
+        climbed = rowClimbs.climb(repeatedRowsOf(op));
     }
 }
 
@@ -13311,12 +13393,50 @@ bool walksFreely(ExplorePaths exploration) {
         && exploration.getHopImports().empty();
 }
 
+bool raisesOnSomeRow(Value mask, const SeedPattern& pattern) {
+    llvm::SmallVector<Value> pending {mask};
+    llvm::DenseSet<Value> visited;
+
+    while (!pending.empty()) {
+        const Value current = pending.pop_back_val();
+        if (!visited.insert(current).second) {
+            continue;
+        }
+
+        Operation* const def = current.getDefiningOp();
+        if (!def || !pattern._ops.contains(def) || !computesPerRow(def)) {
+            continue;
+        } else if (raisesOnSomeRows(def)) {
+            return true;
+        }
+
+        llvm::append_range(pending, def->getOperands());
+    }
+
+    return false;
+}
+
+void collectFilterReads(FilterOp filter, const SeedPattern& pattern, PatternFilterReads& reads) {
+    const Value mask = filter.getMask();
+
+    llvm::SmallPtrSet<void*, 8> inputs;
+    collectPatternInputs(mask, pattern, inputs);
+
+    for (void* const input : inputs) {
+        reads._inputs.push_back(Value::getFromOpaquePointer(input));
+    }
+
+    reads._raises = raisesOnSomeRow(mask, pattern);
+}
+
 // Checks every op of the pattern is one a re-rooted pattern can be rebuilt from, and
-// records its steps and filters
+// records the origins of its columns, its steps and its filters
 bool analyzePattern(SeedPattern& pattern, llvm::ArrayRef<Operation*> orderedOps) {
     if (!isa<ScanNodes, ScanNodesByLabel>(pattern._root)) {
         return false;
     }
+
+    collectPatternOrigins(orderedOps, pattern);
 
     for (Operation* const op : orderedOps) {
         if (op == pattern._root || computesPerRow(op)) {
@@ -13336,6 +13456,10 @@ bool analyzePattern(SeedPattern& pattern, llvm::ArrayRef<Operation*> orderedOps)
         } else {
             return false;
         }
+    }
+
+    for (FilterOp filter : pattern._filters) {
+        collectFilterReads(filter, pattern, pattern._filterReads.emplace_back());
     }
 
     return true;
@@ -13397,107 +13521,123 @@ size_t eventRank(const WalkEvent& event) {
     return 2;
 }
 
-bool raisesOnSomeRow(Value mask, const SeedPattern& pattern) {
-    llvm::SmallVector<Value> pending {mask};
-    llvm::DenseSet<Value> visited;
+void collectStepBindings(const PatternStep& step, llvm::SmallVectorImpl<Value>& bindings) {
+    Operation* const stepOp = step._op;
 
-    while (!pending.empty()) {
-        const Value current = pending.pop_back_val();
-        if (!visited.insert(current).second) {
-            continue;
-        }
+    bindings.push_back(step._from);
+    bindings.push_back(step._to);
 
-        Operation* const def = current.getDefiningOp();
-        if (!def || !pattern._ops.contains(def) || !computesPerRow(def)) {
-            continue;
-        } else if (raisesOnSomeRows(def)) {
-            return true;
-        }
-
-        llvm::append_range(pending, def->getOperands());
+    if (ExplorePaths exploration = dyn_cast<ExplorePaths>(stepOp)) {
+        bindings.push_back(exploration.getPaths());
+    } else {
+        bindings.push_back(stepOp->getResult(1));
+        bindings.push_back(stepOp->getResult(2));
     }
-
-    return false;
 }
 
 void bindStep(const PatternStep& step, llvm::DenseSet<Value>& bound) {
-    Operation* const stepOp = step._op;
+    llvm::SmallVector<Value, 4> bindings;
+    collectStepBindings(step, bindings);
 
-    bound.insert(step._from);
-    bound.insert(step._to);
-
-    if (ExplorePaths exploration = dyn_cast<ExplorePaths>(stepOp)) {
-        bound.insert(exploration.getPaths());
-    } else {
-        bound.insert(stepOp->getResult(1));
-        bound.insert(stepOp->getResult(2));
-    }
+    bound.insert(bindings.begin(), bindings.end());
 }
 
 // The order a pattern is rebuilt in from its seeded node: each filter as soon as what it
 // reads is bound, then the first step written that leaves a bound node. The rows already
-// pass the filters of @param applied, and the root's labels when @param rootChecked. False
-// when the walk leaves a step or a filter out.
-bool planWalk(const SeedPattern& pattern,
-              Value seeded,
-              const llvm::SmallPtrSetImpl<Operation*>& applied,
-              bool rootChecked,
-              llvm::SmallVectorImpl<WalkEvent>& events) {
-    const Value root = pattern._root->getResult(0);
-    llvm::DenseSet<Value> bound {seeded};
-    llvm::SmallPtrSet<Operation*, 16> appliedFilters(applied.begin(), applied.end());
-    llvm::SmallPtrSet<Operation*, 16> walked;
+// pass the filters of @param applied, and the root's labels when @param rootChecked. Each
+// filter counts the columns it reads that are unbound and each step waits on the nodes it
+// can leave, so binding a column wakes only the filters and steps reading it.
+class WalkPlanner {
+public:
+    WalkPlanner(const SeedPattern& pattern, Value seeded, const llvm::SmallPtrSetImpl<Operation*>& applied, bool rootChecked);
 
-    const auto readsBound = [&pattern, &bound](Value value) {
-        llvm::SmallPtrSet<void*, 8> inputs;
-        collectPatternInputs(value, pattern, inputs);
+    // False when the walk leaves a step or a filter out
+    bool plan(llvm::SmallVectorImpl<WalkEvent>& events);
 
-        return llvm::all_of(inputs, [&bound](void* input) { return bound.contains(Value::getFromOpaquePointer(input)); });
+private:
+    // A filter or a step of the pattern, in the order the query writes them in
+    struct WrittenOp {
+        size_t _index {0};
+        bool _isStep {false};
     };
 
-    // A filter whose mask may raise on a row's value runs on no row the written pattern did
-    // not run it on: only once every filter and step written ahead of it holds
-    const auto holdsWhatPrecedes = [&pattern, &appliedFilters, &walked, &rootChecked](FilterOp filter) {
-        Operation* const filterOp = filter.getOperation();
-        const auto precedes = [filterOp](Operation* op) {
-            return op->isBeforeInBlock(filterOp);
-        };
+    const SeedPattern& _pattern;
+    Value _root;
+    bool _rootChecked {false};
+    llvm::DenseSet<Value> _bound;
+    llvm::BitVector _appliedFilters;
+    llvm::BitVector _walkedSteps;
+    llvm::SmallVector<size_t> _unboundInputs;
+    llvm::DenseMap<Value, llvm::SmallVector<size_t, 2>> _filterReaders;
+    llvm::DenseMap<Value, llvm::SmallVector<size_t, 2>> _stepsLeaving;
+    llvm::SmallVector<size_t> _readyFilters;
+    llvm::SmallVector<size_t> _leavableSteps;
+    llvm::SmallVector<WrittenOp> _written;
+    size_t _firstUnheld {0};
 
-        for (FilterOp written : pattern._filters) {
-            if (precedes(written) && !appliedFilters.contains(written.getOperation())) {
-                return false;
-            }
+    void collectWrittenOrder();
+    void bind(Value column);
+    void applyReadyFilters(llvm::SmallVectorImpl<size_t>& appliedNow);
+    void applyHeldFilters(llvm::SmallVectorImpl<size_t>& appliedNow);
+    bool walkNextStep(llvm::SmallVectorImpl<WalkEvent>& events);
+};
+
+WalkPlanner::WalkPlanner(const SeedPattern& pattern, Value seeded, const llvm::SmallPtrSetImpl<Operation*>& applied, bool rootChecked)
+    : _pattern(pattern),
+    _root(pattern._root->getResult(0)),
+    _rootChecked(rootChecked),
+    _appliedFilters(pattern._filters.size()),
+    _walkedSteps(pattern._steps.size()),
+    _unboundInputs(pattern._filters.size(), 0)
+{
+    for (size_t filterIndex = 0; filterIndex < pattern._filters.size(); filterIndex++) {
+        FilterOp filter = pattern._filters[filterIndex];
+        if (applied.contains(filter.getOperation())) {
+            _appliedFilters.set(filterIndex);
+            continue;
         }
 
-        for (const PatternStep& step : pattern._steps) {
-            if (precedes(step._op) && !walked.contains(step._op)) {
-                return false;
-            }
+        const PatternFilterReads& reads = pattern._filterReads[filterIndex];
+        for (const Value input : reads._inputs) {
+            _filterReaders[input].push_back(filterIndex);
         }
 
-        return rootChecked;
-    };
+        _unboundInputs[filterIndex] = reads._inputs.size();
+        if (reads._inputs.empty() && !reads._raises) {
+            _readyFilters.push_back(filterIndex);
+        }
+    }
 
-    bool progressed = true;
-    while (progressed) {
-        progressed = false;
+    for (size_t stepIndex = 0; stepIndex < pattern._steps.size(); stepIndex++) {
+        const PatternStep& step = pattern._steps[stepIndex];
+        _stepsLeaving[step._from].push_back(stepIndex);
+        if (isHop(step._op)) {
+            _stepsLeaving[step._to].push_back(stepIndex);
+        }
+    }
 
-        llvm::SmallVector<WalkEvent> checks;
-        if (!rootChecked && bound.contains(root)) {
+    collectWrittenOrder();
+    bind(seeded);
+}
+
+bool WalkPlanner::plan(llvm::SmallVectorImpl<WalkEvent>& events) {
+    llvm::SmallVector<WalkEvent> checks;
+    llvm::SmallVector<size_t> appliedNow;
+
+    do {
+        checks.clear();
+        if (!_rootChecked && _bound.contains(_root)) {
             checks.push_back(WalkEvent {._kind = WalkEvent::Kind::RootLabels});
-            rootChecked = true;
+            _rootChecked = true;
         }
 
-        for (FilterOp filter : pattern._filters) {
-            const Value mask = filter.getMask();
-            const bool unapplied = !appliedFilters.contains(filter.getOperation());
-            const bool applicable = unapplied
-                                 && readsBound(mask)
-                                 && (!raisesOnSomeRow(mask, pattern) || holdsWhatPrecedes(filter));
-            if (applicable) {
-                checks.push_back(WalkEvent {._kind = WalkEvent::Kind::Filter, ._filter = filter});
-                appliedFilters.insert(filter.getOperation());
-            }
+        appliedNow.clear();
+        applyReadyFilters(appliedNow);
+        applyHeldFilters(appliedNow);
+
+        llvm::sort(appliedNow);
+        for (const size_t filterIndex : appliedNow) {
+            checks.push_back(WalkEvent {._kind = WalkEvent::Kind::Filter, ._filter = _pattern._filters[filterIndex]});
         }
 
         // The order codegen writes them in under a hop, which the passes fusing them into
@@ -13507,86 +13647,148 @@ bool planWalk(const SeedPattern& pattern,
         });
 
         llvm::append_range(events, checks);
+    } while (walkNextStep(events));
 
-        for (const PatternStep& step : pattern._steps) {
-            Operation* const stepOp = step._op;
-            if (walked.contains(stepOp)) {
-                continue;
-            }
-
-            const bool forward = bound.contains(step._from);
-            const bool backward = !forward && bound.contains(step._to) && isHop(stepOp);
-            if (!forward && !backward) {
-                continue;
-            }
-
-            events.push_back(WalkEvent {._kind = forward ? WalkEvent::Kind::Forward : WalkEvent::Kind::Backward, ._step = &step});
-
-            bindStep(step, bound);
-            walked.insert(stepOp);
-            progressed = true;
-            break;
-        }
-    }
-
-    const bool appliesEveryFilter = llvm::all_of(pattern._filters, [&appliedFilters](FilterOp filter) {
-        return appliedFilters.contains(filter.getOperation());
-    });
-
-    return walked.size() == pattern._steps.size() && appliesEveryFilter;
+    return _walkedSteps.all() && _appliedFilters.all();
 }
 
-// The junction column each column of a block is carried from through the filters after it,
-// kept so the filters of one chain trace it once rather than once per filter. A reroot
-// rewrites the block, so clear() follows every one.
-class JunctionTraces {
-public:
-    OpResult trace(Value column, Block* block) {
-        llvm::SmallVector<Value> climbed;
-        Value junction;
+void WalkPlanner::collectWrittenOrder() {
+    const llvm::SmallVector<FilterOp>& filters = _pattern._filters;
+    const llvm::SmallVector<PatternStep>& steps = _pattern._steps;
 
-        for (;;) {
-            const OpResult result = dyn_cast<OpResult>(column);
-            if (!result || result.getOwner()->getBlock() != block) {
-                break;
-            }
-
-            const auto tracedIt = _junctions.find(column);
-            if (tracedIt != _junctions.end()) {
-                junction = tracedIt->second;
-                break;
-            }
-
-            climbed.push_back(column);
-
-            Operation* const op = result.getOwner();
-            FilterOp filter = dyn_cast<FilterOp>(op);
-            if (isa<CrossProduct, Unwind>(op)) {
-                junction = column;
-                break;
-            } else if (!filter) {
-                break;
-            }
-
-            column = filter.getColumnsToFilter()[result.getResultNumber()];
+    size_t filterIndex = 0;
+    size_t stepIndex = 0;
+    while (filterIndex < filters.size() || stepIndex < steps.size()) {
+        FilterOp filter = filterIndex < filters.size() ? filters[filterIndex] : FilterOp();
+        const bool filterWrittenFirst = stepIndex == steps.size() || (filter && filter->isBeforeInBlock(steps[stepIndex]._op));
+        if (filterWrittenFirst) {
+            _written.push_back(WrittenOp {._index = filterIndex++});
+        } else {
+            _written.push_back(WrittenOp {._index = stepIndex++, ._isStep = true});
         }
-
-        for (const Value value : climbed) {
-            _junctions[value] = junction;
-        }
-
-        return junction ? cast<OpResult>(junction) : nullptr;
     }
+}
+
+void WalkPlanner::bind(Value column) {
+    if (!_bound.insert(column).second) {
+        return;
+    }
+
+    const auto readersIt = _filterReaders.find(column);
+    if (readersIt != _filterReaders.end()) {
+        for (const size_t filterIndex : readersIt->second) {
+            _unboundInputs[filterIndex]--;
+
+            const bool ready = _unboundInputs[filterIndex] == 0 && !_pattern._filterReads[filterIndex]._raises;
+            if (ready) {
+                _readyFilters.push_back(filterIndex);
+            }
+        }
+    }
+
+    const auto leavingIt = _stepsLeaving.find(column);
+    if (leavingIt != _stepsLeaving.end()) {
+        for (const size_t stepIndex : leavingIt->second) {
+            _leavableSteps.push_back(stepIndex);
+            std::push_heap(_leavableSteps.begin(), _leavableSteps.end(), std::greater<size_t>());
+        }
+    }
+}
+
+void WalkPlanner::applyReadyFilters(llvm::SmallVectorImpl<size_t>& appliedNow) {
+    for (const size_t filterIndex : _readyFilters) {
+        _appliedFilters.set(filterIndex);
+        appliedNow.push_back(filterIndex);
+    }
+
+    _readyFilters.clear();
+}
+
+// A filter whose mask may raise on a row's value runs on no row the written pattern did
+// not run it on: only once every filter and step written ahead of it holds
+void WalkPlanner::applyHeldFilters(llvm::SmallVectorImpl<size_t>& appliedNow) {
+    while (_firstUnheld < _written.size()) {
+        const WrittenOp written = _written[_firstUnheld];
+
+        if (written._isStep && !_walkedSteps.test(written._index)) {
+            return;
+        } else if (!written._isStep && !_appliedFilters.test(written._index)) {
+            const bool appliesNow = _rootChecked && _unboundInputs[written._index] == 0;
+            if (!appliesNow) {
+                return;
+            }
+
+            _appliedFilters.set(written._index);
+            appliedNow.push_back(written._index);
+        }
+
+        _firstUnheld++;
+    }
+}
+
+bool WalkPlanner::walkNextStep(llvm::SmallVectorImpl<WalkEvent>& events) {
+    while (!_leavableSteps.empty()) {
+        std::pop_heap(_leavableSteps.begin(), _leavableSteps.end(), std::greater<size_t>());
+        const size_t stepIndex = _leavableSteps.pop_back_val();
+        if (_walkedSteps.test(stepIndex)) {
+            continue;
+        }
+
+        const PatternStep& step = _pattern._steps[stepIndex];
+        const bool forward = _bound.contains(step._from);
+        events.push_back(WalkEvent {._kind = forward ? WalkEvent::Kind::Forward : WalkEvent::Kind::Backward, ._step = &step});
+
+        _walkedSteps.set(stepIndex);
+
+        llvm::SmallVector<Value, 4> bindings;
+        collectStepBindings(step, bindings);
+        for (const Value column : bindings) {
+            bind(column);
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
+bool planWalk(const SeedPattern& pattern,
+              Value seeded,
+              const llvm::SmallPtrSetImpl<Operation*>& applied,
+              bool rootChecked,
+              llvm::SmallVectorImpl<WalkEvent>& events) {
+    WalkPlanner planner(pattern, seeded, applied, rootChecked);
+    return planner.plan(events);
+}
+
+// The climbs the filters of a block share until a reroot rewrites it: from a column to the
+// column the filters after it carry, and to the scan its pattern rows come off
+struct SeedClimbs {
+    RowSourceClimbs _filters {isFilterResult};
+    RowSourceClimbs _patternRows {comesOffPatternRows};
 
     void clear() {
-        _junctions.clear();
+        _filters.clear();
+        _patternRows.clear();
     }
-
-private:
-    llvm::DenseMap<Value, Value> _junctions;
 };
 
-bool matchSeedJunction(OpResult seededResult, PatternJunction& junction, SeedPattern& pattern) {
+// The result of a cross product or an unwind of @param block that @param column is carried
+// from through the filters after it; null where it comes off anything else
+OpResult traceJunction(Value column, Block* block, RowSourceClimbs& filterClimbs) {
+    const OpResult result = dyn_cast<OpResult>(column);
+    if (!result || result.getOwner()->getBlock() != block) {
+        return nullptr;
+    }
+
+    const OpResult junction = dyn_cast<OpResult>(filterClimbs.climb(column));
+    Operation* const junctionOp = junction ? junction.getOwner() : nullptr;
+    const bool isAJunction = junctionOp && junctionOp->getBlock() == block && isa<CrossProduct, Unwind>(junctionOp);
+
+    return isAJunction ? junction : nullptr;
+}
+
+bool matchSeedJunction(OpResult seededResult, RowSourceClimbs& rowClimbs, PatternJunction& junction, SeedPattern& pattern) {
     Operation* const op = seededResult.getOwner();
 
     if (CrossProduct product = dyn_cast<CrossProduct>(op)) {
@@ -13597,7 +13799,7 @@ bool matchSeedJunction(OpResult seededResult, PatternJunction& junction, SeedPat
         Region& patternFactor = patternOnTheLeft ? product.getLeftFactor() : product.getRightFactor();
 
         const size_t outputIndex = llvm::find(junction._patternResults, Value(seededResult)) - junction._patternResults.begin();
-        Operation* const root = findPatternRoot(junction._patternOutputs[outputIndex]);
+        Operation* const root = findPatternRoot(junction._patternOutputs[outputIndex], rowClimbs);
         if (!root || root->getParentRegion() != &patternFactor) {
             return false;
         }
@@ -13620,7 +13822,7 @@ bool matchSeedJunction(OpResult seededResult, PatternJunction& junction, SeedPat
 
     readUnwindJunction(unwind, junction);
 
-    Operation* const root = findPatternRoot(junction._patternOutputs[seededResult.getResultNumber() - 1]);
+    Operation* const root = findPatternRoot(junction._patternOutputs[seededResult.getResultNumber() - 1], rowClimbs);
     if (!root || root->getBlock() != op->getBlock()) {
         return false;
     }
@@ -13744,13 +13946,13 @@ bool readsTheJunctionRowWise(const PatternJunction& junction, FilterOp filter) {
     return true;
 }
 
-bool matchPatternSeedSide(FilterOp filter, EqOp equality, Value seeded, Value ids, JunctionTraces& traces, PatternSeed& seed) {
+bool matchPatternSeedSide(FilterOp filter, EqOp equality, Value seeded, Value ids, SeedClimbs& climbs, PatternSeed& seed) {
     if (!isNodeColumn(seeded)) {
         return false;
     }
 
     Block* const block = filter->getBlock();
-    const OpResult seededResult = traces.trace(seeded, block);
+    const OpResult seededResult = traceJunction(seeded, block, climbs._filters);
     if (!seededResult) {
         return false;
     }
@@ -13760,7 +13962,7 @@ bool matchPatternSeedSide(FilterOp filter, EqOp equality, Value seeded, Value id
     std::destroy_at(&seed);
     std::construct_at(&seed);
 
-    if (!matchSeedJunction(seededResult, seed._junction, seed._pattern)) {
+    if (!matchSeedJunction(seededResult, climbs._patternRows, seed._junction, seed._pattern)) {
         return false;
     }
 
@@ -13800,7 +14002,7 @@ bool matchPatternSeedSide(FilterOp filter, EqOp equality, Value seeded, Value id
     return true;
 }
 
-bool matchPatternSeed(FilterOp filter, JunctionTraces& traces, PatternSeed& seed) {
+bool matchPatternSeed(FilterOp filter, SeedClimbs& climbs, PatternSeed& seed) {
     llvm::SmallVector<Value, 4> conjuncts;
     collectConjuncts(filter.getMask(), conjuncts);
 
@@ -13813,7 +14015,7 @@ bool matchPatternSeed(FilterOp filter, JunctionTraces& traces, PatternSeed& seed
         const Value lhs = equality.getLhs();
         const Value rhs = equality.getRhs();
 
-        if (matchPatternSeedSide(filter, equality, lhs, rhs, traces, seed) || matchPatternSeedSide(filter, equality, rhs, lhs, traces, seed)) {
+        if (matchPatternSeedSide(filter, equality, lhs, rhs, climbs, seed) || matchPatternSeedSide(filter, equality, rhs, lhs, climbs, seed)) {
             return true;
         }
     }
@@ -14015,11 +14217,8 @@ private:
 
     Value materializeJoin(const JoinConjunct& join) {
         mlir::IRMapping mapping;
-        for (const Value input : join._cone._inputs) {
-            const Value source = junctionSource(*_junction, climbFilters(input));
-            if (source) {
-                mapping.map(input, materialize(source));
-            }
+        for (const auto& [input, source] : join._junctionSources) {
+            mapping.map(input, materialize(source));
         }
 
         for (Operation* const coneOp : join._cone._ops) {
@@ -14195,38 +14394,43 @@ Value cloneSeedIDs(Value ids, const PatternJunction& junction, mlir::IRMapping& 
     return seedColumns.lookup(ids);
 }
 
-// Whether every row of a column names a node the graph holds, so that a fetch would keep
-// it as it is: a scan's nodes, a fetch's, or either end of a hop or a walk
-bool namesGraphNodes(Value column) {
-    for (;;) {
-        const OpResult result = dyn_cast<OpResult>(column);
-        if (!result) {
-            return false;
-        }
-
-        Operation* const op = result.getOwner();
-        const size_t resultIndex = result.getResultNumber();
-
-        if (isa<ScanNodes, ScanNodesByLabel, ScanNodesByPropertyValue>(op)) {
-            return true;
-        } else if (FilterOp filter = dyn_cast<FilterOp>(op)) {
-            column = filter.getColumnsToFilter()[resultIndex];
-        } else if (isa<FetchNodes>(op) && resultIndex > 0) {
-            column = op->getOperand(resultIndex);
-        } else if (isa<FetchNodes>(op)) {
-            return true;
-        } else if (isEdgeHop(op) && resultIndex >= hopFixedResultCount) {
-            column = op->getOperand(1 + resultIndex - hopFixedResultCount);
-        } else if (isEdgeHop(op)) {
-            return resultIndex == hopInputResult(op) || resultIndex == hopReachedResult(op);
-        } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op); exploration && resultIndex >= pathFixedResultCount) {
-            column = exploration.getColumnsToFilter()[resultIndex - pathFixedResultCount];
-        } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op)) {
-            return column == exploration.getSrcids() || column == exploration.getTgtids();
-        } else {
-            return false;
-        }
+// Whether every row of @param column names a node the graph holds as it comes: a scan's
+// nodes, a fetch's, or either end of a hop or a walk
+bool isGraphNodeEnd(Value column) {
+    const OpResult result = dyn_cast<OpResult>(column);
+    if (!result) {
+        return false;
     }
+
+    Operation* const op = result.getOwner();
+    const size_t resultIndex = result.getResultNumber();
+
+    if (isa<ScanNodes, ScanNodesByLabel, ScanNodesByPropertyValue>(op)) {
+        return true;
+    } else if (isa<FetchNodes>(op)) {
+        return resultIndex == 0;
+    } else if (isEdgeHop(op)) {
+        return resultIndex == hopInputResult(op) || resultIndex == hopReachedResult(op);
+    } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op)) {
+        return column == exploration.getSrcids() || column == exploration.getTgtids();
+    }
+
+    return false;
+}
+
+// The climb from a column to where its nodes come from the graph goes on across the filters,
+// fetches, hops and walks carrying it, up to the end of a hop or a walk
+bool carriesGraphNodes(Value column) {
+    Operation* const def = column.getDefiningOp();
+    const bool carries = def && (isa<FilterOp, FetchNodes, ExplorePaths>(def) || isEdgeHop(def));
+
+    return carries && !isGraphNodeEnd(column);
+}
+
+// Whether every row of a column names a node the graph holds, so that a fetch would keep
+// it as it is
+bool namesGraphNodes(Value column) {
+    return isGraphNodeEnd(climbRowSource(column, carriesGraphNodes));
 }
 
 void reroot(PatternSeed& seed, mlir::RewriterBase& rewriter) {
@@ -14314,14 +14518,14 @@ void reroot(PatternSeed& seed, mlir::RewriterBase& rewriter) {
 
 struct RerootPatternAtSeed : public impl::RerootPatternAtSeedBase<RerootPatternAtSeed> {
     void runOnOperation() override {
-        JunctionTraces traces;
+        SeedClimbs climbs;
 
-        const auto matchSeed = [&traces](FilterOp filter, PatternSeed& seed) {
-            return matchPatternSeed(filter, traces, seed);
+        const auto matchSeed = [&climbs](FilterOp filter, PatternSeed& seed) {
+            return matchPatternSeed(filter, climbs, seed);
         };
 
-        const auto rerootAtSeed = [&traces](PatternSeed& seed, mlir::RewriterBase& rewriter) {
-            traces.clear();
+        const auto rerootAtSeed = [&climbs](PatternSeed& seed, mlir::RewriterBase& rewriter) {
+            climbs.clear();
             reroot(seed, rewriter);
         };
 
@@ -14431,7 +14635,7 @@ bool isComputedAhead(Value value, Operation* op) {
 
 // The keys fuse_hash_join joins on: each side of the equality computed from one column of a
 // side of the junction of its own
-void readJoinKeys(Value conjunct, const PatternJunction& junction, bool usesHashJoin, JoinConjunct& join) {
+void readJoinKeys(Value conjunct, const PatternJunction& junction, bool usesHashJoin, RowSourceClimbs& filterClimbs, JoinConjunct& join) {
     EqOp equality = conjunct.getDefiningOp<EqOp>();
     if (!equality) {
         return;
@@ -14449,7 +14653,7 @@ void readJoinKeys(Value conjunct, const PatternJunction& junction, bool usesHash
             return;
         }
 
-        const Value column = climbFilters(side._cone._inputs.front());
+        const Value column = filterClimbs.climb(side._cone._inputs.front());
         keysThePattern = keysThePattern || llvm::is_contained(junction._patternResults, column);
         keysTheOtherSide = keysTheOtherSide || llvm::is_contained(junction._otherResults, column);
         hashesKeys = hashesKeys && isHashableKey(side);
@@ -14466,6 +14670,7 @@ bool matchJoinConjunct(Value conjunct,
                        const PatternJunction& junction,
                        const SeedPattern& pattern,
                        bool usesHashJoin,
+                       RowSourceClimbs& filterClimbs,
                        JoinConjunct& join) {
     join._conjunct = conjunct;
     join._filter = filter;
@@ -14473,18 +14678,22 @@ bool matchJoinConjunct(Value conjunct,
 
     bool readsTheOtherSide = false;
     for (const Value input : join._cone._inputs) {
-        const Value climbed = climbFilters(input);
+        const Value climbed = filterClimbs.climb(input);
+        const Value source = junctionSource(junction, climbed);
+        if (source) {
+            join._junctionSources.emplace_back(input, source);
+        }
 
         if (llvm::is_contained(junction._otherResults, climbed)) {
             readsTheOtherSide = true;
-        } else if (const Value patternColumn = junctionSource(junction, climbed)) {
-            collectPatternInputs(patternColumn, pattern, join._patternInputs);
+        } else if (source) {
+            collectPatternInputs(source, pattern, join._patternInputs);
         } else if (!isComputedAhead(input, junction._op)) {
             return false;
         }
     }
 
-    readJoinKeys(conjunct, junction, usesHashJoin, join);
+    readJoinKeys(conjunct, junction, usesHashJoin, filterClimbs, join);
 
     return readsTheOtherSide && !join._patternInputs.empty();
 }
@@ -14492,6 +14701,7 @@ bool matchJoinConjunct(Value conjunct,
 bool matchJunctionJoins(const CheapestRoot& match,
                         const RowEstimator& estimator,
                         const DBPassContext& context,
+                        RowSourceClimbs& filterClimbs,
                         JunctionJoins& joins) {
     const SeedPattern& pattern = match._pattern;
     PatternJunction& junction = joins._junction;
@@ -14549,7 +14759,7 @@ bool matchJunctionJoins(const CheapestRoot& match,
 
     for (const auto& [conjunct, filter] : conjuncts) {
         JoinConjunct& join = joins._joins.emplace_back();
-        if (!matchJoinConjunct(conjunct, filter, junction, pattern, context._usesHashJoin, join)) {
+        if (!matchJoinConjunct(conjunct, filter, junction, pattern, context._usesHashJoin, filterClimbs, join)) {
             joins._joins.pop_back();
         }
     }
@@ -14688,9 +14898,10 @@ double estimateWalkCost(const SeedPattern& pattern,
                         ArrayAttr startLabels,
                         llvm::ArrayRef<WalkEvent> events,
                         const JunctionJoins* joins,
-                        const RowEstimator& estimator) {
-    const auto nodeOf = [&pattern, joins](Value column) {
-        const Value patternColumn = joins ? junctionSource(joins->_junction, climbFilters(column)) : Value();
+                        const RowEstimator& estimator,
+                        RowSourceClimbs& filterClimbs) {
+    const auto nodeOf = [&pattern, joins, &filterClimbs](Value column) {
+        const Value patternColumn = joins ? junctionSource(joins->_junction, filterClimbs.climb(column)) : Value();
         return patternOrigin(patternColumn ? patternColumn : column, pattern);
     };
 
@@ -14789,13 +15000,17 @@ void settleCross(CheapestRoot& match) {
     }
 }
 
-bool matchCheapestRoot(Operation* scan, const RowEstimator& estimator, const DBPassContext& context, CheapestRoot& match) {
+bool matchCheapestRoot(Operation* scan,
+                       const RowEstimator& estimator,
+                       const DBPassContext& context,
+                       RowSourceClimbs& filterClimbs,
+                       CheapestRoot& match) {
     SeedPattern& pattern = match._pattern;
     if (!collectRootedPattern(scan, match) || !analyzePattern(pattern, match._orderedOps) || pattern._steps.empty()) {
         return false;
     }
 
-    const JunctionJoins* const joins = matchJunctionJoins(match, estimator, context, match._joins) ? &match._joins : nullptr;
+    const JunctionJoins* const joins = matchJunctionJoins(match, estimator, context, filterClimbs, match._joins) ? &match._joins : nullptr;
 
     const Value root = scan->getResult(0);
     ScanNodesByLabel rootScan = dyn_cast<ScanNodesByLabel>(scan);
@@ -14811,11 +15026,11 @@ bool matchCheapestRoot(Operation* scan, const RowEstimator& estimator, const DBP
 
     const llvm::ArrayRef<WalkEvent> writtenWalk = joins ? crossedWritten : written;
 
-    double cheapest = estimateWalkCost(pattern, root, rootLabels, writtenWalk, joins, estimator) / REROOT_GAIN_FACTOR;
+    double cheapest = estimateWalkCost(pattern, root, rootLabels, writtenWalk, joins, estimator, filterClimbs) / REROOT_GAIN_FACTOR;
     bool foundCheaper = false;
 
     const auto considerWalk = [&](Value candidate, ArrayAttr startLabels, llvm::ArrayRef<WalkEvent> events) {
-        const double cost = estimateWalkCost(pattern, candidate, startLabels, events, joins, estimator);
+        const double cost = estimateWalkCost(pattern, candidate, startLabels, events, joins, estimator, filterClimbs);
         if (cost < cheapest) {
             cheapest = cost;
             foundCheaper = true;
@@ -14949,12 +15164,14 @@ struct RerootPatternAtCheapestNode : public impl::RerootPatternAtCheapestNodeBas
         const RowEstimator estimator(*_context->_view);
 
         const DBPassContext& context = *_context;
-        runWorklist<ScanNodes, ScanNodesByLabel>(getOperation(), [&estimator, &context](Operation* op, mlir::RewriterBase& rewriter) {
+        RowSourceClimbs filterClimbs(isFilterResult);
+        runWorklist<ScanNodes, ScanNodesByLabel>(getOperation(), [&estimator, &context, &filterClimbs](Operation* op, mlir::RewriterBase& rewriter) {
             CheapestRoot match;
-            if (!matchCheapestRoot(op, estimator, context, match)) {
+            if (!matchCheapestRoot(op, estimator, context, filterClimbs, match)) {
                 return false;
             }
 
+            filterClimbs.clear();
             rerootAtCheapestNode(match, rewriter);
             return true;
         });
@@ -14995,35 +15212,15 @@ bool collectScans(Value column, llvm::SmallVectorImpl<Operation*>& scans) {
     return true;
 }
 
+bool isProductResult(Value column) {
+    return isa_and_present<CrossProduct>(column.getDefiningOp());
+}
+
 // The one scan a column carries the nodes of. Unlike collectScans this follows the result a
-// product was read at: its results are the left factor's yielded columns then the right's,
-// so an index past the left's count names a column of the right factor.
+// product was read at to the column its factor yields.
 Operation* scanBehind(Value column) {
-    for (;;) {
-        Operation* const def = column.getDefiningOp();
-        if (!def) {
-            return nullptr;
-        }
-
-        if (isa<ScanNodes, ScanNodesByLabel>(def)) {
-            return def;
-        }
-
-        CrossProduct product = dyn_cast<CrossProduct>(def);
-        if (!product) {
-            return nullptr;
-        }
-
-        const Operation::operand_range leftColumns = factorYieldColumns(product.getLeftFactor());
-        const Operation::operand_range rightColumns = factorYieldColumns(product.getRightFactor());
-        const size_t resultIndex = cast<OpResult>(column).getResultNumber();
-        if (resultIndex >= leftColumns.size() + rightColumns.size()) {
-            return nullptr;
-        }
-
-        column = resultIndex < leftColumns.size() ? leftColumns[resultIndex]
-                                                  : rightColumns[resultIndex - leftColumns.size()];
-    }
+    Operation* const def = climbRowSource(column, isProductResult).getDefiningOp();
+    return isa_and_present<ScanNodes, ScanNodesByLabel>(def) ? def : nullptr;
 }
 
 // What a count reads: the scans it tallies, the property whose holders one of them is
