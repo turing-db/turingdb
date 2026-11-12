@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <algorithm>
 #include <optional>
 #include <span>
 #include <vector>
@@ -117,7 +118,7 @@ public:
         const size_t prevSize = _buffer.size();
         _buffer.resize(_buffer.size() + stride);
         uint8_t* ptr = _buffer.data();
-        std::memcpy(ptr + prevSize, str.data(), stride);
+        std::copy_n(reinterpret_cast<const uint8_t*>(str.data()), stride, ptr + prevSize);
     }
 
     template <CharPrimitive T>
