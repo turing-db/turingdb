@@ -28,10 +28,10 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install Claude Code CLI
-        run: npm install -g @anthropic-ai/claude-code
+        run: npm install -g --engine-strict @anthropic-ai/claude-code@latest
 
       - name: Checkout PR code
         uses: actions/checkout@v4
