@@ -64,6 +64,14 @@ EvaluatedType unwoundItemType(const Expr* arg) {
     return arg->getListShape().unwoundType();
 }
 
+// A VECTOR SEARCH operand typed Null, such as a property no node holds, is left to the search,
+// which raises on a null once a row reaches it and searches for no row when none does
+bool searchMayRead(EvaluatedType operandType, EvaluatedType expected) {
+    return operandType == expected
+        || operandType == EvaluatedType::Any
+        || operandType == EvaluatedType::Null;
+}
+
 }
 
 ReadStmtAnalyzer::ReadStmtAnalyzer(CypherAST* ast, GraphView graphView)
@@ -661,7 +669,7 @@ void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
     analyzeVectorSearchOperand(index, stmt);
 
     const EvaluatedType indexType = index->getType();
-    if (indexType != EvaluatedType::String && indexType != EvaluatedType::Any) {
+    if (!searchMayRead(indexType, EvaluatedType::String)) {
         throwError(fmt::format("VECTOR SEARCH index name must be a String, got {}",
                                EvaluatedTypeName::value(indexType)),
                    stmt);
@@ -671,11 +679,13 @@ void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
     analyzeVectorSearchOperand(neighbourCount, stmt);
 
     const EvaluatedType neighbourCountType = neighbourCount->getType();
-    if (neighbourCountType != EvaluatedType::Integer && neighbourCountType != EvaluatedType::Any) {
+    if (!searchMayRead(neighbourCountType, EvaluatedType::Integer)) {
         throwError("VECTOR SEARCH k value must be an integer", stmt);
     }
 
-    if (neighbourCount->getKind() == Expr::Kind::LITERAL) {
+    const bool countsALiteralInteger = neighbourCountType == EvaluatedType::Integer
+                                    && neighbourCount->getKind() == Expr::Kind::LITERAL;
+    if (countsALiteralInteger) {
         const Literal* literal = static_cast<const LiteralExpr*>(neighbourCount)->getLiteral();
         if (static_cast<const IntegerLiteral*>(literal)->getValue() < 1) {
             throwError("VECTOR SEARCH k value must be greater than 0", stmt);
@@ -690,7 +700,7 @@ void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
     analyzeVectorSearchOperand(queryVector, stmt);
 
     const EvaluatedType queryVectorType = queryVector->getType();
-    if (queryVectorType != EvaluatedType::Embedding && queryVectorType != EvaluatedType::Any) {
+    if (!searchMayRead(queryVectorType, EvaluatedType::Embedding)) {
         throwError(fmt::format("VECTOR SEARCH query vector must be an Embedding, got {}",
                                EvaluatedTypeName::value(queryVectorType)),
                    stmt);

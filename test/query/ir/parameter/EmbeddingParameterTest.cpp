@@ -235,7 +235,7 @@ TEST_F(EmbeddingParameterTest, refusesAQueryVectorParameterThatIsNotAnEmbedding)
     expectError(QUERY, parameters, REASON, QueryStatus::Status::ANALYZE_ERROR);
 
     parameters.set("v", ParameterValue());
-    expectError(QUERY, parameters, REASON, QueryStatus::Status::ANALYZE_ERROR);
+    expectError(QUERY, parameters, REASON, QueryStatus::Status::EXEC_ERROR);
 }
 
 TEST_F(EmbeddingParameterTest, scoresAnEmbeddingParameterAgainstALiteral) {

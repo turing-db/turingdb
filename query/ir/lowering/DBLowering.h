@@ -313,6 +313,7 @@ private:
     void lowerUnwindConst(mlir::db::UnwindConst unwindConst);
     void lowerLoadCSV(mlir::db::LoadCSV loadCSV);
     void lowerVectorSearch(mlir::db::VectorSearch vectorSearch);
+    mlir::Value searchedValueChunk(mlir::Value bound);
     void lowerUnwind(mlir::db::Unwind unwind);
     void lowerUnwindRange(mlir::db::UnwindRange unwindRange);
     void lowerUnwindComputed(mlir::db::UnwindComputed unwind);

@@ -2095,12 +2095,30 @@ void DBLowering::lowerVectorSearch(mlir::db::VectorSearch vectorSearch) {
 
     nl::VectorSearch neighbours = _builder.create<nl::VectorSearch>(_builder.getUnknownLoc(),
                                                                     vectorSearch.getIndexNameAttr(),
-                                                                    boundIndexName ? mapValue(boundIndexName) : mlir::Value(),
+                                                                    searchedValueChunk(boundIndexName),
                                                                     vectorSearch.getKAttr(),
-                                                                    boundCount ? mapValue(boundCount) : mlir::Value(),
+                                                                    searchedValueChunk(boundCount),
                                                                     vectorSearch.getQueryVectorAttr(),
-                                                                    boundQueryVector ? mapValue(boundQueryVector) : mlir::Value());
+                                                                    searchedValueChunk(boundQueryVector));
     buildLoopForSource(neighbours.getResult(), vectorSearch.getOperation());
+}
+
+// A bound value typed none is a null: it reaches the search as a null cell, which the
+// search raises on when it starts
+mlir::Value DBLowering::searchedValueChunk(mlir::Value bound) {
+    if (!bound) {
+        return mlir::Value();
+    }
+
+    const mlir::Value chunk = mapValue(bound);
+    const bool holdsOnlyNull = mlir::isa<mlir::NoneType>(chunkValueElement(_builder, chunk.getType()));
+    if (!holdsOnlyNull) {
+        return chunk;
+    }
+
+    mlir::MLIRContext* const context = _builder.getContext();
+
+    return toAnyChunk(chunk, nl::ChunkType::get(context, storage::AnyType::get(context)));
 }
 
 

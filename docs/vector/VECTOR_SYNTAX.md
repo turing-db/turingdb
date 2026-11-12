@@ -99,7 +99,7 @@ An index name, a `k` and a query vector computed from parameters and literals al
 computed once, and the search runs once for the whole query. One that reads a variable
 runs one search per row, and each row is paired with its own neighbors. A row whose
 search finds no neighbor produces no row. A null index name, `k` or query vector is an
-error. A `k` that is a variable directly before a parenthesised query vector is the count,
+error once a row reaches the search, a property no node holds included. A `k` that is a variable directly before a parenthesised query vector is the count,
 not a function call: `FOR k (1.0, 0.0)`.
 
 **Examples:**

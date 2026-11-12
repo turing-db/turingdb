@@ -4933,7 +4933,13 @@ void NLTranslator::translateToAny(nl::ToAny toAny, NLStmtContainer* body) {
         return;
     }
 
-    if (isUntypedNullChunk(operandValue.getType())) {
+    const bool readsANull = isUntypedNullChunk(operandValue.getType());
+    if (readsANull && yieldsConstantColumn(resultValue)) {
+        ColumnConst<CellView>* const nullCell = _memory->alloc<ColumnConst<CellView>>();
+        nullCell->set(CellView::nullElement());
+        _valueSlots[resultValue] = nullCell;
+        return;
+    } else if (readsANull) {
         translateNullLiteral(resultValue, operand, body);
         return;
     }

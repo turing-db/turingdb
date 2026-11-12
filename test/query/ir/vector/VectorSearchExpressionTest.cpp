@@ -311,6 +311,33 @@ TEST_F(VectorSearchExpressionTest, refusesANullQueryVectorOrNeighbourCount) {
     expectError("VECTOR SEARCH IN idx FOR $m.k (1.0, 0.0) YIELD ids RETURN ids", parameters, "VECTOR SEARCH k value must be an integer, got Null");
 }
 
+// A property no node holds reads as Null, so an operand reading one is typed Null. The search
+// raises on a null once a row reaches it, and searches for no row when none does.
+TEST_F(VectorSearchExpressionTest, searchesForNoRowWhenNoRowReachesAnOperandTypedNull) {
+    createVectorIndex();
+    createSearchedNodes();
+
+    expectRows("MATCH (n:X) WHERE n.name = 'none' VECTOR SEARCH IN idx FOR 2 n.nosuch YIELD ids RETURN n.name, ids", {});
+    expectRows("MATCH (n:X) WHERE n.name = 'none' VECTOR SEARCH IN idx FOR n.nosuch (1.0, 0.0) YIELD ids RETURN n.name, ids", {});
+    expectRows("MATCH (n:X) WHERE n.name = 'none' VECTOR SEARCH IN (n.nosuch) FOR 1 (1.0, 0.0) YIELD ids RETURN n.name, ids", {});
+}
+
+TEST_F(VectorSearchExpressionTest, raisesOnAnOperandTypedNullOnceARowReachesTheSearch) {
+    createVectorIndex();
+    createSearchedNodes();
+
+    expectError("MATCH (n:X) VECTOR SEARCH IN idx FOR 2 n.nosuch YIELD ids RETURN ids",
+                "VECTOR SEARCH query vector must be an Embedding, got Null");
+    expectError("MATCH (n:X) VECTOR SEARCH IN idx FOR n.nosuch (1.0, 0.0) YIELD ids RETURN ids",
+                "VECTOR SEARCH k value must be an integer, got Null");
+    expectError("MATCH (n:X) VECTOR SEARCH IN (n.nosuch) FOR 1 (1.0, 0.0) YIELD ids RETURN ids",
+                "got Null");
+    expectError("VECTOR SEARCH IN idx FOR 2 null YIELD ids RETURN ids",
+                "VECTOR SEARCH query vector must be an Embedding, got Null");
+    expectError("VECTOR SEARCH IN idx FOR null (1.0, 0.0) YIELD ids RETURN ids",
+                "VECTOR SEARCH k value must be an integer, got Null");
+}
+
 TEST_F(VectorSearchExpressionTest, refusesARowNeighbourCountBelowOne) {
     createVectorIndex();
 
