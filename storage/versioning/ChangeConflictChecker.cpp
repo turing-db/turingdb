@@ -249,11 +249,14 @@ void ChangeConflictChecker::checkUpdatedEdgeConflicts(const ConflictCheckSets& w
 
 void ChangeConflictChecker::checkEmbeddingDimensions(const CommitData& latestCommitData) const {
     const GraphView mainView(&latestCommitData);
+    const CommitData& tipData = _change._tip->commitData();
+    const GraphMetadata& tipMetadata = tipData.metadata();
+
+    // A commit's metadata extends the one before it, so the tip's numbers every commit's writes
+    EmbeddingDimensionChecker dimensions(tipMetadata.propTypes(), mainView);
 
     for (const std::unique_ptr<CommitBuilder>& commitBuilder : _change._commits) {
         const CommitData& commitData = commitBuilder->commitData();
-        const GraphMetadata& metadata = commitData.metadata();
-        EmbeddingDimensionChecker dimensions(metadata.propTypes());
 
         for (const WeakArc<DataPart>& part : commitData.commitDataparts()) {
             dimensions.addWrites(part->nodeProperties());
@@ -264,7 +267,7 @@ void ChangeConflictChecker::checkEmbeddingDimensions(const CommitData& latestCom
         if (!writeBuffer.isFlushed()) {
             dimensions.addWrites(writeBuffer);
         }
-
-        dimensions.checkAgainst(mainView);
     }
+
+    dimensions.check();
 }

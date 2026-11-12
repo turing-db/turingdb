@@ -283,7 +283,7 @@ void CommitBuilder::initializeMerge(const Commit* prevCommit) {
 
 void CommitBuilder::checkEmbeddingDimensions() const {
     const GraphMetadata& metadata = _commitData->metadata();
-    EmbeddingDimensionChecker dimensions(metadata.propTypes());
+    EmbeddingDimensionChecker dimensions(metadata.propTypes(), viewGraph());
 
     for (const std::unique_ptr<DataPartBuilder>& builder : _builders) {
         dimensions.addWrites(*builder->_nodeProperties);
@@ -291,7 +291,7 @@ void CommitBuilder::checkEmbeddingDimensions() const {
     }
 
     dimensions.addWrites(*_writeBuffer);
-    dimensions.checkAgainst(viewGraph());
+    dimensions.check();
 }
 
 namespace db {

@@ -40,10 +40,6 @@ bool MetadataRebaser::rebase(const GraphMetadata& theirs,
         _edgeTypeMapping[id] = id;
     }
 
-    for (const auto& [pt, value] : newPropTypes) {
-        _propTypeMapping[pt._id] = pt;
-    }
-
     // Labels
     for (const auto& [ourID, name] : ourLabels) {
         const auto newID = newLabels.getOrCreate(*name);
@@ -66,22 +62,7 @@ bool MetadataRebaser::rebase(const GraphMetadata& theirs,
         }
     }
 
-    // Property types
-    for (const auto& [ourPT, name] : ourPropTypes) {
-        auto newPT = newPropTypes.getOrCreate(*name, ourPT._valueType);
-        if (newPT._valueType != ourPT._valueType) {
-            // Property type already exists, but with different value type
-            // Creating a new property type with name = 'prevName (valueType)'
-            const auto newName = fmt::format("{} ({})", *name, ValueTypeName::value(ourPT._valueType));
-            newPT = newPropTypes.getOrCreate(newName, ourPT._valueType);
-        }
-
-        _propTypeMapping[ourPT._id] = newPT;
-
-        if (newPT._id != ourPT._id) {
-            _propTypesChanged = true;
-        }
-    }
+    mapPropertyTypes(ourPropTypes, newPropTypes);
 
     // Labelsets
     LabelSet newLabelset;
@@ -164,4 +145,26 @@ bool MetadataRebaser::rebase(const GraphMetadata& theirs,
     ours._metadata->_propTypeMap = std::move(newPropTypes);
 
     return true;
+}
+
+void MetadataRebaser::mapPropertyTypes(const PropertyTypeMap& ours, PropertyTypeMap& rebased) {
+    for (const auto& [pt, value] : rebased) {
+        _propTypeMapping[pt._id] = pt;
+    }
+
+    for (const auto& [ourPT, name] : ours) {
+        auto newPT = rebased.getOrCreate(*name, ourPT._valueType);
+        if (newPT._valueType != ourPT._valueType) {
+            // Property type already exists, but with different value type
+            // Creating a new property type with name = 'prevName (valueType)'
+            const auto newName = fmt::format("{} ({})", *name, ValueTypeName::value(ourPT._valueType));
+            newPT = rebased.getOrCreate(newName, ourPT._valueType);
+        }
+
+        _propTypeMapping[ourPT._id] = newPT;
+
+        if (newPT._id != ourPT._id) {
+            _propTypesChanged = true;
+        }
+    }
 }

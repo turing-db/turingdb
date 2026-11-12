@@ -37,9 +37,11 @@ std::optional<size_t> embeddingDimensionOf(const CommitWriteBuffer::UntypedPrope
 
 }
 
-EmbeddingDimensionChecker::EmbeddingDimensionChecker(const PropertyTypeMap& propertyTypes)
-    : _propertyTypes(propertyTypes)
+EmbeddingDimensionChecker::EmbeddingDimensionChecker(const PropertyTypeMap& writtenTypes, const GraphView& graph)
+    : _graph(graph),
+    _rebasedTypes(graph.metadata().propTypes())
 {
+    _rebaser.mapPropertyTypes(writtenTypes, _rebasedTypes);
 }
 
 EmbeddingDimensionChecker::~EmbeddingDimensionChecker() {
@@ -79,27 +81,15 @@ void EmbeddingDimensionChecker::addWrites(const CommitWriteBuffer& writeBuffer) 
     }
 }
 
-void EmbeddingDimensionChecker::checkAgainst(const GraphView& graph) const {
-    const GraphMetadata& graphMetadata = graph.metadata();
-    const PropertyTypeMap& graphTypes = graphMetadata.propTypes();
-    const GraphReader reader = graph.read();
+void EmbeddingDimensionChecker::check() const {
+    const GraphReader reader = _graph.read();
 
     for (const auto& [ptID, dimension] : _dimensions) {
-        // The writes of a change number their properties apart from main, so the graph's
-        // property is the one of the same name
-        const std::string_view name = getPropertyName(ptID);
-        const std::optional<PropertyType> graphType = graphTypes.get(name);
-
-        const bool graphHoldsEmbeddings = graphType.has_value() && graphType->_valueType == ValueType::Embedding;
-        if (!graphHoldsEmbeddings) {
-            continue;
-        }
-
-        const std::optional<size_t> heldDimension = reader.findEmbeddingDimension(graphType->_id);
+        const std::optional<size_t> heldDimension = reader.findEmbeddingDimension(ptID);
 
         const bool differs = heldDimension.has_value() && *heldDimension != dimension;
         if (differs) {
-            throwDimensionError(name, *heldDimension, dimension);
+            throwDimensionError(getPropertyName(ptID), *heldDimension, dimension);
         }
     }
 }
@@ -114,16 +104,17 @@ void EmbeddingDimensionChecker::throwDimensionError(std::string_view propertyNam
 }
 
 void EmbeddingDimensionChecker::addWrite(PropertyTypeID ptID, size_t dimension) {
-    const auto [it, inserted] = _dimensions.emplace(ptID, dimension);
+    const PropertyType rebased = _rebaser.getPropertyTypeMapping(ptID);
+    const auto [it, inserted] = _dimensions.emplace(rebased._id, dimension);
 
     const bool differs = !inserted && it->second != dimension;
     if (differs) {
-        throwDimensionError(getPropertyName(ptID), it->second, dimension);
+        throwDimensionError(getPropertyName(rebased._id), it->second, dimension);
     }
 }
 
 std::string_view EmbeddingDimensionChecker::getPropertyName(PropertyTypeID ptID) const {
-    const std::optional<std::string_view> name = _propertyTypes.getName(ptID);
+    const std::optional<std::string_view> name = _rebasedTypes.getName(ptID);
     bioassert(name.has_value(), "An embedding write names a property the metadata does not hold");
 
     return *name;

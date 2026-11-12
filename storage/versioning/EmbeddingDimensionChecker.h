@@ -6,17 +6,18 @@
 #include <unordered_map>
 
 #include "ID.h"
+#include "metadata/PropertyTypeMap.h"
+#include "versioning/MetadataRebaser.h"
+#include "views/GraphView.h"
 
 namespace db {
 
 class CommitWriteBuffer;
-class GraphView;
 class PropertyManager;
-class PropertyTypeMap;
 
 class EmbeddingDimensionChecker {
 public:
-    explicit EmbeddingDimensionChecker(const PropertyTypeMap& propertyTypes);
+    EmbeddingDimensionChecker(const PropertyTypeMap& writtenTypes, const GraphView& graph);
     ~EmbeddingDimensionChecker();
 
     EmbeddingDimensionChecker(const EmbeddingDimensionChecker&) = delete;
@@ -27,14 +28,16 @@ public:
     void addWrites(const PropertyManager& properties);
     void addWrites(const CommitWriteBuffer& writeBuffer);
 
-    void checkAgainst(const GraphView& graph) const;
+    void check() const;
 
     [[noreturn]] static void throwDimensionError(std::string_view propertyName,
                                                  size_t heldDimension,
                                                  size_t writtenDimension);
 
 private:
-    const PropertyTypeMap& _propertyTypes;
+    GraphView _graph;
+    PropertyTypeMap _rebasedTypes;
+    MetadataRebaser _rebaser;
     std::unordered_map<PropertyTypeID, size_t> _dimensions;
 
     void addWrite(PropertyTypeID ptID, size_t dimension);

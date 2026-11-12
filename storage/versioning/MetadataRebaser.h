@@ -9,6 +9,7 @@ namespace db {
 class GraphMetadata;
 class MetadataBuilder;
 class CommitWriteBuffer;
+class PropertyTypeMap;
 
 class MetadataRebaser {
 public:
@@ -22,6 +23,7 @@ public:
 
     bool rebase(const GraphMetadata& theirs, MetadataBuilder& ours, CommitWriteBuffer& cwb);
     void rebaseWriteBuffer(CommitWriteBuffer& cwb, MetadataBuilder& newMetadata);
+    void mapPropertyTypes(const PropertyTypeMap& ours, PropertyTypeMap& rebased);
 
     LabelID getLabelMapping(LabelID id) const { return _labelMapping.at(id); }
     LabelSetHandle getLabelSetMapping(LabelSetID id) const { return _labelsetMapping.at(id); }
