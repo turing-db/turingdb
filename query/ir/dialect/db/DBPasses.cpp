@@ -259,6 +259,32 @@ bool isFilterResult(Value column) {
     return isa_and_present<FilterOp>(column.getDefiningOp());
 }
 
+Value carriedResultOf(OpOperand& operand) {
+    Operation* const op = operand.getOwner();
+    ColumnCarrierOpInterface carrier = dyn_cast<ColumnCarrierOpInterface>(op);
+
+    CarrySet carrySet;
+    const size_t operandNumber = operand.getOperandNumber();
+    const bool carriesTheOperand = carrier && carrier.getCarrySet(carrySet)
+                                && operandNumber >= carrySet._operandOffset
+                                && operandNumber < carrySet._operandOffset + carrySet._count;
+    if (!carriesTheOperand) {
+        return {};
+    }
+
+    return op->getResult(static_cast<unsigned>(carrySet._resultOffset + operandNumber - carrySet._operandOffset));
+}
+
+BlockArgument elementArgumentOf(Region& region) {
+    ColumnCarrierOpInterface carrier = cast<ColumnCarrierOpInterface>(region.getParentOp());
+
+    size_t elementArgument = 0;
+    const Value source = carrier.getRegionElementSource(region, elementArgument);
+    bioassert(source, "A region binding a list element belongs to an op iterating a list");
+
+    return region.front().getArgument(static_cast<unsigned>(elementArgument));
+}
+
 bool isEdgeHop(Operation* op) {
     return isa<GetOutEdges,
                GetInEdges,
@@ -301,24 +327,12 @@ constexpr size_t EDGE_IDS_RESULT = 1;
 constexpr size_t EDGE_TYPES_RESULT = 2;
 constexpr size_t EDGE_TARGETS_RESULT = 3;
 
-// srcids, tgtids and paths; the carry set follows
-constexpr size_t pathFixedResultCount = 3;
-
 // The columns a cross_product factor yields, in result order.
 Operation::operand_range factorYieldColumns(mlir::Region& factor) {
     mlir::Block& factorBlock = factor.front();
     Yield yield = cast<Yield>(factorBlock.getTerminator());
 
     return yield.getColumns();
-}
-
-Value productFactorColumn(CrossProduct product, size_t resultIndex) {
-    const Operation::operand_range leftColumns = factorYieldColumns(product.getLeftFactor());
-    if (resultIndex < leftColumns.size()) {
-        return leftColumns[resultIndex];
-    }
-
-    return factorYieldColumns(product.getRightFactor())[resultIndex - leftColumns.size()];
 }
 
 using ColumnEquality = std::pair<Value, Value>;
@@ -1468,6 +1482,7 @@ bool isHop(Operation* op);
 bool computesPerRow(Operation* op);
 void eraseIfUnused(Operation* op, mlir::RewriterBase& rewriter);
 Value appendCarriedColumn(Operation* op, Value column, mlir::RewriterBase& rewriter);
+BlockArgument carriedArgument(Region& region, size_t carriedIndex);
 BlockArgument carryIntoRegion(Region& region, Value column, mlir::RewriterBase& rewriter);
 Type boolColumnType(mlir::MLIRContext* context);
 
@@ -1593,12 +1608,11 @@ bool collectRowTags(Block& body, ComprehensionYield yield, llvm::SmallPtrSetImpl
 
         for (OpOperand& use : rowTag.getUses()) {
             Operation* const user = use.getOwner();
-            FilterOp filter = dyn_cast<FilterOp>(user);
-            const unsigned operandNumber = use.getOperandNumber();
+            const bool inAFilter = isa<FilterOp>(user) && user->getBlock() == &body;
+            const Value cut = inAFilter ? carriedResultOf(use) : Value();
 
-            const bool cutByAFilter = filter && filter->getBlock() == &body && operandNumber != 0;
-            if (cutByAFilter) {
-                worklist.push_back(filter->getResult(operandNumber - 1));
+            if (cut) {
+                worklist.push_back(cut);
             } else if (user != yield.getOperation()) {
                 return false;
             }
@@ -1663,7 +1677,8 @@ bool unnestUnwindComprehension(Unwind unwind, mlir::RewriterBase& rewriter) {
         return false;
     }
 
-    Block& body = comprehension.getBody().front();
+    Region& bodyRegion = comprehension.getBody();
+    Block& body = bodyRegion.front();
     ComprehensionYield yield = cast<ComprehensionYield>(body.getTerminator());
 
     // A value standing for every element would stand for one row once it is unwound
@@ -1698,10 +1713,10 @@ bool unnestUnwindComprehension(Unwind unwind, mlir::RewriterBase& rewriter) {
     llvm::SmallVector<Value> rows(unnestedCarried.begin(), unnestedCarried.end());
 
     mlir::IRMapping mapping;
-    mapping.map(body.getArgument(0), unnested.getElement());
+    mapping.map(elementArgumentOf(bodyRegion), unnested.getElement());
 
     for (size_t carriedIndex = 0; carriedIndex < bodyColumns.size(); carriedIndex++) {
-        mapping.map(body.getArgument(carriedIndex + 2), rows[carriedIndex]);
+        mapping.map(carriedArgument(bodyRegion, carriedIndex), rows[carriedIndex]);
     }
 
     for (Operation& op : body.without_terminator()) {
@@ -2002,8 +2017,7 @@ void mapFactorReads(const MaskCone& cone, CrossProduct product, ConeCache& cache
     for (const Value input : cone._inputs) {
         const Value column = cache.climbFilters(input);
         if (column.getDefiningOp() == product.getOperation()) {
-            const size_t resultIndex = cast<OpResult>(column).getResultNumber();
-            mapping.map(input, productFactorColumn(product, resultIndex));
+            mapping.map(input, rowSourceOf(column));
         }
     }
 }
@@ -2486,7 +2500,7 @@ bool readOneNestedSide(CrossProduct product,
     bool readsTheLeft = false;
     bool readsTheRight = false;
     for (const size_t resultIndex : results) {
-        const Value column = productFactorColumn(product, resultIndex);
+        const Value column = rowSourceOf(product->getResult(static_cast<unsigned>(resultIndex)));
         const size_t nestedIndex = cast<OpResult>(column).getResultNumber();
         if (nestedIndex < nestedLeftWidth) {
             readsTheLeft = true;
@@ -3835,8 +3849,7 @@ bool matchStackedLabelFilters(FilterOp outer, StackedLabelFilters& stacked) {
     }
 
     GetNodeLabelSet innerLabelSet = innerCheck.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
-    const size_t checkedIndex = cast<OpResult>(checkedColumn).getResultNumber();
-    const bool overSameNodes = innerLabelSet && innerLabelSet.getInputNodes() == inner.getColumnsToFilter()[checkedIndex];
+    const bool overSameNodes = innerLabelSet && innerLabelSet.getInputNodes() == rowSourceOf(checkedColumn);
     const bool inSameBlock = outer->getBlock() == inner->getBlock();
     if (!overSameNodes || !inSameBlock) {
         return false;
@@ -3933,13 +3946,8 @@ bool matchLabelFilterBelowHop(FilterOp filter, LabelFilterBelowHop& below) {
         return false;
     }
 
-    const size_t resultIndex = cast<OpResult>(checkedColumn).getResultNumber();
-    Value hopOperand;
-    if (resultIndex == hopInputResult(hop)) {
-        hopOperand = hop->getOperand(0);
-    } else if (resultIndex >= hopFixedResultCount) {
-        hopOperand = hop->getOperand(1 + (resultIndex - hopFixedResultCount));
-    } else {
+    const Value hopOperand = rowSourceOf(checkedColumn);
+    if (!hopOperand) {
         return false;
     }
 
@@ -5461,16 +5469,20 @@ bool matchEndBoundConjunct(Value conjunct, ExplorePaths exploration, EndBoundExp
         return false;
     }
 
+    CarrySet carrySet;
+    exploration.getCarrySet(carrySet);
+
     // A walk the pattern brings back to where it started compares its end against its own
     // seed, which is a result of the exploration like a carried column but not one of them
     const size_t resultIndex = carriedResult.getResultNumber();
     const bool endsOnSeed = carried == exploration.getSrcids();
-    if (!endsOnSeed && resultIndex < pathFixedResultCount) {
+    const bool inTheCarrySet = resultIndex >= carrySet._resultOffset && resultIndex < carrySet._resultOffset + carrySet._count;
+    if (!endsOnSeed && !inTheCarrySet) {
         return false;
     }
 
     bound._conjunct = conjunct;
-    bound._endColumn = endsOnSeed ? std::nullopt : std::optional<uint64_t> {resultIndex - pathFixedResultCount};
+    bound._endColumn = endsOnSeed ? std::nullopt : std::optional<uint64_t> {resultIndex - carrySet._resultOffset};
 
     return true;
 }
@@ -6105,23 +6117,14 @@ Value seedColumnOf(ExplorePaths exploration, Value column) {
         return {};
     }
 
-    const size_t resultIndex = cast<OpResult>(climbed).getResultNumber();
-    constexpr size_t TARGET_RESULT_INDEX = 1;
-    const bool holdsTheSeed = resultIndex == 0 || (resultIndex == TARGET_RESULT_INDEX && exploration.getEndsOnSeed());
-
-    if (holdsTheSeed) {
-        return exploration.getInputNodes();
-    } else if (resultIndex >= pathFixedResultCount) {
-        return exploration.getColumnsToFilter()[resultIndex - pathFixedResultCount];
-    } else {
-        return {};
-    }
+    return rowSourceOf(climbed);
 }
 
 // Whether the body reads only the element, constants and carried columns holding one value per
 // seed. Each carried argument the body reads gets the exploration operand to import, the rest null.
 bool matchHopTest(ListPredicate predicate, ExplorePaths exploration, llvm::SmallVectorImpl<Value>& imports) {
-    Block& body = predicate.getBody().front();
+    Region& bodyRegion = predicate.getBody();
+    Block& body = bodyRegion.front();
     const BlockArgument tag = body.getArgument(1);
     ComprehensionYield yield = cast<ComprehensionYield>(body.getTerminator());
 
@@ -6152,7 +6155,7 @@ bool matchHopTest(ListPredicate predicate, ExplorePaths exploration, llvm::Small
 
     const Operation::operand_range carried = predicate.getColumnsToFilter();
     for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
-        if (body.getArgument(carriedIndex + 2).use_empty()) {
+        if (carriedArgument(bodyRegion, carriedIndex).use_empty()) {
             imports.push_back({});
             continue;
         }
@@ -6263,13 +6266,14 @@ unsigned hopArgumentOf(storage::PathExpansionKind expansionKind, size_t step) {
 // the columns its carried arguments stand for, and returns the test it yields: negated for
 // none(), which holds where all() of the negation does
 Value cloneElementTest(ListPredicate predicate, Value element, llvm::ArrayRef<Value> carried, mlir::RewriterBase& rewriter) {
-    Block& body = predicate.getBody().front();
+    Region& bodyRegion = predicate.getBody();
+    Block& body = bodyRegion.front();
 
     mlir::IRMapping mapping;
-    mapping.map(body.getArgument(0), element);
+    mapping.map(elementArgumentOf(bodyRegion), element);
     for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
         if (carried[carriedIndex]) {
-            mapping.map(body.getArgument(carriedIndex + 2), carried[carriedIndex]);
+            mapping.map(carriedArgument(bodyRegion, carriedIndex), carried[carriedIndex]);
         }
     }
 
@@ -6445,22 +6449,23 @@ size_t collectConjunctSlice(Value conjunct, Block& block, size_t walkArguments, 
 // the same walk arguments up to its own end node and the same imports after them
 void hoistConjunct(ExplorePaths exploration,
                    Block& lastBlock,
-                   size_t lastWalkArguments,
                    Value conjunct,
                    llvm::ArrayRef<Operation*> slice,
                    size_t step,
                    mlir::RewriterBase& rewriter) {
     Block* const hopBlock = hopBlockOf(exploration, step, rewriter);
+    Region& hop = *hopBlock->getParent();
     const size_t walkArguments = hopWalkArgumentCount(step);
 
     mlir::IRMapping mapping;
     for (const BlockArgument argument : lastBlock.getArguments()) {
         const size_t argumentNumber = argument.getArgNumber();
+
+        size_t importIndex = 0;
         if (argumentNumber < walkArguments) {
             mapping.map(argument, hopBlock->getArgument(static_cast<unsigned>(argumentNumber)));
-        } else if (argumentNumber >= lastWalkArguments) {
-            const size_t importIndex = argumentNumber - lastWalkArguments;
-            mapping.map(argument, hopBlock->getArgument(static_cast<unsigned>(walkArguments + importIndex)));
+        } else if (matchCarriedIndex(argument, importIndex)) {
+            mapping.map(argument, carriedArgument(hop, importIndex));
         }
     }
 
@@ -6503,7 +6508,7 @@ void hoistHopConjuncts(ExplorePaths exploration, mlir::RewriterBase& rewriter) {
         if (step == lastStep) {
             residual.push_back(conjunct);
         } else {
-            hoistConjunct(exploration, lastBlock, lastWalkArguments, conjunct, slice, step, rewriter);
+            hoistConjunct(exploration, lastBlock, conjunct, slice, step, rewriter);
         }
     }
 
@@ -11595,15 +11600,10 @@ bool factorHoldsAProduct(Region& factor) {
 // The label set the rows of one side are scanned under, when the db level knows one: the
 // labels of a by-label node scan, and none at all otherwise - every node of the graph,
 // which is what the v2 planner estimates a variable with no label constraint at.
-void keySideLabels(const JoinKeySide& side,
-                   size_t factorFirstResult,
-                   const ::db::GraphMetadata& metadata,
-                   ::db::LabelSet& labels) {
+void keySideLabels(const JoinKeySide& side, const ::db::GraphMetadata& metadata, ::db::LabelSet& labels) {
     Block& body = side._factor->front();
-    Yield yield = cast<Yield>(body.getTerminator());
-    const size_t columnIndex = cast<OpResult>(side._column).getResultNumber() - factorFirstResult;
 
-    ScanNodesByLabel scan = rowsOf(yield.getColumns()[columnIndex], body).getDefiningOp<ScanNodesByLabel>();
+    ScanNodesByLabel scan = rowsOf(rowSourceOf(side._column), body).getDefiningOp<ScanNodesByLabel>();
     if (!scan) {
         return;
     }
@@ -11683,13 +11683,10 @@ bool prefersTheProduct(const EqualityCross& match, const DBPassContext& context)
     const ::db::GraphView& view = *context._view;
     const ::db::GraphMetadata& metadata = view.metadata();
 
-    CrossProduct product = match._product;
-    const size_t leftFactorColumns = factorYieldColumns(product.getLeftFactor()).size();
-
     ::db::LabelSet leftLabels;
     ::db::LabelSet rightLabels;
-    keySideLabels(match._left, 0, metadata, leftLabels);
-    keySideLabels(match._right, leftFactorColumns, metadata, rightLabels);
+    keySideLabels(match._left, metadata, leftLabels);
+    keySideLabels(match._right, metadata, rightLabels);
 
     const ::db::CardinalityEstimation estimation(view);
 
@@ -12615,16 +12612,14 @@ void fuseHashJoin(EqualityCross& match, mlir::RewriterBase& rewriter) {
     // comes from the join directly - a carried key from the column the join yields for it,
     // which is that key over the joined rows.
     FilterOp filter = match._filter;
-    const Operation::operand_range carried = filter.getColumnsToFilter();
     rewriter.modifyOpInPlace(filter, [&]() {
-        for (size_t columnIndex = 0; columnIndex < carried.size(); columnIndex++) {
-            const Value carriedColumn = carried[columnIndex];
-            const unsigned operandIndex = static_cast<unsigned>(columnIndex) + 1;
+        for (OpOperand& carried : filter.getColumnsToFilterMutable()) {
+            const Value carriedColumn = carried.get();
 
             if (carriedColumn == match._left._key) {
-                filter->setOperand(operandIndex, leftKeyColumn);
+                carried.set(leftKeyColumn);
             } else if (carriedColumn == match._right._key) {
-                filter->setOperand(operandIndex, rightKeyColumn);
+                carried.set(rightKeyColumn);
             }
         }
     });
@@ -12801,7 +12796,7 @@ bool matchFetchNodesChain(Value nodes, Value ids, FetchNodesChain& chain) {
     for (OpOperand& use : nodes.getUses()) {
         Operation* const user = use.getOwner();
         const bool readByTheEquality = user == chain._equality.getOperation();
-        const bool carriedByTheFilter = user == chain._filter.getOperation() && use.getOperandNumber() > 0;
+        const bool carriedByTheFilter = user == chain._filter.getOperation() && carriedResultOf(use);
 
         if (!readByTheEquality && !carriedByTheFilter && !readsTheRowsAlone(use)) {
             return false;
@@ -13790,6 +13785,7 @@ OpResult traceJunction(Value column, Block* block, RowSourceClimbs& filterClimbs
 
 bool matchSeedJunction(OpResult seededResult, RowSourceClimbs& rowClimbs, PatternJunction& junction, SeedPattern& pattern) {
     Operation* const op = seededResult.getOwner();
+    const Value patternOutput = rowSourceOf(seededResult);
 
     if (CrossProduct product = dyn_cast<CrossProduct>(op)) {
         const size_t leftCount = factorYield(op, 0).getNumOperands();
@@ -13798,8 +13794,7 @@ bool matchSeedJunction(OpResult seededResult, RowSourceClimbs& rowClimbs, Patter
 
         Region& patternFactor = patternOnTheLeft ? product.getLeftFactor() : product.getRightFactor();
 
-        const size_t outputIndex = llvm::find(junction._patternResults, Value(seededResult)) - junction._patternResults.begin();
-        Operation* const root = findPatternRoot(junction._patternOutputs[outputIndex], rowClimbs);
+        Operation* const root = findPatternRoot(patternOutput, rowClimbs);
         if (!root || root->getParentRegion() != &patternFactor) {
             return false;
         }
@@ -13816,13 +13811,13 @@ bool matchSeedJunction(OpResult seededResult, RowSourceClimbs& rowClimbs, Patter
     }
 
     Unwind unwind = cast<Unwind>(op);
-    if (seededResult.getResultNumber() == 0) {
+    if (!patternOutput) {
         return false;
     }
 
     readUnwindJunction(unwind, junction);
 
-    Operation* const root = findPatternRoot(junction._patternOutputs[seededResult.getResultNumber() - 1], rowClimbs);
+    Operation* const root = findPatternRoot(patternOutput, rowClimbs);
     if (!root || root->getBlock() != op->getBlock()) {
         return false;
     }
@@ -13863,9 +13858,8 @@ bool readsTheSeed(Value value, const PatternJunction& junction, llvm::DenseSet<V
             continue;
         }
 
-        if (FilterOp carrying = dyn_cast<FilterOp>(def)) {
-            const size_t resultIndex = cast<OpResult>(current).getResultNumber();
-            worklist.push_back(carrying.getColumnsToFilter()[resultIndex]);
+        if (isa<FilterOp>(def)) {
+            worklist.push_back(rowSourceOf(current));
         } else {
             llvm::append_range(worklist, def->getOperands());
         }
@@ -13899,8 +13893,7 @@ bool isComputedFromTheSeed(Value ids, const PatternJunction& junction, Operation
                 return false;
             }
 
-            const size_t resultIndex = cast<OpResult>(current).getResultNumber();
-            worklist.push_back(carrying.getColumnsToFilter()[resultIndex]);
+            worklist.push_back(rowSourceOf(current));
         } else if (!computesPerRow(def)) {
             return false;
         } else {
@@ -13967,8 +13960,7 @@ bool matchPatternSeedSide(FilterOp filter, EqOp equality, Value seeded, Value id
     }
 
     const PatternJunction& junction = seed._junction;
-    const size_t outputIndex = llvm::find(junction._patternResults, Value(seededResult)) - junction._patternResults.begin();
-    seed._seeded = patternOrigin(junction._patternOutputs[outputIndex], seed._pattern);
+    seed._seeded = patternOrigin(rowSourceOf(seededResult), seed._pattern);
 
     const bool walkableFromTheSeed = isPatternNode(seed._pattern, seed._seeded) && isWalkableFrom(seed._pattern, seed._seeded);
     if (!walkableFromTheSeed) {
@@ -14245,8 +14237,12 @@ private:
         }
     }
 
-    void rebindCarried(Operation* op, size_t firstCarried, Value walkedFrom) {
-        size_t resultIndex = firstCarried;
+    void rebindCarried(Operation* op, Value walkedFrom) {
+        CarrySet carrySet;
+        const bool carries = matchCarrySet(op, carrySet);
+        bioassert(carries, "The op a pattern is rebuilt through carries the columns in flight");
+
+        size_t resultIndex = carrySet._resultOffset;
         for (const Value origin : _inFlight) {
             if (origin != walkedFrom) {
                 _current[origin] = op->getResult(resultIndex++);
@@ -14260,7 +14256,7 @@ private:
         carried(columns, types, Value());
 
         FilterOp filter = _builder.create<FilterOp>(_loc, types, mask, columns);
-        rebindCarried(filter.getOperation(), 0, Value());
+        rebindCarried(filter.getOperation(), Value());
     }
 
     void applyRootLabels() {
@@ -14274,7 +14270,7 @@ private:
     }
 
     void bindHop(const PatternStep& step, Operation* walked, Value walkedFrom, size_t fromResult, size_t toResult) {
-        rebindCarried(walked, hopFixedResultCount, walkedFrom);
+        rebindCarried(walked, walkedFrom);
 
         bind(step._from, walked->getResult(fromResult));
         bind(step._to, walked->getResult(toResult));
@@ -14336,7 +14332,7 @@ private:
                                                             exploration.getStepCount());
         takeHopRegions(exploration, walked);
 
-        rebindCarried(walked.getOperation(), pathFixedResultCount, step._from);
+        rebindCarried(walked.getOperation(), step._from);
         bind(step._from, walked.getSrcids());
         bind(step._to, walked.getTgtids());
         bind(exploration.getPaths(), walked.getPaths());
@@ -14362,8 +14358,8 @@ Value cloneSeedIDs(Value ids, const PatternJunction& junction, mlir::IRMapping& 
 
         const size_t resultIndex = cast<OpResult>(value).getResultNumber();
 
-        if (FilterOp carrying = dyn_cast<FilterOp>(def)) {
-            const Value carried = carrying.getColumnsToFilter()[resultIndex];
+        if (isa<FilterOp>(def)) {
+            const Value carried = rowSourceOf(value);
             if (seedColumns.contains(carried)) {
                 seedColumns.map(value, seedColumns.lookup(carried));
                 worklist.pop_back();
