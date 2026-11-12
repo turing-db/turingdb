@@ -69,3 +69,10 @@ add_turing_test(test_net_server_buffer_limit ServerBufferLimitTest.cpp)
 
 add_turing_test(test_net_schema_id_cells_over_the_wire SchemaIDCellsOverTheWireTest.cpp)
 target_sources(test_net_schema_id_cells_over_the_wire PRIVATE ProtoServerTest.cpp)
+
+add_turing_test(test_net_nested_writer_after_throw NestedWriterAfterThrowTest.cpp)
+
+add_turing_test(test_net_request_body_after_refusal RequestBodyAfterRefusalTest.cpp)
+
+add_turing_test(test_net_client_parameters_after_refusal ClientParametersAfterRefusalTest.cpp)
+target_sources(test_net_client_parameters_after_refusal PRIVATE ProtoServerTest.cpp)

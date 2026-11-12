@@ -2,7 +2,6 @@
 
 #include <optional>
 #include <span>
-#include <stack>
 #include <stdint.h>
 #include <string_view>
 #include <type_traits>
@@ -130,7 +129,7 @@ struct ElementWriteVisitor {
             _outBuf->copyFixedLenData(&elementCount, sizeof(elementCount));
             _outBuf->copyFixedLenData(&listByteSize, sizeof(listByteSize));
 
-            _stack->emplace(NestedContainerIterator::list(value.elements()));
+            _stack->push_back(NestedContainerIterator::list(value.elements()));
         } else if constexpr (db::IsMap<T>) {
             const T value = view.getAs<T>();
 
@@ -143,7 +142,7 @@ struct ElementWriteVisitor {
             _outBuf->copyFixedLenData(&entryCount, sizeof(entryCount));
             _outBuf->copyFixedLenData(&mapByteSize, sizeof(mapByteSize));
 
-            _stack->emplace(NestedContainerIterator::map(value.entries()));
+            _stack->push_back(NestedContainerIterator::map(value.entries()));
         } else {
             static_assert(std::is_trivially_copyable_v<T>,
                           "ElementWriteVisitor can't encode a non trivial element in a trivial manner");
@@ -191,7 +190,7 @@ private:
     net::proto::TuringProtoOutBuf* _outBuf {nullptr};
     NestedContainerIterator::Stack _stack;
 
-    void drainNestedValues();
+    void drainNestedValues(const NestedContainerIterator& root);
     void writeCellValues(std::span<const db::CellView> elements);
     void writeMapKey(std::string_view key);
     void writeNullCell();
