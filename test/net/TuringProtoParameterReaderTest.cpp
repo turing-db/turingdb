@@ -374,7 +374,6 @@ TEST_F(TuringProtoParameterReaderTest, anEmbeddingComesBackAsItsFloats) {
 }
 
 // The bytes the npm client (wasm/npm/TuringClient.mjs) writes for {v: new Float32Array([1, 0.5])}
-// and the Python clients for {"v": numpy.array([1, 0.5], dtype=numpy.float32)}
 TEST_F(TuringProtoParameterReaderTest, readsTheEmbeddingAClientWrites) {
     const std::vector<uint8_t> bytes = {
         0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x76, 0x05, 0x08, 0x00,
