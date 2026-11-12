@@ -39,7 +39,7 @@ protected:
     }
 
     // Prints the first row that differs rather than every row
-    void expectManyRows(std::string_view query, Rows expected) {
+    void expectManyRows(std::string_view query, Rows& expected) {
         RowSink sink;
         const QueryStatus status = runQuery(query, &sink);
         ASSERT_TRUE(status.isOk()) << "query: " << query << "\nerror: " << status.getError();
@@ -50,16 +50,16 @@ protected:
 
         ASSERT_EQ(rows.size(), expected.size()) << "query: " << query;
 
-        const auto [actualIt, expectedIt] = std::mismatch(rows.begin(), rows.end(), expected.begin());
-        if (actualIt == rows.end()) {
+        const auto [actualRow, expectedRow] = std::mismatch(rows.begin(), rows.end(), expected.begin());
+        if (actualRow == rows.end()) {
             return;
         }
 
         std::string actualText;
-        describeRows(Rows {*actualIt}, actualText);
+        describeRows(Rows {*actualRow}, actualText);
 
         std::string expectedText;
-        describeRows(Rows {*expectedIt}, expectedText);
+        describeRows(Rows {*expectedRow}, expectedText);
 
         ADD_FAILURE() << "query: " << query << "\nfirst differing row: " << actualText << "expected: " << expectedText;
     }

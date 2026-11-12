@@ -46,6 +46,7 @@
 #include "DBOps.h"
 #include "DBRowCone.h"
 #include "DBStagePlanner.h"
+#include "DBWrittenOrder.h"
 
 #include "BioAssert.h"
 
@@ -190,18 +191,6 @@ void runFilterWorklist(Operation* root, MatchFilter matchFilter, RewriteFilter r
         rewriteFilter(match, rewriter);
         return true;
     });
-}
-
-bool isGraphWrite(Operation* op) {
-    return isa<CreateNode,
-               CreateEdge,
-               Merge,
-               SetNodeProperty,
-               SetEdgeProperty,
-               SetNodeProperties,
-               SetEdgeProperties,
-               DeleteNode,
-               DeleteEdge>(op);
 }
 
 bool isNodeSource(Operation* op) {
@@ -524,50 +513,8 @@ Value scannedAnchorEqualTo(Value anchor, llvm::ArrayRef<ColumnEquality> anchorEq
     return {};
 }
 
-// The ops of a function numbered in the order they are written, an op before the ops it holds,
-// so an op is written before another exactly when its position is lower
-class WrittenOrder {
-public:
-    explicit WrittenOrder(Operation* function)
-    {
-        function->walk([this](Operation* op, const mlir::WalkStage& stage) {
-            if (stage.isBeforeAllRegions()) {
-                const size_t position = _count++;
-                _positions[op] = position;
-
-                if (isGraphWrite(op)) {
-                    _writePositions.push_back(position);
-                }
-            }
-
-            if (stage.isAfterAllRegions() && op->getNumRegions() > 0) {
-                _lastHeldPositions[op] = _count - 1;
-            }
-        });
-    }
-
-    // A filter pushed to just after @param anchorProducer cuts the rows of every op between the
-    // two, so a write among them would no longer run on the rows the filter drops. A write the
-    // producer holds has run on every row by then.
-    bool writesBetween(Operation* anchorProducer, Operation* filter) const {
-        const auto lastHeld = _lastHeldPositions.find(anchorProducer);
-        const size_t afterProducer = lastHeld != _lastHeldPositions.end() ? lastHeld->second : _positions.at(anchorProducer);
-        const size_t filterPosition = _positions.at(filter);
-
-        const size_t* const firstWriteAfter = llvm::upper_bound(_writePositions, afterProducer);
-
-        return firstWriteAfter != _writePositions.end() && *firstWriteAfter < filterPosition;
-    }
-
-private:
-    llvm::DenseMap<Operation*, size_t> _positions;
-    llvm::DenseMap<Operation*, size_t> _lastHeldPositions;
-    llvm::SmallVector<size_t> _writePositions;
-    size_t _count {0};
-};
-
 bool matchPushablePredicate(FilterOp filter,
-                            const WrittenOrder& order,
+                            const DBWrittenOrder& order,
                             LineageClimbs& climbs,
                             PushablePredicate& pushable) {
     Operation* const maskDef = filter.getMask().getDefiningOp();
@@ -618,6 +565,9 @@ bool matchPushablePredicate(FilterOp filter,
         return false;
     }
 
+    // A filter pushed to just after the anchor's producer cuts the rows of every op between the
+    // two, so a write among them would no longer run on the rows the filter drops. A write the
+    // producer holds has run on every row by then.
     return !order.writesBetween(pushable._anchors.front().getDefiningOp(), filter.getOperation());
 }
 
@@ -690,7 +640,8 @@ struct PushDownFilters : public impl::PushDownFiltersBase<PushDownFilters> {
             filters.push_back(filter);
         });
 
-        const WrittenOrder order(getOperation());
+        DBWrittenOrder order;
+        order.build(getOperation());
 
         LineageClimbs climbs;
         for (FilterOp filter : filters) {
@@ -1730,25 +1681,14 @@ struct SinkUnwindSource : public impl::SinkUnwindSourceBase<SinkUnwindSource> {
     }
 };
 
-void collectRowCone(llvm::ArrayRef<Value> roots, Block* block, MaskCone& cone) {
-    const auto computedInTheBlock = [block](Operation* op) {
-        return op->getBlock() == block && computesFromTheRow(op) && !raisesOnSomeRows(op);
-    };
-
-    llvm::SmallPtrSet<Operation*, 8> visited;
-    for (const Value root : roots) {
-        collectConePostOrder(root, computedInTheBlock, visited, cone);
-    }
-}
-
-void cloneRowCone(const MaskCone& cone, mlir::IRMapping& mapping, mlir::RewriterBase& rewriter) {
-    for (Operation* const op : cone._ops) {
+void cloneRowCone(llvm::ArrayRef<Operation*> ops, mlir::IRMapping& mapping, mlir::RewriterBase& rewriter) {
+    for (Operation* const op : ops) {
         rewriter.clone(*op, mapping);
     }
 }
 
-void eraseUnusedRowCone(const MaskCone& cone, mlir::RewriterBase& rewriter) {
-    for (Operation* const op : llvm::reverse(cone._ops)) {
+void eraseUnusedRowCone(llvm::ArrayRef<Operation*> ops, mlir::RewriterBase& rewriter) {
+    for (Operation* const op : llvm::reverse(ops)) {
         eraseIfUnused(op, rewriter);
     }
 }
@@ -2232,7 +2172,7 @@ void sinkUnwindIntoFactor(UnwindPlacement& placement, ConeCache& cache, mlir::Re
     mapConeIntoFactors(placement._source, product, cache, mapping, rewriter);
 
     rewriter.setInsertionPoint(yield);
-    cloneRowCone(placement._source, mapping, rewriter);
+    cloneRowCone(placement._source._ops, mapping, rewriter);
 
     const Value unwoundElement = unwind.getElement();
     llvm::SmallVector<Type> sunkTypes {unwoundElement.getType()};
@@ -2281,7 +2221,7 @@ void sinkUnwindIntoFactor(UnwindPlacement& placement, ConeCache& cache, mlir::Re
     }
 
     rewriter.eraseOp(unwind);
-    eraseUnusedRowCone(placement._source, rewriter);
+    eraseUnusedRowCone(placement._source._ops, rewriter);
     rewriter.eraseOp(product);
 }
 
@@ -2312,7 +2252,7 @@ void unwindBesideItsRows(UnwindPlacement& placement, mlir::RewriterBase& rewrite
     rewriter.setInsertionPointToEnd(listBlock);
 
     mlir::IRMapping mapping;
-    cloneRowCone(placement._source, mapping, rewriter);
+    cloneRowCone(placement._source._ops, mapping, rewriter);
 
     const Value source = mapping.lookupOrDefault(unwind.getSource());
     Unwind listUnwind = rewriter.create<Unwind>(loc, TypeRange {elementType}, source, ValueRange {});
@@ -2326,7 +2266,7 @@ void unwindBesideItsRows(UnwindPlacement& placement, mlir::RewriterBase& rewrite
     rewriter.replaceAllUsesWith(unwoundElement, product.getResult(carriedRows.size()));
 
     rewriter.eraseOp(unwind);
-    eraseUnusedRowCone(placement._source, rewriter);
+    eraseUnusedRowCone(placement._source._ops, rewriter);
 }
 
 void placeUnwind(UnwindPlacement& placement, ConeCache& cache, mlir::RewriterBase& rewriter) {
@@ -2510,7 +2450,7 @@ void cutFactor(CrossProduct product,
     mapConeIntoFactors(cone, product, cache, mapping, rewriter);
 
     rewriter.setInsertionPoint(yield);
-    cloneRowCone(cone, mapping, rewriter);
+    cloneRowCone(cone._ops, mapping, rewriter);
 
     llvm::SmallVector<Value, 2> mappedConjuncts;
     for (const Value conjunct : conjuncts) {
@@ -2695,8 +2635,8 @@ void keepUncutConjuncts(ProductCut& cut, mlir::RewriterBase& rewriter) {
     }
 
     eraseUnusedConjunction(mask, rewriter);
-    eraseUnusedRowCone(cut._leftCone, rewriter);
-    eraseUnusedRowCone(cut._rightCone, rewriter);
+    eraseUnusedRowCone(cut._leftCone._ops, rewriter);
+    eraseUnusedRowCone(cut._rightCone._ops, rewriter);
 }
 
 CrossProduct rotateProduct(CrossProduct product, const ProductRotation& rotation, mlir::RewriterBase& rewriter) {
@@ -2949,7 +2889,7 @@ void mergeStackedFilters(StackedFilters& stacked, mlir::RewriterBase& rewriter) 
     }
 
     rewriter.setInsertionPoint(lower);
-    cloneRowCone(cone, mapping, rewriter);
+    cloneRowCone(cone._ops, mapping, rewriter);
 
     llvm::SmallVector<Value, 4> conjuncts {lower.getMask()};
     for (const Value conjunct : stacked._merged) {
@@ -2975,7 +2915,7 @@ void mergeStackedFilters(StackedFilters& stacked, mlir::RewriterBase& rewriter) 
     }
 
     eraseUnusedConjunction(upperMask, rewriter);
-    eraseUnusedRowCone(cone, rewriter);
+    eraseUnusedRowCone(cone._ops, rewriter);
 }
 
 struct MergeFilters : public impl::MergeFiltersBase<MergeFilters> {
@@ -10501,7 +10441,7 @@ void keepConjunctsOver(FilterOp filter,
         mapping.map(carried, column);
     }
 
-    cloneRowCone(cone, mapping, rewriter);
+    cloneRowCone(cone._ops, mapping, rewriter);
 
     llvm::SmallVector<Value, 4> rebuilt;
     for (const Value conjunct : conjuncts) {
@@ -10636,7 +10576,7 @@ void fuseFetchNodes(FetchNodesChain& chain, mlir::RewriterBase& rewriter) {
     rewriter.eraseOp(filter);
     eraseUnusedConjunction(mask, rewriter);
     rewriter.eraseOp(chain._equality);
-    eraseUnusedRowCone(otherConjunctsCone, rewriter);
+    eraseUnusedRowCone(otherConjunctsCone._ops, rewriter);
 
     llvm::SmallVector<CrossProduct> products;
     for (const OpResult link : chain._links) {
@@ -12779,11 +12719,11 @@ private:
 
 void stageConjuncts(const DBStagePlanner::FilterStages& stages, mlir::RewriterBase& rewriter) {
     FilterOp filter = stages._filter;
-    const Location loc = filter.getLoc();
+    const Location location = filter.getLoc();
     const Value mask = filter.getMask();
     const Operation::operand_range columns = filter.getColumnsToFilter();
     const llvm::ArrayRef<Value> conjuncts = stages._conjuncts;
-    const llvm::ArrayRef<Operation*> moved = stages._moved._ops;
+    const llvm::ArrayRef<Operation*> moved = stages._moved;
     const llvm::ArrayRef<Value> carried = stages._carried;
 
     mlir::IRMapping mapping;
@@ -12801,9 +12741,7 @@ void stageConjuncts(const DBStagePlanner::FilterStages& stages, mlir::RewriterBa
     DBStagePlanner::StageEnd stageStart;
     FilterOp stageFilter;
     for (const DBStagePlanner::StageEnd& stageEnd : stages._stageEnds) {
-        for (Operation* const op : moved.slice(stageStart._ops, stageEnd._ops - stageStart._ops)) {
-            rewriter.clone(*op, mapping);
-        }
+        cloneRowCone(moved.slice(stageStart._ops, stageEnd._ops - stageStart._ops), mapping, rewriter);
 
         stageMasks.clear();
         for (const Value conjunct : conjuncts.slice(stageStart._conjuncts, stageEnd._conjuncts - stageStart._conjuncts)) {
@@ -12821,8 +12759,8 @@ void stageConjuncts(const DBStagePlanner::FilterStages& stages, mlir::RewriterBa
             addOperand(column);
         }
 
-        const Value stageMask = conjoin(stageMasks, loc, rewriter);
-        stageFilter = rewriter.create<FilterOp>(loc, types, stageMask, operands);
+        const Value stageMask = conjoin(stageMasks, location, rewriter);
+        stageFilter = rewriter.create<FilterOp>(location, types, stageMask, operands);
 
         const ResultRange kept = stageFilter.getFilteredColumns();
         const size_t columnCount = columns.size();
@@ -12839,10 +12777,7 @@ void stageConjuncts(const DBStagePlanner::FilterStages& stages, mlir::RewriterBa
 
     rewriter.replaceOp(filter, stageFilter.getResults());
     eraseUnusedConjunction(mask, rewriter);
-
-    for (Operation* const op : llvm::reverse(moved)) {
-        eraseIfUnused(op, rewriter);
-    }
+    eraseUnusedRowCone(moved, rewriter);
 }
 
 struct StageFilterConjuncts : public impl::StageFilterConjunctsBase<StageFilterConjuncts> {
@@ -12858,18 +12793,35 @@ struct StageFilterConjuncts : public impl::StageFilterConjunctsBase<StageFilterC
             return;
         }
 
+        Operation* const root = getOperation();
+
+        llvm::SmallVector<FilterOp> candidates;
+        root->walk([&candidates](FilterOp filter) {
+            const Value mask = filter.getMask();
+            const bool readOnlyByTheFilter = mask.hasOneUse();
+            if (readOnlyByTheFilter && mask.getDefiningOp<AndOp>()) {
+                candidates.push_back(filter);
+            }
+        });
+
+        if (candidates.empty()) {
+            return;
+        }
+
+        DBWrittenOrder writtenOrder;
+        if (writesTheGraph(root)) {
+            writtenOrder.build(root);
+        }
+
         const RowEstimator estimator(*_context->_view);
         WalkKnowledge knowledge;
-        getOperation()->walk([&estimator, &knowledge](Operation* op) {
+        root->walk([&estimator, &knowledge](Operation* op) {
             const std::optional<double> seeded = estimateSourceRows(op, estimator, knowledge);
             if (!seeded) {
                 estimateRowMultiplier(op, estimator, knowledge);
             }
         });
 
-        // Every plan is read before any filter is rewritten, and a rewrite erases only its own
-        // filter and the ops only it reads, so the filters go last to first: a plan names no
-        // value a later filter's rewrite replaces.
         ConeCache cache;
         const auto nodeOf = [&cache](Value column) {
             return cache.climbFilters(column);
@@ -12879,14 +12831,14 @@ struct StageFilterConjuncts : public impl::StageFilterConjunctsBase<StageFilterC
             return estimator.getPredicateSelectivity(predicate, nodeOf, knowledge);
         };
 
-        DBStagePlanner planner(selectivityOf);
+        DBStagePlanner planner(&writtenOrder);
         std::deque<DBStagePlanner::FilterStages> plans;
-        getOperation()->walk([&planner, &plans](FilterOp filter) {
+        for (const FilterOp filter : candidates) {
             DBStagePlanner::FilterStages& stages = plans.emplace_back();
-            if (!planner.plan(filter, stages)) {
+            if (!planner.plan(filter, selectivityOf, stages)) {
                 plans.pop_back();
             }
-        });
+        }
 
         mlir::IRRewriter rewriter(&getContext());
         for (const DBStagePlanner::FilterStages& stages : llvm::reverse(plans)) {

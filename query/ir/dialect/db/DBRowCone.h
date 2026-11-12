@@ -2,6 +2,7 @@
 
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Value.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -34,5 +35,7 @@ void collectConePostOrder(Value mask,
                           llvm::function_ref<bool(Operation*)> joinsTheCone,
                           llvm::SmallPtrSet<Operation*, 8>& visited,
                           MaskCone& cone);
+
+void collectRowCone(llvm::ArrayRef<Value> roots, Block* block, MaskCone& cone);
 
 }

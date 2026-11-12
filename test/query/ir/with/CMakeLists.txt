@@ -35,3 +35,5 @@ target_sources(test_query_ir_constant_projection_over_reduced_rows PRIVATE ${IR_
 target_include_directories(test_query_ir_constant_projection_over_reduced_rows PRIVATE ${IR_TEST_DIR})
 
 add_turing_test(test_query_ir_raising_constant_over_reduced_rows RaisingConstantOverReducedRowsTest.cpp)
+
+add_turing_test(test_query_ir_constant_scope_conjuncts ConstantScopeConjunctsTest.cpp)
