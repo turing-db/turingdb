@@ -141,11 +141,7 @@ void GraphManager::listAvailableGraphs(std::vector<std::string>& names) const {
         names.emplace_back(path.filename());
     }
 
-    _graphLoadStatus.listLoadingGraphs(names);
-
-    std::vector<std::string_view> loadedNames;
-    _graphs.listNames(loadedNames);
-    names.insert(names.end(), loadedNames.begin(), loadedNames.end());
+    _graphs.listAllNames(names);
 
     std::ranges::sort(names);
     const auto [duplicatesBegin, duplicatesEnd] = std::ranges::unique(names);
@@ -265,19 +261,14 @@ void GraphManager::getGraphPath(std::string_view graphName, fs::Path& graphPath)
 }
 
 bool GraphManager::isGraphLoading(std::string_view graphName) const {
-    return _graphLoadStatus.isGraphLoading(graphName);
+    return _graphs.isPending(graphName);
 }
 
 Graph* GraphManager::loadBinaryDB(std::string_view graphName,
                                   const fs::Path& dbPath,
                                   JobSystem* jobSystem) {
-    if (!_graphLoadStatus.addLoadingGraph(graphName)) {
-        return nullptr;
-    }
-
     ObjectMap<Graph>::SlotReservation reservation = _graphs.reserve(graphName);
     if (!reservation.isValid()) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
         return nullptr;
     }
 
@@ -287,13 +278,10 @@ Graph* GraphManager::loadBinaryDB(std::string_view graphName,
 
     if (auto res = GraphLoader::load(graph.get(), dbPath); !res) {
         spdlog::error("Could not load graph {}: {}", graphName, res.error().fmtMessage());
-        _graphLoadStatus.removeLoadingGraph(graphName);
         return nullptr;
     }
 
     reservation.publish(std::move(graph));
-
-    _graphLoadStatus.removeLoadingGraph(graphName);
 
     return graphPtr;
 }
@@ -309,13 +297,8 @@ Graph* GraphManager::loadJsonlDB(std::string_view graphName,
         return nullptr;
     }
 
-    if (!_graphLoadStatus.addLoadingGraph(graphName)) {
-        return nullptr;
-    }
-
     ObjectMap<Graph>::SlotReservation reservation = _graphs.reserve(graphName);
     if (!reservation.isValid()) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
         return nullptr;
     }
 
@@ -324,7 +307,6 @@ Graph* GraphManager::loadJsonlDB(std::string_view graphName,
 
     std::ifstream file(dbPath.get());
     if (!file) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
         return nullptr;
     }
 
@@ -335,7 +317,6 @@ Graph* GraphManager::loadJsonlDB(std::string_view graphName,
 
     if (!importRes) {
         _changes.deleteChange(changeAccessor, change->id());
-        _graphLoadStatus.removeLoadingGraph(graphName);
         throw TuringException(importRes.error().fmtMessage());
     }
 
@@ -343,7 +324,6 @@ Graph* GraphManager::loadJsonlDB(std::string_view graphName,
 
     if (!submitRes) {
         _changes.deleteChange(changeAccessor, change->id());
-        _graphLoadStatus.removeLoadingGraph(graphName);
         spdlog::error(submitRes.error().fmtMessage());
         return nullptr;
     }
@@ -352,15 +332,12 @@ Graph* GraphManager::loadJsonlDB(std::string_view graphName,
         const auto dumpRes = GraphDumper::dump(graph.get(), graphPath);
 
         if (!dumpRes) {
-            _graphLoadStatus.removeLoadingGraph(graphName);
             spdlog::error(dumpRes.error().fmtMessage());
             return nullptr;
         }
     }
 
     reservation.publish(std::move(graph));
-
-    _graphLoadStatus.removeLoadingGraph(graphName);
 
     return graphPtr;
 }
@@ -374,13 +351,8 @@ Graph* GraphManager::loadGmlDB(std::string_view graphName,
         return nullptr;
     }
 
-    if (!_graphLoadStatus.addLoadingGraph(graphName)) {
-        return nullptr;
-    }
-
     ObjectMap<Graph>::SlotReservation reservation = _graphs.reserve(graphName);
     if (!reservation.isValid()) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
         return nullptr;
     }
 
@@ -392,20 +364,16 @@ Graph* GraphManager::loadGmlDB(std::string_view graphName,
     GMLImporter importer;
 
     if (!importer.importFile(*jobSystem, graph.get(), FileUtils::Path {dbPath.c_str()})) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
         return nullptr;
     }
 
     if (_config->isSyncedOnDisk()) {
         if (!GraphDumper::dump(graph.get(), graphPath)) {
-            _graphLoadStatus.removeLoadingGraph(graphName);
             return nullptr;
         }
     }
 
     reservation.publish(std::move(graph));
-
-    _graphLoadStatus.removeLoadingGraph(graphName);
 
     return graphPtr;
 }
@@ -420,13 +388,8 @@ Graph* GraphManager::loadParquetDB(std::string_view graphName,
         return nullptr;
     }
 
-    if (!_graphLoadStatus.addLoadingGraph(graphName)) {
-        return nullptr;
-    }
-
     ObjectMap<Graph>::SlotReservation reservation = _graphs.reserve(graphName);
     if (!reservation.isValid()) {
-        _graphLoadStatus.removeLoadingGraph(graphName);
         return nullptr;
     }
 
@@ -438,7 +401,6 @@ Graph* GraphManager::loadParquetDB(std::string_view graphName,
 
     if (!nodeFile.exists() || !edgeFile.exists()) {
         spdlog::error("Parquet import expects {} and {}", nodeFile.get(), edgeFile.get());
-        _graphLoadStatus.removeLoadingGraph(graphName);
         return nullptr;
     }
 
@@ -454,7 +416,6 @@ Graph* GraphManager::loadParquetDB(std::string_view graphName,
         importer.import();
     } catch (...) {
         _changes.deleteChange(changeAccessor, change->id());
-        _graphLoadStatus.removeLoadingGraph(graphName);
         throw;
     }
 
@@ -462,7 +423,6 @@ Graph* GraphManager::loadParquetDB(std::string_view graphName,
 
     if (!submitRes) {
         _changes.deleteChange(changeAccessor, change->id());
-        _graphLoadStatus.removeLoadingGraph(graphName);
         spdlog::error(submitRes.error().fmtMessage());
         return nullptr;
     }
@@ -471,15 +431,12 @@ Graph* GraphManager::loadParquetDB(std::string_view graphName,
         const auto dumpRes = GraphDumper::dump(graph.get(), graphPath);
 
         if (!dumpRes) {
-            _graphLoadStatus.removeLoadingGraph(graphName);
             spdlog::error(dumpRes.error().fmtMessage());
             return nullptr;
         }
     }
 
     reservation.publish(std::move(graph));
-
-    _graphLoadStatus.removeLoadingGraph(graphName);
 
     return graphPtr;
 }
