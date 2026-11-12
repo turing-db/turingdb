@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <algorithm>
 #include <stdexcept>
 #include <span>
 #include <string_view>
@@ -68,12 +69,12 @@ public:
     }
 
     void write(const uint8_t* data, size_t size) {
-        memcpy(_buffer + _size, data, size);
+        std::copy_n(data, size, _buffer + _size);
         _size += size;
     }
 
     void patch(const uint8_t* data, size_t size, size_t offset) {
-        memcpy(_buffer + offset, data, size);
+        std::copy_n(data, size, _buffer + offset);
     }
 
     void reserveSpace(size_t byteCount) {
