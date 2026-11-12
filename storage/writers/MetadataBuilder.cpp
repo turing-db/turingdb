@@ -74,6 +74,18 @@ std::optional<std::string_view> MetadataBuilder::findPropertyTypeName(PropertyTy
     return _metadata->_propTypeMap.getName(propTypeID);
 }
 
+std::optional<size_t> MetadataBuilder::findEmbeddingDimension(PropertyTypeID propTypeID) const {
+    std::shared_lock lock(_spinLock);
+
+    return _metadata->_propTypeMap.getEmbeddingDimension(propTypeID);
+}
+
+size_t MetadataBuilder::getOrSetEmbeddingDimension(PropertyTypeID propTypeID, size_t dimension) {
+    std::unique_lock lock(_spinLock);
+
+    return _metadata->_propTypeMap.getOrSetEmbeddingDimension(propTypeID, dimension);
+}
+
 std::unique_ptr<MetadataBuilder> MetadataBuilder::create(const GraphMetadata& prevMetadata, GraphMetadata* metadata) {
     Profile profile("MetadataBuilder::create");
 

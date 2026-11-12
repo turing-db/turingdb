@@ -137,7 +137,7 @@ TEST_F(EmbeddingPropertyDimensionTest, refusesToMergeDataPartsOfDifferentDimensi
     const DataPartMerger merger(&tip->commitData(), tip->metadata());
 
     expectUserError([&] { merger.merge(parts); },
-                    "Cannot merge the data parts: embedding property 'vec' has dimension 2 in one and 3 in another");
+                    "Cannot merge the data parts: embedding property 'vec' has dimension 2 and a data part holds embeddings of dimension 3");
 }
 
 int main(int argc, char** argv) {

@@ -37,8 +37,7 @@ public:
                                                                   const GraphView& view,
                                                                   size_t partIndex);
 
-    [[nodiscard]] static std::unique_ptr<DataPartBuilder> prepareMerge(MetadataBuilder& metadata,
-                                                                       const GraphView& view);
+    [[nodiscard]] static std::unique_ptr<DataPartBuilder> prepareMerge(MetadataBuilder& metadata);
 
     NodeID addNode(const LabelSetHandle& labelset);
     NodeID addNode(const LabelSet& labelset);
@@ -103,7 +102,6 @@ private:
     NodeID _nextNodeID {0};
     EdgeID _nextEdgeID {0};
     MetadataBuilder* _metadata {nullptr};
-    GraphView _view;
     size_t _outPatchEdgeCount {0};
     size_t _inPatchEdgeCount {0};
     size_t _partIndex {0};
@@ -128,7 +126,7 @@ private:
     std::unique_ptr<PropertyManager> _nodeProperties;
     std::unique_ptr<PropertyManager> _edgeProperties;
 
-    // Nulls of an embedding property no datapart holds a value of yet. They mask nothing,
+    // Nulls of an embedding property no value has fixed the dimension of yet. They mask nothing,
     // so no container takes them, but they still keep an older write of the same entity
     // from taking their place.
     EntitiesByProperty _nodeNullsWithoutContainer;
@@ -145,12 +143,10 @@ private:
     }
 
     [[nodiscard]] static std::unique_ptr<DataPartBuilder> create(MetadataBuilder& metadata,
-                                                                 const GraphView& view,
                                                                  size_t nodeCount,
                                                                  size_t edgeCount,
                                                                  size_t partIndex);
 
-    std::optional<size_t> findEmbeddingDimension(PropertyTypeID ptID) const;
     bool registerEmbeddingWrite(PropertyManager& properties,
                                 PropertyTypeID ptID,
                                 const std::optional<types::Embedding::Primitive>& value);

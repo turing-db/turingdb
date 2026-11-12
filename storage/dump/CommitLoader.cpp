@@ -12,14 +12,29 @@
 #include "Graph.h"
 #include "Path.h"
 #include "dump/TombstonesLoader.h"
+#include "properties/PropertyManager.h"
 #include "versioning/Commit.h"
 #include "versioning/CommitHash.h"
 #include "versioning/CommitHistoryBuilder.h"
 #include "versioning/VersionController.h"
+#include "writers/MetadataBuilder.h"
 
 #include "BioAssert.h"
 
 using namespace db;
+
+namespace {
+
+void setEmbeddingDimensions(MetadataBuilder& metadata, const PropertyManager& properties) {
+    for (const auto& [ptID, container] : properties) {
+        const std::optional<size_t> dimension = properties.findEmbeddingDimension(ptID);
+        if (dimension) {
+            metadata.getOrSetEmbeddingDimension(ptID, *dimension);
+        }
+    }
+}
+
+}
 
 DumpResult<void> CommitLoader::loadData(const fs::Path& commitDir,
                                         const fs::Path& partsDir,
@@ -34,12 +49,13 @@ DumpResult<void> CommitLoader::loadData(const fs::Path& commitDir,
     CommitHistoryBuilder historyBuilder {commit->_data->_history};
 
     auto& metadata = commit->_data->_metadata;
+    bool holdsEmbeddingDimensions = false;
 
     // Loading metadata
     {
         Profile profile("CommitLoader::load <metadata>");
 
-        auto res = GraphMetadataLoader::load(commitDir, metadata);
+        auto res = GraphMetadataLoader::load(commitDir, metadata, holdsEmbeddingDimensions);
 
         if (!res) {
             return res.get_unexpected();
@@ -144,6 +160,17 @@ DumpResult<void> CommitLoader::loadData(const fs::Path& commitDir,
 
         historyBuilder.setCommitDatapartCount(numCommitDataParts);
         reader.file().close();
+    }
+
+    // A dump older than EMBEDDING_DIMENSION_VERSION keeps no dimension, so the containers give
+    // it. Where data parts disagree, the oldest part's stands and a merge refuses the others
+    if (!holdsEmbeddingDimensions) {
+        const std::unique_ptr<MetadataBuilder> metadataBuilder = MetadataBuilder::create(metadata, &metadata);
+
+        for (const WeakArc<DataPart>& part : commit->_data->allDataparts()) {
+            setEmbeddingDimensions(*metadataBuilder, part->nodeProperties());
+            setEmbeddingDimensions(*metadataBuilder, part->edgeProperties());
+        }
     }
 
     return  {};

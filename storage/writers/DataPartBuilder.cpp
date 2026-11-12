@@ -23,26 +23,22 @@ std::unique_ptr<DataPartBuilder> DataPartBuilder::prepare(MetadataBuilder& metad
     const GraphReader reader = view.read();
 
     return create(metadata,
-                  view,
                   reader.getTotalNodesAllocated(),
                   reader.getTotalEdgesAllocated(),
                   partIndex);
 }
 
-std::unique_ptr<DataPartBuilder> DataPartBuilder::prepareMerge(MetadataBuilder& metadata,
-                                                               const GraphView& view) {
-    return create(metadata, view, 0, 0, 0);
+std::unique_ptr<DataPartBuilder> DataPartBuilder::prepareMerge(MetadataBuilder& metadata) {
+    return create(metadata, 0, 0, 0);
 }
 
 std::unique_ptr<DataPartBuilder> DataPartBuilder::create(MetadataBuilder& metadata,
-                                                         const GraphView& view,
                                                          const size_t nodeCount,
                                                          const size_t edgeCount,
                                                          size_t partIndex) {
     auto* ptr = new DataPartBuilder();
 
     ptr->_metadata = &metadata;
-    ptr->_view = view;
     ptr->_firstNodeID = nodeCount;
     ptr->_firstEdgeID = edgeCount;
     ptr->_nextNodeID = ptr->_firstNodeID;
@@ -279,25 +275,25 @@ template void DataPartBuilder::addEdgeProperty<types::Map>(const EdgeRecord&,
                                                            std::optional<types::Map::OwningPrimitive>&&,
                                                            LabelSetHandle);
 
-std::optional<size_t> DataPartBuilder::findEmbeddingDimension(PropertyTypeID ptID) const {
-    const GraphReader reader = _view.read();
-
-    return _nodeProperties->findEmbeddingDimension(ptID)
-        .or_else([&] { return _edgeProperties->findEmbeddingDimension(ptID); })
-        .or_else([&] { return reader.findEmbeddingDimension(ptID); });
-}
-
 bool DataPartBuilder::registerEmbeddingWrite(PropertyManager& properties,
                                              PropertyTypeID ptID,
                                              const std::optional<types::Embedding::Primitive>& value) {
-    const std::optional<size_t> heldDimension = findEmbeddingDimension(ptID);
-    const std::optional<size_t> dimension = value.has_value() ? value->size() : heldDimension;
+    std::optional<size_t> dimension;
+
+    if (value.has_value()) {
+        const size_t writtenDimension = value->size();
+        dimension = _metadata->getOrSetEmbeddingDimension(ptID, writtenDimension);
+
+        if (*dimension != writtenDimension) {
+            const std::optional<std::string_view> name = _metadata->findPropertyTypeName(ptID);
+            EmbeddingDimensionChecker::throwDimensionError(name.value_or(""), *dimension, writtenDimension);
+        }
+    } else {
+        dimension = _metadata->findEmbeddingDimension(ptID);
+    }
 
     if (!dimension.has_value()) {
         return false;
-    } else if (heldDimension.has_value() && *heldDimension != *dimension) {
-        const std::optional<std::string_view> name = _metadata->findPropertyTypeName(ptID);
-        EmbeddingDimensionChecker::throwDimensionError(name.value_or(""), *heldDimension, *dimension);
     }
 
     if (!properties.hasPropertyType(ptID)) {

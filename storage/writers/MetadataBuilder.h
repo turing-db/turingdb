@@ -43,6 +43,9 @@ public:
     [[nodiscard]] std::optional<PropertyType> findPropertyType(PropertyTypeID propTypeID) const;
     [[nodiscard]] std::optional<std::string_view> findPropertyTypeName(PropertyTypeID propTypeID) const;
 
+    [[nodiscard]] std::optional<size_t> findEmbeddingDimension(PropertyTypeID propTypeID) const;
+    size_t getOrSetEmbeddingDimension(PropertyTypeID propTypeID, size_t dimension);
+
     [[nodiscard]] static std::unique_ptr<MetadataBuilder> create(const GraphMetadata& prevMetadata, GraphMetadata* metadata);
 
 private:

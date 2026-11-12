@@ -1,5 +1,7 @@
 #include "PropertyTypeMap.h"
 
+#include "BioAssert.h"
+
 using namespace db;
 
 PropertyTypeMap::PropertyTypeMap() = default;
@@ -14,7 +16,7 @@ PropertyTypeMap::PropertyTypeMap(const PropertyTypeMap& other)
         const size_t count = _container.size();
         auto newName = std::make_unique<std::string>(*name);
         auto* namePtr = newName.get();
-        _container.emplace_back(pt, std::move(newName));
+        _container.emplace_back(pt, std::move(newName), pair._embeddingDimension);
         _nameMap.emplace(*namePtr, count);
         _idMap.emplace(pt._id, count);
     }
@@ -35,7 +37,7 @@ PropertyTypeMap& PropertyTypeMap::operator=(const PropertyTypeMap& other) {
         const size_t count = _container.size();
         auto newName = std::make_unique<std::string>(*name);
         auto* namePtr = newName.get();
-        _container.emplace_back(pt, std::move(newName));
+        _container.emplace_back(pt, std::move(newName), pair._embeddingDimension);
         _nameMap.emplace(*namePtr, count);
         _idMap.emplace(pt._id, count);
     }
@@ -76,6 +78,17 @@ std::optional<std::string_view> PropertyTypeMap::getName(PropertyTypeID ptID) co
     return *_container[offset]._name;
 }
 
+std::optional<size_t> PropertyTypeMap::getEmbeddingDimension(PropertyTypeID ptID) const {
+    const auto it = _idMap.find(ptID);
+    if (it == _idMap.end()) {
+        return std::nullopt;
+    }
+
+    const size_t offset = it->second;
+
+    return _container[offset]._embeddingDimension;
+}
+
 size_t PropertyTypeMap::getCount() const {
     return _nameMap.size();
 }
@@ -94,4 +107,18 @@ PropertyType PropertyTypeMap::getOrCreate(std::string_view name, ValueType value
     _idMap.emplace(nextID, count);
 
     return pt;
+}
+
+size_t PropertyTypeMap::getOrSetEmbeddingDimension(PropertyTypeID ptID, size_t dimension) {
+    const auto it = _idMap.find(ptID);
+    bioassert(it != _idMap.end(), "Cannot fix the dimension of a property the map does not hold");
+
+    Pair& pair = _container[it->second];
+    bioassert(pair._pt._valueType == ValueType::Embedding, "Cannot fix the dimension of a property that holds no embeddings");
+
+    if (!pair._embeddingDimension.has_value()) {
+        pair._embeddingDimension = dimension;
+    }
+
+    return *pair._embeddingDimension;
 }

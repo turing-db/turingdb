@@ -16,12 +16,15 @@ public:
     static constexpr size_t PROP_TYPE_BASE_STRIDE = sizeof(ValueType) // Value type
                                                   + sizeof(uint64_t); // String size
 
+    static constexpr size_t EMBEDDING_DIMENSION_STRIDE = sizeof(bool)      // Has an embedding dimension
+                                                       + sizeof(uint64_t); // Embedding dimension
+
     explicit PropertyTypeMapLoader(fs::FilePageReader& reader)
         : _reader(reader)
     {
     }
 
-    [[nodiscard]] DumpResult<void> load(PropertyTypeMap& propTypes) {
+    [[nodiscard]] DumpResult<void> load(PropertyTypeMap& propTypes, bool& holdsEmbeddingDimensions) {
         _reader.nextPage();
 
         if (_reader.errorOccured()) {
@@ -35,9 +38,16 @@ public:
             return DumpError::result(DumpErrorType::COULD_NOT_READ_PROP_TYPES);
         }
 
-        if (auto res = GraphDumpHelper::checkFileHeader(it); !res) {
-            return res.get_unexpected();
+        const auto version = GraphDumpHelper::checkFileHeader(it);
+        if (!version) {
+            return version.get_unexpected();
         }
+
+        holdsEmbeddingDimensions = version.value() >= DumpConfig::EMBEDDING_DIMENSION_VERSION;
+
+        const size_t propTypeStride = holdsEmbeddingDimensions
+                                    ? PROP_TYPE_BASE_STRIDE + EMBEDDING_DIMENSION_STRIDE
+                                    : PROP_TYPE_BASE_STRIDE;
 
         const uint64_t propTypeCount = it.get<uint64_t>();
         const uint64_t pageCount = it.get<uint64_t>();
@@ -59,11 +69,19 @@ public:
             const size_t countInPage = it.get<uint64_t>();
 
             for (size_t j = 0; j < countInPage; j++) {
-                if (it.remainingBytes() < PROP_TYPE_BASE_STRIDE) {
+                if (it.remainingBytes() < propTypeStride) {
                     return DumpError::result(DumpErrorType::COULD_NOT_READ_PROP_TYPES);
                 }
 
                 const ValueType valueType = it.get<ValueType>();
+
+                bool hasEmbeddingDimension = false;
+                uint64_t embeddingDimension = 0;
+                if (holdsEmbeddingDimensions) {
+                    hasEmbeddingDimension = it.get<bool>();
+                    embeddingDimension = it.get<uint64_t>();
+                }
+
                 const uint64_t strsize = it.get<uint64_t>();
 
                 if (it.remainingBytes() < strsize) {
@@ -71,8 +89,11 @@ public:
                 }
 
                 const std::string_view name = it.get<char>(strsize);
-                propTypes.getOrCreate(std::string {name},
-                        valueType);
+                const PropertyType pt = propTypes.getOrCreate(std::string {name}, valueType);
+
+                if (hasEmbeddingDimension) {
+                    propTypes.getOrSetEmbeddingDimension(pt._id, embeddingDimension);
+                }
             }
         }
 

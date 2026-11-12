@@ -24,11 +24,12 @@ void GraphReport::getReport(const GraphReader& reader, std::stringstream& report
 
     for (const auto& part : reader.dataparts()) {
         const PropertyManager& nodeProperties = part->nodeProperties();
-        for (const auto& [pt, ptName] : propTypeMap) {
+        for (const PropertyTypeMap::Pair& pair : propTypeMap) {
+            const PropertyType& pt = pair._pt;
             const auto* indexerPtr = nodeProperties.tryGetIndexer(pt._id);
 
             if (indexerPtr) {
-                report << "# " << ptName << " id=" << pt._id.getValue() << " Count="
+                report << "# " << *pair._name << " id=" << pt._id.getValue() << " Count="
                        << nodeProperties.count(pt._id);
                 const auto& indexer = *indexerPtr;
 

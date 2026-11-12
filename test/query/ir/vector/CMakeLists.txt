@@ -70,3 +70,7 @@ target_include_directories(test_query_ir_vector_search_expression PRIVATE ${IR_T
 add_turing_test(test_query_ir_embedding_dimension_rebased_property EmbeddingDimensionRebasedPropertyTest.cpp)
 target_sources(test_query_ir_embedding_dimension_rebased_property PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
 target_include_directories(test_query_ir_embedding_dimension_rebased_property PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_embedding_dimension_kept EmbeddingDimensionKeptTest.cpp)
+target_sources(test_query_ir_embedding_dimension_kept PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_embedding_dimension_kept PRIVATE ${IR_TEST_DIR})

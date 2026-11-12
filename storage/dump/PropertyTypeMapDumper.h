@@ -17,7 +17,10 @@ public:
         static constexpr size_t PAGE_HEADER_STRIDE = sizeof(uint64_t);
 
         // PropertyType stride = size of string
-        static constexpr size_t PROPERTY_TYPE_BASE_STRIDE = sizeof(ValueType) + sizeof(uint64_t);
+        static constexpr size_t PROPERTY_TYPE_BASE_STRIDE = sizeof(ValueType)
+                                                          + sizeof(bool)      // Has an embedding dimension
+                                                          + sizeof(uint64_t)  // Embedding dimension
+                                                          + sizeof(uint64_t); // String size
 
         const uint64_t propTypeCount = propTypes.getCount();
 
@@ -28,7 +31,9 @@ public:
         uint64_t pageCount = 1;
 
         auto* buffer = &_writer.buffer();
-        for (const auto& [pt, name] : propTypes) {
+        for (const auto& [pt, name, embeddingDimension] : propTypes) {
+            const bool hasEmbeddingDimension = embeddingDimension.has_value();
+            const uint64_t dimension = embeddingDimension.value_or(0);
             const uint64_t strsize = name->size();
             const size_t stride = PROPERTY_TYPE_BASE_STRIDE + strsize;
 
@@ -45,6 +50,8 @@ public:
             }
 
             _writer.writeToCurrentPage(pt._valueType);
+            _writer.writeToCurrentPage(hasEmbeddingDimension);
+            _writer.writeToCurrentPage(dimension);
             _writer.writeToCurrentPage(strsize);
             _writer.writeToCurrentPage(*name);
             countInPage++;

@@ -148,11 +148,11 @@ bool MetadataRebaser::rebase(const GraphMetadata& theirs,
 }
 
 void MetadataRebaser::mapPropertyTypes(const PropertyTypeMap& ours, PropertyTypeMap& rebased) {
-    for (const auto& [pt, value] : rebased) {
+    for (const auto& [pt, value, embeddingDimension] : rebased) {
         _propTypeMapping[pt._id] = pt;
     }
 
-    for (const auto& [ourPT, name] : ours) {
+    for (const auto& [ourPT, name, embeddingDimension] : ours) {
         auto newPT = rebased.getOrCreate(*name, ourPT._valueType);
         if (newPT._valueType != ourPT._valueType) {
             // Property type already exists, but with different value type
@@ -162,6 +162,10 @@ void MetadataRebaser::mapPropertyTypes(const PropertyTypeMap& ours, PropertyType
         }
 
         _propTypeMapping[ourPT._id] = newPT;
+
+        if (embeddingDimension) {
+            rebased.getOrSetEmbeddingDimension(newPT._id, *embeddingDimension);
+        }
 
         if (newPT._id != ourPT._id) {
             _propTypesChanged = true;

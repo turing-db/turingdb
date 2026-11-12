@@ -13,6 +13,7 @@ public:
     struct Pair {
         PropertyType _pt;
         std::unique_ptr<std::string> _name;
+        std::optional<size_t> _embeddingDimension;
     };
 
     using Container = std::vector<Pair>;
@@ -30,12 +31,14 @@ public:
     [[nodiscard]] std::optional<PropertyType> get(PropertyTypeID ptID) const;
     [[nodiscard]] std::optional<PropertyType> get(std::string_view name) const;
     [[nodiscard]] std::optional<std::string_view> getName(PropertyTypeID ptID) const;
+    [[nodiscard]] std::optional<size_t> getEmbeddingDimension(PropertyTypeID ptID) const;
     [[nodiscard]] size_t getCount() const;
 
     [[nodiscard]] Container::const_iterator begin() const { return _container.begin(); }
     [[nodiscard]] Container::const_iterator end() const { return _container.end(); }
 
     PropertyType getOrCreate(std::string_view labelName, ValueType valueType);
+    size_t getOrSetEmbeddingDimension(PropertyTypeID ptID, size_t dimension);
 
 private:
     Container _container;

@@ -11,7 +11,6 @@
 #include "iterators/GetOutEdgesIterator.h"
 #include "columns/ColumnVector.h"
 #include "ID.h"
-#include "datapart/DataPart.h"
 #include "datapart/EdgeRecord.h"
 
 #include "BioAssert.h"
@@ -253,16 +252,10 @@ void ChangeConflictChecker::checkEmbeddingDimensions(const CommitData& latestCom
     const GraphMetadata& tipMetadata = tipData.metadata();
 
     // A commit's metadata extends the one before it, so the tip's numbers every commit's writes
+    // and holds every dimension they fixed
     EmbeddingDimensionChecker dimensions(tipMetadata.propTypes(), mainView);
 
     for (const std::unique_ptr<CommitBuilder>& commitBuilder : _change._commits) {
-        const CommitData& commitData = commitBuilder->commitData();
-
-        for (const WeakArc<DataPart>& part : commitData.commitDataparts()) {
-            dimensions.addWrites(part->nodeProperties());
-            dimensions.addWrites(part->edgeProperties());
-        }
-
         const CommitWriteBuffer& writeBuffer = commitBuilder->writeBuffer();
         if (!writeBuffer.isFlushed()) {
             dimensions.addWrites(writeBuffer);

@@ -13,7 +13,6 @@
 namespace db {
 
 class CommitWriteBuffer;
-class PropertyManager;
 
 class EmbeddingDimensionChecker {
 public:
@@ -25,7 +24,6 @@ public:
     EmbeddingDimensionChecker& operator=(const EmbeddingDimensionChecker&) = delete;
     EmbeddingDimensionChecker& operator=(EmbeddingDimensionChecker&&) = delete;
 
-    void addWrites(const PropertyManager& properties);
     void addWrites(const CommitWriteBuffer& writeBuffer);
 
     void check() const;

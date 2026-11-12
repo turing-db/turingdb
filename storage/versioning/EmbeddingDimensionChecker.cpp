@@ -10,8 +10,6 @@
 #include "metadata/GraphMetadata.h"
 #include "metadata/PropertyType.h"
 #include "metadata/PropertyTypeMap.h"
-#include "properties/PropertyManager.h"
-#include "reader/GraphReader.h"
 #include "versioning/CommitWriteBuffer.h"
 #include "versioning/VersionControlException.h"
 #include "views/GraphView.h"
@@ -42,18 +40,16 @@ EmbeddingDimensionChecker::EmbeddingDimensionChecker(const PropertyTypeMap& writ
     _rebasedTypes(graph.metadata().propTypes())
 {
     _rebaser.mapPropertyTypes(writtenTypes, _rebasedTypes);
+
+    for (const PropertyTypeMap::Pair& written : writtenTypes) {
+        const std::optional<size_t>& dimension = written._embeddingDimension;
+        if (dimension) {
+            addWrite(written._pt._id, *dimension);
+        }
+    }
 }
 
 EmbeddingDimensionChecker::~EmbeddingDimensionChecker() {
-}
-
-void EmbeddingDimensionChecker::addWrites(const PropertyManager& properties) {
-    for (const auto& [ptID, container] : properties) {
-        const std::optional<size_t> dimension = properties.findEmbeddingDimension(ptID);
-        if (dimension) {
-            addWrite(ptID, *dimension);
-        }
-    }
 }
 
 void EmbeddingDimensionChecker::addWrites(const CommitWriteBuffer& writeBuffer) {
@@ -82,10 +78,11 @@ void EmbeddingDimensionChecker::addWrites(const CommitWriteBuffer& writeBuffer) 
 }
 
 void EmbeddingDimensionChecker::check() const {
-    const GraphReader reader = _graph.read();
+    const GraphMetadata& graphMetadata = _graph.metadata();
+    const PropertyTypeMap& graphTypes = graphMetadata.propTypes();
 
     for (const auto& [ptID, dimension] : _dimensions) {
-        const std::optional<size_t> heldDimension = reader.findEmbeddingDimension(ptID);
+        const std::optional<size_t> heldDimension = graphTypes.getEmbeddingDimension(ptID);
 
         const bool differs = heldDimension.has_value() && *heldDimension != dimension;
         if (differs) {

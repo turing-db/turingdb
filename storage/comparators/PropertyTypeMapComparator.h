@@ -19,8 +19,8 @@ public:
         auto itB = b.begin();
 
         for (; itA != a.end() && itB != b.end(); ++itA, ++itB) {
-            const auto& [ptA, nameA] = *itA;
-            const auto& [ptB, nameB] = *itB;
+            const auto& [ptA, nameA, dimensionA] = *itA;
+            const auto& [ptB, nameB, dimensionB] = *itB;
 
             if (*nameA != *nameB) {
                 return false;
@@ -31,6 +31,10 @@ public:
             }
 
             if (ptA._id != ptB._id) {
+                return false;
+            }
+
+            if (dimensionA != dimensionB) {
                 return false;
             }
         }

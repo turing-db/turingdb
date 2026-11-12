@@ -15,6 +15,7 @@
 #include "versioning/VersionControlException.h"
 
 #include "ID.h"
+#include "BioAssert.h"
 
 using namespace db;
 namespace rg = ranges;
@@ -34,7 +35,7 @@ std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts) c
     const size_t nodeCount = graphReader.getNodeCount();
     const size_t edgeCount = graphReader.getEdgeCount();
 
-    std::unique_ptr<DataPartBuilder> datapartBuilder = DataPartBuilder::prepareMerge(_metadataBuilder, _graphView);
+    std::unique_ptr<DataPartBuilder> datapartBuilder = DataPartBuilder::prepareMerge(_metadataBuilder);
 
     std::vector<LabelSetHandle>& labelSets = datapartBuilder->coreNodeLabelSets();
     std::vector<EdgeRecord>& edges = datapartBuilder->edges();
@@ -161,8 +162,7 @@ std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts) c
                     }
 
                     auto& oldContainer = propertyContainer->cast<types::Embedding>();
-                    const EmbeddingContainer& oldValues = oldContainer.getRawContainer();
-                    const size_t dimension = oldValues.getDimension();
+                    const size_t dimension = getEmbeddingDimension(propertyID, oldContainer.getRawContainer());
 
                     if (!nodePropertyManager.hasPropertyType(propertyID)) {
                         nodePropertyManager.registerEmbeddingPropertyType(propertyID, dimension);
@@ -176,12 +176,6 @@ std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts) c
                     }
 
                     auto& newContainer = nodePropertyManager.getMutableContainer<types::Embedding>(propertyID);
-
-                    const EmbeddingContainer& mergedValues = newContainer.getRawContainer();
-                    const size_t mergedDimension = mergedValues.getDimension();
-                    if (dimension != mergedDimension) {
-                        throwEmbeddingDimensionError(propertyID, mergedDimension, dimension);
-                    }
 
                     for (const auto& [start, size] : keptRanges) {
                         std::memcpy(newContainer._values._views.data() + _nodePropertiesCount[propertyID],
@@ -332,8 +326,7 @@ std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts) c
                     }
 
                     auto& oldContainer = propertyContainer->cast<types::Embedding>();
-                    const EmbeddingContainer& oldValues = oldContainer.getRawContainer();
-                    const size_t dimension = oldValues.getDimension();
+                    const size_t dimension = getEmbeddingDimension(propertyID, oldContainer.getRawContainer());
 
                     if (!edgePropertyManager.hasPropertyType(propertyID)) {
                         edgePropertyManager.registerEmbeddingPropertyType(propertyID, dimension);
@@ -347,12 +340,6 @@ std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts) c
                     }
 
                     auto& newContainer = edgePropertyManager.getMutableContainer<types::Embedding>(propertyID);
-
-                    const EmbeddingContainer& mergedValues = newContainer.getRawContainer();
-                    const size_t mergedDimension = mergedValues.getDimension();
-                    if (dimension != mergedDimension) {
-                        throwEmbeddingDimensionError(propertyID, mergedDimension, dimension);
-                    }
 
                     for (const auto& [start, size] : keptRanges) {
                         std::memcpy(newContainer._values._views.data() + _edgePropertiesCount[propertyID],
@@ -461,15 +448,22 @@ std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts) c
     return datapartBuilder;
 }
 
-void DataPartMerger::throwEmbeddingDimensionError(PropertyTypeID propertyID,
-                                                  size_t mergedDimension,
-                                                  size_t partDimension) const {
+size_t DataPartMerger::getEmbeddingDimension(PropertyTypeID propertyID, const EmbeddingContainer& partValues) const {
     const GraphMetadata& metadata = _graphView.metadata();
     const PropertyTypeMap& propertyTypes = metadata.propTypes();
-    const std::optional<std::string_view> name = propertyTypes.getName(propertyID);
 
-    throw VersionControlException(fmt::format("Cannot merge the data parts: embedding property '{}' has dimension {} in one and {} in another",
-                                              name.value_or(""),
-                                              mergedDimension,
-                                              partDimension));
+    const std::optional<size_t> dimension = propertyTypes.getEmbeddingDimension(propertyID);
+    bioassert(dimension.has_value(), "A data part holds embeddings of a property whose dimension is not fixed");
+
+    const size_t partDimension = partValues.getDimension();
+    if (partDimension != *dimension) {
+        const std::optional<std::string_view> name = propertyTypes.getName(propertyID);
+
+        throw VersionControlException(fmt::format("Cannot merge the data parts: embedding property '{}' has dimension {} and a data part holds embeddings of dimension {}",
+                                                  name.value_or(""),
+                                                  *dimension,
+                                                  partDimension));
+    }
+
+    return *dimension;
 }

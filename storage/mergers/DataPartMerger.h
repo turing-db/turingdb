@@ -12,6 +12,7 @@ namespace db {
 class MetadataBuilder;
 class GraphView;
 class DataPartBuilder;
+class EmbeddingContainer;
 
 class DataPartMerger {
 public:
@@ -24,8 +25,6 @@ private:
     GraphView _graphView;
     MetadataBuilder& _metadataBuilder;
 
-    [[noreturn]] void throwEmbeddingDimensionError(PropertyTypeID propertyID,
-                                                   size_t mergedDimension,
-                                                   size_t partDimension) const;
+    size_t getEmbeddingDimension(PropertyTypeID propertyID, const EmbeddingContainer& partValues) const;
 };
 }

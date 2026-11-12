@@ -119,7 +119,7 @@ public:
         writer->write(DumpConfig::VERSION);
     }
 
-    static DumpResult<void> checkFileHeader(fs::AlignedBufferIterator& it) {
+    static DumpResult<uint64_t> checkFileHeader(fs::AlignedBufferIterator& it) {
         const auto badcafe = it.get<decltype(DumpConfig::ONE_BAD_CAFE)>();
         const auto version = it.get<decltype(DumpConfig::VERSION)>();
 
@@ -131,7 +131,7 @@ public:
             return DumpError::result(DumpErrorType::OUTDATED);
         }
 
-        return {};
+        return version;
     }
 
     static DumpResult<void> checkFileHeader(fs::ByteBufferIterator* it) {

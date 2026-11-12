@@ -13,7 +13,9 @@ class GraphMetadata;
 
 class GraphMetadataLoader {
 public:
-    [[nodiscard]] static DumpResult<void> load(const fs::Path& metaDataDir, GraphMetadata& metadata) {
+    [[nodiscard]] static DumpResult<void> load(const fs::Path& metaDataDir,
+                                               GraphMetadata& metadata,
+                                               bool& holdsEmbeddingDimensions) {
         // Reading labels
         {
             const fs::Path labelsFile = metaDataDir / "labels";
@@ -53,7 +55,7 @@ public:
 
             PropertyTypeMapLoader loader(reader.value());
 
-            if (auto res = loader.load(metadata._propTypeMap); !res) {
+            if (auto res = loader.load(metadata._propTypeMap, holdsEmbeddingDimensions); !res) {
                 return res.get_unexpected();
             }
         }

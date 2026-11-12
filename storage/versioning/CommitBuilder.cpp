@@ -285,11 +285,6 @@ void CommitBuilder::checkEmbeddingDimensions() const {
     const GraphMetadata& metadata = _commitData->metadata();
     EmbeddingDimensionChecker dimensions(metadata.propTypes(), viewGraph());
 
-    for (const std::unique_ptr<DataPartBuilder>& builder : _builders) {
-        dimensions.addWrites(*builder->_nodeProperties);
-        dimensions.addWrites(*builder->_edgeProperties);
-    }
-
     dimensions.addWrites(*_writeBuffer);
     dimensions.check();
 }
