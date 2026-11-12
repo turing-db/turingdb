@@ -2,6 +2,8 @@
 
 #include "DBInterfaces.cpp.inc"
 
+#include "DBOps.h"
+
 #include "BioAssert.h"
 
 using namespace mlir;
@@ -12,6 +14,19 @@ MutableOperandRange unsegmentedRun(Operation* op, size_t offset, size_t count) {
     bioassert(!op->hasTrait<OpTrait::AttrSizedOperandSegments>(), "An op sizing its operand segments names the one holding each carry set");
 
     return MutableOperandRange(op, static_cast<unsigned>(offset), static_cast<unsigned>(count));
+}
+
+// The run of results the columns @param region yields come out as, row for row; false where
+// the op holding it pads or merges them
+bool matchYieldedRun(Region& region, size_t& resultOffset, size_t& count) {
+    mlir::db::ColumnCarrierOpInterface carrier = dyn_cast<mlir::db::ColumnCarrierOpInterface>(region.getParentOp());
+    if (!carrier || !carrier.getYieldedResultOffset(region, resultOffset)) {
+        return false;
+    }
+
+    count = mlir::db::yieldedColumnsOf(region.front()).size();
+
+    return true;
 }
 
 }
@@ -182,4 +197,70 @@ Value mlir::db::elementSourceOf(BlockArgument argument) {
     const bool bindsTheElement = source && argument.getArgNumber() == elementArgument;
 
     return bindsTheElement ? source : Value();
+}
+
+MutableOperandRange mlir::db::yieldedColumnsOf(Block& body) {
+    Operation* const terminator = body.getTerminator();
+
+    if (Yield yield = dyn_cast<Yield>(terminator)) {
+        return yield.getColumnsMutable();
+    } else if (SubqueryYield yield = dyn_cast<SubqueryYield>(terminator)) {
+        return yield.getColumnsMutable();
+    }
+
+    OptionalYield yield = cast<OptionalYield>(terminator);
+
+    return yield.getColumnsMutable();
+}
+
+ResultRange mlir::db::yieldedResultsOf(Region& region) {
+    const ResultRange results = region.getParentOp()->getResults();
+
+    size_t resultOffset = 0;
+    size_t yieldCount = 0;
+    if (!matchYieldedRun(region, resultOffset, yieldCount)) {
+        return results.take_front(0);
+    }
+
+    return results.slice(resultOffset, yieldCount);
+}
+
+bool mlir::db::matchYieldedResult(OpResult result, Region*& region, size_t& yieldIndex) {
+    const size_t resultIndex = result.getResultNumber();
+    for (Region& candidate : result.getOwner()->getRegions()) {
+        size_t resultOffset = 0;
+        size_t yieldCount = 0;
+        if (!matchYieldedRun(candidate, resultOffset, yieldCount)) {
+            continue;
+        }
+
+        const bool comesOutOfTheRegion = resultIndex >= resultOffset && resultIndex < resultOffset + yieldCount;
+        if (comesOutOfTheRegion) {
+            region = &candidate;
+            yieldIndex = resultIndex - resultOffset;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+Region* mlir::db::yieldingRegionOf(OpResult result) {
+    Region* region = nullptr;
+    size_t yieldIndex = 0;
+    matchYieldedResult(result, region, yieldIndex);
+
+    return region;
+}
+
+Value mlir::db::yieldedColumnOf(OpResult result) {
+    Region* region = nullptr;
+    size_t yieldIndex = 0;
+    if (!matchYieldedResult(result, region, yieldIndex)) {
+        return {};
+    }
+
+    const OperandRange yielded = yieldedColumnsOf(region->front());
+
+    return yielded[yieldIndex];
 }

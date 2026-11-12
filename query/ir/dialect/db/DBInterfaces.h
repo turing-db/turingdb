@@ -72,6 +72,23 @@ Value carriedColumnOf(BlockArgument argument);
 // no element
 Value elementSourceOf(BlockArgument argument);
 
+// The columns the terminator of @param body yields to the op holding it
+MutableOperandRange yieldedColumnsOf(Block& body);
+
+// The results the columns @param region yields come out as, one row for each row it yields;
+// none where the op holding it pads or merges what it yields
+ResultRange yieldedResultsOf(Region& region);
+
+// Sets @param region to the region whose yield @param result comes out of, row for row, and
+// @param yieldIndex to its place in that yield; false for a result no region yields so
+bool matchYieldedResult(OpResult result, Region*& region, size_t& yieldIndex);
+
+// The region whose yield @param result comes out of, row for row; null where none does
+Region* yieldingRegionOf(OpResult result);
+
+// The column a region yields that @param result comes out as, row for row; null where none does
+Value yieldedColumnOf(OpResult result);
+
 }
 
 namespace mlir::OpTrait {

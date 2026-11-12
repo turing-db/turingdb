@@ -161,18 +161,6 @@ bool isSafeLiteralDivisor(Value divisor, bool minusOneOverflows) {
     return false;
 }
 
-Value yieldedFactorColumn(Region& leftFactor, Region& rightFactor, size_t resultNumber) {
-    Yield leftYield = cast<Yield>(leftFactor.front().getTerminator());
-    const OperandRange leftColumns = leftYield.getColumns();
-    if (resultNumber < leftColumns.size()) {
-        return leftColumns[resultNumber];
-    }
-
-    Yield rightYield = cast<Yield>(rightFactor.front().getTerminator());
-
-    return rightYield.getColumns()[resultNumber - leftColumns.size()];
-}
-
 size_t factorResultOffset(Region& leftFactor, Region& factor) {
     if (&factor == &leftFactor) {
         return 0;
@@ -3159,7 +3147,7 @@ Value ExplorePaths::getRowSource(OpResult result) {
 }
 
 Value CrossProduct::getRowSource(OpResult result) {
-    return yieldedFactorColumn(getLeftFactor(), getRightFactor(), result.getResultNumber());
+    return yieldedColumnOf(result);
 }
 
 bool CrossProduct::getYieldedResultOffset(Region& region, size_t& resultOffset) {
@@ -3176,7 +3164,7 @@ bool CrossProduct::readsColumnsFromAbove(Region& region) {
 }
 
 Value HashJoin::getRowSource(OpResult result) {
-    return yieldedFactorColumn(getLeftFactor(), getRightFactor(), result.getResultNumber());
+    return yieldedColumnOf(result);
 }
 
 bool HashJoin::getYieldedResultOffset(Region& region, size_t& resultOffset) {

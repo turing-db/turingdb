@@ -1068,7 +1068,6 @@ struct UnwindEqualityCross {
     CrossProduct _product {nullptr};
     UnwindConst _unwind {nullptr};
     Region* _relationFactor {nullptr};
-    bool _unwindOnTheLeft {false};
     bool _readsTheIDs {false};
     bool _readsTheIntegers {false};
     bool _readsTheElement {false};
@@ -1243,16 +1242,13 @@ bool matchUnwindEqualityCross(CrossProduct product, UnwindEqualityCross& match) 
     match._product = product;
     match._unwind = leftUnwind ? leftUnwind : rightUnwind;
     match._relationFactor = leftUnwind ? &rightFactor : &leftFactor;
-    match._unwindOnTheLeft = static_cast<bool>(leftUnwind);
 
     if (!elementsCompareDistinctly(match._unwind)) {
         return false;
     }
 
-    // The results are the left factor's yielded columns followed by the right factor's, so
-    // an unwind on the left contributes the first and one on the right the last.
-    const size_t unwoundIndex = match._unwindOnTheLeft ? 0 : product.getResults().size() - 1;
-    match._unwoundColumn = product.getResult(unwoundIndex);
+    Region& unwindFactor = leftUnwind ? leftFactor : rightFactor;
+    match._unwoundColumn = yieldedResultsOf(unwindFactor).front();
 
     match._equality = matchSoleEquality(match._unwoundColumn, match._filter);
     if (!match._equality) {
@@ -1338,9 +1334,10 @@ bool matchUnwindEqualityCross(CrossProduct product, UnwindEqualityCross& match) 
 
 // Moves the relation factor's ops out to where the product stood and rewires the results
 // it contributed to the columns it yielded, leaving the product's own results unread.
-void inlineRelationFactor(CrossProduct product, Region& relationFactor, bool unwindOnTheLeft) {
+void inlineRelationFactor(CrossProduct product, Region& relationFactor) {
     Block& relationBlock = relationFactor.front();
     Yield relationYield = cast<Yield>(relationBlock.getTerminator());
+    const ResultRange relationResults = yieldedResultsOf(relationFactor);
 
     const llvm::SmallVector<Value> yielded(relationYield.getColumns().begin(),
                                            relationYield.getColumns().end());
@@ -1351,11 +1348,8 @@ void inlineRelationFactor(CrossProduct product, Region& relationFactor, bool unw
                                         relationBlock.begin(),
                                         Block::iterator(relationYield));
 
-    // The unwound column is the product's first result or its last, so the relation's run
-    // from the other end.
-    const size_t firstRelationResult = unwindOnTheLeft ? 1 : 0;
     for (size_t index = 0; index < yielded.size(); index++) {
-        product.getResult(firstRelationResult + index).replaceAllUsesWith(yielded[index]);
+        relationResults[index].replaceAllUsesWith(yielded[index]);
     }
 }
 
@@ -1382,7 +1376,7 @@ Value buildElementDisjunction(UnwindEqualityCross& match, mlir::OpBuilder& build
 }
 
 void fuseUnwindEquality(UnwindEqualityCross& match, mlir::OpBuilder& builder) {
-    inlineRelationFactor(match._product, *match._relationFactor, match._unwindOnTheLeft);
+    inlineRelationFactor(match._product, *match._relationFactor);
 
     // Inlining rewired every use of the columns the relation contributed, the equality's
     // own operand among them, so the compared column is read back rather than remembered.
@@ -1924,13 +1918,18 @@ void eraseUnusedRowCone(const MaskCone& cone, mlir::RewriterBase& rewriter) {
     }
 }
 
-size_t leftFactorWidth(CrossProduct product) {
-    return factorYieldColumns(product.getLeftFactor()).size();
-}
-
 void collectFactorTypes(Region& leftFactor, Region& rightFactor, llvm::SmallVectorImpl<Type>& types) {
     llvm::append_range(types, factorYieldColumns(leftFactor).getTypes());
     llvm::append_range(types, factorYieldColumns(rightFactor).getTypes());
+}
+
+// Replaces @param results, the results of a factor, with the ones @param factor yields at the
+// same places
+void replaceFactorResults(ResultRange results, Region& factor, mlir::RewriterBase& rewriter) {
+    const ResultRange replacements = yieldedResultsOf(factor);
+    for (size_t index = 0; index < results.size(); index++) {
+        rewriter.replaceAllUsesWith(results[index], replacements[index]);
+    }
 }
 
 struct FactorReads {
@@ -1971,7 +1970,7 @@ private:
 };
 
 void collectFactorReads(const MaskCone& cone, CrossProduct product, ConeCache& cache, FactorReads& reads) {
-    const size_t leftWidth = leftFactorWidth(product);
+    Region& leftFactor = product.getLeftFactor();
     for (const Value input : cone._inputs) {
         if (cache.yieldsConstantColumn(input)) {
             continue;
@@ -1983,11 +1982,11 @@ void collectFactorReads(const MaskCone& cone, CrossProduct product, ConeCache& c
             continue;
         }
 
-        const size_t resultIndex = cast<OpResult>(column).getResultNumber();
-        if (resultIndex < leftWidth) {
-            reads._leftResults.push_back(resultIndex);
+        const OpResult result = cast<OpResult>(column);
+        if (yieldingRegionOf(result) == &leftFactor) {
+            reads._leftResults.push_back(result.getResultNumber());
         } else {
-            reads._rightResults.push_back(resultIndex);
+            reads._rightResults.push_back(result.getResultNumber());
         }
     }
 }
@@ -2330,8 +2329,8 @@ void sinkUnwindIntoFactor(UnwindPlacement& placement, ConeCache& cache, mlir::Re
     Region& rightFactor = product.getRightFactor();
     Region& factor = placement._sinksLeft ? leftFactor : rightFactor;
 
-    const size_t leftWidth = leftFactorWidth(product);
-    const size_t firstResult = placement._sinksLeft ? 0 : leftWidth;
+    const ResultRange leftResults = yieldedResultsOf(leftFactor);
+    const ResultRange rightResults = yieldedResultsOf(rightFactor);
 
     Yield yield = cast<Yield>(factor.front().getTerminator());
     const llvm::SmallVector<Value> yielded(yield.getColumns().begin(), yield.getColumns().end());
@@ -2366,16 +2365,11 @@ void sinkUnwindIntoFactor(UnwindPlacement& placement, ConeCache& cache, mlir::Re
     widened.getLeftFactor().takeBody(leftFactor);
     widened.getRightFactor().takeBody(rightFactor);
 
-    // The element follows the factor's columns, so a right factor sitting after a widened
-    // left one starts a column further along
-    for (const Value result : product.getResults()) {
-        const size_t resultIndex = cast<OpResult>(result).getResultNumber();
-        const bool shifts = placement._sinksLeft && resultIndex >= leftWidth;
+    replaceFactorResults(leftResults, widened.getLeftFactor(), rewriter);
+    replaceFactorResults(rightResults, widened.getRightFactor(), rewriter);
 
-        rewriter.replaceAllUsesWith(result, widened.getResult(shifts ? resultIndex + 1 : resultIndex));
-    }
-
-    Value element = widened.getResult(firstResult + yielded.size());
+    Region& widenedFactor = placement._sinksLeft ? widened.getLeftFactor() : widened.getRightFactor();
+    Value element = yieldedResultsOf(widenedFactor)[yielded.size()];
     for (FilterOp filter : llvm::reverse(placement._filters)) {
         element = appendCarriedColumn(filter, element, rewriter);
     }
@@ -2427,11 +2421,12 @@ void unwindBesideItsRows(UnwindPlacement& placement, mlir::RewriterBase& rewrite
     rewriter.create<Yield>(loc, ValueRange {listUnwind.getElement()});
 
     const ResultRange carriedRows = unwind.getCarried();
+    const ResultRange rowsResults = yieldedResultsOf(product.getLeftFactor());
     for (size_t index = 0; index < carriedRows.size(); index++) {
-        rewriter.replaceAllUsesWith(carriedRows[index], product.getResult(index));
+        rewriter.replaceAllUsesWith(carriedRows[index], rowsResults[index]);
     }
 
-    rewriter.replaceAllUsesWith(unwoundElement, product.getResult(carriedRows.size()));
+    rewriter.replaceAllUsesWith(unwoundElement, yieldedResultsOf(product.getRightFactor()).front());
 
     rewriter.eraseOp(unwind);
     eraseUnusedRowCone(placement._source, rewriter);
@@ -2490,19 +2485,18 @@ bool readOneNestedSide(CrossProduct product,
                        llvm::ArrayRef<size_t> results,
                        bool& readsTheNestedLeft) {
     Region& factor = nestedOnTheLeft ? product.getLeftFactor() : product.getRightFactor();
-    const CrossProduct nested = matchProductFactor(factor);
+    CrossProduct nested = matchProductFactor(factor);
     if (!nested || results.empty()) {
         return false;
     }
 
-    const size_t nestedLeftWidth = leftFactorWidth(nested);
+    Region& nestedLeftFactor = nested.getLeftFactor();
 
     bool readsTheLeft = false;
     bool readsTheRight = false;
     for (const size_t resultIndex : results) {
         const Value column = rowSourceOf(product->getResult(static_cast<unsigned>(resultIndex)));
-        const size_t nestedIndex = cast<OpResult>(column).getResultNumber();
-        if (nestedIndex < nestedLeftWidth) {
+        if (yieldingRegionOf(cast<OpResult>(column)) == &nestedLeftFactor) {
             readsTheLeft = true;
         } else {
             readsTheRight = true;
@@ -2807,6 +2801,11 @@ void keepUncutConjuncts(ProductCut& cut, mlir::RewriterBase& rewriter) {
     eraseUnusedRowCone(cut._rightCone, rewriter);
 }
 
+struct FactorPlace {
+    Region* _factor {nullptr};
+    size_t _position {0};
+};
+
 CrossProduct rotateProduct(CrossProduct product, const ProductRotation& rotation, mlir::RewriterBase& rewriter) {
     const Location loc = product.getLoc();
 
@@ -2820,18 +2819,23 @@ CrossProduct rotateProduct(CrossProduct product, const ProductRotation& rotation
     Region& restFactor = rotation._keepsTheNestedLeft ? nested.getRightFactor() : nested.getLeftFactor();
 
     const Operation::operand_range nestedYield = factorYieldColumns(nestedFactor);
+    const ResultRange results = product->getResults();
 
-    const size_t productLeftWidth = leftFactorWidth(product);
-    const size_t nestedLeftWidth = leftFactorWidth(nested);
-    const size_t keptWidth = factorYieldColumns(keptFactor).size();
-    const size_t otherWidth = factorYieldColumns(otherFactor).size();
+    llvm::SmallVector<FactorPlace> places;
+    for (const OpResult result : results) {
+        FactorPlace place;
+        matchYieldedResult(result, place._factor, place._position);
+        if (place._factor == &nestedFactor) {
+            matchYieldedResult(cast<OpResult>(nestedYield[place._position]), place._factor, place._position);
+        }
+
+        places.push_back(place);
+    }
 
     // The other factor keeps its side, so an outer factor is not re-run once per chunk of the
     // nested side it is crossed with
     Region& innerLeft = rotation._nestedOnTheLeft ? keptFactor : otherFactor;
     Region& innerRight = rotation._nestedOnTheLeft ? otherFactor : keptFactor;
-    const size_t keptFirst = rotation._nestedOnTheLeft ? 0 : otherWidth;
-    const size_t otherFirstInInner = rotation._nestedOnTheLeft ? keptWidth : 0;
 
     llvm::SmallVector<Type> innerTypes;
     collectFactorTypes(innerLeft, innerRight, innerTypes);
@@ -2852,29 +2856,23 @@ CrossProduct rotateProduct(CrossProduct product, const ProductRotation& rotation
 
     // The rotated product holds the inner product's columns, then the rest of the nested
     // product's
-    const auto rotatedIndex = [&](size_t resultIndex) {
-        const bool fromTheNested = (resultIndex < productLeftWidth) == rotation._nestedOnTheLeft;
-        if (!fromTheNested) {
-            const size_t otherFirst = rotation._nestedOnTheLeft ? productLeftWidth : 0;
-            return otherFirstInInner + (resultIndex - otherFirst);
+    const ResultRange innerColumns = yieldedResultsOf(rotated.getLeftFactor());
+    const ResultRange restColumns = yieldedResultsOf(rotated.getRightFactor());
+    const ResultRange innerLeftColumns = yieldedResultsOf(inner.getLeftFactor());
+    const ResultRange innerRightColumns = yieldedResultsOf(inner.getRightFactor());
+
+    for (size_t resultIndex = 0; resultIndex < results.size(); resultIndex++) {
+        const FactorPlace& place = places[resultIndex];
+
+        Value rotatedColumn;
+        if (place._factor == &restFactor) {
+            rotatedColumn = restColumns[place._position];
+        } else {
+            const ResultRange innerFactorColumns = place._factor == &innerLeft ? innerLeftColumns : innerRightColumns;
+            rotatedColumn = innerColumns[innerFactorColumns[place._position].getResultNumber()];
         }
 
-        const size_t nestedFirst = rotation._nestedOnTheLeft ? 0 : productLeftWidth;
-        const Value column = nestedYield[resultIndex - nestedFirst];
-        const size_t nestedIndex = cast<OpResult>(column).getResultNumber();
-
-        const bool fromTheLeft = nestedIndex < nestedLeftWidth;
-        const size_t sidePosition = fromTheLeft ? nestedIndex : nestedIndex - nestedLeftWidth;
-        if (fromTheLeft == rotation._keepsTheNestedLeft) {
-            return keptFirst + sidePosition;
-        }
-
-        return keptWidth + otherWidth + sidePosition;
-    };
-
-    for (const Value result : product.getResults()) {
-        const size_t resultIndex = cast<OpResult>(result).getResultNumber();
-        rewriter.replaceAllUsesWith(result, rotated.getResult(rotatedIndex(resultIndex)));
+        rewriter.replaceAllUsesWith(results[resultIndex], rotatedColumn);
     }
 
     rewriter.eraseOp(product);
@@ -5544,18 +5542,14 @@ struct FactorColumn {
     Region* _factor {nullptr};
     Region* _other {nullptr};
     size_t _position {0};
-    bool _left {false};
 };
 
 void locateFactorColumn(CrossProduct product, size_t resultIndex, FactorColumn& column) {
     Region& leftFactor = product.getLeftFactor();
     Region& rightFactor = product.getRightFactor();
-    const size_t leftCount = factorYieldColumns(leftFactor).size();
 
-    column._left = resultIndex < leftCount;
-    column._factor = column._left ? &leftFactor : &rightFactor;
-    column._other = column._left ? &rightFactor : &leftFactor;
-    column._position = column._left ? resultIndex : resultIndex - leftCount;
+    matchYieldedResult(product->getResult(static_cast<unsigned>(resultIndex)), column._factor, column._position);
+    column._other = column._factor == &leftFactor ? &rightFactor : &leftFactor;
 }
 
 // Whether the result can be taken out of the product as a set: its factor yields it alone,
@@ -5651,13 +5645,13 @@ Value collapseFactorColumn(const FactorColumnLevel& level, Block* head) {
 
     const llvm::SmallVector<Value> yielded(factorYieldColumns(*column._factor));
     const llvm::SmallVector<Value> otherYielded(factorYieldColumns(*column._other));
+    const ResultRange otherResults = yieldedResultsOf(*column._other);
 
     moveFactorBody(*column._factor, head, head->begin());
     moveFactorBody(*column._other, product->getBlock(), Block::iterator(product));
 
-    const size_t firstOtherResult = column._left ? 1 : 0;
     for (size_t index = 0; index < otherYielded.size(); index++) {
-        product.getResult(firstOtherResult + index).replaceAllUsesWith(otherYielded[index]);
+        otherResults[index].replaceAllUsesWith(otherYielded[index]);
     }
 
     const Value hoisted = yielded.front();
@@ -7097,10 +7091,10 @@ void dropCarriedColumn(Operation* op, size_t resultIndex, mlir::RewriterBase& re
     rewriter.eraseOp(op);
 }
 
-void eraseUnkeptYields(Yield yield, const llvm::SmallBitVector& keep, size_t firstIndex) {
+void eraseUnkeptYields(Yield yield, const llvm::SmallBitVector& keep, ResultRange factorResults) {
     llvm::BitVector erased(yield.getNumOperands());
     for (size_t columnIndex = 0; columnIndex < erased.size(); columnIndex++) {
-        if (!keep[firstIndex + columnIndex]) {
+        if (!keep[factorResults[columnIndex].getResultNumber()]) {
             erased.set(columnIndex);
         }
     }
@@ -7108,20 +7102,11 @@ void eraseUnkeptYields(Yield yield, const llvm::SmallBitVector& keep, size_t fir
     yield->eraseOperands(erased);
 }
 
-// The db.yield ending a factor region of a two-factor op - db.cross_product, db.hash_join.
-Yield factorYield(Operation* op, unsigned factorIndex) {
-    return cast<Yield>(op->getRegion(factorIndex).front().getTerminator());
-}
-
 // The results a two-factor op has to keep: the ones something reads, the ones the op
 // itself matches on, and - since lowering sizes each side by a column of it - one
 // row-carrying column per factor. False when that is every result, so the caller leaves
 // the op alone.
 bool selectKeptFactorColumns(Operation* op, llvm::SmallBitVector& keep) {
-    Yield leftYield = factorYield(op, 0);
-    Yield rightYield = factorYield(op, 1);
-    const size_t leftCount = leftYield.getNumOperands();
-
     const Operation::result_range results = op->getResults();
 
     keep.resize(results.size());
@@ -7134,12 +7119,16 @@ bool selectKeptFactorColumns(Operation* op, llvm::SmallBitVector& keep) {
     // A join reads its two key columns to match on whether or not anything downstream
     // reads them, the way a sort orders by its keys.
     if (HashJoin join = dyn_cast<HashJoin>(op)) {
-        keep.set(join.getLeftKey());
-        keep.set(leftCount + join.getRightKey());
+        keep.set(yieldedResultsOf(join.getLeftFactor())[join.getLeftKey()].getResultNumber());
+        keep.set(yieldedResultsOf(join.getRightFactor())[join.getRightKey()].getResultNumber());
     }
 
-    keepRowCarryingColumn(leftYield.getColumns(), 0, keep);
-    keepRowCarryingColumn(rightYield.getColumns(), leftCount, keep);
+    for (Region& factor : op->getRegions()) {
+        const ResultRange factorResults = yieldedResultsOf(factor);
+        if (!factorResults.empty()) {
+            keepRowCarryingColumn(factorYieldColumns(factor), factorResults.front().getResultNumber(), keep);
+        }
+    }
 
     return !keep.all();
 }
@@ -7154,12 +7143,11 @@ void keptResultTypes(Operation* op, const llvm::SmallBitVector& keep, llvm::Smal
 }
 
 // Where a factor's key column lands once that factor's unkept columns are gone: the kept
-// columns of the factor ahead of it. firstIndex is where the factor's columns start among
-// the op's results.
-size_t trimmedKeyColumn(const llvm::SmallBitVector& keep, size_t firstIndex, size_t keyColumn) {
+// columns of the factor ahead of it.
+size_t trimmedKeyColumn(const llvm::SmallBitVector& keep, ResultRange factorResults, size_t keyColumn) {
     size_t trimmed = 0;
     for (size_t columnIndex = 0; columnIndex < keyColumn; columnIndex++) {
-        if (keep[firstIndex + columnIndex]) {
+        if (keep[factorResults[columnIndex].getResultNumber()]) {
             trimmed++;
         }
     }
@@ -7180,18 +7168,19 @@ void replaceKeptResults(Operation* op, Operation* trimmed, const llvm::SmallBitV
 // Hands the two factors to the op built in its place, drops the columns their yields no
 // longer name, and rewires every kept result. Shared by the cross product and the hash
 // join, which differ only in the op the caller built.
-void replaceWithTrimmedFactors(Operation* op,
-                               Operation* trimmed,
-                               const llvm::SmallBitVector& keep,
-                               size_t leftCount) {
-    Yield leftYield = factorYield(op, 0);
-    Yield rightYield = factorYield(op, 1);
+void replaceWithTrimmedFactors(Operation* op, Operation* trimmed, const llvm::SmallBitVector& keep) {
+    llvm::SmallVector<ResultRange, 2> factorResults;
+    for (Region& factor : op->getRegions()) {
+        factorResults.push_back(yieldedResultsOf(factor));
+    }
 
-    trimmed->getRegion(0).takeBody(op->getRegion(0));
-    trimmed->getRegion(1).takeBody(op->getRegion(1));
+    for (Region& factor : op->getRegions()) {
+        const unsigned factorIndex = factor.getRegionNumber();
+        Region& trimmedFactor = trimmed->getRegion(factorIndex);
+        trimmedFactor.takeBody(factor);
 
-    eraseUnkeptYields(leftYield, keep, 0);
-    eraseUnkeptYields(rightYield, keep, leftCount);
+        eraseUnkeptYields(cast<Yield>(trimmedFactor.front().getTerminator()), keep, factorResults[factorIndex]);
+    }
 
     replaceKeptResults(op, trimmed, keep);
 }
@@ -7206,15 +7195,13 @@ Operation* trimCrossProduct(CrossProduct product, mlir::OpBuilder& builder) {
         return productOp;
     }
 
-    const size_t leftCount = factorYield(productOp, 0).getNumOperands();
-
     llvm::SmallVector<Type> trimmedTypes;
     keptResultTypes(productOp, keep, trimmedTypes);
 
     builder.setInsertionPoint(product);
     CrossProduct trimmed = builder.create<CrossProduct>(product.getLoc(), trimmedTypes);
 
-    replaceWithTrimmedFactors(productOp, trimmed.getOperation(), keep, leftCount);
+    replaceWithTrimmedFactors(productOp, trimmed.getOperation(), keep);
     productOp->erase();
 
     return trimmed.getOperation();
@@ -7230,9 +7217,8 @@ Operation* trimHashJoin(HashJoin join, mlir::OpBuilder& builder) {
         return joinOp;
     }
 
-    const size_t leftCount = factorYield(joinOp, 0).getNumOperands();
-    const size_t leftKey = trimmedKeyColumn(keep, 0, join.getLeftKey());
-    const size_t rightKey = trimmedKeyColumn(keep, leftCount, join.getRightKey());
+    const size_t leftKey = trimmedKeyColumn(keep, yieldedResultsOf(join.getLeftFactor()), join.getLeftKey());
+    const size_t rightKey = trimmedKeyColumn(keep, yieldedResultsOf(join.getRightFactor()), join.getRightKey());
 
     llvm::SmallVector<Type> trimmedTypes;
     keptResultTypes(joinOp, keep, trimmedTypes);
@@ -7240,7 +7226,7 @@ Operation* trimHashJoin(HashJoin join, mlir::OpBuilder& builder) {
     builder.setInsertionPoint(join);
     HashJoin trimmed = builder.create<HashJoin>(join.getLoc(), trimmedTypes, leftKey, rightKey);
 
-    replaceWithTrimmedFactors(joinOp, trimmed.getOperation(), keep, leftCount);
+    replaceWithTrimmedFactors(joinOp, trimmed.getOperation(), keep);
     joinOp->erase();
 
     return trimmed.getOperation();
@@ -8702,20 +8688,6 @@ struct RowsStep {
     Value _outerRows;
 };
 
-MutableOperandRange yieldedColumnsOf(Block& body) {
-    Operation* const terminator = body.getTerminator();
-
-    if (Yield yield = dyn_cast<Yield>(terminator)) {
-        return yield.getColumnsMutable();
-    } else if (SubqueryYield yield = dyn_cast<SubqueryYield>(terminator)) {
-        return yield.getColumnsMutable();
-    }
-
-    OptionalYield yield = cast<OptionalYield>(terminator);
-
-    return yield.getColumnsMutable();
-}
-
 bool matchMapsRowsStep(OpResult result, RowsStep& step) {
     Operation* const carrier = result.getOwner();
     if (!mapsRowsThrough(carrier)) {
@@ -8986,36 +8958,22 @@ bool matchIntoRegionStep(BlockArgument argument, RowsStep& step) {
 }
 
 bool matchOutOfRegionStep(OpResult result, RowsStep& step) {
-    Operation* const op = result.getOwner();
-    ColumnCarrierOpInterface carrier = dyn_cast<ColumnCarrierOpInterface>(op);
-    if (!carrier) {
+    Region* region = nullptr;
+    size_t yieldIndex = 0;
+    if (!matchYieldedResult(result, region, yieldIndex)) {
         return false;
     }
 
-    const size_t resultIndex = result.getResultNumber();
-    for (Region& region : op->getRegions()) {
-        size_t resultOffset = 0;
-        if (!carrier.getYieldedResultOffset(region, resultOffset)) {
-            continue;
-        }
+    Block& body = region->front();
+    const OperandRange yielded = yieldedColumnsOf(body);
 
-        Block& body = region.front();
-        const OperandRange yielded = yieldedColumnsOf(body);
+    step = RowsStep {._kind = RowsStepKind::OutOfRegion,
+                     ._body = &body,
+                     ._position = yieldIndex,
+                     ._rows = result,
+                     ._outerRows = yielded[yieldIndex]};
 
-        const bool comesOutOfTheRegion = resultIndex >= resultOffset && resultIndex < resultOffset + yielded.size();
-        if (comesOutOfTheRegion) {
-            const size_t yieldIndex = resultIndex - resultOffset;
-            step = RowsStep {._kind = RowsStepKind::OutOfRegion,
-                             ._body = &body,
-                             ._position = yieldIndex,
-                             ._rows = result,
-                             ._outerRows = yielded[yieldIndex]};
-
-            return true;
-        }
-    }
-
-    return false;
+    return true;
 }
 
 bool matchHandsBackStep(OpResult result, RowsStep& step) {
@@ -11479,10 +11437,10 @@ struct PlaceRowInvariantOps : public impl::PlaceRowInvariantOpsBase<PlaceRowInva
 };
 
 // One side of a join: the factor supplying its key, the product column the key is read
-// from, the ops computing one from the other, and - once sunk - where the key sits in the
-// factor's yield.
+// from and its place in that factor's yield, and the ops computing one from the other.
 struct JoinKeySide {
     Region* _factor {nullptr};
+    size_t _position {0};
     Value _key;
     Value _column;
     MaskCone _cone;
@@ -11530,7 +11488,7 @@ bool matchKeySide(Value key, JoinKeySide& side, CrossProduct& product) {
 
     product = keyProduct;
 
-    return true;
+    return matchYieldedResult(cast<OpResult>(side._column), side._factor, side._position);
 }
 
 // Whether nothing but the equality reads the ops rebuilding a key. The cone is sunk into
@@ -12499,22 +12457,15 @@ bool matchEqualityConjunct(FilterOp filter, Value conjunct, OpAnswers& readAlone
 
     match._product = product;
 
-    const size_t leftCount = factorYieldColumns(product.getLeftFactor()).size();
-    const auto yieldedByTheLeftFactor = [leftCount](const JoinKeySide& side) {
-        return cast<OpResult>(side._column).getResultNumber() < leftCount;
-    };
-
     // One key on each side is what makes this a join; two keys of one factor are a
     // single-variable predicate, which the filter applies where it already stands.
-    if (yieldedByTheLeftFactor(first) == yieldedByTheLeftFactor(second)) {
+    if (first._factor == second._factor) {
         return false;
     }
 
-    const bool firstIsOnTheLeft = yieldedByTheLeftFactor(first);
+    const bool firstIsOnTheLeft = first._factor == &product.getLeftFactor();
     match._left = firstIsOnTheLeft ? first : second;
     match._right = firstIsOnTheLeft ? second : first;
-    match._left._factor = &product.getLeftFactor();
-    match._right._factor = &product.getRightFactor();
 
     if (!isHashableKey(match._left) || !isHashableKey(match._right)) {
         return false;
@@ -12537,16 +12488,15 @@ bool matchEqualityConjunct(FilterOp filter, Value conjunct, OpAnswers& readAlone
 // factor yields and the join can index it as that side is read. Answers where the key
 // lands in the yield: the column's own place when the key is that column, a fresh last
 // place when it is computed from it.
-size_t sinkKeyIntoFactor(JoinKeySide& side, size_t factorFirstResult, mlir::OpBuilder& builder) {
+size_t sinkKeyIntoFactor(JoinKeySide& side, mlir::OpBuilder& builder) {
     Yield yield = cast<Yield>(side._factor->front().getTerminator());
-    const size_t columnIndex = cast<OpResult>(side._column).getResultNumber() - factorFirstResult;
 
     if (side._cone._ops.empty()) {
-        return columnIndex;
+        return side._position;
     }
 
     mlir::IRMapping mapping;
-    mapping.map(side._column, yield.getColumns()[columnIndex]);
+    mapping.map(side._column, yield.getColumns()[side._position]);
 
     builder.setInsertionPoint(yield);
     for (Operation* const coneOp : side._cone._ops) {
@@ -12561,26 +12511,23 @@ size_t sinkKeyIntoFactor(JoinKeySide& side, size_t factorFirstResult, mlir::OpBu
 
 void fuseHashJoin(EqualityCross& match, mlir::RewriterBase& rewriter) {
     CrossProduct product = match._product;
+    Region& leftFactor = product.getLeftFactor();
+    Region& rightFactor = product.getRightFactor();
 
-    Yield leftYield = cast<Yield>(product.getLeftFactor().front().getTerminator());
-    Yield rightYield = cast<Yield>(product.getRightFactor().front().getTerminator());
-    const size_t leftCount = leftYield.getNumOperands();
-    const size_t rightCount = rightYield.getNumOperands();
+    const ResultRange leftResults = yieldedResultsOf(leftFactor);
+    const ResultRange rightResults = yieldedResultsOf(rightFactor);
 
-    const size_t leftKey = sinkKeyIntoFactor(match._left, 0, rewriter);
-    const size_t rightKey = sinkKeyIntoFactor(match._right, leftCount, rewriter);
+    const size_t leftKey = sinkKeyIntoFactor(match._left, rewriter);
+    const size_t rightKey = sinkKeyIntoFactor(match._right, rewriter);
 
     // The join probes its left factor and builds its right, so the two sides go in the
     // way round the match chose rather than the way round the product held them.
     const bool buildsTheLeftFactor = match._buildsTheLeftFactor;
-    Yield probeYield = buildsTheLeftFactor ? rightYield : leftYield;
-    Yield buildYield = buildsTheLeftFactor ? leftYield : rightYield;
-    Region& probeFactor = buildsTheLeftFactor ? product.getRightFactor() : product.getLeftFactor();
-    Region& buildFactor = buildsTheLeftFactor ? product.getLeftFactor() : product.getRightFactor();
+    Region& probeFactor = buildsTheLeftFactor ? rightFactor : leftFactor;
+    Region& buildFactor = buildsTheLeftFactor ? leftFactor : rightFactor;
 
     llvm::SmallVector<Type> resultTypes;
-    llvm::append_range(resultTypes, probeYield.getColumns().getTypes());
-    llvm::append_range(resultTypes, buildYield.getColumns().getTypes());
+    collectFactorTypes(probeFactor, buildFactor, resultTypes);
 
     const size_t probeKey = buildsTheLeftFactor ? rightKey : leftKey;
     const size_t buildKey = buildsTheLeftFactor ? leftKey : rightKey;
@@ -12590,23 +12537,12 @@ void fuseHashJoin(EqualityCross& match, mlir::RewriterBase& rewriter) {
     join.getLeftFactor().takeBody(probeFactor);
     join.getRightFactor().takeBody(buildFactor);
 
-    // Sinking a key widens that factor's yield, so a column of the side the join reads
-    // second sits further along in its results than it did in the product's.
-    const size_t joinProbeCount = probeYield.getNumOperands();
-    const size_t leftFirstResult = buildsTheLeftFactor ? joinProbeCount : 0;
-    const size_t rightFirstResult = buildsTheLeftFactor ? 0 : joinProbeCount;
-
-    llvm::SmallVector<Value> joinColumns;
-    for (size_t columnIndex = 0; columnIndex < leftCount; columnIndex++) {
-        joinColumns.push_back(join.getResult(leftFirstResult + columnIndex));
-    }
-    for (size_t columnIndex = 0; columnIndex < rightCount; columnIndex++) {
-        joinColumns.push_back(join.getResult(rightFirstResult + columnIndex));
-    }
+    Region& joinedLeftFactor = buildsTheLeftFactor ? join.getRightFactor() : join.getLeftFactor();
+    Region& joinedRightFactor = buildsTheLeftFactor ? join.getLeftFactor() : join.getRightFactor();
 
     // A sunk key sits past the columns its factor already yielded, so it is none of those.
-    const Value leftKeyColumn = join.getResult(leftFirstResult + leftKey);
-    const Value rightKeyColumn = join.getResult(rightFirstResult + rightKey);
+    const Value leftKeyColumn = yieldedResultsOf(joinedLeftFactor)[leftKey];
+    const Value rightKeyColumn = yieldedResultsOf(joinedRightFactor)[rightKey];
 
     // The join keeps only the rows the equality held on, so what the filter carries now
     // comes from the join directly - a carried key from the column the join yields for it,
@@ -12624,9 +12560,8 @@ void fuseHashJoin(EqualityCross& match, mlir::RewriterBase& rewriter) {
         }
     });
 
-    for (size_t columnIndex = 0; columnIndex < joinColumns.size(); columnIndex++) {
-        rewriter.replaceAllUsesWith(product.getResult(columnIndex), joinColumns[columnIndex]);
-    }
+    replaceFactorResults(leftResults, joinedLeftFactor, rewriter);
+    replaceFactorResults(rightResults, joinedRightFactor, rewriter);
 
     dropConjunct(filter, match._equality.getResult(), rewriter);
     rewriter.eraseOp(product);
@@ -12982,7 +12917,6 @@ void keepConjunctsOver(FilterOp filter,
 
 CrossProduct dropProductColumn(CrossProduct product, size_t resultIndex, mlir::RewriterBase& rewriter) {
     Operation* const productOp = product.getOperation();
-    const size_t leftCount = factorYield(productOp, 0).getNumOperands();
 
     llvm::SmallBitVector keep(productOp->getNumResults(), true);
     keep.reset(resultIndex);
@@ -12993,7 +12927,7 @@ CrossProduct dropProductColumn(CrossProduct product, size_t resultIndex, mlir::R
     rewriter.setInsertionPoint(product);
     CrossProduct trimmed = rewriter.create<CrossProduct>(product.getLoc(), keptTypes);
 
-    replaceWithTrimmedFactors(productOp, trimmed.getOperation(), keep, leftCount);
+    replaceWithTrimmedFactors(productOp, trimmed.getOperation(), keep);
     rewriter.eraseOp(productOp);
 
     return trimmed;
@@ -13002,8 +12936,8 @@ CrossProduct dropProductColumn(CrossProduct product, size_t resultIndex, mlir::R
 // A product one of whose factors yields nothing makes the other factor's rows alone
 void inlineTheFactorLeft(CrossProduct product, mlir::RewriterBase& rewriter) {
     Operation* const productOp = product.getOperation();
-    const bool leftIsEmpty = factorYield(productOp, 0).getNumOperands() == 0;
-    const bool rightIsEmpty = factorYield(productOp, 1).getNumOperands() == 0;
+    const bool leftIsEmpty = factorYieldColumns(product.getLeftFactor()).empty();
+    const bool rightIsEmpty = factorYieldColumns(product.getRightFactor()).empty();
 
     if (!leftIsEmpty && !rightIsEmpty) {
         return;
@@ -13012,6 +12946,7 @@ void inlineTheFactorLeft(CrossProduct product, mlir::RewriterBase& rewriter) {
     Region& keptFactor = leftIsEmpty ? product.getRightFactor() : product.getLeftFactor();
     Block& keptBlock = keptFactor.front();
     Yield keptYield = cast<Yield>(keptBlock.getTerminator());
+    const ResultRange keptResults = yieldedResultsOf(keptFactor);
 
     const llvm::SmallVector<Value> yielded(keptYield.getColumns().begin(), keptYield.getColumns().end());
 
@@ -13021,7 +12956,7 @@ void inlineTheFactorLeft(CrossProduct product, mlir::RewriterBase& rewriter) {
                                                 Block::iterator(keptYield));
 
     for (size_t index = 0; index < yielded.size(); index++) {
-        product.getResult(index).replaceAllUsesWith(yielded[index]);
+        keptResults[index].replaceAllUsesWith(yielded[index]);
     }
 
     rewriter.eraseOp(product);
@@ -13155,22 +13090,20 @@ struct PatternJunction {
     llvm::SmallVector<Value> _otherResults;
 };
 
-void readProductJunction(CrossProduct product, bool patternOnTheLeft, PatternJunction& junction) {
-    Operation* const op = product.getOperation();
-    const size_t leftCount = factorYield(op, 0).getNumOperands();
+void readProductJunction(CrossProduct product, Region& patternFactor, PatternJunction& junction) {
+    Region& leftFactor = product.getLeftFactor();
+    Region& otherFactor = &patternFactor == &leftFactor ? product.getRightFactor() : leftFactor;
 
-    Region& patternFactor = patternOnTheLeft ? product.getLeftFactor() : product.getRightFactor();
-
-    junction._op = op;
-    junction._otherFactor = patternOnTheLeft ? &product.getRightFactor() : &product.getLeftFactor();
+    junction._op = product.getOperation();
+    junction._otherFactor = &otherFactor;
 
     const Operation::operand_range patternYield = factorYieldColumns(patternFactor);
     junction._patternOutputs.assign(patternYield.begin(), patternYield.end());
 
-    for (size_t index = 0; index < op->getNumResults(); index++) {
-        const bool fromThePattern = (index < leftCount) == patternOnTheLeft;
-        (fromThePattern ? junction._patternResults : junction._otherResults).push_back(op->getResult(index));
-    }
+    const ResultRange patternResults = yieldedResultsOf(patternFactor);
+    const ResultRange otherResults = yieldedResultsOf(otherFactor);
+    junction._patternResults.assign(patternResults.begin(), patternResults.end());
+    junction._otherResults.assign(otherResults.begin(), otherResults.end());
 }
 
 void readUnwindJunction(Unwind unwind, PatternJunction& junction) {
@@ -13788,11 +13721,8 @@ bool matchSeedJunction(OpResult seededResult, RowSourceClimbs& rowClimbs, Patter
     const Value patternOutput = rowSourceOf(seededResult);
 
     if (CrossProduct product = dyn_cast<CrossProduct>(op)) {
-        const size_t leftCount = factorYield(op, 0).getNumOperands();
-        const bool patternOnTheLeft = seededResult.getResultNumber() < leftCount;
-        readProductJunction(product, patternOnTheLeft, junction);
-
-        Region& patternFactor = patternOnTheLeft ? product.getLeftFactor() : product.getRightFactor();
+        Region& patternFactor = *yieldingRegionOf(seededResult);
+        readProductJunction(product, patternFactor, junction);
 
         Operation* const root = findPatternRoot(patternOutput, rowClimbs);
         if (!root || root->getParentRegion() != &patternFactor) {
@@ -14168,11 +14098,12 @@ private:
             crossedProduct.getLeftFactor().takeBody(leftFactor);
             crossedProduct.getRightFactor().takeBody(rightFactor);
 
-            const size_t leftWidth = leftFactorWidth(crossedProduct);
-            for (const OpResult result : crossedProduct->getResults()) {
-                const bool fromThePattern = (result.getResultNumber() < leftWidth) == patternOnTheLeft;
-                (fromThePattern ? rebuiltColumns : otherColumns).push_back(result);
-            }
+            Region& crossedPatternFactor = patternOnTheLeft ? crossedProduct.getLeftFactor() : crossedProduct.getRightFactor();
+            Region& crossedOtherFactor = patternOnTheLeft ? crossedProduct.getRightFactor() : crossedProduct.getLeftFactor();
+            const ResultRange crossedPatternResults = yieldedResultsOf(crossedPatternFactor);
+            const ResultRange crossedOtherResults = yieldedResultsOf(crossedOtherFactor);
+            rebuiltColumns.assign(crossedPatternResults.begin(), crossedPatternResults.end());
+            otherColumns.assign(crossedOtherResults.begin(), crossedOtherResults.end());
 
             crossed = crossedProduct.getOperation();
         } else {
@@ -14715,7 +14646,7 @@ bool matchJunctionJoins(const CheapestRoot& match,
             return false;
         }
 
-        readProductJunction(product, yield->getParentRegion() == &product.getLeftFactor(), junction);
+        readProductJunction(product, *yield->getParentRegion(), junction);
         joins._crossedRows = estimateFactorRows(*junction._otherFactor, estimator);
     } else if (unwind && !unwind.getColumnsToFilter().empty()) {
         readUnwindJunction(unwind, junction);

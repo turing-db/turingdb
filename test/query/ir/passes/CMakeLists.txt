@@ -146,6 +146,8 @@ add_call_v3_test(test_query_ir_forwarded_region_reads ForwardedRegionReadsTest.c
 
 add_ir_tests(test_query_ir_forwarded_columns ForwardedColumnsTest.cpp)
 
+add_ir_tests(test_query_ir_yielded_results YieldedResultsTest.cpp)
+
 add_turing_test(test_query_ir_reroot_control_graph RerootControlGraphTest.cpp)
 target_sources(test_query_ir_reroot_control_graph PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
 target_include_directories(test_query_ir_reroot_control_graph PRIVATE ${IR_TEST_DIR})
