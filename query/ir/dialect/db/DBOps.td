@@ -316,10 +316,12 @@ def UnwindConst : TuringOp<"unwind_const", [Pure]> {
     `elements` carries the literals as an array of attributes, so each element keeps
     its own type: a typed attribute for a scalar, a unit attribute for a null, a
     nested array attribute for a nested list. When they share one type the list is
-    homogeneous and the result is that typed column; when they differ - or the list
-    is empty, or holds a null or a nested list, neither of which has a type - it is
-    heterogeneous and the result is a type-erased !storage.any column, a
-    tagged scalar per row, matching Cypher's LIST OF ANY:
+    homogeneous and the result is that typed column. A null takes the type of the
+    other elements, and a nested list is typed by its own elements, so [1, null, 2]
+    gives i64 and [[1, 2], [3]] gives !storage.list<i64>. When the types differ, or
+    the list is empty or holds only nulls, it is heterogeneous and the result is a
+    type-erased !storage.any column, a tagged scalar per row, matching Cypher's
+    LIST OF ANY:
 
       %row = db.unwind_const([true, "s", 10]) : !db.column<!storage.any>
 
