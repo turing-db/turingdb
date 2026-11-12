@@ -188,3 +188,5 @@ add_ir_tests(test_query_ir_path_in_case PathInCaseTest.cpp)
 add_ir_tests(test_query_ir_path_under_two_names PathUnderTwoNamesTest.cpp)
 
 add_call_v3_test(test_query_ir_path_sort_key PathSortKeyTest.cpp)
+
+add_call_v3_test(test_query_ir_zero_maximum_hops ZeroMaximumHopsTest.cpp)
