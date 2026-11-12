@@ -256,16 +256,9 @@ EdgeID CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
     // PendingNodes vector, and the firstNodeID of the datapart. This is correct if
     // PendingNodes are added to the datapart builder in the order that they appear in the
     // PendingNodes vector.
-    const NodeID srcID =
-        std::holds_alternative<NodeID>(edge.src)
-            ? std::get<NodeID>(edge.src)
-            : NodeID {std::get<CommitWriteBuffer::PendingNodeOffset>(edge.src)}
-                  + builder.firstNodeID();
-
-    const NodeID tgtID =
-        std::holds_alternative<NodeID>(edge.tgt)
-            ? std::get<NodeID>(edge.tgt)
-            : NodeID { std::get<CommitWriteBuffer::PendingNodeOffset>(edge.tgt) } + builder.firstNodeID();
+    const size_t firstPendingNodeID = builder.firstNodeID().getValue();
+    const NodeID srcID = committedIDOf(edge.src, firstPendingNodeID);
+    const NodeID tgtID = committedIDOf(edge.tgt, firstPendingNodeID);
 
     const EdgeTypeID edgeTypeID = edge.edgeType;
     const EdgeRecord newEdgeRecord = builder.addEdge(edgeTypeID, srcID, tgtID);
@@ -415,22 +408,10 @@ void CommitWriteBuffer::applyPendingEdgeUpdate(DataPartBuilder& builder,
 
     // (n)-[e]->(m) : e is pending, but n and m may or may not be
     const bool srcIsPending = !std::holds_alternative<NodeID>(pending.src);
-    const bool tgtIsPending = !std::holds_alternative<NodeID>(pending.tgt);
 
-    // Helpers to get a temporary NodeID to reference for the EdgeRecord if the node is
-    // pending (not committed).
-    const NodeID builderFirstNodeID = builder.firstNodeID();
-    const auto nodeIDFromPendingOffset =
-        [builderFirstNodeID](const ExistingOrPendingNode& n) -> NodeID {
-        return NodeID {std::get<PendingNodeOffset>(n)} + builderFirstNodeID;
-    };
-
-    // Get the NodeIDs of source and target of this edge
-    const NodeID srcID = srcIsPending ? nodeIDFromPendingOffset(pending.src)
-                                      : std::get<NodeID>(pending.src);
-
-    const NodeID tgtID = tgtIsPending ? nodeIDFromPendingOffset(pending.tgt)
-                                      : std::get<NodeID>(pending.tgt);
+    const size_t firstPendingNodeID = builder.firstNodeID().getValue();
+    const NodeID srcID = committedIDOf(pending.src, firstPendingNodeID);
+    const NodeID tgtID = committedIDOf(pending.tgt, firstPendingNodeID);
 
     // Construct a "fake" edge record which represents the edge record for when this edge
     // is committed

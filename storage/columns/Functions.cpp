@@ -1086,24 +1086,12 @@ EdgeEndsFunction::EdgeEndsFunction(GraphView view, const CommitWriteBuffer* writ
     }
 }
 
-// A node this change wrote is held in the write buffer under its offset there, and will
-// commit as the ID one past the last the graph holds plus that offset. An end the change
-// did not write is already a committed ID and stands as it is.
 void EdgeEndsFunction::readPendingEnds(EdgeID edge, NodeID& start, NodeID& end) const {
     const CommitWriteBuffer::PendingEdge& pending =
         _writeBuffer->getPendingEdge(edge.getValue() - _firstPendingEdgeID);
 
-    const auto resolve = [this](const CommitWriteBuffer::ExistingOrPendingNode& node) -> NodeID {
-        const NodeID* committed = std::get_if<NodeID>(&node);
-        if (committed) {
-            return *committed;
-        }
-
-        return NodeID {std::get<CommitWriteBuffer::PendingNodeOffset>(node) + _firstPendingNodeID};
-    };
-
-    start = resolve(pending.src);
-    end = resolve(pending.tgt);
+    start = CommitWriteBuffer::committedIDOf(pending.src, _firstPendingNodeID);
+    end = CommitWriteBuffer::committedIDOf(pending.tgt, _firstPendingNodeID);
 }
 
 void EdgeEndsFunction::readEnds(EdgeID edge, NodeID& start, NodeID& end) const {

@@ -1,25 +1,10 @@
 #include "PendingAdjacency.h"
 
 #include <algorithm>
-#include <variant>
 
 #include "versioning/CommitWriteBuffer.h"
 
 using namespace db;
-
-namespace {
-
-// The ID a pending edge names its endpoint by: one the graph holds, or the one a node this
-// change wrote will commit as
-NodeID nodeIDOf(const CommitWriteBuffer::ExistingOrPendingNode& node, size_t firstPendingNodeID) {
-    if (std::holds_alternative<NodeID>(node)) {
-        return std::get<NodeID>(node);
-    }
-
-    return NodeID(firstPendingNodeID + std::get<CommitWriteBuffer::PendingNodeOffset>(node));
-}
-
-}
 
 PendingAdjacency::PendingAdjacency() {
 }
@@ -54,8 +39,8 @@ void PendingAdjacency::index(const CommitWriteBuffer& writeBuffer,
         }
 
         const CommitWriteBuffer::PendingEdge& edge = edges[_indexedEdges];
-        const NodeID source = nodeIDOf(edge.src, firstPendingNodeID);
-        const NodeID target = nodeIDOf(edge.tgt, firstPendingNodeID);
+        const NodeID source = CommitWriteBuffer::committedIDOf(edge.src, firstPendingNodeID);
+        const NodeID target = CommitWriteBuffer::committedIDOf(edge.tgt, firstPendingNodeID);
         const EdgeID edgeID(firstPendingEdgeID + _indexedEdges);
 
         _outgoing[source.getValue()].push_back({edgeID, source, target, edge.edgeType});

@@ -13,16 +13,6 @@ using namespace db;
 
 namespace {
 
-// The ID a pending edge names its endpoint by: one the graph holds, or the one a node this
-// change wrote will commit as
-NodeID nodeIDOf(const CommitWriteBuffer::ExistingOrPendingNode& node, size_t firstPendingNodeID) {
-    if (std::holds_alternative<NodeID>(node)) {
-        return std::get<NodeID>(node);
-    }
-
-    return NodeID(firstPendingNodeID + std::get<CommitWriteBuffer::PendingNodeOffset>(node));
-}
-
 // Whether @param node carries at least @param labels. A node this change wrote carries its
 // labels in the buffer; one the graph already holds is read off the graph, and a node
 // neither holds carries no label to match.
@@ -57,8 +47,8 @@ void NLPendingEdgeIndex::indexEdges(const CommitWriteBuffer* writeBuffer, size_t
     for (; _indexedEdges < edges.size(); _indexedEdges++) {
         const CommitWriteBuffer::PendingEdge& edge = edges[_indexedEdges];
 
-        _outgoing[nodeIDOf(edge.src, firstPendingNodeID).getValue()].push_back(_indexedEdges);
-        _incoming[nodeIDOf(edge.tgt, firstPendingNodeID).getValue()].push_back(_indexedEdges);
+        _outgoing[CommitWriteBuffer::committedIDOf(edge.src, firstPendingNodeID).getValue()].push_back(_indexedEdges);
+        _incoming[CommitWriteBuffer::committedIDOf(edge.tgt, firstPendingNodeID).getValue()].push_back(_indexedEdges);
     }
 }
 
@@ -216,7 +206,7 @@ bool NLPendingEdgeHop::walks(size_t offset, NodeID& other) const {
         return false;
     }
 
-    other = nodeIDOf(otherEnd, _firstPendingNodeID);
+    other = CommitWriteBuffer::committedIDOf(otherEnd, _firstPendingNodeID);
 
     return true;
 }
@@ -270,7 +260,7 @@ void NLPendingEdgeScan::fill(size_t maxCount) {
         }
 
         if (_srcs) {
-            _srcs->push_back(nodeIDOf(edge.src, _firstPendingNodeID));
+            _srcs->push_back(CommitWriteBuffer::committedIDOf(edge.src, _firstPendingNodeID));
         }
         if (_edgeIDs) {
             _edgeIDs->push_back(EdgeID(_firstPendingEdgeID + offset));
@@ -279,7 +269,7 @@ void NLPendingEdgeScan::fill(size_t maxCount) {
             _types->push_back(edge.edgeType);
         }
         if (_tgts) {
-            _tgts->push_back(nodeIDOf(edge.tgt, _firstPendingNodeID));
+            _tgts->push_back(CommitWriteBuffer::committedIDOf(edge.tgt, _firstPendingNodeID));
         }
 
         remainingToMax--;
