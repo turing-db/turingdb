@@ -30,6 +30,8 @@ using Rows = std::vector<StringRowSink::Row>;
 constexpr std::string_view RENAMED_TWO_THEN_THREE =
     "Embedding property 'e (Embedding)' has dimension 2 and cannot take an embedding of dimension 3";
 constexpr std::string_view TWO_THEN_THREE = "Embedding property 'e' has dimension 2 and cannot take an embedding of dimension 3";
+constexpr std::string_view TWO_INTO_ONE =
+    "Properties 'e' (Embedding) and 'e (Embedding)' (Embedding) of the change can not both be filed under 'e (Embedding)'";
 
 }
 
@@ -165,7 +167,7 @@ TEST_F(EmbeddingDimensionRebasedPropertyTest, rejectsTwoPropertiesOfAChangeThatT
     run("COMMIT", second);
     run("CREATE (:Vec {name: 'c', `e (Embedding)`: (1.0, 0.0, 0.0)})", second);
     run("COMMIT", second);
-    expectError("CHANGE SUBMIT", second, RENAMED_TWO_THEN_THREE);
+    expectError("CHANGE SUBMIT", second, TWO_INTO_ONE);
     run("CHANGE DELETE", second);
 
     mergeDataParts();

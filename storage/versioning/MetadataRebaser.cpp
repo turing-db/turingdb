@@ -1,9 +1,19 @@
 #include "MetadataRebaser.h"
 
+#include <optional>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+
+#include <spdlog/fmt/fmt.h>
+
 #include "Profiler.h"
 #include "metadata/GraphMetadata.h"
 #include "versioning/CommitWriteBuffer.h"
+#include "versioning/VersionControlException.h"
 #include "writers/MetadataBuilder.h"
+
+#include "BioAssert.h"
 
 using namespace db;
 
@@ -152,17 +162,57 @@ void MetadataRebaser::mapPropertyTypes(const PropertyTypeMap& ours, PropertyType
         _propTypeMapping[pt._id] = pt;
     }
 
+    std::unordered_map<PropertyTypeID, std::string> renames;
+
     for (const auto& [ourPT, name, embeddingDimension] : ours) {
-        auto newPT = rebased.getOrCreate(*name, ourPT._valueType);
-        if (newPT._valueType != ourPT._valueType) {
-            // Property type already exists, but with different value type
-            // Creating a new property type with name = 'prevName (valueType)'
-            const auto newName = fmt::format("{} ({})", *name, ValueTypeName::value(ourPT._valueType));
-            newPT = rebased.getOrCreate(newName, ourPT._valueType);
+        const ValueType valueType = ourPT._valueType;
+        const std::optional<PropertyType> held = rebased.get(*name);
+
+        const bool heldWithAnotherType = held.has_value() && held->_valueType != valueType;
+        if (!heldWithAnotherType) {
+            continue;
         }
+
+        const std::string_view valueTypeName = ValueTypeName::value(valueType);
+        std::string& renamed = renames[ourPT._id];
+        renamed = fmt::format("{} ({})", *name, valueTypeName);
+        const std::optional<PropertyType> heldRenamed = rebased.get(renamed);
+
+        const bool renamedHeldWithAnotherType = heldRenamed.has_value() && heldRenamed->_valueType != valueType;
+        if (renamedHeldWithAnotherType) {
+            throw VersionControlException(fmt::format("Property '{}' ({}) can not be filed under '{}': main holds '{}' as {}",
+                                                      *name,
+                                                      valueTypeName,
+                                                      renamed,
+                                                      renamed,
+                                                      ValueTypeName::value(heldRenamed->_valueType)));
+        }
+    }
+
+    std::unordered_map<PropertyTypeID, const PropertyTypeMap::Pair*> filedFrom;
+
+    for (const PropertyTypeMap::Pair& our : ours) {
+        const PropertyType& ourPT = our._pt;
+        const auto rename = renames.find(ourPT._id);
+        const std::string& rebasedName = rename != renames.end() ? rename->second : *our._name;
+        const PropertyType newPT = rebased.getOrCreate(rebasedName, ourPT._valueType);
+
+        const auto [filed, inserted] = filedFrom.emplace(newPT._id, &our);
+        if (!inserted) {
+            const PropertyTypeMap::Pair& other = *filed->second;
+            throw VersionControlException(fmt::format("Properties '{}' ({}) and '{}' ({}) of the change can not both be filed under '{}'",
+                                                      *other._name,
+                                                      ValueTypeName::value(other._pt._valueType),
+                                                      *our._name,
+                                                      ValueTypeName::value(ourPT._valueType),
+                                                      rebasedName));
+        }
+
+        bioassert(newPT._valueType == ourPT._valueType, "The rebase files a property under one of another value type");
 
         _propTypeMapping[ourPT._id] = newPT;
 
+        const std::optional<size_t>& embeddingDimension = our._embeddingDimension;
         if (embeddingDimension) {
             rebased.getOrSetEmbeddingDimension(newPT._id, *embeddingDimension);
         }

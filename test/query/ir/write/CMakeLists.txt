@@ -96,3 +96,7 @@ add_turing_test(test_query_ir_new_property_two_types NewPropertyTwoTypesTest.cpp
 
 # The nodes, edges and dataparts db.history reports for a commit COMMIT closes in a change.
 add_turing_test(test_query_ir_change_commit_history ChangeCommitHistoryTest.cpp)
+
+add_turing_test(test_query_ir_renamed_property_collision RenamedPropertyCollisionTest.cpp)
+target_sources(test_query_ir_renamed_property_collision PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_renamed_property_collision PRIVATE ${IR_TEST_DIR})
