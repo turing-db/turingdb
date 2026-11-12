@@ -125,6 +125,17 @@ public:
         return slot;
     }
 
+    bool isPending(std::string_view name) const {
+        std::shared_lock<RWSpinLock> lock(_mapLock);
+
+        const auto it = _map.find(name);
+        if (it == _map.end()) {
+            return false;
+        }
+
+        return it->second->isFree();
+    }
+
     size_t size() const {
         std::shared_lock<RWSpinLock> lock(_mapLock);
         return _size;
@@ -137,6 +148,14 @@ public:
             if (slot && !slot->isFree()) {
                 names.push_back(name);
             }
+        }
+    }
+
+    void listAllNames(std::vector<std::string>& names) const {
+        std::shared_lock<RWSpinLock> lock(_mapLock);
+
+        for (const auto& [name, slot] : _map) {
+            names.push_back(name);
         }
     }
 
