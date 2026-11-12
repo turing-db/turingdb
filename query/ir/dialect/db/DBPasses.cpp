@@ -11,6 +11,7 @@
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Operation.h"
@@ -34,6 +35,7 @@
 #include "metadata/LabelSet.h"
 #include "views/GraphView.h"
 
+#include "InsertionOrderedMap.h"
 #include "IRConstantColumn.h"
 #include "IRRaiseEffect.h"
 #include "IRValueTypes.h"
@@ -137,6 +139,28 @@ public:
         return nullptr;
     }
 
+    void defer(Operation* op) {
+        if (_deferredPositions.try_emplace(op, _deferred.size()).second) {
+            _deferred.push_back(op);
+        }
+    }
+
+    // Queues the deferred ops in the order they were deferred; false where there are none
+    bool requeueDeferred() {
+        bool requeued = false;
+        for (Operation* const op : _deferred) {
+            if (op) {
+                push(op);
+                requeued = true;
+            }
+        }
+
+        _deferred.clear();
+        _deferredPositions.clear();
+
+        return requeued;
+    }
+
     void notifyOperationInserted(Operation* op, mlir::OpBuilder::InsertPoint previous) override {
         if (_isQueued(op)) {
             push(op);
@@ -149,6 +173,12 @@ public:
             _ops[found->second] = nullptr;
             _positions.erase(found);
         }
+
+        const auto deferred = _deferredPositions.find(op);
+        if (deferred != _deferredPositions.end()) {
+            _deferred[deferred->second] = nullptr;
+            _deferredPositions.erase(deferred);
+        }
     }
 
 private:
@@ -156,6 +186,8 @@ private:
     std::vector<Operation*> _ops;
     llvm::DenseMap<Operation*, size_t> _positions;
     size_t _next {0};
+    std::vector<Operation*> _deferred;
+    llvm::DenseMap<Operation*, size_t> _deferredPositions;
 
     void push(Operation* op) {
         if (_positions.try_emplace(op, _ops.size()).second) {
@@ -9192,7 +9224,7 @@ CarryListener::~CarryListener() {
 
 // Carries a column through the ops mapping rows, out of the regions a result is yielded from,
 // and into and back out of the body of an op handing back what it carries in, as its region
-// carry set lays out
+// carry set lays out. Each op is rebuilt as a column is carried through it.
 class HandBackCarry {
 public:
     HandBackCarry(mlir::RewriterBase& rewriter, CarryListener* listener)
@@ -9201,7 +9233,9 @@ public:
     {
     }
 
-    Value carryThroughOp(Operation* carrier, Value column) {
+    virtual ~HandBackCarry();
+
+    virtual Value carryThroughOp(Operation* carrier, Value column) {
         const llvm::SmallVector<Value> carrierResults(carrier->getResults());
 
         const Value carried = carryThrough(carrier, column, _rewriter);
@@ -9225,7 +9259,7 @@ public:
     // result. A body yielding its carried columns back yields it along the one at
     // @param rowsIndex, carried through each step between, and an op among them handing back
     // what it carries in hands this column back the same way before the steps above it go on.
-    Operation* handBack(Operation* op, size_t carriedIndex, size_t rowsIndex) {
+    Value handBack(Operation* op, size_t carriedIndex, size_t rowsIndex) {
         llvm::SmallVector<HandBack> handBacks;
         pushHandBack(op, carriedIndex, rowsIndex, handBacks);
 
@@ -9233,15 +9267,14 @@ public:
             HandBack& current = handBacks.back();
 
             if (current._nextStep == 0) {
-                const size_t handedIndex = current._carriedIndex;
-                Operation* const rebuilt = finishHandBack(current);
+                const Value handedBack = handBackCarriedColumn(current._op, current._carriedIndex, current._rowsIndex, current._column);
 
                 handBacks.pop_back();
                 if (handBacks.empty()) {
-                    return rebuilt;
+                    return handedBack;
                 }
 
-                handBacks.back()._column = rebuilt->getResult(static_cast<unsigned>(handedIndex));
+                handBacks.back()._column = handedBack;
                 continue;
             }
 
@@ -9256,11 +9289,11 @@ public:
             Operation* const handing = step._body->getParentOp();
 
             bool appended = false;
-            const size_t handedIndex = carryIntoRegions(handing, current._column, _rewriter, appended);
+            const size_t handedIndex = carryInto(handing, current._column, appended);
             if (appended) {
                 pushHandBack(handing, handedIndex, step._position, handBacks);
             } else {
-                current._column = handing->getResult(static_cast<unsigned>(handedIndex));
+                current._column = handedBackColumn(handing, handedIndex);
             }
         }
     }
@@ -9279,7 +9312,7 @@ public:
 
     // The result of the op holding @param body that @param column, a column of the body, comes
     // out as: one it yields already, or one it is yielded as at the end of the yield
-    Value carryOutOf(Block& body, Value column) {
+    virtual Value carryOutOf(Block& body, Value column) {
         Operation* op = body.getParentOp();
 
         size_t resultOffset = 0;
@@ -9296,6 +9329,14 @@ public:
         }
 
         return op->getResult(static_cast<unsigned>(resultOffset + yieldIndex));
+    }
+
+    virtual size_t carryInto(Operation* op, Value column, bool& appended) {
+        return carryIntoRegions(op, column, _rewriter, appended);
+    }
+
+    virtual Value carriedArgumentOf(Region& region, size_t carriedIndex) {
+        return carriedArgument(region, carriedIndex);
     }
 
     // @param column read as the run constant @param constant reads its row source as
@@ -9362,8 +9403,37 @@ public:
         return rebuilt;
     }
 
-private:
+protected:
     mlir::RewriterBase& _rewriter;
+
+    virtual Value handedBackColumn(Operation* op, size_t carriedIndex) {
+        return op->getResult(static_cast<unsigned>(carriedIndex));
+    }
+
+    // @param op hands back the column it carries in at @param carriedIndex as the result there,
+    // a body yielding its carried columns back yielding @param yielded for it
+    virtual Value handBackCarriedColumn(Operation* op, size_t carriedIndex, size_t rowsIndex, Value yielded) {
+        Region& region = op->getRegion(0);
+
+        RegionCarrySet carrySet;
+        matchRegionCarrySet(region, carrySet);
+
+        if (carrySet._yieldsBack) {
+            insertYieldedColumn(region.front(), carriedIndex, yielded);
+        }
+
+        const Value column = op->getOperand(static_cast<unsigned>(carrySet._operandOffset + carriedIndex));
+        Operation* const rebuilt = insertResult(op, carriedIndex, column.getType());
+        const Value handedBack = rebuilt->getResult(static_cast<unsigned>(carriedIndex));
+
+        if (_listener) {
+            _listener->notifyHandedBack(rebuilt->getResult(static_cast<unsigned>(rowsIndex)), handedBack);
+        }
+
+        return handedBack;
+    }
+
+private:
     CarryListener* _listener {nullptr};
 
     void pushHandBack(Operation* op, size_t carriedIndex, size_t rowsIndex, llvm::SmallVectorImpl<HandBack>& handBacks) {
@@ -9378,32 +9448,10 @@ private:
             bioassert(chained, "A column is carried into a body only along one it yields back");
 
             handBack._nextStep = handBack._chain.size();
-            handBack._column = carriedArgument(region, carriedIndex);
+            handBack._column = carriedArgumentOf(region, carriedIndex);
         }
 
         handBacks.push_back(handBack);
-    }
-
-    Operation* finishHandBack(const HandBack& handBack) {
-        Operation* const op = handBack._op;
-        Region& region = op->getRegion(0);
-
-        RegionCarrySet carrySet;
-        matchRegionCarrySet(region, carrySet);
-
-        if (carrySet._yieldsBack) {
-            insertYieldedColumn(region.front(), handBack._carriedIndex, handBack._column);
-        }
-
-        const Value column = op->getOperand(static_cast<unsigned>(carrySet._operandOffset + handBack._carriedIndex));
-        Operation* const rebuilt = insertResult(op, handBack._carriedIndex, column.getType());
-
-        if (_listener) {
-            _listener->notifyHandedBack(rebuilt->getResult(static_cast<unsigned>(handBack._rowsIndex)),
-                                        rebuilt->getResult(static_cast<unsigned>(handBack._carriedIndex)));
-        }
-
-        return rebuilt;
     }
 
     void notifyRebuilt(llvm::ArrayRef<Value> replaced, llvm::ArrayRef<Value> replacements) {
@@ -9412,6 +9460,9 @@ private:
         }
     }
 };
+
+HandBackCarry::~HandBackCarry() {
+}
 
 // Hands a read the column holding what it reads of its rows: one read before it, or one read
 // of rows its own come from, carried down to it through the ops between
@@ -9600,12 +9651,12 @@ private:
     }
 
     Value carryThroughBody(const RowsStep& step, Value column) {
-        Operation* op = step._body->getParentOp();
+        Operation* const op = step._body->getParentOp();
 
         bool appended = false;
         const size_t carriedIndex = carryIntoRegions(op, column, _rewriter, appended);
         if (appended) {
-            op = _carry.handBack(op, carriedIndex, step._position);
+            return _carry.handBack(op, carriedIndex, step._position);
         }
 
         return op->getResult(static_cast<unsigned>(carriedIndex));
@@ -9815,9 +9866,738 @@ struct CarryLabelAndTypeReads : public impl::CarryLabelAndTypeReadsBase<CarryLab
     }
 };
 
+// A column an op gains, and the value standing in for the result or the argument it comes out
+// as until the op is rebuilt with it
+struct StagedColumn {
+    Value _column;
+    Value _standIn;
+};
+
+// A column carried into the regions of an op, and the value standing in for the argument each
+// region asked about takes it as, by region number
+struct StagedCarriedIn {
+    Value _column;
+    llvm::SmallVector<std::pair<unsigned, Value>, 1> _arguments;
+};
+
+// What changes in the columns an op carries, each run growing at its end: the columns carried
+// through it, into its regions, handed back out of them with what a body yielding them back
+// yields, and yielded out of the region numbered beside each. _dropped are the positions in its
+// carry set of the columns it stops carrying.
+struct StagedOp {
+    llvm::SmallVector<StagedColumn> _carried;
+    llvm::SmallVector<StagedCarriedIn> _carriedIn;
+    llvm::SmallVector<StagedColumn> _handedBack;
+    llvm::SmallVector<std::pair<unsigned, StagedColumn>> _yielded;
+    llvm::SmallVector<size_t> _dropped;
+};
+
+enum class OperandRun {
+    CarrySet,
+    RegionCarrySet,
+    Yielded,
+};
+
+// The position each column first holds in a run of an op's operands - its carry set, its carry
+// set into its regions, or the columns a terminator yields - indexed once per op until it changes
+class OperandPositions {
+public:
+    bool find(Operation* op, OperandRun run, Value column, size_t& position) {
+        const auto [entry, isNew] = _positions.try_emplace({op, static_cast<unsigned>(run)});
+        llvm::DenseMap<Value, size_t>& positions = entry->second;
+
+        if (isNew) {
+            llvm::SmallVector<Value> columns;
+            collectRun(op, run, columns);
+
+            for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+                positions.try_emplace(columns[columnIndex], columnIndex);
+            }
+        }
+
+        const auto found = positions.find(column);
+        if (found == positions.end()) {
+            return false;
+        }
+
+        position = found->second;
+        return true;
+    }
+
+    void forget(Operation* op) {
+        _positions.erase({op, static_cast<unsigned>(OperandRun::CarrySet)});
+        _positions.erase({op, static_cast<unsigned>(OperandRun::RegionCarrySet)});
+        _positions.erase({op, static_cast<unsigned>(OperandRun::Yielded)});
+    }
+
+    void clear() {
+        _positions.clear();
+    }
+
+private:
+    llvm::DenseMap<std::pair<Operation*, unsigned>, llvm::DenseMap<Value, size_t>> _positions;
+
+    static void collectRun(Operation* op, OperandRun run, llvm::SmallVectorImpl<Value>& columns) {
+        if (run == OperandRun::CarrySet) {
+            CarrySet carrySet;
+            matchCarrySet(op, carrySet);
+            llvm::append_range(columns, op->getOperands().slice(carrySet._operandOffset, carrySet._count));
+        } else if (run == OperandRun::RegionCarrySet) {
+            RegionCarrySet carrySet;
+            matchRegionCarrySet(op->getRegion(0), carrySet);
+            llvm::append_range(columns, op->getOperands().slice(carrySet._operandOffset, carrySet._count));
+        } else {
+            const OperandRange yielded = yieldedColumnsOf(*op->getBlock());
+            llvm::append_range(columns, yielded);
+        }
+    }
+};
+
+// A result an op gains at _position among its results as they stand, after the ones gained
+// there with a lower _order
+struct ResultInsertion {
+    size_t _position {0};
+    size_t _order {0};
+    Value _standIn;
+};
+
+// Carries columns as HandBackCarry does, rebuilding no op while it carries: what an op gains or
+// stops carrying is staged, a value standing in for each result or argument it gains, until
+// rebuild() gives each op everything staged for it at once. An op many columns cross is then
+// rebuilt once, not once for each of them.
+class StagedCarry : public HandBackCarry {
+public:
+    explicit StagedCarry(mlir::RewriterBase& rewriter)
+        : HandBackCarry(rewriter, nullptr)
+    {
+    }
+
+    ~StagedCarry() override;
+
+    Value carryThroughOp(Operation* carrier, Value column) override {
+        CarrySet carrySet;
+        const bool carries = matchCarrySet(carrier, carrySet);
+        bioassert(carries, "A row-mapping op has a carry set");
+
+        size_t position = 0;
+        if (_positions.find(carrier, OperandRun::CarrySet, column, position)) {
+            return carrier->getResult(static_cast<unsigned>(carrySet._resultOffset + position));
+        }
+
+        const auto [entry, isNew] = _carriedStandIns.try_emplace({carrier, column}, Value());
+        if (!isNew) {
+            return entry->second;
+        }
+
+        const Value standIn = makeStandIn(column.getType(), carrier->getLoc());
+        entry->second = standIn;
+        _staged[carrier]._carried.push_back(StagedColumn {._column = column, ._standIn = standIn});
+
+        return standIn;
+    }
+
+    Value carryOutOf(Block& body, Value column) override {
+        Region& region = *body.getParent();
+        Operation* const op = region.getParentOp();
+
+        size_t resultOffset = 0;
+        const bool yields = cast<ColumnCarrierOpInterface>(op).getYieldedResultOffset(region, resultOffset);
+        bioassert(yields, "A column comes out of a region whose yield the op's results stand for");
+
+        size_t yieldIndex = 0;
+        if (_positions.find(body.getTerminator(), OperandRun::Yielded, column, yieldIndex)) {
+            return op->getResult(static_cast<unsigned>(resultOffset + yieldIndex));
+        }
+
+        const unsigned regionNumber = region.getRegionNumber();
+        const auto [entry, isNew] = _yieldedStandIns.try_emplace({op, regionNumber, column}, Value());
+        if (!isNew) {
+            return entry->second;
+        }
+
+        const Value standIn = makeStandIn(column.getType(), op->getLoc());
+        entry->second = standIn;
+        _staged[op]._yielded.emplace_back(regionNumber, StagedColumn {._column = column, ._standIn = standIn});
+
+        return standIn;
+    }
+
+    size_t carryInto(Operation* op, Value column, bool& appended) override {
+        RegionCarrySet carrySet;
+        const bool carries = matchRegionCarrySet(op->getRegion(0), carrySet);
+        bioassert(carries, "An op a column is carried into carries columns into its regions");
+
+        appended = false;
+
+        size_t position = 0;
+        if (_positions.find(op, OperandRun::RegionCarrySet, column, position)) {
+            return position;
+        }
+
+        StagedOp& staged = _staged[op];
+        const auto [entry, isNew] = _carriedInPositions.try_emplace({op, column}, carrySet._count + staged._carriedIn.size());
+        if (isNew) {
+            staged._carriedIn.push_back(StagedCarriedIn {._column = column});
+            appended = true;
+        }
+
+        return entry->second;
+    }
+
+    Value carriedArgumentOf(Region& region, size_t carriedIndex) override {
+        RegionCarrySet carrySet;
+        matchRegionCarrySet(region, carrySet);
+
+        if (carriedIndex < carrySet._count) {
+            return carriedArgument(region, carriedIndex);
+        }
+
+        StagedCarriedIn& carriedIn = _staged.at(region.getParentOp())._carriedIn[carriedIndex - carrySet._count];
+        const unsigned regionNumber = region.getRegionNumber();
+
+        const auto argument = llvm::find_if(carriedIn._arguments, [regionNumber](const std::pair<unsigned, Value>& entry) {
+            return entry.first == regionNumber;
+        });
+        if (argument != carriedIn._arguments.end()) {
+            return argument->second;
+        }
+
+        const Value standIn = makeStandIn(carriedIn._column.getType(), carriedIn._column.getLoc());
+        carriedIn._arguments.emplace_back(regionNumber, standIn);
+
+        return standIn;
+    }
+
+    void dropCarriedColumn(Operation* op, size_t resultIndex) {
+        CarrySet carrySet;
+        const bool carries = matchCarrySet(op, carrySet);
+        bioassert(carries, "A column is dropped from an op with a carry set");
+
+        _staged[op]._dropped.push_back(resultIndex - carrySet._resultOffset);
+    }
+
+    void eraseOnRebuild(Operation* op) {
+        _erased.push_back(op);
+    }
+
+    void forgetOperandsOf(Operation* op) {
+        _positions.forget(op);
+    }
+
+    // Gives each op what is staged for it, rebuilding the ones whose results change, and
+    // replaces each stand-in by the value it stood for
+    void rebuild() {
+        for (const auto& [op, staged] : _staged) {
+            const bool changesResults = !staged._carried.empty()
+                                     || !staged._handedBack.empty()
+                                     || !staged._yielded.empty()
+                                     || !staged._dropped.empty();
+            if (changesResults) {
+                rebuildStaged(op, staged);
+            } else {
+                carryIn(op, staged);
+            }
+        }
+
+        for (Operation* const replaced : _replaced) {
+            replaced->dropAllReferences();
+        }
+
+        for (Operation* const replaced : _replaced) {
+            _rewriter.eraseOp(replaced);
+        }
+
+        for (Operation* const erased : _erased) {
+            _rewriter.eraseOp(erased);
+        }
+
+        for (Operation* const standIn : _standIns) {
+            bioassert(standIn->use_empty(), "A stand-in is replaced by the value it stood for");
+            standIn->erase();
+        }
+
+        _staged.clear();
+        _carriedStandIns.clear();
+        _yieldedStandIns.clear();
+        _carriedInPositions.clear();
+        _positions.clear();
+        _replacements.clear();
+        _standIns.clear();
+        _replaced.clear();
+        _erased.clear();
+    }
+
+protected:
+    Value handedBackColumn(Operation* op, size_t carriedIndex) override {
+        RegionCarrySet carrySet;
+        matchRegionCarrySet(op->getRegion(0), carrySet);
+
+        if (carriedIndex < carrySet._count) {
+            return op->getResult(static_cast<unsigned>(carriedIndex));
+        }
+
+        const StagedOp& staged = _staged.at(op);
+        const size_t handedIndex = carriedIndex - carrySet._count;
+        bioassert(handedIndex < staged._handedBack.size(), "A column carried into an op handing back what it carries in is handed back");
+
+        return staged._handedBack[handedIndex]._standIn;
+    }
+
+    Value handBackCarriedColumn(Operation* op, size_t carriedIndex, size_t rowsIndex, Value yielded) override {
+        RegionCarrySet carrySet;
+        matchRegionCarrySet(op->getRegion(0), carrySet);
+
+        StagedOp& staged = _staged.at(op);
+        bioassert(carriedIndex == carrySet._count + staged._handedBack.size(), "An op hands back the columns carried into it in the order they came in");
+
+        const Value column = staged._carriedIn[carriedIndex - carrySet._count]._column;
+        const Value standIn = makeStandIn(column.getType(), op->getLoc());
+        staged._handedBack.push_back(StagedColumn {._column = yielded, ._standIn = standIn});
+
+        return standIn;
+    }
+
+private:
+    ::db::InsertionOrderedMap<Operation*, StagedOp> _staged;
+    llvm::DenseMap<std::pair<Operation*, Value>, Value> _carriedStandIns;
+    llvm::DenseMap<std::tuple<Operation*, unsigned, Value>, Value> _yieldedStandIns;
+    llvm::DenseMap<std::pair<Operation*, Value>, size_t> _carriedInPositions;
+    OperandPositions _positions;
+    llvm::DenseMap<Value, Value> _replacements;
+    std::vector<Operation*> _standIns;
+    std::vector<Operation*> _replaced;
+    std::vector<Operation*> _erased;
+
+    // A value of @param type in no block, standing in for a result or an argument an op is to
+    // gain. Only what was carried or placed since the last rebuild reads it.
+    Value makeStandIn(Type type, Location loc) {
+        OperationState state(loc, mlir::UnrealizedConversionCastOp::getOperationName());
+        state.addTypes(type);
+
+        Operation* const standIn = Operation::create(state);
+        _standIns.push_back(standIn);
+
+        return standIn->getResult(0);
+    }
+
+    // The value @param value stands for once the ops rebuilt so far replaced it
+    Value resolve(Value value) const {
+        Value resolved = value;
+        while (true) {
+            const auto replacement = _replacements.find(resolved);
+            if (replacement == _replacements.end()) {
+                return resolved;
+            }
+
+            resolved = replacement->second;
+        }
+    }
+
+    void replace(Value value, Value replacement) {
+        _rewriter.replaceAllUsesWith(value, replacement);
+        _replacements[value] = replacement;
+    }
+
+    // The results @param op gains, each where it comes in among its results as they stand: the
+    // columns it hands back at the end of the ones it carries in, the columns carried through it
+    // at the end of its carry set, and the columns a region yields at the end of its yield
+    static void collectResultInsertions(Operation* op, const StagedOp& staged, llvm::SmallVectorImpl<ResultInsertion>& insertions) {
+        if (!staged._handedBack.empty()) {
+            RegionCarrySet carrySet;
+            matchRegionCarrySet(op->getRegion(0), carrySet);
+
+            for (const StagedColumn& handedBack : staged._handedBack) {
+                insertions.push_back(ResultInsertion {._position = carrySet._count, ._standIn = handedBack._standIn});
+            }
+        }
+
+        if (!staged._carried.empty()) {
+            CarrySet carrySet;
+            matchCarrySet(op, carrySet);
+
+            for (const StagedColumn& carried : staged._carried) {
+                insertions.push_back(ResultInsertion {._position = carrySet._resultOffset + carrySet._count, ._order = 1, ._standIn = carried._standIn});
+            }
+        }
+
+        ColumnCarrierOpInterface carrier = cast<ColumnCarrierOpInterface>(op);
+        for (const auto& [regionNumber, yielded] : staged._yielded) {
+            Region& region = op->getRegion(regionNumber);
+
+            size_t resultOffset = 0;
+            carrier.getYieldedResultOffset(region, resultOffset);
+
+            const size_t yieldCount = yieldedColumnsOf(region.front()).size();
+            insertions.push_back(ResultInsertion {._position = resultOffset + yieldCount, ._order = 2 + regionNumber, ._standIn = yielded._standIn});
+        }
+
+        std::stable_sort(insertions.begin(), insertions.end(), [](const ResultInsertion& insertion, const ResultInsertion& other) {
+            return std::tie(insertion._position, insertion._order) < std::tie(other._position, other._order);
+        });
+    }
+
+    // Where the columns staged into each region of @param op come in: after its carried arguments
+    void collectArgumentPositions(Operation* op, llvm::SmallVectorImpl<size_t>& positions) {
+        ColumnCarrierOpInterface carrier = cast<ColumnCarrierOpInterface>(op);
+        for (Region& region : op->getRegions()) {
+            RegionCarrySet carrySet;
+            carrier.getRegionCarrySet(region, carrySet);
+            positions.push_back(carrySet._argumentOffset + carrySet._count);
+        }
+    }
+
+    void carryIn(Operation* op, const StagedOp& staged, llvm::ArrayRef<size_t> argumentPositions) {
+        llvm::SmallVector<Value> columns;
+        for (const StagedCarriedIn& carriedIn : staged._carriedIn) {
+            columns.push_back(resolve(carriedIn._column));
+        }
+
+        _rewriter.modifyOpInPlace(op, [op, &columns, argumentPositions] {
+            cast<ColumnCarrierOpInterface>(op).getRegionCarrySetMutable().append(columns);
+
+            for (Region& region : op->getRegions()) {
+                if (region.empty()) {
+                    continue;
+                }
+
+                Block& body = region.front();
+                const size_t position = argumentPositions[region.getRegionNumber()];
+                for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+                    const Value column = columns[columnIndex];
+                    body.insertArgument(static_cast<unsigned>(position + columnIndex), column.getType(), column.getLoc());
+                }
+            }
+        });
+
+        for (size_t columnIndex = 0; columnIndex < staged._carriedIn.size(); columnIndex++) {
+            for (const auto& [regionNumber, standIn] : staged._carriedIn[columnIndex]._arguments) {
+                Block& body = op->getRegion(regionNumber).front();
+                replace(standIn, body.getArgument(static_cast<unsigned>(argumentPositions[regionNumber] + columnIndex)));
+            }
+        }
+    }
+
+    void carryIn(Operation* op, const StagedOp& staged) {
+        llvm::SmallVector<size_t> argumentPositions;
+        collectArgumentPositions(op, argumentPositions);
+
+        carryIn(op, staged, argumentPositions);
+    }
+
+    // The columns the regions of @param op yield, with the ones staged for them: what a body
+    // yielding its carried columns back yields for the ones it hands back, after them, and what
+    // a region yields out, at the end
+    void growYields(Operation* op, const StagedOp& staged, const RegionCarrySet& carrySet) {
+        for (Region& region : op->getRegions()) {
+            const unsigned regionNumber = region.getRegionNumber();
+            const bool yieldsBack = regionNumber == 0 && carrySet._yieldsBack && !staged._handedBack.empty();
+            const bool yieldsOut = llvm::any_of(staged._yielded, [regionNumber](const std::pair<unsigned, StagedColumn>& yielded) {
+                return yielded.first == regionNumber;
+            });
+            if (!yieldsBack && !yieldsOut) {
+                continue;
+            }
+
+            Block& body = region.front();
+            MutableOperandRange yielded = yieldedColumnsOf(body);
+            const OperandRange current = yielded;
+            llvm::SmallVector<Value> columns(current.begin(), current.end());
+
+            if (yieldsBack) {
+                llvm::SmallVector<Value> handedBack;
+                for (const StagedColumn& column : staged._handedBack) {
+                    handedBack.push_back(resolve(column._column));
+                }
+
+                columns.insert(columns.begin() + carrySet._count, handedBack.begin(), handedBack.end());
+            }
+
+            for (const auto& [yieldingRegion, column] : staged._yielded) {
+                if (yieldingRegion == regionNumber) {
+                    columns.push_back(resolve(column._column));
+                }
+            }
+
+            _rewriter.modifyOpInPlace(body.getTerminator(), [&yielded, &columns] {
+                yielded.assign(columns);
+            });
+        }
+    }
+
+    // Rebuilds @param op with the results staged for it inserted, its staged carry set, its
+    // staged columns into its regions and the yields of its regions grown, and replaces each of
+    // its results and stand-ins by the result of the rebuilt op holding the same column
+    void rebuildStaged(Operation* op, const StagedOp& staged) {
+        llvm::SmallVector<ResultInsertion> insertions;
+        collectResultInsertions(op, staged, insertions);
+
+        CarrySet carrySet;
+        const bool carries = matchCarrySet(op, carrySet);
+
+        RegionCarrySet regionCarrySet;
+        if (op->getNumRegions() > 0) {
+            matchRegionCarrySet(op->getRegion(0), regionCarrySet);
+        }
+
+        const size_t resultCount = op->getNumResults();
+        llvm::SmallBitVector dropped(resultCount);
+        for (const size_t carriedIndex : staged._dropped) {
+            dropped.set(static_cast<unsigned>(carrySet._resultOffset + carriedIndex));
+        }
+
+        llvm::SmallVector<Type> types;
+        llvm::SmallVector<size_t> rebuiltIndices(resultCount);
+        llvm::SmallVector<size_t> standInIndices;
+        size_t nextInsertion = 0;
+        for (size_t resultIndex = 0; resultIndex <= resultCount; resultIndex++) {
+            while (nextInsertion < insertions.size() && insertions[nextInsertion]._position == resultIndex) {
+                standInIndices.push_back(types.size());
+                types.push_back(insertions[nextInsertion]._standIn.getType());
+                nextInsertion++;
+            }
+
+            if (resultIndex < resultCount && !dropped[static_cast<unsigned>(resultIndex)]) {
+                rebuiltIndices[resultIndex] = types.size();
+                types.push_back(op->getResult(static_cast<unsigned>(resultIndex)).getType());
+            }
+        }
+
+        OperationState state(op->getLoc(), op->getName());
+        state.addOperands(op->getOperands());
+        state.addTypes(types);
+        state.addAttributes(op->getAttrs());
+
+        const bool changesCarrySet = carries && (!staged._carried.empty() || !staged._dropped.empty());
+        llvm::SmallVector<Value> carriedColumns;
+        if (changesCarrySet) {
+            llvm::SmallBitVector droppedCarried(carrySet._count);
+            for (const size_t carriedIndex : staged._dropped) {
+                droppedCarried.set(static_cast<unsigned>(carriedIndex));
+            }
+
+            llvm::SmallVector<size_t> kept;
+            for (size_t carriedIndex = 0; carriedIndex < carrySet._count; carriedIndex++) {
+                if (!droppedCarried[static_cast<unsigned>(carriedIndex)]) {
+                    kept.push_back(carriedIndex);
+                    carriedColumns.push_back(op->getOperand(static_cast<unsigned>(carrySet._operandOffset + carriedIndex)));
+                }
+            }
+
+            if (!staged._dropped.empty()) {
+                trimAttributes(op, kept, state, _rewriter);
+            }
+
+            for (const StagedColumn& carried : staged._carried) {
+                carriedColumns.push_back(resolve(carried._column));
+            }
+        }
+
+        llvm::SmallVector<size_t> argumentPositions;
+        collectArgumentPositions(op, argumentPositions);
+
+        Operation* const rebuilt = rebuildOp(op, state, _rewriter);
+
+        if (changesCarrySet) {
+            _rewriter.modifyOpInPlace(rebuilt, [rebuilt, &carriedColumns] {
+                cast<ColumnCarrierOpInterface>(rebuilt).getCarrySetMutable().assign(carriedColumns);
+            });
+        }
+
+        if (!staged._carriedIn.empty()) {
+            carryIn(rebuilt, staged, argumentPositions);
+        }
+
+        growYields(rebuilt, staged, regionCarrySet);
+
+        for (size_t resultIndex = 0; resultIndex < resultCount; resultIndex++) {
+            if (!dropped[static_cast<unsigned>(resultIndex)]) {
+                replace(op->getResult(static_cast<unsigned>(resultIndex)), rebuilt->getResult(static_cast<unsigned>(rebuiltIndices[resultIndex])));
+            }
+        }
+
+        for (size_t insertionIndex = 0; insertionIndex < insertions.size(); insertionIndex++) {
+            replace(insertions[insertionIndex]._standIn, rebuilt->getResult(static_cast<unsigned>(standInIndices[insertionIndex])));
+        }
+
+        _replaced.push_back(op);
+    }
+};
+
+StagedCarry::~StagedCarry() {
+}
+
+// For each op of the blocks asked about, a label growing along its block, kept up as ops move in
+// where isBeforeInBlock recomputes the whole block after each move, and how many ops with an
+// effect besides raising stand before it. A label that does not fit spreads the smallest range
+// around it with room enough, as in the order-maintenance list of Bender et al.
+class BlockLayout {
+public:
+    bool isBefore(Operation* op, Operation* other) {
+        layOut(op->getBlock());
+        return positionOf(op)._label < positionOf(other)._label;
+    }
+
+    bool hasNoEffectButRaising(Operation* op) {
+        layOut(op->getBlock());
+        return !_barriers.contains(op);
+    }
+
+    // Whether every op from @param first up to @param last, which it stands before in its block,
+    // has no effect but raising. A null @param last is the end of the block.
+    bool crossesNoEffect(Operation* first, Operation* last) {
+        Block* const block = first->getBlock();
+        layOut(block);
+
+        const size_t lastCount = last ? positionOf(last)._barriersBefore : _barrierCounts.at(block);
+
+        return positionOf(first)._barriersBefore == lastCount;
+    }
+
+    void notifyInserted(Operation* op, Block* previousBlock) {
+        _positions.erase(op);
+        _barriers.erase(op);
+
+        Block* const block = op->getBlock();
+        if (!::db::hasNoEffectButRaising(op)) {
+            forgetBlockAndHolders(block);
+            forgetBlockAndHolders(previousBlock);
+            return;
+        }
+
+        const auto counted = _barrierCounts.find(block);
+        if (counted == _barrierCounts.end()) {
+            return;
+        }
+
+        Operation* const previous = op->getPrevNode();
+        Operation* const next = op->getNextNode();
+        const uint64_t low = previous ? positionOf(previous)._label : 0;
+        const uint64_t high = next ? positionOf(next)._label : LABEL_END;
+        const size_t barriersBefore = next ? positionOf(next)._barriersBefore : counted->second;
+
+        _positions[op] = OpPosition {._label = low + (high - low) / 2, ._barriersBefore = barriersBefore};
+        if (high - low < 2) {
+            spreadLabelsAround(op);
+        }
+    }
+
+    void clear() {
+        _barrierCounts.clear();
+        _positions.clear();
+        _barriers.clear();
+    }
+
+private:
+    struct OpPosition {
+        uint64_t _label {0};
+        size_t _barriersBefore {0};
+    };
+
+    static constexpr unsigned LABEL_BITS = 62;
+    static constexpr uint64_t LABEL_END = uint64_t {1} << LABEL_BITS;
+    static constexpr uint64_t LABEL_STRIDE = uint64_t {1} << 32;
+    static constexpr double RANGE_CAPACITY_GROWTH = 4.0 / 3.0;
+
+    llvm::DenseMap<Block*, size_t> _barrierCounts;
+    llvm::DenseMap<Operation*, OpPosition> _positions;
+    llvm::DenseSet<Operation*> _barriers;
+
+    const OpPosition& positionOf(Operation* op) const {
+        const auto position = _positions.find(op);
+        bioassert(position != _positions.end(), "Every op of a block laid out has a position");
+
+        return position->second;
+    }
+
+    void layOut(Block* block) {
+        if (_barrierCounts.contains(block)) {
+            return;
+        }
+
+        uint64_t label = LABEL_STRIDE;
+        size_t count = 0;
+        for (Operation& op : *block) {
+            _positions[&op] = OpPosition {._label = label, ._barriersBefore = count};
+            label += LABEL_STRIDE;
+
+            if (!::db::hasNoEffectButRaising(&op)) {
+                _barriers.insert(&op);
+                count++;
+            }
+        }
+
+        _barrierCounts[block] = count;
+    }
+
+    bool hasLabelIn(Operation* op, uint64_t base, uint64_t size) const {
+        const uint64_t label = positionOf(op)._label;
+        return label >= base && label - base < size;
+    }
+
+    // Spreads the labels of the ops around @param op, which holds no free label of its own, over
+    // the smallest aligned range of labels holding them whose ops fill few enough of it
+    void spreadLabelsAround(Operation* op) {
+        Operation* const neighbour = op->getPrevNode() ? op->getPrevNode() : op->getNextNode();
+        const uint64_t center = neighbour ? positionOf(neighbour)._label : 0;
+
+        double capacity = 1.0;
+        for (unsigned bits = 1; bits <= LABEL_BITS; bits++) {
+            capacity *= RANGE_CAPACITY_GROWTH;
+
+            const uint64_t size = uint64_t {1} << bits;
+            const uint64_t base = center & ~(size - 1);
+
+            Operation* first = op;
+            while (first->getPrevNode() && hasLabelIn(first->getPrevNode(), base, size)) {
+                first = first->getPrevNode();
+            }
+
+            Operation* last = op;
+            size_t count = 1;
+            while (last->getNextNode() && hasLabelIn(last->getNextNode(), base, size)) {
+                last = last->getNextNode();
+                count++;
+            }
+
+            for (Operation* counted = first; counted != op; counted = counted->getNextNode()) {
+                count++;
+            }
+
+            if (static_cast<double>(count) > capacity) {
+                continue;
+            }
+
+            const uint64_t gap = size / (count + 1);
+            uint64_t label = base;
+            for (Operation* spread = first; spread != last->getNextNode(); spread = spread->getNextNode()) {
+                label += gap;
+                _positions[spread]._label = label;
+            }
+
+            return;
+        }
+
+        bioassert(false, "A block holds fewer ops than its labels");
+    }
+
+    void forgetBlockAndHolders(Block* block) {
+        for (Block* current = block; current; ) {
+            if (_barrierCounts.erase(current)) {
+                for (Operation& op : *current) {
+                    _positions.erase(&op);
+                    _barriers.erase(&op);
+                }
+            }
+
+            Operation* const holder = current->getParentOp();
+            current = holder ? holder->getBlock() : nullptr;
+        }
+    }
+};
+
 // Whether @param value is defined where @param op can read it: in a block holding the op, in front
 // of the op or the one holding it there
-bool standsBefore(Value value, Operation* op) {
+bool standsBefore(Value value, Operation* op, BlockLayout& layout) {
     Operation* const ancestor = value.getParentBlock()->findAncestorOpInBlock(*op);
     if (!ancestor) {
         return false;
@@ -9825,18 +10605,18 @@ bool standsBefore(Value value, Operation* op) {
 
     Operation* const definer = value.getDefiningOp();
 
-    return !definer || definer->isBeforeInBlock(ancestor);
+    return !definer || layout.isBefore(definer, ancestor);
 }
 
 // The ops computing @param constants that do not stand before @param destination, each after the
 // ones it reads. False where one reads an argument of a block not holding @param destination: a
 // run constant read off it holds one value per run of its body, not one for every row there.
-bool collectConstantCone(llvm::ArrayRef<Value> constants, Operation* destination, llvm::SmallVectorImpl<Operation*>& cone) {
+bool collectConstantCone(llvm::ArrayRef<Value> constants, Operation* destination, BlockLayout& layout, llvm::SmallVectorImpl<Operation*>& cone) {
     llvm::SmallPtrSet<Operation*, 8> visited;
     llvm::SmallVector<std::pair<Operation*, bool>> pending;
 
-    const auto pushDefiner = [destination, &visited, &pending](Value value) {
-        if (standsBefore(value, destination)) {
+    const auto pushDefiner = [destination, &layout, &visited, &pending](Value value) {
+        if (standsBefore(value, destination, layout)) {
             return true;
         }
 
@@ -10111,7 +10891,7 @@ bool repeatsAbove(llvm::ArrayRef<Value> rows, Region& region) {
 // can go: past the first step repeating rows, then on until a step it cannot take, the top of a
 // region, or a filter with a repeat above it, after which the op's uses all come. A filter before
 // any repeat ends the climb, past which one that seeks a repeat looks for one above.
-void climbRows(Operation* op, RowsClimb& climb) {
+void climbRows(Operation* op, BlockLayout& layout, RowsClimb& climb) {
     climb._op = op;
     climb._operands.assign(op->operand_begin(), op->operand_end());
 
@@ -10180,7 +10960,7 @@ void climbRows(Operation* op, RowsClimb& climb) {
             matchCarriedIndex(carried, level._rowsIndex);
         }
 
-        const bool canExit = ::db::hasNoEffectButRaising(holder)
+        const bool canExit = layout.hasNoEffectButRaising(holder)
                           && (!carriesIn || handsBackAlong(region.front(), carrySet, level._rowsIndex));
         if (!canExit && climb._repeats) {
             endClimbInRegion(level, rowOperands, columns, climb);
@@ -10221,12 +11001,12 @@ Operation* hoistDestinationOf(const RowsClimb& climb) {
 
 // The values the regions of @param op read from above, each standing before @param destination
 // or holding one value
-bool collectRegionReads(Operation* op, Operation* destination, llvm::SmallVectorImpl<Value>& constants) {
+bool collectRegionReads(Operation* op, Operation* destination, BlockLayout& layout, llvm::SmallVectorImpl<Value>& constants) {
     llvm::SetVector<Value> readAbove;
     mlir::getUsedValuesDefinedAbove(op->getRegions(), readAbove);
 
     for (const Value value : readAbove) {
-        if (!standsBefore(value, destination) && !::db::yieldsConstantColumn(value)) {
+        if (!standsBefore(value, destination, layout) && !::db::yieldsConstantColumn(value)) {
             return false;
         }
 
@@ -10236,37 +11016,25 @@ bool collectRegionReads(Operation* op, Operation* destination, llvm::SmallVector
     return true;
 }
 
-// Whether every op from @param first up to @param last, which it stands before in its block,
-// has no effect but raising, so that a pure op can move across them
-bool crossesNoEffect(Operation* first, Operation* last) {
-    for (Operation* crossed = first; crossed != last; crossed = crossed->getNextNode()) {
-        if (!::db::hasNoEffectButRaising(crossed)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
 // Whether @param op can move in front of @param destination, an op before it, without reading
 // what an op between writes
-bool movesUpAcrossNoEffect(Operation* op, Operation* destination) {
+bool movesUpAcrossNoEffect(Operation* op, Operation* destination, BlockLayout& layout) {
     Block* block = destination->getBlock();
     while (!block->findAncestorOpInBlock(*op)) {
         block = block->getParentOp()->getBlock();
     }
 
-    return crossesNoEffect(block->findAncestorOpInBlock(*destination), block->findAncestorOpInBlock(*op));
+    return layout.crossesNoEffect(block->findAncestorOpInBlock(*destination), block->findAncestorOpInBlock(*op));
 }
 
-bool matchHoist(RowsClimb& climb) {
+bool matchHoist(RowsClimb& climb, BlockLayout& layout) {
     if (!climb._hoists) {
         return false;
     }
 
     Operation* const op = climb._op;
     Operation* const destination = hoistDestinationOf(climb);
-    if (!movesUpAcrossNoEffect(op, destination)) {
+    if (!movesUpAcrossNoEffect(op, destination, layout)) {
         return false;
     }
 
@@ -10277,14 +11045,14 @@ bool matchHoist(RowsClimb& climb) {
         }
     }
 
-    if (!collectRegionReads(op, destination, constants)) {
+    if (!collectRegionReads(op, destination, layout, constants)) {
         return false;
     }
 
-    return collectConstantCone(constants, destination, climb._constants);
+    return collectConstantCone(constants, destination, layout, climb._constants);
 }
 
-void hoistRowInvariantOp(const RowsClimb& climb, mlir::RewriterBase& rewriter) {
+void hoistRowInvariantOp(const RowsClimb& climb, StagedCarry& carry, mlir::RewriterBase& rewriter) {
     Operation* const op = climb._op;
     Operation* const destination = hoistDestinationOf(climb);
     const llvm::SmallPtrSet<Operation*, 4> readers(op->user_begin(), op->user_end());
@@ -10302,7 +11070,6 @@ void hoistRowInvariantOp(const RowsClimb& climb, mlir::RewriterBase& rewriter) {
     const Value result = op->getResult(0);
     const size_t levelCount = climb._levels.size();
 
-    HandBackCarry carry(rewriter, nullptr);
     llvm::SmallVector<size_t> carriedIndices(levelCount);
     Value column = result;
     for (size_t levelIndex = levelCount; levelIndex > 0; levelIndex--) {
@@ -10311,8 +11078,8 @@ void hoistRowInvariantOp(const RowsClimb& climb, mlir::RewriterBase& rewriter) {
 
         if (level._exits && level._carriesIn) {
             bool appended = false;
-            carriedIndices[levelIndex - 1] = carryIntoRegions(region.getParentOp(), column, rewriter, appended);
-            column = carriedArgument(region, carriedIndices[levelIndex - 1]);
+            carriedIndices[levelIndex - 1] = carry.carryInto(region.getParentOp(), column, appended);
+            column = carry.carriedArgumentOf(region, carriedIndices[levelIndex - 1]);
         }
 
         for (const RowsStep& step : llvm::reverse(level._steps)) {
@@ -10399,9 +11166,9 @@ bool matchFilterChain(Operation* op, RowsSink& sink) {
 
 // After the filters an op runs on the rows they keep, which its operands and the columns its
 // regions read are carried to, and after the ops between, which must not write what it reads
-bool canSink(const RowsSink& sink) {
+bool canSink(const RowsSink& sink, BlockLayout& layout) {
     Operation* const op = sink._op;
-    if (!crossesNoEffect(op->getNextNode(), sink._chain.back()->getNextNode())) {
+    if (!layout.crossesNoEffect(op->getNextNode(), sink._chain.back()->getNextNode())) {
         return false;
     }
 
@@ -10422,35 +11189,24 @@ bool canSink(const RowsSink& sink) {
     return !readsRowsAbove;
 }
 
-// @param column carried through each op of @param chain, which it leaves rebuilt to carry it
-Value carryAlongChain(llvm::MutableArrayRef<Operation*> chain, Value column, mlir::RewriterBase& rewriter) {
+Value carryAlongChain(llvm::ArrayRef<Operation*> chain, Value column, StagedCarry& carry) {
     Value carried = column;
-    for (Operation*& carrier : chain) {
-        carried = carryThrough(carrier, carried, rewriter);
-        carrier = carried.getDefiningOp();
+    for (Operation* const carrier : chain) {
+        carried = carry.carryThroughOp(carrier, carried);
     }
 
     return carried;
 }
 
-void sinkRowInvariantOp(RowsSink& sink, mlir::RewriterBase& rewriter) {
+void sinkRowInvariantOp(const RowsSink& sink, StagedCarry& carry, mlir::RewriterBase& rewriter) {
     Operation* const op = sink._op;
-    llvm::SmallVector<Operation*>& chain = sink._chain;
-
-    llvm::SmallVector<size_t> rowOperands;
-    for (size_t operandIndex = 0; operandIndex < op->getNumOperands(); operandIndex++) {
-        if (!::db::yieldsConstantColumn(op->getOperand(static_cast<unsigned>(operandIndex)))) {
-            rowOperands.push_back(operandIndex);
-        }
-    }
-
-    for (const size_t operandIndex : rowOperands) {
-        carryAlongChain(chain, op->getOperand(static_cast<unsigned>(operandIndex)), rewriter);
-    }
+    const llvm::ArrayRef<Operation*> chain = sink._chain;
 
     llvm::SmallVector<Value> operands(op->getOperands());
-    for (const size_t operandIndex : rowOperands) {
-        operands[operandIndex] = carryAlongChain(chain, operands[operandIndex], rewriter);
+    for (Value& operand : operands) {
+        if (!::db::yieldsConstantColumn(operand)) {
+            operand = carryAlongChain(chain, operand, carry);
+        }
     }
 
     const Value result = op->getResult(0);
@@ -10459,9 +11215,8 @@ void sinkRowInvariantOp(RowsSink& sink, mlir::RewriterBase& rewriter) {
         CarrySet carrySet;
         matchCarrySet(carrier, carrySet);
 
-        const OperandRange carriedColumns = carrier->getOperands().slice(carrySet._operandOffset, carrySet._count);
-        const size_t carriedIndex = static_cast<size_t>(llvm::find(carriedColumns, carried) - carriedColumns.begin());
-        carried = carrier->getResult(static_cast<unsigned>(carrySet._resultOffset + carriedIndex));
+        const size_t operandIndex = carried.use_begin()->getOperandNumber();
+        carried = carrier->getResult(static_cast<unsigned>(carrySet._resultOffset + operandIndex - carrySet._operandOffset));
     }
 
     rewriter.setInsertionPointAfter(chain.back());
@@ -10481,16 +11236,16 @@ void sinkRowInvariantOp(RowsSink& sink, mlir::RewriterBase& rewriter) {
 
         const size_t resultIndex = carriedResult.getResultNumber();
         carried = carrier->getOperand(static_cast<unsigned>(carrySet._operandOffset + resultIndex - carrySet._resultOffset));
-        dropCarriedColumn(carrier, resultIndex, rewriter);
+        carry.dropCarriedColumn(carrier, resultIndex);
     }
 
-    rewriter.eraseOp(op);
+    carry.eraseOnRebuild(op);
 }
 
 // A value computed from the columns in front of an op repeating rows is computed once there when
 // a use of it comes before any filter after that op, and after the last filter all its uses follow
 // otherwise. Moved, an op runs on other rows than its own, so one that may raise stays where it is.
-bool placeRowInvariantOp(Operation* op, mlir::RewriterBase& rewriter) {
+bool placeRowInvariantOp(Operation* op, StagedCarry& carry, BlockLayout& layout, mlir::RewriterBase& rewriter) {
     if (op->use_empty() || !mlir::isPure(op)) {
         return false;
     }
@@ -10500,25 +11255,152 @@ bool placeRowInvariantOp(Operation* op, mlir::RewriterBase& rewriter) {
 
     RowsClimb climb;
     climb._seeksARepeat = followsAFilter && !sink._repeats;
-    climbRows(op, climb);
+    climbRows(op, layout, climb);
 
     const bool computedLate = followsAFilter && (sink._repeats || climb._repeats);
-    if (computedLate && !canSink(sink)) {
+    if (computedLate && !canSink(sink, layout)) {
         return false;
     } else if (computedLate) {
-        sinkRowInvariantOp(sink, rewriter);
+        sinkRowInvariantOp(sink, carry, rewriter);
         return true;
-    } else if (!matchHoist(climb)) {
+    } else if (!matchHoist(climb, layout)) {
         return false;
     }
 
-    hoistRowInvariantOp(climb, rewriter);
+    hoistRowInvariantOp(climb, carry, rewriter);
     return true;
+}
+
+// Runs placeRowInvariantOp over a worklist in rounds, as runWorklistOver does, staging what each
+// placement carries and rebuilding the ops gaining columns once each sweep of the worklist ends.
+// An op whose match could read what a sweep staged but has not built waits for the next sweep,
+// so that it is matched on the program the placements before it built.
+class RowInvariantPlacement : public mlir::RewriterBase::Listener {
+public:
+    explicit RowInvariantPlacement(Operation* root)
+        : _root(root),
+          _rewriter(root->getContext(), this),
+          _carry(_rewriter)
+    {
+    }
+
+    ~RowInvariantPlacement() override;
+
+    void run() {
+        bool rewritten = true;
+        while (rewritten) {
+            rewritten = false;
+
+            Worklist worklist(_root, computesOneValuePerRow);
+            _worklist = &worklist;
+
+            do {
+                while (Operation* op = worklist.pop()) {
+                    if (_unsettled.contains(op)) {
+                        worklist.defer(op);
+                    } else if (placeRowInvariantOp(op, _carry, _layout, _rewriter)) {
+                        rewritten = true;
+                    }
+                }
+
+                settle();
+            } while (worklist.requeueDeferred());
+
+            _worklist = nullptr;
+        }
+    }
+
+    void notifyOperationInserted(Operation* op, mlir::OpBuilder::InsertPoint previous) override {
+        _worklist->notifyOperationInserted(op, previous);
+
+        if (!_rebuilding) {
+            _layout.notifyInserted(op, previous.getBlock());
+            unsettle(op);
+        }
+    }
+
+    void notifyOperationModified(Operation* op) override {
+        _carry.forgetOperandsOf(op);
+
+        if (!_rebuilding) {
+            unsettle(op);
+        }
+    }
+
+    void notifyOperationErased(Operation* op) override {
+        _worklist->notifyOperationErased(op);
+        _carry.forgetOperandsOf(op);
+        _layout.clear();
+        _unsettled.erase(op);
+    }
+
+private:
+    using Worklist = OpWorklist<bool (*)(Operation*)>;
+
+    Operation* _root {nullptr};
+    mlir::IRRewriter _rewriter;
+    StagedCarry _carry;
+    BlockLayout _layout;
+    llvm::DenseSet<Operation*> _unsettled;
+    Worklist* _worklist {nullptr};
+    bool _rebuilding {false};
+
+    static void pushUsers(ValueRange values, llvm::SmallVectorImpl<Operation*>& pending) {
+        for (const Value value : values) {
+            for (Operation* const user : value.getUsers()) {
+                pending.push_back(user);
+            }
+        }
+    }
+
+    // Holds back @param op and every op whose match can read it: the readers of its results and
+    // of its regions' arguments, the readers of the op holding a terminator, and the placeable
+    // ops holding it, which read what their regions read
+    void unsettle(Operation* op) {
+        llvm::SmallVector<Operation*> pending {op};
+        while (!pending.empty()) {
+            Operation* const current = pending.pop_back_val();
+            if (!_unsettled.insert(current).second) {
+                continue;
+            }
+
+            pushUsers(current->getResults(), pending);
+            for (Region& region : current->getRegions()) {
+                for (Block& block : region) {
+                    pushUsers(block.getArguments(), pending);
+                }
+            }
+
+            Operation* const holder = current->getParentOp();
+            if (holder && current->hasTrait<OpTrait::IsTerminator>()) {
+                pushUsers(holder->getResults(), pending);
+            }
+
+            for (Operation* ancestor = holder; ancestor; ancestor = ancestor->getParentOp()) {
+                if (computesOneValuePerRow(ancestor)) {
+                    pending.push_back(ancestor);
+                }
+            }
+        }
+    }
+
+    void settle() {
+        _rebuilding = true;
+        _carry.rebuild();
+        _rebuilding = false;
+
+        _unsettled.clear();
+        _layout.clear();
+    }
+};
+
+RowInvariantPlacement::~RowInvariantPlacement() {
 }
 
 struct PlaceRowInvariantOps : public impl::PlaceRowInvariantOpsBase<PlaceRowInvariantOps> {
     void runOnOperation() override {
-        runWorklistOver(getOperation(), computesOneValuePerRow, placeRowInvariantOp);
+        RowInvariantPlacement placement(getOperation());
+        placement.run();
     }
 };
 
