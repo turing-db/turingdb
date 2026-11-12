@@ -54,3 +54,5 @@ add_call_v3_test(test_query_ir_edge_id_lookup EdgeIDLookupTest.cpp)
 add_call_v3_test(test_query_ir_limit_skip_parameter LimitSkipParameterTest.cpp)
 
 add_call_v3_test(test_query_ir_point_parameter PointParameterTest.cpp)
+
+add_call_v3_test(test_query_ir_walk_edge_id_lookup WalkEdgeIDLookupTest.cpp)

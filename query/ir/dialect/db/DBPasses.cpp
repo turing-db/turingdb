@@ -287,9 +287,31 @@ bool isEdgeColumn(Value column) {
     return type && isa<storage::EdgeIDType>(type.getType());
 }
 
-bool isEntityColumn(Value column) {
+// The node or edge type a column holds: its own element, or the element of the list of nodes
+// or edges a list index, head() or last() reads one entry of. Null for any other column.
+Type entityElementOf(Value column) {
     const ColumnType type = dyn_cast<ColumnType>(column.getType());
-    return type && storage::isEntityIDType(type.getType());
+    if (!type) {
+        return Type();
+    } else if (storage::isEntityIDType(type.getType())) {
+        return type.getType();
+    }
+
+    Operation* const read = column.getDefiningOp();
+    if (!isa_and_nonnull<ListIndex, Head, Last>(read)) {
+        return Type();
+    }
+
+    const storage::ListType list = dyn_cast<storage::ListType>(::db::declaredColumnElement(read->getOperand(0)));
+    if (!list || !storage::isEntityIDType(list.getElementType())) {
+        return Type();
+    }
+
+    return list.getElementType();
+}
+
+bool isEntityColumn(Value column) {
+    return static_cast<bool>(entityElementOf(column));
 }
 
 // Every equality of two node columns the filter requires: it keeps only the rows where they
@@ -785,7 +807,7 @@ bool matchBoundID(Value value, Value scanColumn, EntityIDList& entityIDs) {
     }
 
     const Type element = ::db::inferredColumnElement(value);
-    const Type scanned = cast<ColumnType>(scanColumn.getType()).getType();
+    const Type scanned = entityElementOf(scanColumn);
     if (!element.isSignlessInteger(64) && element != scanned) {
         return false;
     }
@@ -996,7 +1018,8 @@ void canonicalizeIDComparison(const IDComparison& comparison, mlir::OpBuilder& b
     if (literal && entityIDOfLiteral(literal.getValue(), entityID)) {
         entityIDs = builder.create<ConstantOp>(loc, builder.getI64IntegerAttr(entityID)).getResult();
     } else {
-        entityIDs = builder.createOrFold<EntityIDOf>(loc, entities.getType(), comparison._value);
+        const Type entityColumnType = ColumnType::get(builder.getContext(), entityElementOf(entities));
+        entityIDs = builder.createOrFold<EntityIDOf>(loc, entityColumnType, comparison._value);
     }
 
     equality->setOperands({entities, entityIDs});
@@ -5904,14 +5927,91 @@ struct FuseExploreEndFactor : public impl::FuseExploreEndFactorBase<FuseExploreE
     }
 };
 
-// A conjunct a scan of the graph answers on its own, over the node column it reads: the nodes
-// holding a property value, or the nodes listed by id
+// A column holding the first or the last edge of each path of a walk: the walk's edge list
+// read at index 0 or -1, or by head() or last(). A list written backwards holds the walk's
+// last hop first.
+struct WalkEndEdge {
+    ExplorePaths _walk;
+    bool _first {false};
+};
+
+bool matchWalkEndEdge(Value column, WalkEndEdge& endEdge) {
+    Operation* const read = column.getDefiningOp();
+
+    bool readsTheFront = false;
+    if (isa_and_nonnull<Head>(read)) {
+        readsTheFront = true;
+    } else if (ListIndex index = dyn_cast_or_null<ListIndex>(read)) {
+        ConstantOp position = index.getRhs().getDefiningOp<ConstantOp>();
+        const IntegerAttr integer = position ? dyn_cast<IntegerAttr>(position.getValue()) : IntegerAttr();
+        const bool readsAnEnd = integer && (integer.getInt() == 0 || integer.getInt() == -1);
+        if (!readsAnEnd) {
+            return false;
+        }
+
+        readsTheFront = integer.getInt() == 0;
+    } else if (!isa_and_nonnull<Last>(read)) {
+        return false;
+    }
+
+    ExpandPath expansion = read->getOperand(0).getDefiningOp<ExpandPath>();
+    const bool listsEveryEdge = expansion && expansion.getKind() == storage::PathExpansionKind::Edges && !expansion.getStep();
+    if (!listsEveryEdge) {
+        return false;
+    }
+
+    ExplorePaths walk = climbFilters(expansion.getPaths()).getDefiningOp<ExplorePaths>();
+    if (!walk) {
+        return false;
+    }
+
+    endEdge._walk = walk;
+    endEdge._first = readsTheFront != expansion.getReversed();
+
+    return true;
+}
+
+ConstScanEdges scanListedEdges(const EntityIDList& edgeIDs, bool undirected, Location loc, mlir::OpBuilder& builder) {
+    mlir::MLIRContext* const context = builder.getContext();
+    const Type nodeType = ColumnType::get(context, storage::NodeIDType::get(context));
+    const Type edgeType = ColumnType::get(context, storage::EdgeIDType::get(context));
+    const Type edgeTypeType = ColumnType::get(context, storage::EdgeTypeIDType::get(context));
+
+    ConstScanEdges listed = builder.create<ConstScanEdges>(loc,
+                                                           nodeType,
+                                                           edgeType,
+                                                           edgeTypeType,
+                                                           nodeType,
+                                                           edgeIDs._literals,
+                                                           edgeIDs._bound,
+                                                           undirected);
+    computeBoundValuesAhead(listed);
+
+    return listed;
+}
+
+// The end a hop of @param direction walks each listed edge from, or with @param reached the
+// end it reaches: a hop walking both ways walks every edge from each of its ends
+Value scanListedEdgeEnds(const EntityIDList& edgeIDs, storage::PathDirection direction, bool reached, Location loc, mlir::OpBuilder& builder) {
+    ConstScanEdges listed = scanListedEdges(edgeIDs, direction == storage::PathDirection::Both, loc, builder);
+    const bool readsTheSources = (direction == storage::PathDirection::Backward) == reached;
+
+    return readsTheSources ? listed.getSrcids() : listed.getTgtids();
+}
+
+// A conjunct a scan of the graph answers, over the node column it reads: the nodes holding a
+// property value, the nodes listed by id, or the ends of a walk whose last edge is listed by
+// id. Its last hop reaches those ends over the listed edges, and may reach them over others,
+// so that conjunct still tests the rows.
 struct NodeScanPredicate {
     Value _column;
     StringAttr _property;
     TypedAttr _value;
     Value _boundValue;
     EntityIDList _nodeIDs;
+    EntityIDList _lastEdgeIDs;
+    storage::PathDirection _lastHop {storage::PathDirection::Forward};
+    bool _listsLastEdges {false};
 };
 
 bool matchNodeIDPredicate(Value conjunct, NodeScanPredicate& predicate) {
@@ -5925,11 +6025,31 @@ bool matchNodeIDPredicate(Value conjunct, NodeScanPredicate& predicate) {
     return true;
 }
 
+bool matchWalkLastEdgePredicate(Value conjunct, NodeScanPredicate& predicate) {
+    const Value column = disjunctionColumn(conjunct);
+    WalkEndEdge endEdge;
+    if (!column || !matchWalkEndEdge(column, endEdge) || endEdge._first) {
+        return false;
+    }
+
+    if (!collectIDDisjunction(conjunct, column, predicate._lastEdgeIDs)) {
+        return false;
+    }
+
+    ExplorePaths walk = endEdge._walk;
+
+    predicate._column = walk.getTgtids();
+    predicate._lastHop = walk.getStepDirection(walk.getStepCount() - 1);
+    predicate._listsLastEdges = true;
+
+    return true;
+}
+
 bool matchNodeScanPredicate(Value conjunct, NodeScanPredicate& predicate) {
     EqOp equality = conjunct.getDefiningOp<EqOp>();
     PropertyEquality property;
     if (!equality || !matchPropertyEquality(equality, property)) {
-        return matchNodeIDPredicate(conjunct, predicate);
+        return matchNodeIDPredicate(conjunct, predicate) || matchWalkLastEdgePredicate(conjunct, predicate);
     }
 
     // A read of the write buffer sees nodes no scan of the graph does
@@ -5985,13 +6105,18 @@ Value buildNodeScan(const NodeScanPredicate& predicate, ArrayAttr labels, Locati
         return scan.getResult();
     }
 
-    ConstScanNodes listed = builder.create<ConstScanNodes>(loc,
-                                                           nodeColumnType,
-                                                           predicate._nodeIDs._literals,
-                                                           predicate._nodeIDs._bound);
-    computeBoundValuesAhead(listed);
+    llvm::SmallVector<Value> nodes;
+    if (predicate._listsLastEdges) {
+        nodes.push_back(scanListedEdgeEnds(predicate._lastEdgeIDs, predicate._lastHop, true, loc, builder));
+    } else {
+        ConstScanNodes listed = builder.create<ConstScanNodes>(loc,
+                                                               nodeColumnType,
+                                                               predicate._nodeIDs._literals,
+                                                               predicate._nodeIDs._bound);
+        computeBoundValuesAhead(listed);
+        nodes.push_back(listed.getResult());
+    }
 
-    llvm::SmallVector<Value> nodes {listed.getResult()};
     if (labels) {
         keepLabelledRows(nodes, labels, loc, builder);
     }
@@ -6159,7 +6284,8 @@ void fuseExploreEndSet(ExploreEndSet& endSet, mlir::RewriterBase& rewriter) {
         }
     });
 
-    if (endsOnThePredicate && endSet._conjunct.hasOneUse()) {
+    const bool holdsTheConjunct = endsOnThePredicate && !chain._predicate._listsLastEdges;
+    if (holdsTheConjunct && endSet._conjunct.hasOneUse()) {
         dropConjunct(endSet._filter, endSet._conjunct, rewriter);
     }
 }
@@ -12269,8 +12395,10 @@ struct RerootPatternAtSeed : public impl::RerootPatternAtSeedBase<RerootPatternA
     }
 };
 
-// A pattern one of whose hops binds the edges a disjunction of ID tests reads after the
-// pattern: it is rebuilt from the edges the disjunction lists, walked out from both their ends
+// A pattern one of whose steps binds the edges a disjunction of ID tests reads after the
+// pattern: a hop, rebuilt from the edges the disjunction lists and walked out from both their
+// ends, or a walk starting on them, rebuilt from the ends the listed edges leave. The walk
+// leaves those ends over other edges too, so the disjunction still tests its rows.
 struct ListedEdgesPattern {
     SeedPattern _pattern;
     FilterOp _filter {nullptr};
@@ -12297,14 +12425,31 @@ bool endsAtTheFilter(const SeedPattern& pattern, llvm::ArrayRef<Operation*> patt
     });
 }
 
+const PatternStep* findStep(const SeedPattern& pattern, Operation* op) {
+    for (const PatternStep& step : pattern._steps) {
+        if (step._op == op) {
+            return &step;
+        }
+    }
+
+    return nullptr;
+}
+
 bool matchListedEdgesPattern(FilterOp filter, ListedEdgesPattern& match) {
     const Value mask = filter.getMask();
     const Value column = disjunctionColumn(mask);
-    if (!column || !isEdgeColumn(column)) {
+    if (!column) {
         return false;
     }
 
-    Operation* const root = findPatternRoot(column);
+    WalkEndEdge walkStart;
+    const bool listsHopEdges = isEdgeColumn(column);
+    const bool listsWalkStarts = !listsHopEdges && matchWalkEndEdge(column, walkStart) && walkStart._first;
+    if (!listsHopEdges && !listsWalkStarts) {
+        return false;
+    }
+
+    Operation* const root = findPatternRoot(listsHopEdges ? column : walkStart._walk.getSrcids());
     if (!root || root->getBlock() != filter->getBlock()) {
         return false;
     }
@@ -12322,15 +12467,20 @@ bool matchListedEdgesPattern(FilterOp filter, ListedEdgesPattern& match) {
         return false;
     }
 
-    const PatternStep* const step = findEdgeStep(pattern, patternOrigin(column, pattern));
+    const PatternStep* const step = listsHopEdges ? findEdgeStep(pattern, patternOrigin(column, pattern)) : findStep(pattern, walkStart._walk.getOperation());
     if (!step || !collectIDDisjunction(mask, column, match._edgeIDs)) {
         return false;
     }
 
-    const Value edges = step->_op->getResult(EDGE_IDS_RESULT);
+    const PatternStep* const fetchedStep = listsHopEdges ? step : nullptr;
+    const Value seeded = listsHopEdges ? step->_op->getResult(EDGE_IDS_RESULT) : step->_from;
     const llvm::SmallPtrSet<Operation*, 1> noneApplied;
-    if (!isWalkableFrom(pattern, edges, step) || !planWalk(pattern, edges, step, noneApplied, false, match._events)) {
+    if (!isWalkableFrom(pattern, seeded, fetchedStep) || !planWalk(pattern, seeded, fetchedStep, noneApplied, false, match._events)) {
         return false;
+    }
+
+    if (listsWalkStarts) {
+        match._events.push_back(WalkEvent {._kind = WalkEvent::Kind::Filter, ._filter = filter});
     }
 
     match._filter = filter;
@@ -12339,29 +12489,30 @@ bool matchListedEdgesPattern(FilterOp filter, ListedEdgesPattern& match) {
     return true;
 }
 
-// Every row rebuilt from the listed edges holds the disjunction, so the filter testing it goes
+// Every row rebuilt from a hop's listed edges holds the disjunction, so the filter testing it
+// goes. A walk rebuilt from their ends tests it again.
 void rerootAtListedEdges(ListedEdgesPattern& match, mlir::RewriterBase& rewriter) {
     FilterOp filter = match._filter;
     const Location loc = filter.getLoc();
     const PatternStep& step = *match._listedStep;
-    Operation* const hop = step._op;
 
     rewriter.setInsertionPoint(filter);
-    ConstScanEdges listed = rewriter.create<ConstScanEdges>(loc,
-                                                            hop->getResult(0).getType(),
-                                                            hop->getResult(EDGE_IDS_RESULT).getType(),
-                                                            hop->getResult(EDGE_TYPES_RESULT).getType(),
-                                                            hop->getResult(EDGE_TARGETS_RESULT).getType(),
-                                                            match._edgeIDs._literals,
-                                                            match._edgeIDs._bound,
-                                                            isa<GetEdges>(hop));
-    computeBoundValuesAhead(listed);
-
     PatternReplay replay(match._pattern, rewriter, loc);
-    replay.bind(step._from, listed->getResult(hopInputResult(hop)));
-    replay.bind(step._to, listed->getResult(hopReachedResult(hop)));
-    replay.bind(hop->getResult(EDGE_IDS_RESULT), listed.getEids());
-    replay.bind(hop->getResult(EDGE_TYPES_RESULT), listed.getEtypes());
+
+    if (ExplorePaths walk = dyn_cast<ExplorePaths>(step._op)) {
+        const Value starts = scanListedEdgeEnds(match._edgeIDs, walk.getStepDirection(0), false, loc, rewriter);
+        RemoveDuplicates seeds = rewriter.create<RemoveDuplicates>(loc, TypeRange {starts.getType()}, ValueRange {starts}, Value());
+        replay.bind(step._from, seeds.getResult(0));
+    } else {
+        Operation* const hop = step._op;
+        ConstScanEdges listed = scanListedEdges(match._edgeIDs, isa<GetEdges>(hop), loc, rewriter);
+
+        replay.bind(step._from, listed->getResult(hopInputResult(hop)));
+        replay.bind(step._to, listed->getResult(hopReachedResult(hop)));
+        replay.bind(hop->getResult(EDGE_IDS_RESULT), listed.getEids());
+        replay.bind(hop->getResult(EDGE_TYPES_RESULT), listed.getEtypes());
+    }
+
     replay.walk(match._events);
 
     const ResultRange filtered = filter.getFilteredColumns();

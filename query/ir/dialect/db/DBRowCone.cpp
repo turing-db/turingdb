@@ -38,7 +38,7 @@ bool mlir::db::isRowWiseOp(Operation* op) {
 }
 
 bool mlir::db::computesPerRow(Operation* op) {
-    return isRowWiseOp(op) || isa<ListIndex, ContainerIndex, ToNullable, GetEdgeTypes>(op);
+    return isRowWiseOp(op) || isa<ListIndex, ContainerIndex, ToNullable, GetEdgeTypes, ExpandPath, Head, Last>(op);
 }
 
 bool mlir::db::computesFromTheRow(Operation* op) {

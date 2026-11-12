@@ -134,7 +134,7 @@ def FuseFetchNodes : Pass<"fuse_fetch_nodes"> {
 }
 
 def RerootPatternAtEdgeIDs : Pass<"reroot_pattern_at_edge_ids"> {
-    let summary = "Walk a pattern out from the edges a filter on the IDs of one of its edges lists, an OR of equalities to an ID and IN tests over a list of IDs, looked up by a const_scan_edges, instead of scanning the pattern and filtering it";
+    let summary = "Walk a pattern out from the edges a filter on the IDs of one of its edges lists, an OR of equalities to an ID and IN tests over a list of IDs, looked up by a const_scan_edges, instead of scanning the pattern and filtering it. A filter on the first edge of a walk seeds the walk at the ends those edges leave, and still tests its rows";
     let dependentDialects = ["mlir::db::DB"];
 }
 
@@ -204,7 +204,7 @@ def FuseExploreEndFactor : Pass<"fuse_explore_end_factor"> {
 }
 
 def FuseExploreEndSet : Pass<"fuse_explore_end_set"> {
-    let summary = "End a path exploration on the nodes a filter's property or id predicate holds of, or on the nodes the hops after the walk lead back to from them";
+    let summary = "End a path exploration on the nodes a filter's property or id predicate holds of, on the nodes the hops after the walk lead back to from them, or on the ends of the edges a filter on the IDs of its last edge lists";
     let dependentDialects = ["mlir::db::DB"];
 }
 

@@ -206,18 +206,6 @@ TEST_F(EdgeIDLookupTest, walksOnFromTheListedEdge) {
                      {{"Adam", "Remy", "Eighties"}, {"Ghosts", "Remy", "Eighties"}});
 }
 
-TEST_F(EdgeIDLookupTest, leavesAVariableLengthPatternAlone) {
-    const ParameterMap parameters;
-    const std::string_view query = "MATCH (a)-[rs*1..2]->(b) WHERE id(rs[0]) = 3 RETURN a.name, b.name";
-
-    std::string program;
-    dbProgramOf(query, parameters, program);
-
-    EXPECT_FALSE(contains(program, "db.const_scan_edges")) << program;
-    EXPECT_FALSE(contains(program, "db.fetch_edges")) << program;
-    expectRows(query, parameters, {{"Remy", "Eighties"}});
-}
-
 TEST_F(EdgeIDLookupTest, listsAnEdgeTheQueryCreated) {
     ParameterMap parameters;
     parameters.insert("id").setInt64(18);
