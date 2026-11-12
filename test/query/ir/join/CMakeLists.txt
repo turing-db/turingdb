@@ -42,6 +42,8 @@ add_ir_tests(test_query_ir_hash_join_index NLHashJoinIndexTest.cpp)
 # so it needs the frontend engine beside the dialects.
 add_turing_test(test_query_ir_hash_join HashJoinTest.cpp)
 
+add_turing_test(test_query_ir_hash_join_entity_key HashJoinEntityKeyTest.cpp)
+
 add_turing_test(test_query_ir_nested_product_filter NestedProductFilterTest.cpp)
 
 add_turing_test(test_query_ir_predicate_over_kept_rows PredicateOverKeptRowsTest.cpp)
