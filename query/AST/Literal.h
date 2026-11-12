@@ -231,8 +231,6 @@ class EmbeddingLiteral : public Literal {
 public:
     static EmbeddingLiteral* create(CypherAST* ast);
 
-    static EmbeddingLiteral* create(CypherAST* ast, std::vector<float>&& data);
-
     constexpr Kind getKind() const override { return Kind::EMBEDDING; }
 
     constexpr EvaluatedType getType() const override { return EvaluatedType::Embedding; }
@@ -241,16 +239,12 @@ public:
 
     size_t getDimension() const { return _data.size(); }
 
-    // Overload for DIGIT Parser rule
-    void addItem(int64_t x) { _data.push_back(x); }
-    // Overload for DOUBLE Parser rule
     void addItem(double x) { _data.push_back(x); }
 
 private:
     std::vector<float> _data;
 
     EmbeddingLiteral();
-    explicit EmbeddingLiteral(std::vector<float>&& data);
     ~EmbeddingLiteral() override;
 };
 

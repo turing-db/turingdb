@@ -21,9 +21,9 @@ constexpr std::string_view indexName = "vectors";
 
 }
 
-// A VECTOR SEARCH searches for the vector the query wrote, so a statement carrying none -
-// or one of no dimension - is turned away by the analyzer. The grammar cannot spell either
-// shape, so the statements are built here rather than parsed.
+// A VECTOR SEARCH searches for the vector the query wrote, so a statement carrying none is
+// turned away by the analyzer. The grammar cannot spell that shape, so the statement is built
+// here rather than parsed.
 class VectorSearchQueryVectorTest : public turing::test::TuringTest {
 public:
     void initialize() override {
@@ -63,9 +63,4 @@ protected:
 
 TEST_F(VectorSearchQueryVectorTest, rejectsASearchCarryingNoQueryVector) {
     expectRejected(nullptr);
-}
-
-TEST_F(VectorSearchQueryVectorTest, rejectsASearchForAVectorOfNoDimension) {
-    CypherAST ast(_procedures.get(), "");
-    expectRejected(LiteralExpr::create(&ast, EmbeddingLiteral::create(&ast)));
 }

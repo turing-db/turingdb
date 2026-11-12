@@ -696,13 +696,6 @@ void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
                    stmt);
     }
 
-    if (queryVector->getKind() == Expr::Kind::LITERAL) {
-        const Literal* literal = static_cast<const LiteralExpr*>(queryVector)->getLiteral();
-        if (static_cast<const EmbeddingLiteral*>(literal)->getValue().empty()) {
-            throwError("VECTOR SEARCH query vector cannot be empty", stmt);
-        }
-    }
-
     // Process YIELD clause - create VarDecl for 'ids' variable
     const YieldClause* yield = stmt->getYield();
     if (!yield) {

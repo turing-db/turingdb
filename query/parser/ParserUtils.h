@@ -13,7 +13,6 @@ namespace db {
 class CallSubqueryStmt;
 class CypherAST;
 class EdgePattern;
-class EmbeddingLiteral;
 class EntityTypeExpr;
 class ExistsExpr;
 class Expr;
@@ -59,8 +58,6 @@ public:
 
     ParserUtils() = delete;
     ~ParserUtils() = delete;
-
-    static EmbeddingLiteral* listExprToEmbeddingLiteral(CypherAST* ast, const ListLiteral* list);
 
     // A parameter written as $0, $1, ... is looked up under the digits as its name
     static Parameter* createNumberedParameter(CypherAST* ast, int64_t number);
@@ -192,8 +189,6 @@ public:
                               const SourceLocation& location);
 
 private:
-    static void listExprToFloatVector(const ListLiteral* list, std::vector<float>& out);
-
     // `RETURN <the columns of @param projection>`, read back by name from the scope the
     // segment that projects them publishes
     static ReturnStmt* createSegmentReturn(CypherAST* ast,

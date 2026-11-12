@@ -58,7 +58,7 @@ public:
                 }
 
                 const size_t byteWidth = static_cast<size_t>(descriptor->type_length());
-                if (byteWidth == 0 || byteWidth % sizeof(EmbeddingElement) != 0) {
+                if (byteWidth % sizeof(EmbeddingElement) != 0) {
                     throw TuringException(fmt::format(
                         "LOAD EMBEDDING: embedding column '{}' byte width {} is not a multiple of {}",
                         _embeddingColumn, byteWidth, sizeof(EmbeddingElement)));
