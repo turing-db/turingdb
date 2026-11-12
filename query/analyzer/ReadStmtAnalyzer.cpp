@@ -827,10 +827,6 @@ void ReadStmtAnalyzer::analyze(UnwindStmt* unwind) {
         throwError("Invalid use of aggregate expression in this context", unwind);
     }
 
-    if (unwind->isForeach()) {
-        throwOnNonListForeachLiteral(arg);
-    }
-
     const Symbol* symbol = unwind->symbol();
     bioassert(symbol, "Invalid symbol.");
 
@@ -850,24 +846,6 @@ void ReadStmtAnalyzer::analyze(UnwindStmt* unwind) {
     // Unwinding a list of lists leaves a list, so the variable carries the shape it has
     // left: what a second UNWIND of it reads to know its own elements.
     itemDecl->setListShape(arg->getListShape().unwound());
-}
-
-void ReadStmtAnalyzer::throwOnNonListForeachLiteral(const Expr* arg) const {
-    if (arg->getKind() != Expr::Kind::LITERAL) {
-        return;
-    }
-
-    const Literal* literal = static_cast<const LiteralExpr*>(arg)->getLiteral();
-    const Literal::Kind literalKind = literal->getKind();
-
-    const bool iteratesAList = literalKind == Literal::Kind::LIST;
-    const bool iteratesNull = literalKind == Literal::Kind::NULL_LITERAL;
-
-    if (!iteratesAList && !iteratesNull) {
-        throwError(fmt::format("FOREACH requires a list, not '{}'",
-                               EvaluatedTypeName::value(arg->getType())),
-                   arg);
-    }
 }
 
 void ReadStmtAnalyzer::throwError(std::string_view msg, const void* obj) const {

@@ -1,1 +1,2 @@
 add_turing_test(test_query_ir_foreach ForeachTest.cpp)
+add_turing_test(test_query_ir_foreach_non_list ForeachNonListTest.cpp)

@@ -135,10 +135,6 @@ TEST_F(ForeachTest, rejectsAReadingClauseAfterIt) {
                    "A reading clause cannot follow an updating clause");
 }
 
-TEST_F(ForeachTest, rejectsANonListLiteral) {
-    expectRejected("FOREACH (x IN 5 | CREATE (:Tag))", "requires a list");
-}
-
 TEST_F(ForeachTest, rejectsAReadingClauseInTheBody) {
     expectRejected("FOREACH (x IN [1] | MATCH (n) CREATE (:Tag))", "syntax error");
 }

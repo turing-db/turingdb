@@ -104,10 +104,6 @@ private:
 
     void analyzeVectorSearchOperand(Expr* operand, const VectorSearchStmt* stmt);
 
-    // Rejects a FOREACH over a literal that is no list, which Neo4j types as an error
-    // where UNWIND spreads the value into one row. A null iterates no row.
-    void throwOnNonListForeachLiteral(const Expr* arg) const;
-
     VarDecl* resolveShortestPathEndpoint(const Symbol* endpoint, const ShortestPathStmt* spSt) const;
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
