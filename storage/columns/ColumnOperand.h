@@ -33,6 +33,11 @@ std::optional<T> constantOperand(const ColumnConst<std::optional<T>>* column) {
     return column->get(0);
 }
 
+template <typename T>
+decltype(auto) operandRow(const ColumnConst<T>* column, size_t) {
+    return constantOperand(column);
+}
+
 template <typename ColumnType, typename T>
 void writeRow(ColumnType* column, size_t row, const T& value) {
     column->set(row, value);
@@ -121,11 +126,6 @@ struct BinaryOpExecutor {
 template <typename ColumnType>
 struct ColumnOperandOf {
     using type = std::remove_cvref_t<decltype(operandRow(std::declval<const ColumnType*>(), size_t {0}))>;
-};
-
-template <typename T>
-struct ColumnOperandOf<ColumnConst<T>> {
-    using type = std::remove_cvref_t<decltype(constantOperand(std::declval<const ColumnConst<T>*>()))>;
 };
 
 template <typename ColumnType>
