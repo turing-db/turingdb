@@ -87,12 +87,12 @@ public:
         const EmbeddingColumn* const values = static_cast<const EmbeddingColumn*>(chunks[1]);
 
         const std::vector<NodeID>& rawIDs = nodeIDs->getRaw();
-        const std::vector<std::optional<std::span<const float>>>& rawValues = values->getRaw();
 
         for (size_t row = offset; row < offset + rowCount; row++) {
             std::optional<std::vector<float>> value;
-            if (rawValues[row]) {
-                value.emplace(rawValues[row]->begin(), rawValues[row]->end());
+            if (values->isValid(row)) {
+                const std::span<const float> embedding = values->getValue(row);
+                value.emplace(embedding.begin(), embedding.end());
             }
 
             _rows.emplace_back(rawIDs[row].getValue(), value);

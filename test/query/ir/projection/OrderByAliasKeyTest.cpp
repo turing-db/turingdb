@@ -35,6 +35,7 @@
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
+#include "IRTestColumns.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
@@ -71,12 +72,11 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
 
-        const auto* values = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[0]);
+        const auto* values = columnAs<ColumnOptVector<int64_t>>(chunks[0]);
         ASSERT_NE(values, nullptr);
 
-        const auto& valueRaw = values->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _values.push_back(valueRaw[rowIndex]);
+            _values.push_back(values->get(rowIndex));
         }
     }
 

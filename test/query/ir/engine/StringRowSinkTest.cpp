@@ -16,6 +16,7 @@
 #include "CellView.h"
 #include "ID.h"
 #include "columns/ColumnConst.h"
+#include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "list/ListBuffer.h"
 #include "list/ListView.h"
@@ -45,6 +46,22 @@ void expectCell(const Column& column, std::string_view expected) {
     sink.appendChunks(chunks, 0, 1);
 
     EXPECT_EQ(sink.getRows().front().front(), expected);
+}
+
+template <typename T>
+void expectNullableCell(const T& value, std::string_view expected) {
+    ColumnOptVector<T> column;
+    column.push_back(value);
+
+    expectCell(column, expected);
+}
+
+template <typename T>
+void expectNullCell() {
+    ColumnOptVector<T> column;
+    column.pushNull();
+
+    expectCell(column, "null");
 }
 
 }
@@ -162,7 +179,7 @@ TEST(StringRowSinkColumnTest, readsAMap) {
 
     expectCell(ColumnVector<MapView> {map}, "{a: 1, b: null}");
     expectCell(ColumnConst<MapView> {MapView {map}}, "{a: 1, b: null}");
-    expectCell(ColumnVector<std::optional<MapView>> {std::optional<MapView> {}}, "null");
+    expectNullCell<MapView>();
     expectCell(ColumnConst<std::optional<MapView>> {std::optional<MapView> {map}}, "{a: 1, b: null}");
 }
 
@@ -185,15 +202,15 @@ TEST(StringRowSinkColumnTest, readsAnEmbedding) {
 
     expectCell(ColumnVector<types::Embedding::Primitive> {values}, "0.5, 1.5");
     expectCell(ColumnConst<types::Embedding::Primitive> {types::Embedding::Primitive {values}}, "0.5, 1.5");
-    expectCell(ColumnVector<std::optional<types::Embedding::Primitive>> {std::nullopt}, "null");
+    expectNullCell<types::Embedding::Primitive>();
 }
 
 TEST(StringRowSinkColumnTest, readsIdentifiersAndHashes) {
     expectCell(ColumnConst<NodeID> {NodeID {5}}, "5");
     expectCell(ColumnVector<LabelSetID> {LabelSetID {2}}, "2");
-    expectCell(ColumnVector<std::optional<EdgeTypeID>> {EdgeTypeID {1}}, "1");
-    expectCell(ColumnVector<std::optional<LabelID>> {std::nullopt}, "null");
-    expectCell(ColumnVector<std::optional<PropertyTypeID>> {PropertyTypeID {3}}, "3");
+    expectNullableCell(EdgeTypeID {1}, "1");
+    expectNullCell<LabelID>();
+    expectNullableCell(PropertyTypeID {3}, "3");
     expectCell(ColumnVector<CommitHash> {CommitHash {255}}, "ff");
     expectCell(ColumnVector<ChangeID> {ChangeID {255}}, "255");
 }
@@ -202,7 +219,7 @@ TEST(StringRowSinkColumnTest, readsBooleansTypesAndConstantTemporals) {
     expectCell(ColumnVector<CustomBool> {CustomBool {true}}, "true");
     expectCell(ColumnConst<CustomBool> {CustomBool {false}}, "false");
     expectCell(ColumnConst<ValueType> {ValueType::String}, "String");
-    expectCell(ColumnVector<std::optional<ValueType>> {std::nullopt}, "null");
+    expectNullCell<ValueType>();
     expectCell(ColumnConst<DateTime> {DateTime {0}}, "1970-01-01T00:00:00Z");
     expectCell(ColumnConst<Duration> {Duration {90061000000}}, "PT25H1M1S");
     expectCell(ColumnConst<std::optional<std::string>> {std::optional<std::string> {"text"}}, "text");

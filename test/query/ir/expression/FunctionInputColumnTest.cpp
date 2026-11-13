@@ -19,6 +19,7 @@
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 
+#include "IRTestColumns.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
@@ -39,11 +40,11 @@ public:
         ASSERT_LT(_nullColumn, chunks.size());
 
         const ColumnOptVector<types::Int64::Primitive>* nullColumn =
-            dynamic_cast<const ColumnOptVector<types::Int64::Primitive>*>(chunks[_nullColumn]);
+            columnAs<ColumnOptVector<types::Int64::Primitive>>(chunks[_nullColumn]);
         ASSERT_NE(nullColumn, nullptr);
 
         for (size_t row = offset; row < offset + rowCount; ++row) {
-            if (!(*nullColumn)[row].has_value()) {
+            if (!nullColumn->isValid(row)) {
                 ++_nullRows;
             }
         }

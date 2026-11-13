@@ -22,6 +22,7 @@
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 
+#include "IRTestColumns.h"
 #include "IRTestRows.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
@@ -48,16 +49,15 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
 
-        const auto* mask = dynamic_cast<const ColumnOptVector<CustomBool>*>(chunks[0]);
+        const auto* mask = columnAs<ColumnOptVector<CustomBool>>(chunks[0]);
         if (!mask) {
             _otherKinds.emplace_back(chunks[0]->getTypeName());
             return;
         }
 
-        const std::vector<std::optional<CustomBool>>& raw = mask->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            ASSERT_TRUE(raw[rowIndex].has_value());
-            _values.push_back(static_cast<bool>(*raw[rowIndex]));
+            ASSERT_TRUE(mask->isValid(rowIndex));
+            _values.push_back(static_cast<bool>(mask->getValue(rowIndex)));
         }
     }
 
