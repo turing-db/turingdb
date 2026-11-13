@@ -38,6 +38,7 @@
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
+#include "IRTestColumns.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
@@ -57,13 +58,12 @@ int64_t readValue(const Column* column, size_t row) {
         return static_cast<int64_t>((*nodeIDs)[row].getValue());
     } else if (const auto* constants = dynamic_cast<const ColumnConst<int64_t>*>(column)) {
         return (*constants)[row];
-    } else if (const auto* values = dynamic_cast<const ColumnOptVector<int64_t>*>(column)) {
-        const std::optional<int64_t>& value = values->getRaw()[row];
-        if (!value) {
+    } else if (const auto* values = columnAs<ColumnOptVector<int64_t>>(column)) {
+        if (!values->isValid(row)) {
             throw std::runtime_error("LimitSkipTest: null row in a value output column");
         }
 
-        return *value;
+        return values->getValue(row);
     }
 
     throw std::runtime_error("LimitSkipTest: unsupported output column type");

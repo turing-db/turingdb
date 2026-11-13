@@ -39,6 +39,7 @@
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
+#include "IRTestColumns.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
@@ -52,15 +53,14 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
 
-        const auto* lists = dynamic_cast<const ColumnOptVector<ListView>*>(chunks[0]);
+        const auto* lists = columnAs<ColumnOptVector<ListView>>(chunks[0]);
         ASSERT_NE(lists, nullptr);
 
-        const auto& raw = lists->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            ASSERT_TRUE(raw[rowIndex].has_value());
+            ASSERT_TRUE(lists->isValid(rowIndex));
 
             std::vector<std::string>& names = _values.emplace_back();
-            for (const CellView element : *raw[rowIndex]) {
+            for (const CellView element : lists->getValue(rowIndex)) {
                 ASSERT_EQ(element.getTag(), CellTag::String);
                 names.emplace_back(element.getAs<std::string_view>());
             }

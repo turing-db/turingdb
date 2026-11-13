@@ -98,12 +98,9 @@ public:
         const NameColumn* const names = static_cast<const NameColumn*>(chunks[0]);
         const ScoreColumn* const scores = static_cast<const ScoreColumn*>(chunks[1]);
 
-        const std::vector<std::optional<types::String::Primitive>>& rawNames = names->getRaw();
-        const std::vector<std::optional<double>>& rawScores = scores->getRaw();
-
         for (size_t row = offset; row < offset + rowCount; row++) {
-            ASSERT_TRUE(rawNames[row]);
-            _rows.emplace_back(std::string {*rawNames[row]}, rawScores[row]);
+            ASSERT_TRUE(names->isValid(row));
+            _rows.emplace_back(std::string {names->getValue(row)}, scores->get(row));
         }
     }
 
@@ -122,10 +119,9 @@ public:
         using ScoreColumn = ColumnOptVector<double>;
 
         const ScoreColumn* const scores = static_cast<const ScoreColumn*>(chunks[0]);
-        const std::vector<std::optional<double>>& rawScores = scores->getRaw();
 
         for (size_t row = offset; row < offset + rowCount; row++) {
-            _scores.push_back(rawScores[row]);
+            _scores.push_back(scores->get(row));
         }
     }
 

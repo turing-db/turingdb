@@ -38,6 +38,7 @@
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
+#include "IRTestColumns.h"
 #include "TuringException.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
@@ -70,13 +71,12 @@ public:
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
             Row& row = _rows.emplace_back();
             for (const Column* const column : chunks) {
-                const auto* names = dynamic_cast<const ColumnOptVector<std::string_view>*>(column);
+                const auto* names = columnAs<ColumnOptVector<std::string_view>>(column);
                 if (!names) {
                     throw TuringException("OptionalMatchCutTest: expected a string property column");
                 }
 
-                const std::optional<std::string_view>& name = (*names)[rowIndex];
-                row.push_back(name ? std::string(*name) : "null");
+                row.push_back(names->isValid(rowIndex) ? std::string(names->getValue(rowIndex)) : "null");
             }
         }
     }

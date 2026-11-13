@@ -42,6 +42,7 @@
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
+#include "IRTestColumns.h"
 #include "TuringException.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
@@ -134,13 +135,12 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
 
-        const auto* names = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
+        const auto* names = columnAs<ColumnOptVector<std::string_view>>(chunks[0]);
         ASSERT_NE(names, nullptr);
 
-        const auto& nameRaw = names->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            ASSERT_TRUE(nameRaw[rowIndex].has_value());
-            _names.push_back(std::string(*nameRaw[rowIndex]));
+            ASSERT_TRUE(names->isValid(rowIndex));
+            _names.push_back(std::string(names->getValue(rowIndex)));
         }
     }
 
@@ -157,12 +157,11 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
 
-        const auto* values = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[0]);
+        const auto* values = columnAs<ColumnOptVector<int64_t>>(chunks[0]);
         ASSERT_NE(values, nullptr);
 
-        const auto& valueRaw = values->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _values.push_back(valueRaw[rowIndex]);
+            _values.push_back(values->get(rowIndex));
         }
     }
 
@@ -194,13 +193,12 @@ public:
         const auto* constants = dynamic_cast<const ColumnConst<int64_t>*>(chunks[_constantColumn]);
         ASSERT_NE(constants, nullptr);
 
-        const auto* names = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[_nameColumn]);
+        const auto* names = columnAs<ColumnOptVector<std::string_view>>(chunks[_nameColumn]);
         ASSERT_NE(names, nullptr);
 
-        const auto& nameRaw = names->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            ASSERT_TRUE(nameRaw[rowIndex].has_value());
-            _rows.emplace_back((*constants)[rowIndex], std::string(*nameRaw[rowIndex]));
+            ASSERT_TRUE(names->isValid(rowIndex));
+            _rows.emplace_back((*constants)[rowIndex], std::string(names->getValue(rowIndex)));
         }
     }
 
@@ -220,12 +218,11 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
-        const auto* values = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[1]);
+        const auto* values = columnAs<ColumnOptVector<int64_t>>(chunks[1]);
         ASSERT_NE(values, nullptr);
 
-        const auto& valueRaw = values->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _rows.emplace_back(readNodeID(chunks[0], rowIndex), valueRaw[rowIndex]);
+            _rows.emplace_back(readNodeID(chunks[0], rowIndex), values->get(rowIndex));
         }
     }
 
@@ -244,12 +241,11 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
-        const auto* averages = dynamic_cast<const ColumnOptVector<double>*>(chunks[1]);
+        const auto* averages = columnAs<ColumnOptVector<double>>(chunks[1]);
         ASSERT_NE(averages, nullptr);
 
-        const auto& averageRaw = averages->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _rows.emplace_back(readNodeID(chunks[0], rowIndex), averageRaw[rowIndex]);
+            _rows.emplace_back(readNodeID(chunks[0], rowIndex), averages->get(rowIndex));
         }
     }
 
