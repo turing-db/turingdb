@@ -28,50 +28,10 @@ struct BinaryOperators {
 
 /// Binary predicates, returning a Bool-like
 struct BinaryPredicates {
-    template <typename Op, typename ColT, typename ColU>
-    static void exec(ColumnVector<CustomBool>* res, const ColT* lhs, const ColU* rhs) {
-        using DecayColT = TypeUtils::decay_col_t<ColT>;
-        using DecayColU = TypeUtils::decay_col_t<ColU>;
-
-        using InternalT = InnerTypeHelper<DecayColT>::type;
-        using InternalU = InnerTypeHelper<DecayColU>::type;
-
-        BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(res, lhs, rhs);
-    }
-
-    template <typename Op, typename ColT, typename ColU>
-    static void exec(ColumnOptVector<CustomBool>* res, const ColT* lhs, const ColU* rhs) {
-        using DecayColT = TypeUtils::decay_col_t<ColT>;
-        using DecayColU = TypeUtils::decay_col_t<ColU>;
-
-        using InternalT = InnerTypeHelper<DecayColT>::type;
-        using InternalU = InnerTypeHelper<DecayColU>::type;
-
-        BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(res, lhs, rhs);
-    }
-
-    template <typename Op, typename ColT, typename ColU>
-    static void exec(ColumnConst<std::optional<CustomBool>>* res, const ColT* lhs, const ColU* rhs) {
-        using DecayColT = TypeUtils::decay_col_t<ColT>;
-        using DecayColU = TypeUtils::decay_col_t<ColU>;
-
-        using InternalT = InnerTypeHelper<DecayColT>::type;
-        using InternalU = InnerTypeHelper<DecayColU>::type;
-
-        BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(res, lhs, rhs);
-    }
-
-    /// Const x Const predicates e.g. 1 = 1
-    // FIXME: Do we need opt version for null-literals ?
-    template <typename Op, typename ColT, typename ColU>
-    static void exec(ColumnConst<CustomBool>* res, const ColT* lhs, const ColU* rhs) {
-        using DecayColT = TypeUtils::decay_col_t<ColT>;
-        using DecayColU = TypeUtils::decay_col_t<ColU>;
-
-        using InternalT = InnerTypeHelper<DecayColT>::type;
-        using InternalU = InnerTypeHelper<DecayColU>::type;
-
-        BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(res, lhs, rhs);
+    template <typename Op, typename ColW, typename ColT, typename ColU>
+        requires is_result_column<Op, ColT, ColU, ColW>
+    static void exec(ColW* res, const ColT* lhs, const ColU* rhs) {
+        BinaryOpExecutor<Op>::apply(res, lhs, rhs);
     }
 };
 

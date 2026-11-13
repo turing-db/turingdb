@@ -3394,18 +3394,8 @@ NLJoinKeyFunctions optJoinKeyFunctions() {
     return {&hashOptKeyColumn<Primitive>, &keyEqualOptColumn<Primitive>, &optColumnRowMatchable<Primitive>};
 }
 
-template <typename Element>
-const Element& keyColumnRow(const ColumnVector<Element>* column, size_t row) {
-    return column->getRaw()[row];
-}
-
-template <typename Element>
-auto keyColumnRow(const ColumnOptVector<Element>* column, size_t row) {
-    return column->get(row);
-}
-
 template <typename ColumnType>
-concept RowKeyColumn = requires(const ColumnType* column) { keyColumnRow(column, size_t {0}); };
+concept RowKeyColumn = requires(const ColumnType* column) { operandRow(column, size_t {0}); };
 
 // A probe key and a build key of two types, compared by the `=` of the filter the join
 // replaces: an unknown answer matches nothing, as the filter kept only the true rows
@@ -3414,7 +3404,7 @@ bool keyEqualAcrossTypes(const Column* probe, size_t probeRow, const Column* bui
     const ProbeColumn* typedProbe = static_cast<const ProbeColumn*>(probe);
     const BuildColumn* typedBuild = static_cast<const BuildColumn*>(build);
 
-    const auto equal = Eq {}(keyColumnRow(typedProbe, probeRow), keyColumnRow(typedBuild, buildRow));
+    const auto equal = Eq {}(operandRow(typedProbe, probeRow), operandRow(typedBuild, buildRow));
     if constexpr (TypeUtils::is_optional_v<std::decay_t<decltype(equal)>>) {
         return equal.has_value() && equal->_boolean;
     } else {
@@ -3581,7 +3571,7 @@ std::optional<CellView> presentRow(const ColumnVector<CellView>* column, size_t 
 
 template <typename Primitive>
 std::optional<Primitive> presentRow(const ColumnOptVector<Primitive>* column, size_t row) {
-    return column->get(row);
+    return operandRow(column, row);
 }
 
 template <typename Primitive, bool IsMax>
