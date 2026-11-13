@@ -17,25 +17,12 @@
 #include "QueryTypeName.h"
 #include "TypeUtils.h"
 #include "ColumnMask.h"
+#include "ColumnOptMask.h"
 #include "ColumnConst.h"
 #include "CellOrder.h"
 #include "metadata/PropertyType.h"
 
 namespace db {
-
-// A mask's boolean reaches the comparisons of a type-erased cell only through its
-// conversion to a number, so it is compared as the boolean property type
-inline bool operator==(CellView element, ColumnMask::Bool_t predicate) {
-    return element == types::Bool::Primitive {predicate._value};
-}
-
-inline std::strong_ordering operator<=>(CellView element, ColumnMask::Bool_t predicate) {
-    return element <=> types::Bool::Primitive {predicate._value};
-}
-
-inline std::optional<std::partial_ordering> comparisonOrder(CellView element, ColumnMask::Bool_t predicate) {
-    return comparisonOrder(element, types::Bool::Primitive {predicate._value});
-}
 
 namespace {
 
@@ -50,7 +37,6 @@ static constexpr CustomBool sentinelTrue(true);
 // three-valued operators take it as an operand beside the booleans
 template <typename T>
 concept BooleanOpt = std::same_as<TypeUtils::unwrap_optional_t<T>, types::Bool::Primitive>
-                  || std::same_as<ColumnMask::Bool_t, T>
                   || std::same_as<std::decay_t<T>, PropertyNull>;
 
 template <typename... Ts>
@@ -494,156 +480,6 @@ struct BinaryPredicateExecutor {
         const auto& result = op(lhs->getRaw(), rhs->getRaw());
         res->front() = result;
     }
-
-    static void apply(ColumnMask* res,
-                      const ColumnMask* lhs,
-                      const ColumnMask* rhs) {
-        bioassert(lhs->size() == rhs->size(), "Misshapen ColumnMasks.");
-        const size_t size = lhs->size();
-
-        res->resize(size);
-        auto& resd = res->getRaw();
-        const auto& lhsd = lhs->getRaw();
-        const auto& rhsd = rhs->getRaw();
-
-        auto op = Op {};
-        for (size_t i = 0; i < size; i++) {
-            resd[i] = op(lhsd[i], rhsd[i]);
-       }
-    }
-
-    static void apply(ColumnOptMask* res,
-                      const ColumnVector<T>* lhs,
-                      const ColumnMask* rhs) {
-        bioassert(lhs->size() == rhs->size(), "Misshapen ColumnMasks.");
-        const size_t size = lhs->size();
-
-        res->resize(size);
-        auto& resd = res->getRaw();
-        const auto& lhsd = lhs->getRaw();
-        const auto& rhsd = rhs->getRaw();
-
-        auto op = Op {};
-        for (size_t i = 0; i < size; i++) {
-            resd[i] = op(lhsd[i], rhsd[i]);
-       }
-    }
-
-    static void apply(ColumnOptMask* res,
-                      const ColumnMask* lhs,
-                      const ColumnVector<U>* rhs) {
-        bioassert(lhs->size() == rhs->size(), "Misshapen ColumnMasks.");
-        const size_t size = lhs->size();
-
-        res->resize(size);
-        auto& resd = res->getRaw();
-        const auto& lhsd = lhs->getRaw();
-        const auto& rhsd = rhs->getRaw();
-
-        auto op = Op {};
-        for (size_t i = 0; i < size; i++) {
-            resd[i] = op(lhsd[i], rhsd[i]);
-       }
-    }
-
-    static void apply(ColumnMask* res,
-                      const ColumnVector<T>* lhs,
-                      const ColumnMask* rhs) {
-        bioassert(lhs->size() == rhs->size(), "Misshapen ColumnMasks.");
-        const size_t size = lhs->size();
-
-        res->resize(size);
-        auto& resd = res->getRaw();
-        const auto& lhsd = lhs->getRaw();
-        const auto& rhsd = rhs->getRaw();
-
-        auto op = Op {};
-        for (size_t i = 0; i < size; i++) {
-            resd[i] = op(lhsd[i], rhsd[i]);
-        }
-    }
-
-    static void apply(ColumnMask* res,
-                      const ColumnMask* lhs,
-                      const ColumnVector<U>* rhs) {
-        bioassert(lhs->size() == rhs->size(), "Misshapen ColumnMasks.");
-        const size_t size = lhs->size();
-
-        res->resize(size);
-        auto& resd = res->getRaw();
-        const auto& lhsd = lhs->getRaw();
-        const auto& rhsd = rhs->getRaw();
-
-        auto op = Op {};
-        for (size_t i = 0; i < size; i++) {
-            resd[i] = op(lhsd[i], rhsd[i]);
-        }
-    }
-
-    static void apply(ColumnMask* res,
-                      const ColumnConst<T>* lhs,
-                      const ColumnMask* rhs) {
-        const size_t size = rhs->size();
-
-        res->resize(size);
-        auto& resd = res->getRaw();
-        const auto& val = lhs->getRaw();
-        const auto& rhsd = rhs->getRaw();
-
-        auto op = Op {};
-        for (size_t i = 0; i < size; i++) {
-            resd[i] = op(val, rhsd[i]);
-        }
-    }
-
-    static void apply(ColumnMask* res,
-                      const ColumnMask* lhs,
-                      const ColumnConst<U>* rhs) {
-        const size_t size = lhs->size();
-
-        res->resize(size);
-        auto& resd = res->getRaw();
-        const auto& lhsd = lhs->getRaw();
-        const auto& val = rhs->getRaw();
-
-        auto op = Op {};
-        for (size_t i = 0; i < size; i++) {
-            resd[i] = op(lhsd[i], val);
-        }
-    }
-
-    static void apply(ColumnOptMask* res,
-                      const ColumnMask* lhs,
-                      const ColumnConst<U>* rhs) {
-        const size_t size = lhs->size();
-
-        res->resize(size);
-        auto& resd = res->getRaw();
-        const auto& lhsd = lhs->getRaw();
-        const auto& val = rhs->getRaw();
-
-        auto op = Op {};
-        for (size_t i = 0; i < size; i++) {
-            resd[i] = op(lhsd[i], val);
-        }
-    }
-
-    static void apply(ColumnOptMask* res,
-                      const ColumnConst<T>* lhs,
-                      const ColumnMask* rhs) {
-        const size_t size = rhs->size();
-
-        res->resize(size);
-        auto& resd = res->getRaw();
-        const auto& val = lhs->getRaw();
-        const auto& rhsd = rhs->getRaw();
-
-        auto op = Op {};
-        for (size_t i = 0; i < size; i++) {
-            resd[i] = op(val, rhsd[i]);
-        }
-    }
-
 };
 
 /**
@@ -701,7 +537,7 @@ struct BinaryPredicate {
     
     // Handle non-optional cases
     template <typename T, typename U>
-    inline ColumnMask::Bool_t operator()(T&& a, U&& b) {
+    inline CustomBool operator()(T&& a, U&& b) {
         return F{}(std::forward<T>(a), std::forward<U>(b));
     }
 };
@@ -833,10 +669,6 @@ struct TuringXor {
 
     bool operator()(CustomBool a, CustomBool b) {
         return a._boolean ^ b._boolean;
-    }
-
-    bool operator()(ColumnMask::Bool_t a, ColumnMask::Bool_t b) {
-        return a._value ^ b._value; 
     }
 };
 

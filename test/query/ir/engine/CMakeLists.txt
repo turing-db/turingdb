@@ -13,9 +13,11 @@ add_ir_tests(test_query_ir_nldialect NLDialectTest.cpp)
 
 add_ir_tests(test_query_ir_kernel_result_nullability KernelResultNullabilityTest.cpp)
 
-add_ir_tests(test_query_ir_kernel_result_mask KernelResultMaskTest.cpp)
+add_ir_tests(test_query_ir_kernel_result_bool KernelResultBoolTest.cpp)
 
 add_ir_tests(test_query_ir_boolean_column_class BooleanColumnClassTest.cpp)
+
+add_ir_tests(test_query_ir_mask_meets_bool_property MaskMeetsBoolPropertyTest.cpp)
 
 # The reduced-row output tests read the single row a reduction collapsed to from another
 # block, against the shared SimpleGraph fixture.

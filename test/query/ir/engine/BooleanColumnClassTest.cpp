@@ -80,11 +80,10 @@ void flagsDealloc(ProcedureData* data) {
 
 }
 
-// A boolean chunk is held in the column its type names: !storage.bool in a mask, i1 in a
-// column of plain booleans, !storage.nullable<i1> in a nullable one. Every kernel reading
-// one is picked from that type, and the translator rejects a truth value held in a column
-// of another class and a mask read through a kernel of plain booleans. Of the 8 people,
-// Remy and Adam have an age.
+// A boolean chunk is held in the column its type names: !storage.bool and i1 in a column of
+// plain booleans, !storage.nullable<i1> in a nullable one. Every kernel reading one is
+// picked from that type, and the translator rejects a truth value held in a column of
+// another class. Of the 8 people, Remy and Adam have an age.
 class BooleanColumnClassTest : public TuringTest {
 protected:
     void initialize() override {

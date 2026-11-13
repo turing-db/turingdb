@@ -10,7 +10,6 @@
 #include "TuringProtoNestedWriter.h"
 #include "TuringProtoOutBuf.h"
 #include "TuringProtoHeaders.h"
-#include "columns/ColumnMask.h"
 #include "columns/ColumnVector.h"
 #include "metadata/PropertyType.h"
 #include "QueryCallbacks.h"
@@ -117,10 +116,6 @@ struct ColumnHeaderWriter {
     void operator()(const db::ColumnConst<std::optional<T>>* col) {
         const auto typeCode = ColInternalKindToProtoEnum::map<T>();
         writeColumnSchema(typeCode, net::proto::ColumnKind::OPTIONAL_CONSTANT);
-    }
-
-    void operator()(const db::ColumnMask* col) {
-        writeColumnSchema(net::proto::ColumnInternalKind::BOOL, net::proto::ColumnKind::VECTOR);
     }
 };
 
@@ -338,18 +333,6 @@ public:
                           "TuringProtoEncoder only supports trivially copyable types and string");
             _outBuf->copyFixedLenData(&*opt, sizeof(T));
         }
-    }
-
-    void operator()(const db::ColumnMask* col) {
-        static_assert(sizeof(db::ColumnMask::ValueType) == sizeof(db::types::Bool::Primitive),
-                      "A mask is decoded as a BOOL vector, so its values must be bool-sized");
-
-        const std::span<const db::ColumnMask::ValueType> values = columnWindow(col->data(), col->size());
-
-        writeRowCount(values.size());
-
-        const size_t columnByteSize = sizeof(db::ColumnMask::ValueType) * values.size();
-        _outBuf->copyVector<db::ColumnMask::ValueType>(values.data(), columnByteSize);
     }
 
 private:

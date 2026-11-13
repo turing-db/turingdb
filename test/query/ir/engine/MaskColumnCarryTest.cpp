@@ -17,7 +17,7 @@
 #include "SystemAccessor.h"
 #include "SystemManager.h"
 #include "columns/Column.h"
-#include "columns/ColumnMask.h"
+#include "columns/ColumnOptMask.h"
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 

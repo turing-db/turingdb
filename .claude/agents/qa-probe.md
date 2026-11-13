@@ -52,16 +52,10 @@ renders a result with its own set of column kinds. That is a user-facing failure
 question answered with an error or a placeholder — so report it as `OUTPUT-BUG`. Do not
 bury it as a tooling note.
 
-One gap is already known. Do not spend time rediscovering it: the shell cannot render a
-`ColumnMask`, which is what a label predicate answers with, so `MATCH (n) RETURN n:Person`
-gives `EXEC_ERROR: Unsupported unary operation on column of type db::ColumnMask` and no
-rows at all. `writeColumnCell` in `tools/turingdb/TuringShell.cpp` excludes ColumnMask.
-
 To place a failure, `EXPLAIN` the query to see the column type of each output, then vary a
 clause that changes the column kind without changing what the query means — add an
-`ORDER BY`, a `DISTINCT`, or a grouping key. `MATCH (n) RETURN n:Person ORDER BY n.name`
-prints all 18 rows because the sort materialises the mask first. If any of those renders
-the values, the engine has them and the shell is what failed.
+`ORDER BY`, a `DISTINCT`, or a grouping key. If any of those renders the values, the
+engine has them and the shell is what failed.
 
 ## Verdicts
 

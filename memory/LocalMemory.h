@@ -10,7 +10,6 @@
 #include "columns/ColumnSet.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
-#include "columns/ColumnMask.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnStringTable.h"
 
@@ -61,7 +60,6 @@ public:
         MakeMemoryPool<ColumnVector<size_t>>::type,
         MakeMemoryPool<ColumnVector<std::string_view>>::type,
         // MakeMemoryPool<ColumnVector<std::string>>::type,
-        MakeMemoryPool<ColumnMask>::type,
         MakeMemoryPool<ColumnConst<NodeID>>::type,
         MakeMemoryPool<ColumnConst<EdgeID>>::type,
         MakeMemoryPool<ColumnConst<GraphPath>>::type,

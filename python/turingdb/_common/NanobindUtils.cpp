@@ -282,8 +282,6 @@ auto toPyElement(const Row& row, const ValueToPyObject& nested) {
         return temporalMicroseconds(row);
     } else if constexpr (std::is_same_v<Row, db::CustomBool>) {
         return static_cast<uint8_t>(row._boolean);
-    } else if constexpr (std::is_same_v<Row, db::ColumnMask::Bool_t>) {
-        return static_cast<uint8_t>(row._value);
     } else if constexpr (db::IDLike<Row> && !db::EntityIDLike<Row>) {
         return static_cast<uint64_t>(row.getValue());
     } else if constexpr (db::Hash<Row>) {

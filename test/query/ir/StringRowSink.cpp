@@ -16,7 +16,6 @@
 #include "PathView.h"
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnConst.h"
-#include "columns/ColumnMask.h"
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/ColumnVector.h"
 #include "list/ListView.h"
@@ -214,10 +213,6 @@ struct CellTextWriter {
     template <typename T>
     void operator()(const ColumnConst<T>* column) {
         appendCellText(column->getRaw(), _text);
-    }
-
-    void operator()(const ColumnMask* column) {
-        _text += (*column)[_rowIndex] ? "true" : "false";
     }
 };
 

@@ -18,8 +18,6 @@
 
 namespace db {
 
-class ColumnMask;
-
 template <typename T>
 struct IsHash : std::false_type {};
 
@@ -126,10 +124,6 @@ struct ColumnTypeGenerator {
         } else {
             COMPILE_ERROR("Unknown column type");
         }
-    }
-
-    void operator()(const ColumnMask*) {
-        _name = "Bool";
     }
 };
 

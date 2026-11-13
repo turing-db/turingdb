@@ -201,7 +201,7 @@ public:
         const auto* mask = dynamic_cast<const ColumnMask*>(chunks[0]);
         ASSERT_NE(mask, nullptr);
 
-        const std::vector<ColumnMask::Bool_t>& raw = mask->getRaw();
+        const std::vector<CustomBool>& raw = mask->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
             _values.push_back(static_cast<bool>(raw[rowIndex]));
         }
