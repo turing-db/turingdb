@@ -27,6 +27,7 @@
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 
+#include "IRTestColumns.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
@@ -77,19 +78,15 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
-        const auto* keys = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
+        const auto* keys = columnAs<ColumnOptVector<std::string_view>>(chunks[0]);
         const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(chunks[1]);
         ASSERT_NE(keys, nullptr);
         ASSERT_NE(lists, nullptr);
         ASSERT_EQ(keys->size(), lists->size());
 
-        const auto& keyRaw = keys->getRaw();
         const auto& listRaw = lists->getRaw();
         for (size_t row = offset; row < offset + rowCount; row++) {
-            std::optional<std::string> key;
-            if (keyRaw[row]) {
-                key = std::string(*keyRaw[row]);
-            }
+            const std::optional<std::string> key = getOptionalString(keys, row);
 
             Names names;
             readStringList(listRaw[row], names);
@@ -115,8 +112,8 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 3u);
 
-        const auto* teams = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
-        const auto* scores = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[1]);
+        const auto* teams = columnAs<ColumnOptVector<std::string_view>>(chunks[0]);
+        const auto* scores = columnAs<ColumnOptVector<int64_t>>(chunks[1]);
         const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(chunks[2]);
         ASSERT_NE(teams, nullptr);
         ASSERT_NE(scores, nullptr);
@@ -124,19 +121,14 @@ public:
         ASSERT_EQ(teams->size(), lists->size());
         ASSERT_EQ(scores->size(), lists->size());
 
-        const auto& teamRaw = teams->getRaw();
-        const auto& scoreRaw = scores->getRaw();
         const auto& listRaw = lists->getRaw();
         for (size_t row = offset; row < offset + rowCount; row++) {
-            std::optional<std::string> team;
-            if (teamRaw[row]) {
-                team = std::string(*teamRaw[row]);
-            }
+            const std::optional<std::string> team = getOptionalString(teams, row);
 
             Names names;
             readStringList(listRaw[row], names);
 
-            _rows.push_back({team, scoreRaw[row], names});
+            _rows.push_back({team, scores->get(row), names});
         }
     }
 
@@ -157,19 +149,18 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
-        const auto* keys = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[0]);
+        const auto* keys = columnAs<ColumnOptVector<int64_t>>(chunks[0]);
         const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(chunks[1]);
         ASSERT_NE(keys, nullptr);
         ASSERT_NE(lists, nullptr);
         ASSERT_EQ(keys->size(), lists->size());
 
-        const auto& keyRaw = keys->getRaw();
         const auto& listRaw = lists->getRaw();
         for (size_t row = offset; row < offset + rowCount; row++) {
             Names names;
             readStringList(listRaw[row], names);
 
-            _rows.push_back({keyRaw[row], names});
+            _rows.push_back({keys->get(row), names});
         }
     }
 
@@ -190,19 +181,15 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
-        const auto* keys = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
+        const auto* keys = columnAs<ColumnOptVector<std::string_view>>(chunks[0]);
         const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(chunks[1]);
         ASSERT_NE(keys, nullptr);
         ASSERT_NE(lists, nullptr);
         ASSERT_EQ(keys->size(), lists->size());
 
-        const auto& keyRaw = keys->getRaw();
         const auto& listRaw = lists->getRaw();
         for (size_t row = offset; row < offset + rowCount; row++) {
-            std::optional<std::string> key;
-            if (keyRaw[row]) {
-                key = std::string(*keyRaw[row]);
-            }
+            const std::optional<std::string> key = getOptionalString(keys, row);
 
             Values values;
             readInt64List(listRaw[row], values);
@@ -228,19 +215,15 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
-        const auto* keys = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
+        const auto* keys = columnAs<ColumnOptVector<std::string_view>>(chunks[0]);
         const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(chunks[1]);
         ASSERT_NE(keys, nullptr);
         ASSERT_NE(lists, nullptr);
         ASSERT_EQ(keys->size(), lists->size());
 
-        const auto& keyRaw = keys->getRaw();
         const auto& listRaw = lists->getRaw();
         for (size_t row = offset; row < offset + rowCount; row++) {
-            std::optional<std::string> key;
-            if (keyRaw[row]) {
-                key = std::string(*keyRaw[row]);
-            }
+            const std::optional<std::string> key = getOptionalString(keys, row);
 
             NodeIDs ids;
             readNodeIDList(listRaw[row], ids);

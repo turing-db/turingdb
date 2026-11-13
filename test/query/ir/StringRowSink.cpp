@@ -17,6 +17,7 @@
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnOperatorDispatcher.h"
+#include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "list/ListView.h"
 #include "map/MapEntryView.h"
@@ -190,14 +191,14 @@ void appendCellText(const T& value, std::string& text) {
     }
 }
 
-template <typename T>
-void appendCellText(const std::optional<T>& value, std::string& text) {
-    if (!value) {
+template <typename NullableColumn>
+void appendNullableCellText(const NullableColumn* column, size_t row, std::string& text) {
+    if (!column->isValid(row)) {
         text += "null";
         return;
     }
 
-    appendCellText(*value, text);
+    appendCellText(column->getValue(row), text);
 }
 
 struct CellTextWriter {
@@ -209,10 +210,20 @@ struct CellTextWriter {
         appendCellText(column->getRaw()[_rowIndex], _text);
     }
 
+    template <typename T>
+    void operator()(const ColumnOptVector<T>* column) {
+        appendNullableCellText(column, _rowIndex, _text);
+    }
+
     // A constant column holds the one value every row of the relation reads
     template <typename T>
     void operator()(const ColumnConst<T>* column) {
         appendCellText(column->getRaw(), _text);
+    }
+
+    template <typename T>
+    void operator()(const ColumnConst<std::optional<T>>* column) {
+        appendNullableCellText(column, 0, _text);
     }
 };
 

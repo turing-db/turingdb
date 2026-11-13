@@ -42,6 +42,7 @@
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
+#include "IRTestColumns.h"
 #include "TuringException.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
@@ -56,22 +57,23 @@ using Rows = std::vector<Row>;
 
 template <typename T>
 std::optional<std::string> renderOptCell(const Column* column, size_t row) {
-    const auto* values = dynamic_cast<const ColumnOptVector<T>*>(column);
+    const auto* values = columnAs<ColumnOptVector<T>>(column);
     if (!values) {
         return std::nullopt;
     }
 
-    const std::optional<T>& value = (*values)[row];
-    if (!value) {
+    if (!values->isValid(row)) {
         return "null";
     }
 
+    const T& value = values->getValue(row);
+
     if constexpr (std::is_same_v<T, CustomBool>) {
-        return static_cast<bool>(*value) ? "true" : "false";
+        return static_cast<bool>(value) ? "true" : "false";
     } else if constexpr (std::is_same_v<T, std::string_view>) {
-        return std::string(*value);
+        return std::string(value);
     } else {
-        return std::to_string(*value);
+        return std::to_string(value);
     }
 }
 
