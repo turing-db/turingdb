@@ -490,7 +490,7 @@ nl::ChunkType procedureChunkType(mlir::OpBuilder& builder, const NamedProcedureT
     const mlir::Type elementType = procedureElementType(builder, returnValue._type);
 
     if (returnValue._nullable) {
-        return nl::ChunkType::get(context, storage::NullableType::get(context, elementType));
+        return nl::ChunkType::get(context, nullableElementType(elementType));
     }
 
     return nl::ChunkType::get(context, elementType);
@@ -991,9 +991,7 @@ nl::ChunkType groupAggregateResultChunkType(mlir::OpBuilder& builder,
             const bool keepsTheValue = kind == storage::GroupAggregateKind::First;
             const mlir::Type resultElement = keepsTheValue ? inputValue
                                                            : aggregateResultElementType(builder, groupKindToAggregateKind(kind), inputValue);
-            const storage::NullableType resultNullable = storage::NullableType::get(context, resultElement);
-
-            return nl::ChunkType::get(context, resultNullable);
+            return nl::ChunkType::get(context, nullableElementType(resultElement));
         }
         break;
     }
@@ -2043,11 +2041,7 @@ void DBLowering::lowerUnwindConst(mlir::db::UnwindConst unwindConst) {
     // on nullable<T>, so the uniform shape is what makes the unwound column composable.
     // A heterogeneous list keeps its type-erased !storage.any chunk, which only
     // pass-through consumers accept.
-    const bool heterogeneous = mlir::isa<storage::AnyType>(elementType);
-    const mlir::Type chunkElementType = heterogeneous ? elementType
-                                                      : storage::NullableType::get(context, elementType);
-
-    const nl::ChunkType chunk = nl::ChunkType::get(context, chunkElementType);
+    const nl::ChunkType chunk = nl::ChunkType::get(context, nullableElementType(elementType));
     const nl::IteratorType iteratorType = nl::IteratorType::get(context, {chunk});
 
     nl::UnwindConst rows = _builder.create<nl::UnwindConst>(_builder.getUnknownLoc(),
@@ -5035,7 +5029,7 @@ mlir::Value DBLowering::laidOutNullAs(mlir::Value chunk, mlir::Type valueElement
     }
 
     mlir::MLIRContext* const context = _builder.getContext();
-    const nl::ChunkType chunkType = nl::ChunkType::get(context, storage::NullableType::get(context, valueElement));
+    const nl::ChunkType chunkType = nl::ChunkType::get(context, nullableElementType(valueElement));
 
     return typedNullChunk(chunk, chunkType);
 }
@@ -5271,8 +5265,7 @@ void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::
     // in place at function scope, right after the producing loop. The result is a
     // single-row nullable value chunk - an aggregate can be null (min/max/avg of no
     // non-null row), and sum rides the same representation.
-    const storage::NullableType resultNullable = storage::NullableType::get(context, resultElement);
-    const nl::ChunkType resultChunkType = nl::ChunkType::get(context, resultNullable);
+    const nl::ChunkType resultChunkType = nl::ChunkType::get(context, nullableElementType(resultElement));
 
     setInsertionAfterProducingLoop(producingBlock);
     nl::AggregateResult aggregateResult = _builder.create<nl::AggregateResult>(loc, resultChunkType, state, kind);
@@ -6618,7 +6611,7 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
                     return storage::NullableType::get(ctx, storage::ListType::get(ctx, cell));
                 }
 
-                return storage::NullableType::get(ctx, cell);
+                return cell;
             }
 
             const mlir::Type lhsElement = chunkValueElement(_builder, lhsType);
@@ -6668,7 +6661,7 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
             const mlir::Type cell = storage::AnyType::get(ctx);
 
             if (lhsIsACell && rhsIsACell) {
-                return storage::NullableType::get(ctx, cell);
+                return cell;
             } else if (readsACell && (lhsIsAList || rhsIsAList)) {
                 return storage::NullableType::get(ctx, storage::ListType::get(ctx, cell));
             }
@@ -6713,7 +6706,7 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
                                            ? element
                                            : storage::AnyType::get(ctx);
 
-            return storage::NullableType::get(ctx, indexed);
+            return nullableElementType(indexed);
         }
         break;
 
@@ -6946,11 +6939,8 @@ nl::ChunkType DBLowering::caseResultChunkType(mlir::Type resultElement) {
     // invalid - and so can a !storage.any column, in the tag; every scalar lands in a
     // nullable one.
     mlir::MLIRContext* const context = _builder.getContext();
-    const mlir::Type resultChunkElement = holdsItsOwnNull(resultElement)
-        ? resultElement
-        : storage::NullableType::get(context, resultElement);
 
-    return nl::ChunkType::get(context, resultChunkElement);
+    return nl::ChunkType::get(context, nullableElementType(resultElement));
 }
 
 void DBLowering::lowerLazyCase(mlir::db::LazyCase caseOp) {
@@ -7309,7 +7299,7 @@ void DBLowering::lowerUnaryFunction(mlir::Operation* op) {
 
     mlir::Type resultElement = baseElement;
     if (resultNullable) {
-        resultElement = storage::NullableType::get(_builder.getContext(), baseElement);
+        resultElement = nullableElementType(baseElement);
     }
 
     const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultElement);
@@ -7358,7 +7348,7 @@ void DBLowering::lowerBinaryFunction(mlir::Operation* op) {
 
     mlir::Type resultElement = baseElement;
     if (mayHoldANull(lhsChunk.getType()) || mayHoldANull(rhsChunk.getType())) {
-        resultElement = storage::NullableType::get(_builder.getContext(), baseElement);
+        resultElement = nullableElementType(baseElement);
     }
 
     const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultElement);
@@ -8155,8 +8145,7 @@ mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinali
     mlir::MLIRContext* const context = _builder.getContext();
     const bool isContainer = llvm::isa<storage::ListType, storage::MapType>(valueElement);
     const bool staysPlain = !nullable && (isContainer || isReadAsRows(valueElement));
-    const mlir::Type resultElement = staysPlain ? valueElement
-                                                : storage::NullableType::get(context, valueElement);
+    const mlir::Type resultElement = staysPlain ? valueElement : nullableElementType(valueElement);
     const nl::ChunkType resultType = nl::ChunkType::get(context, resultElement);
 
     // With no relation driving the projection the value is laid out over the single row

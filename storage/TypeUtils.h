@@ -7,6 +7,7 @@
 #include <type_traits>
 #include <variant>
 
+#include "CellView.h"
 #include "OptionalTraits.h"
 #include "metadata/PropertyType.h"
 
@@ -31,9 +32,24 @@ struct TypeUtils {
     template <typename T>
     using wrap_optional_t = std::conditional_t<is_optional_v<T>, T, std::optional<T>>;
 
+    // A cell holds its own null in its tag, so a value that can be absent stays a cell
+    template <typename T>
+    using nullable_t = std::conditional_t<std::is_same_v<std::remove_cvref_t<T>, CellView>,
+                                          CellView,
+                                          wrap_optional_t<T>>;
+
     template <typename Func, typename... Args>
-    using optional_invoke_result =
-        wrap_optional_t<std::invoke_result_t<Func, unwrap_optional_t<Args>...>>;
+    using nullable_invoke_result =
+        nullable_t<std::invoke_result_t<Func, unwrap_optional_t<Args>...>>;
+
+    template <typename T>
+    static constexpr nullable_t<T> nullValue() {
+        if constexpr (std::is_same_v<nullable_t<T>, CellView>) {
+            return CellView::nullElement();
+        } else {
+            return std::nullopt;
+        }
+    }
 
     template <typename T>
     using decay_col_t = std::remove_cvref_t<std::remove_pointer_t<T>>;

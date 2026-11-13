@@ -1,6 +1,7 @@
 #include "StorageTypes.h"
 
 #include "StorageDialect.h"
+#include "NullLiteralType.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -12,8 +13,8 @@ using namespace mlir::storage;
 
 mlir::LogicalResult NullableType::verify(llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
                                          mlir::Type valueType) {
-    if (isa<NodeIDType, EdgeIDType>(valueType)) {
-        return emitError() << "a node or edge column holds its own null as an invalid ID, so it is never nullable";
+    if (mlir::holdsItsOwnNull(valueType)) {
+        return emitError() << "a column of entities, paths or tagged cells holds its own null, so it is never nullable";
     }
 
     return mlir::success();

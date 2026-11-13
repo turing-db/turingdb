@@ -8,8 +8,9 @@
 
 #include "StorageDialect.h"
 
-// A node or an edge column holds its own null as an invalid ID, so !storage.nullable wraps
-// neither
+// A node or an edge column holds its own null as an invalid ID, a path column as the path
+// with no node and a column of tagged cells as a Null-tagged cell, so !storage.nullable wraps
+// none of them
 class NullableEntityTypeTest : public ::testing::Test {
 protected:
     NullableEntityTypeTest() {
@@ -33,6 +34,18 @@ TEST_F(NullableEntityTypeTest, rejectsANullableNode) {
 
 TEST_F(NullableEntityTypeTest, rejectsANullableEdge) {
     EXPECT_FALSE(parses("!storage.nullable<!storage.edge_id>"));
+}
+
+TEST_F(NullableEntityTypeTest, rejectsANullablePath) {
+    EXPECT_FALSE(parses("!storage.nullable<!storage.path>"));
+}
+
+TEST_F(NullableEntityTypeTest, rejectsANullableTaggedCell) {
+    EXPECT_FALSE(parses("!storage.nullable<!storage.any>"));
+}
+
+TEST_F(NullableEntityTypeTest, acceptsANullableListOfTaggedCells) {
+    EXPECT_TRUE(parses("!storage.nullable<!storage.list<!storage.any>>"));
 }
 
 TEST_F(NullableEntityTypeTest, acceptsANullableValue) {
