@@ -4,8 +4,11 @@
 #include <variant>
 
 #include "columns/ColumnConst.h"
+#include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "map/MapContainer.h"
+
+#include "Overloaded.h"
 
 using namespace db;
 
@@ -95,21 +98,25 @@ CellView NLValueStore::ownCell(ListBuffer<>::ListItemVariant& item) {
 }
 
 void NLValueStore::ownColumnRows(Column* column, size_t firstRow) {
-    dispatchViewColumn(column, [&]<typename ViewColumn>(const ViewColumn* viewColumn) {
-        using ElementType = typename ViewColumn::ValueType;
+    dispatchViewColumn(column, Overloaded {
+        [&]<typename ElementType>(const ColumnConst<ElementType>*) {
+            ColumnConst<ElementType>* constant = static_cast<ColumnConst<ElementType>*>(column);
 
-        ViewColumn* ownedColumn = static_cast<ViewColumn*>(column);
-
-        if constexpr (std::same_as<ViewColumn, ColumnConst<ElementType>>) {
-            ElementType& constant = ownedColumn->getRaw();
-            constant = ownElement(constant);
-        } else if constexpr (std::same_as<ViewColumn, ColumnVector<ElementType>>) {
-            std::vector<ElementType>& raw = ownedColumn->getRaw();
-
-            for (size_t row = firstRow; row < raw.size(); row++) {
-                raw[row] = ownElement(raw[row]);
+            if constexpr (ColumnConst<ElementType>::IS_NULLABLE) {
+                if (constant->isValid(0)) {
+                    constant->set(own(constant->getValue(0)));
+                }
+            } else {
+                ElementType& value = constant->getRaw();
+                value = own(value);
             }
-        }
+        },
+        [&]<typename ElementType>(const ColumnVector<ElementType>*) {
+            ownRows(static_cast<ColumnVector<ElementType>*>(column), firstRow);
+        },
+        [&]<typename Element>(const ColumnOptVector<Element>*) {
+            ownRows(static_cast<ColumnOptVector<Element>*>(column), firstRow);
+        },
     });
 }
 

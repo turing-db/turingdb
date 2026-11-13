@@ -107,6 +107,7 @@
 #include "IRException.h"
 #include "IRRange.h"
 #include "BioAssert.h"
+#include "Overloaded.h"
 
 using namespace db;
 
@@ -1368,6 +1369,21 @@ void gatherColumn(const Column* input,
     }
 }
 
+template <typename Element>
+void gatherOptColumn(const Column* input,
+                     const ColumnVector<size_t>* indices,
+                     Column* output) {
+    const ColumnOptVector<Element>* typedInput = static_cast<const ColumnOptVector<Element>*>(input);
+    ColumnOptVector<Element>* typedOutput = static_cast<ColumnOptVector<Element>*>(output);
+
+    const std::vector<size_t>& indicesRaw = indices->getRaw();
+    typedOutput->resize(indicesRaw.size());
+
+    for (size_t row = 0; row < indicesRaw.size(); row++) {
+        typedOutput->setOptional(row, typedInput->get(indicesRaw[row]));
+    }
+}
+
 // Fill a chunk with a run of null rows. Every element type reads its own
 // default-constructed value as null: an ID defaults to the invalid ID that ID::isValid
 // rejects, which is how an entity an OPTIONAL MATCH did not match is spelled.
@@ -1376,6 +1392,14 @@ void fillNullColumn(Column* output, size_t rowCount) {
     ColumnVector<ElementType>* typedOutput = static_cast<ColumnVector<ElementType>*>(output);
 
     typedOutput->getRaw().assign(rowCount, ElementType {});
+}
+
+template <typename Element>
+void fillNullOptColumn(Column* output, size_t rowCount) {
+    ColumnOptVector<Element>* typedOutput = static_cast<ColumnOptVector<Element>*>(output);
+
+    typedOutput->clear();
+    typedOutput->resize(rowCount);
 }
 
 void collectBooleanSurvivors(const Column* mask, ColumnVector<size_t>* indices) {
@@ -1588,6 +1612,31 @@ void blockRepeatColumn(const Column* input, size_t factor, size_t position, size
     }
 }
 
+template <typename Element>
+void blockRepeatOptColumn(const Column* input, size_t factor, size_t position, size_t rowCount, Column* output) {
+    const ColumnOptVector<Element>* typedInput = static_cast<const ColumnOptVector<Element>*>(input);
+    ColumnOptVector<Element>* typedOutput = static_cast<ColumnOptVector<Element>*>(output);
+
+    const size_t inputSize = typedInput->size();
+    typedOutput->resize(rowCount);
+
+    size_t outputRow = 0;
+    size_t inputIndex = position / factor;
+    size_t doneInBlock = position % factor;
+
+    while (outputRow < rowCount && inputIndex < inputSize) {
+        const size_t blockEnd = outputRow + std::min(factor - doneInBlock, rowCount - outputRow);
+        const auto value = typedInput->get(inputIndex);
+
+        for (; outputRow < blockEnd; outputRow++) {
+            typedOutput->setOptional(outputRow, value);
+        }
+
+        inputIndex++;
+        doneInBlock = 0;
+    }
+}
+
 void blockRepeatConstColumn(const Column* input, size_t factor, size_t position, size_t rowCount, Column* output) {
     output->assignFromLine(input, 0, rowCount);
 }
@@ -1624,6 +1673,33 @@ void tileColumn(const Column* input, size_t factor, size_t position, size_t rowC
     }
 }
 
+template <typename Element>
+void tileOptColumn(const Column* input, size_t factor, size_t position, size_t rowCount, Column* output) {
+    const ColumnOptVector<Element>* typedInput = static_cast<const ColumnOptVector<Element>*>(input);
+    ColumnOptVector<Element>* typedOutput = static_cast<ColumnOptVector<Element>*>(output);
+
+    typedOutput->resize(rowCount);
+
+    const size_t tileLength = typedInput->size();
+    if (tileLength == 0) {
+        return;
+    }
+
+    size_t outputRow = 0;
+    size_t inputIndex = position % tileLength;
+
+    while (outputRow < rowCount) {
+        const size_t count = std::min(tileLength - inputIndex, rowCount - outputRow);
+
+        for (size_t offset = 0; offset < count; offset++) {
+            typedOutput->setOptional(outputRow + offset, typedInput->get(inputIndex + offset));
+        }
+
+        outputRow += count;
+        inputIndex = 0;
+    }
+}
+
 // Constant broadcast: the one value a ColumnConst holds is laid out over every row
 // of the step, as a present value. The two broadcasts above repeat the several
 // values of a chunk; a constant column has no rows of its own to repeat, so its row
@@ -1633,10 +1709,12 @@ void broadcastConstantColumn(const Column* value, size_t rowCount, Column* outpu
     const ColumnConst<Primitive>* typedValue = static_cast<const ColumnConst<Primitive>*>(value);
     ColumnOptVector<Primitive>* typedOutput = static_cast<ColumnOptVector<Primitive>*>(output);
 
-    auto& outputRaw = typedOutput->getRaw();
-    outputRaw.resize(rowCount);
+    const Primitive& constant = typedValue->getRaw();
+    typedOutput->resize(rowCount);
 
-    std::fill_n(outputRaw.begin(), rowCount, std::optional<Primitive>(typedValue->getRaw()));
+    for (size_t row = 0; row < rowCount; row++) {
+        typedOutput->set(row, constant);
+    }
 }
 
 template <typename Primitive>
@@ -1644,25 +1722,33 @@ void broadcastNullableConstantColumn(const Column* value, size_t rowCount, Colum
     const auto* typedValue = static_cast<const ColumnConst<std::optional<Primitive>>*>(value);
     ColumnOptVector<Primitive>* typedOutput = static_cast<ColumnOptVector<Primitive>*>(output);
 
-    auto& outputRaw = typedOutput->getRaw();
-    outputRaw.resize(rowCount);
+    const auto constant = typedValue->get(0);
+    typedOutput->resize(rowCount);
 
-    std::fill_n(outputRaw.begin(), rowCount, typedValue->getRaw());
+    for (size_t row = 0; row < rowCount; row++) {
+        typedOutput->setOptional(row, constant);
+    }
 }
 
 // A constant chunk is not always a ColumnConst: a kernel computing over literals writes
 // its one row into an ordinary column. That row is the one every row of the step reads.
 template <typename Primitive>
 void broadcastSingleRowColumn(const Column* value, size_t rowCount, Column* output) {
-    const auto& valueRaw = static_cast<const ColumnOptVector<Primitive>*>(value)->getRaw();
+    const ColumnOptVector<Primitive>* typedValue = static_cast<const ColumnOptVector<Primitive>*>(value);
     ColumnOptVector<Primitive>* typedOutput = static_cast<ColumnOptVector<Primitive>*>(output);
 
-    if (valueRaw.empty()) {
-        typedOutput->getRaw().assign(rowCount, std::optional<Primitive> {});
+    if (typedValue->empty()) {
+        typedOutput->clear();
+        typedOutput->resize(rowCount);
         return;
     }
 
-    typedOutput->getRaw().assign(rowCount, valueRaw.front());
+    const auto constant = typedValue->get(0);
+    typedOutput->resize(rowCount);
+
+    for (size_t row = 0; row < rowCount; row++) {
+        typedOutput->setOptional(row, constant);
+    }
 }
 
 // The null literal laid out over every row of the step: it holds no value to repeat, so
@@ -1671,8 +1757,8 @@ void broadcastSingleRowColumn(const Column* value, size_t rowCount, Column* outp
 void broadcastNullColumn(const Column* value, size_t rowCount, Column* output) {
     ColumnOptVector<int64_t>* typedOutput = static_cast<ColumnOptVector<int64_t>*>(output);
 
-    auto& outputRaw = typedOutput->getRaw();
-    outputRaw.assign(rowCount, std::optional<int64_t> {});
+    typedOutput->clear();
+    typedOutput->resize(rowCount);
 }
 
 // The plain sibling of broadcastConstantColumn: a list, a map, a map entry, a node, an edge
@@ -1708,6 +1794,24 @@ NLUnaryFn selectRowConstantOf(const Column* row, LocalMemory* memory, Column*& r
     return &readSingleRowAsConstant<Element>;
 }
 
+template <typename Element>
+void readOptSingleRowAsConstant(Column* result, const Column* row) {
+    const ColumnOptVector<Element>* typedRow = static_cast<const ColumnOptVector<Element>*>(row);
+    bioassert(typedRow->size() == 1, "A computation over constants did not write a single row.");
+
+    static_cast<ColumnConst<std::optional<Element>>*>(result)->setOptional(typedRow->get(0));
+}
+
+template <typename Element>
+NLUnaryFn selectOptRowConstantOf(const Column* row, LocalMemory* memory, Column*& result) {
+    bioassert(row->getKind() == ColumnOptVector<Element>::staticKind(),
+              "nl.row_constant reads a {} under a chunk of another element type",
+              row->getTypeName());
+
+    result = memory->alloc<ColumnConst<std::optional<Element>>>();
+    return &readOptSingleRowAsConstant<Element>;
+}
+
 // Range copy: rows [inputOffset, inputOffset + rowCount) of the input land at
 // output indices [0, rowCount). This lifts a skip's surviving suffix to the front
 // of a fresh chunk - nl.skip_truncate passes inputOffset = skipThisStep and
@@ -1723,6 +1827,18 @@ void copyRangeColumn(const Column* input, size_t inputOffset, size_t rowCount, C
 
     const auto first = inputRaw.begin() + inputOffset;
     std::copy(first, first + rowCount, outputRaw.begin());
+}
+
+template <typename Element>
+void copyRangeOptColumn(const Column* input, size_t inputOffset, size_t rowCount, Column* output) {
+    const ColumnOptVector<Element>* typedInput = static_cast<const ColumnOptVector<Element>*>(input);
+    ColumnOptVector<Element>* typedOutput = static_cast<ColumnOptVector<Element>*>(output);
+
+    typedOutput->resize(rowCount);
+
+    for (size_t row = 0; row < rowCount; row++) {
+        typedOutput->setOptional(row, typedInput->get(inputOffset + row));
+    }
 }
 
 void copyRangeConstColumn(const Column* input, size_t inputOffset, size_t rowCount, Column* output) {
@@ -1748,6 +1864,20 @@ void appendColumn(const Column* input, Column* buffer) {
     bufferRaw.insert(bufferRaw.end(), inputRaw.begin(), inputRaw.end());
 }
 
+template <typename Element>
+void appendOptColumn(const Column* input, Column* buffer) {
+    const ColumnOptVector<Element>* typedInput = static_cast<const ColumnOptVector<Element>*>(input);
+    ColumnOptVector<Element>* typedBuffer = static_cast<ColumnOptVector<Element>*>(buffer);
+
+    const size_t inputSize = typedInput->size();
+    const size_t firstRow = typedBuffer->size();
+    typedBuffer->resize(firstRow + inputSize);
+
+    for (size_t row = 0; row < inputSize; row++) {
+        typedBuffer->setOptional(firstRow + row, typedInput->get(row));
+    }
+}
+
 // The append of a column of views, for a buffer that outlives the loop filling it: the
 // views a chunk carries point into the buffers that built them, which the producing step
 // empties when it comes round again, so the values themselves go into the accumulator's own.
@@ -1764,6 +1894,22 @@ void appendOwnedColumn(const Column* input, Column* buffer, NLValueStore& values
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
         bufferRaw[firstRow + row] = values.ownElement(inputRaw[row]);
+    }
+}
+
+template <typename Element>
+void appendOwnedOptColumn(const Column* input, Column* buffer, NLValueStore& values) {
+    const ColumnOptVector<Element>* typedInput = static_cast<const ColumnOptVector<Element>*>(input);
+    ColumnOptVector<Element>* typedBuffer = static_cast<ColumnOptVector<Element>*>(buffer);
+
+    const size_t inputSize = typedInput->size();
+    const size_t firstRow = typedBuffer->size();
+    typedBuffer->resize(firstRow + inputSize);
+
+    for (size_t row = 0; row < inputSize; row++) {
+        if (typedInput->isValid(row)) {
+            typedBuffer->set(firstRow + row, values.own(typedInput->getValue(row)));
+        }
     }
 }
 
@@ -1812,12 +1958,10 @@ int compareColumn(const Column* column, size_t a, size_t b) {
 // and two nulls tie; non-null values compare by their natural order.
 template <typename Primitive>
 int compareOptColumn(const Column* column, size_t a, size_t b) {
-    const auto& raw = static_cast<const ColumnVector<std::optional<Primitive>>*>(column)->getRaw();
-    const std::optional<Primitive>& valueA = raw[a];
-    const std::optional<Primitive>& valueB = raw[b];
+    const ColumnOptVector<Primitive>* typedColumn = static_cast<const ColumnOptVector<Primitive>*>(column);
 
-    const bool aNull = !valueA.has_value();
-    const bool bNull = !valueB.has_value();
+    const bool aNull = !typedColumn->isValid(a);
+    const bool bNull = !typedColumn->isValid(b);
     if (aNull || bNull) {
         if (aNull && bNull) {
             return 0;
@@ -1826,9 +1970,12 @@ int compareOptColumn(const Column* column, size_t a, size_t b) {
         return aNull ? 1 : -1;
     }
 
-    if (sortsBefore(*valueA, *valueB)) {
+    const Primitive& valueA = typedColumn->getValue(a);
+    const Primitive& valueB = typedColumn->getValue(b);
+
+    if (sortsBefore(valueA, valueB)) {
         return -1;
-    } else if (sortsBefore(*valueB, *valueA)) {
+    } else if (sortsBefore(valueB, valueA)) {
         return 1;
     }
 
@@ -1839,11 +1986,14 @@ int compareOptColumn(const Column* column, size_t a, size_t b) {
 // so a kernel reading a nullable value column takes a column a procedure yielded.
 template <typename Primitive>
 void toNullableColumn(Column* result, const Column* operand) {
-    const auto& values = static_cast<const ColumnVector<Primitive>*>(operand)->getRaw();
-    auto& nullables = static_cast<ColumnOptVector<Primitive>*>(result)->getRaw();
+    const std::vector<Primitive>& values = static_cast<const ColumnVector<Primitive>*>(operand)->getRaw();
+    ColumnOptVector<Primitive>* nullables = static_cast<ColumnOptVector<Primitive>*>(result);
 
-    nullables.resize(values.size());
-    std::copy(values.begin(), values.end(), nullables.begin());
+    nullables->resize(values.size());
+
+    for (size_t row = 0; row < values.size(); row++) {
+        nullables->set(row, values[row]);
+    }
 }
 
 // Read an entity column as a nullable column of its IDs' integers: a node or an edge an
@@ -1852,14 +2002,14 @@ void toNullableColumn(Column* result, const Column* operand) {
 template <typename ID>
 void entityToNullableColumn(Column* result, const Column* operand) {
     const std::vector<ID>& ids = static_cast<const ColumnVector<ID>*>(operand)->getRaw();
-    auto& nullables = static_cast<ColumnOptVector<types::UInt64::Primitive>*>(result)->getRaw();
+    ColumnOptVector<types::UInt64::Primitive>* nullables = static_cast<ColumnOptVector<types::UInt64::Primitive>*>(result);
 
-    nullables.resize(ids.size());
+    nullables->resize(ids.size());
     for (size_t row = 0; row < ids.size(); row++) {
         if (ids[row].isValid()) {
-            nullables[row] = ids[row].getValue();
+            nullables->set(row, ids[row].getValue());
         } else {
-            nullables[row] = std::nullopt;
+            nullables->setNull(row);
         }
     }
 }
@@ -1911,7 +2061,7 @@ void toNullableConst(Column* result, const Column* operand) {
         return;
     }
 
-    *nullable = std::optional<Primitive>((*constant)[0]);
+    nullable->setOptional((*constant)[0]);
 }
 
 template <typename Primitive>
@@ -2307,6 +2457,33 @@ void fillNullRows(Column* result, const Column* value, const ColumnVector<Custom
     bioassert(fillIt == fills.end(), "A value has fewer null rows than the rows filling them.");
 }
 
+template <typename Element>
+void fillNullOptRows(Column* result, const Column* value, const ColumnVector<CustomBool>* nullRows, const Column* fill) {
+    const ColumnOptVector<Element>* values = static_cast<const ColumnOptVector<Element>*>(value);
+    const std::vector<CustomBool>& nulls = nullRows->getRaw();
+    const ColumnOptVector<Element>* fills = static_cast<const ColumnOptVector<Element>*>(fill);
+    ColumnOptVector<Element>* results = static_cast<ColumnOptVector<Element>*>(result);
+
+    const size_t rowCount = values->size();
+    const size_t fillCount = fills->size();
+    bioassert(nulls.size() == rowCount, "A value's null rows are marked over other rows than its own.");
+
+    results->resize(rowCount);
+
+    size_t fillRow = 0;
+    for (size_t row = 0; row < rowCount; row++) {
+        if (nulls[row]) {
+            bioassert(fillRow < fillCount, "A value has more null rows than the rows filling them.");
+            results->setOptional(row, fills->get(fillRow));
+            fillRow++;
+        } else {
+            results->setOptional(row, values->get(row));
+        }
+    }
+
+    bioassert(fillRow == fillCount, "A value has fewer null rows than the rows filling them.");
+}
+
 // Folds each row's list into the accumulator, the body running once per element position
 // over the rows whose list reaches it. @param testStep runs after each chunk of rows a step
 // folded has its accumulators written, and hands back the rows whose fold ends there.
@@ -2490,12 +2667,10 @@ int comparePathColumn(const Column* column, size_t a, size_t b) {
 // sorts after every value, as compareOptColumn places a null after every value.
 template <typename View>
 int compareOptContainerColumn(const Column* column, size_t a, size_t b) {
-    const auto& raw = static_cast<const ColumnOptVector<View>*>(column)->getRaw();
-    const std::optional<View>& valueA = raw[a];
-    const std::optional<View>& valueB = raw[b];
+    const ColumnOptVector<View>* typedColumn = static_cast<const ColumnOptVector<View>*>(column);
 
-    const bool aNull = !valueA.has_value();
-    const bool bNull = !valueB.has_value();
+    const bool aNull = !typedColumn->isValid(a);
+    const bool bNull = !typedColumn->isValid(b);
     if (aNull || bNull) {
         if (aNull && bNull) {
             return 0;
@@ -2504,7 +2679,7 @@ int compareOptContainerColumn(const Column* column, size_t a, size_t b) {
         return aNull ? 1 : -1;
     }
 
-    const std::strong_ordering order = *valueA <=> *valueB;
+    const std::strong_ordering order = typedColumn->getValue(a) <=> typedColumn->getValue(b);
 
     if (order == std::strong_ordering::less) {
         return -1;
@@ -2606,15 +2781,14 @@ void distinctAppendPresentValue(NLSerializedKey& key, const MapView map) {
 // tag alone, so all nulls share a key and DISTINCT dedups them together, matching Cypher.
 template <typename Primitive>
 void distinctKeyAppendOptColumn(const Column* column, size_t row, NLSerializedKey& key) {
-    const auto& raw = static_cast<const ColumnVector<std::optional<Primitive>>*>(column)->getRaw();
-    const std::optional<Primitive>& value = raw[row];
+    const ColumnOptVector<Primitive>* typedColumn = static_cast<const ColumnOptVector<Primitive>*>(column);
 
-    if (!value.has_value()) {
+    if (!typedColumn->isValid(row)) {
         key.push_back('\0');
         return;
     }
 
-    distinctAppendPresentValue(key, *value);
+    distinctAppendPresentValue(key, typedColumn->getValue(row));
 }
 
 // What a key value packs as, holding the value as its serialized key does: an ID's integer, a
@@ -2672,17 +2846,15 @@ void packKeyColumn(const Column* column, size_t beginRow, size_t endRow, const N
 
 template <typename Primitive>
 void packOptKeyColumn(const Column* column, size_t beginRow, size_t endRow, const NLKeyPackTarget& target) {
-    const auto& raw = static_cast<const ColumnVector<std::optional<Primitive>>*>(column)->getRaw();
+    const ColumnOptVector<Primitive>* typedColumn = static_cast<const ColumnOptVector<Primitive>*>(column);
     const std::byte nullMask {static_cast<uint8_t>(1u << (target._nullBit % 8))};
 
     std::byte* value = target._values;
     std::byte* nulls = target._nulls + target._nullBit / 8;
 
     for (size_t row = beginRow; row < endRow; row++) {
-        const std::optional<Primitive>& element = raw[row];
-
-        if (element.has_value()) {
-            const auto packed = packedKeyValue(*element);
+        if (typedColumn->isValid(row)) {
+            const auto packed = packedKeyValue(typedColumn->getValue(row));
             std::memcpy(value, &packed, sizeof(packed));
         } else {
             *nulls |= nullMask;
@@ -2957,10 +3129,9 @@ bool columnRowMatchable(const Column* column, size_t row) {
 
 template <typename Primitive>
 bool optColumnRowMatchable(const Column* column, size_t row) {
-    const auto& raw = static_cast<const ColumnVector<std::optional<Primitive>>*>(column)->getRaw();
-    const std::optional<Primitive>& value = raw[row];
+    const ColumnOptVector<Primitive>* typedColumn = static_cast<const ColumnOptVector<Primitive>*>(column);
 
-    return value.has_value() && keyValueIsMatchable(*value);
+    return typedColumn->isValid(row) && keyValueIsMatchable(typedColumn->getValue(row));
 }
 
 // Serialize one row of a type-erased column of tagged scalars into the row key.
@@ -2995,29 +3166,25 @@ void distinctKeyAppendPathColumn(const Column* column, size_t row, NLSerializedK
 }
 
 void distinctKeyAppendOptListColumn(const Column* column, size_t row, NLSerializedKey& key) {
-    const std::vector<std::optional<ListView>>& raw =
-        static_cast<const ColumnOptVector<ListView>*>(column)->getRaw();
-    const std::optional<ListView>& list = raw[row];
+    const ColumnOptVector<ListView>* typedColumn = static_cast<const ColumnOptVector<ListView>*>(column);
 
-    if (!list.has_value()) {
+    if (!typedColumn->isValid(row)) {
         key.push_back(static_cast<char>(CellTag::Null));
         return;
     }
 
-    distinctAppendPresentValue(key, *list);
+    distinctAppendPresentValue(key, typedColumn->getValue(row));
 }
 
 void distinctKeyAppendOptMapColumn(const Column* column, size_t row, NLSerializedKey& key) {
-    const std::vector<std::optional<MapView>>& raw =
-        static_cast<const ColumnOptVector<MapView>*>(column)->getRaw();
-    const std::optional<MapView>& map = raw[row];
+    const ColumnOptVector<MapView>* typedColumn = static_cast<const ColumnOptVector<MapView>*>(column);
 
-    if (!map.has_value()) {
+    if (!typedColumn->isValid(row)) {
         key.push_back(static_cast<char>(CellTag::Null));
         return;
     }
 
-    distinctAppendPresentValue(key, *map);
+    distinctAppendPresentValue(key, typedColumn->getValue(row));
 }
 
 template <typename Integral>
@@ -3194,12 +3361,14 @@ void hashKeyColumn(const Column* column, std::vector<uint64_t>& hashes) {
 
 template <typename Primitive>
 void hashOptKeyColumn(const Column* column, std::vector<uint64_t>& hashes) {
-    const auto& raw = static_cast<const ColumnVector<std::optional<Primitive>>*>(column)->getRaw();
-    hashes.resize(raw.size());
+    const ColumnOptVector<Primitive>* typedColumn = static_cast<const ColumnOptVector<Primitive>*>(column);
 
-    std::transform(raw.begin(), raw.end(), hashes.begin(), [](const std::optional<Primitive>& value) {
-        return value.has_value() ? hashKeyValue(*value) : uint64_t {0};
-    });
+    const size_t rowCount = typedColumn->size();
+    hashes.resize(rowCount);
+
+    for (size_t row = 0; row < rowCount; row++) {
+        hashes[row] = typedColumn->isValid(row) ? hashKeyValue(typedColumn->getValue(row)) : uint64_t {0};
+    }
 }
 
 template <typename ElementType>
@@ -3212,10 +3381,10 @@ bool keyEqualColumn(const Column* probe, size_t probeRow, const Column* build, s
 
 template <typename Primitive>
 bool keyEqualOptColumn(const Column* probe, size_t probeRow, const Column* build, size_t buildRow) {
-    const auto& probeRaw = static_cast<const ColumnVector<std::optional<Primitive>>*>(probe)->getRaw();
-    const auto& buildRaw = static_cast<const ColumnVector<std::optional<Primitive>>*>(build)->getRaw();
+    const ColumnOptVector<Primitive>* typedProbe = static_cast<const ColumnOptVector<Primitive>*>(probe);
+    const ColumnOptVector<Primitive>* typedBuild = static_cast<const ColumnOptVector<Primitive>*>(build);
 
-    return keyValuesEqual(*probeRaw[probeRow], *buildRaw[buildRow]);
+    return keyValuesEqual(typedProbe->getValue(probeRow), typedBuild->getValue(buildRow));
 }
 
 template <typename ElementType>
@@ -3228,14 +3397,27 @@ NLJoinKeyFunctions optJoinKeyFunctions() {
     return {&hashOptKeyColumn<Primitive>, &keyEqualOptColumn<Primitive>, &optColumnRowMatchable<Primitive>};
 }
 
+template <typename Element>
+const Element& keyColumnRow(const ColumnVector<Element>* column, size_t row) {
+    return column->getRaw()[row];
+}
+
+template <typename Element>
+auto keyColumnRow(const ColumnOptVector<Element>* column, size_t row) {
+    return column->get(row);
+}
+
+template <typename ColumnType>
+concept RowKeyColumn = requires(const ColumnType* column) { keyColumnRow(column, size_t {0}); };
+
 // A probe key and a build key of two types, compared by the `=` of the filter the join
 // replaces: an unknown answer matches nothing, as the filter kept only the true rows
 template <typename ProbeColumn, typename BuildColumn>
 bool keyEqualAcrossTypes(const Column* probe, size_t probeRow, const Column* build, size_t buildRow) {
-    const auto& probeRaw = static_cast<const ProbeColumn*>(probe)->getRaw();
-    const auto& buildRaw = static_cast<const BuildColumn*>(build)->getRaw();
+    const ProbeColumn* typedProbe = static_cast<const ProbeColumn*>(probe);
+    const BuildColumn* typedBuild = static_cast<const BuildColumn*>(build);
 
-    const auto equal = Eq {}(probeRaw[probeRow], buildRaw[buildRow]);
+    const auto equal = Eq {}(keyColumnRow(typedProbe, probeRow), keyColumnRow(typedBuild, buildRow));
     if constexpr (TypeUtils::is_optional_v<std::decay_t<decltype(equal)>>) {
         return equal.has_value() && equal->_boolean;
     } else {
@@ -3246,13 +3428,11 @@ bool keyEqualAcrossTypes(const Column* probe, size_t probeRow, const Column* bui
 struct CrossTypeKeyEqualSelector {
     NLKeyEqualFunction _equal {nullptr};
 
-    template <typename ProbeElement, typename BuildElement>
-    void operator()(const ColumnVector<ProbeElement>*, const ColumnVector<BuildElement>*) {
-        _equal = &keyEqualAcrossTypes<ColumnVector<ProbeElement>, ColumnVector<BuildElement>>;
-    }
-
     template <typename ProbeColumn, typename BuildColumn>
     void operator()(const ProbeColumn*, const BuildColumn*) {
+        if constexpr (RowKeyColumn<ProbeColumn> && RowKeyColumn<BuildColumn>) {
+            _equal = &keyEqualAcrossTypes<ProbeColumn, BuildColumn>;
+        }
     }
 };
 
@@ -3704,19 +3884,34 @@ void groupGatherAppendColumn(const Column* input,
     }
 }
 
-template <typename ElementType>
-void reownColumn(Column* column, NLValueStore& values) {
-    for (ElementType& element : static_cast<ColumnVector<ElementType>*>(column)->getRaw()) {
-        element = values.ownElement(element);
+template <typename Element>
+void groupGatherAppendOptColumn(const Column* input,
+                                const std::vector<size_t>& rows,
+                                Column* buffer,
+                                NLValueStore& values) {
+    const ColumnOptVector<Element>* typedInput = static_cast<const ColumnOptVector<Element>*>(input);
+    ColumnOptVector<Element>* typedBuffer = static_cast<ColumnOptVector<Element>*>(buffer);
+
+    for (const size_t row : rows) {
+        if (typedInput->isValid(row)) {
+            typedBuffer->push_back(values.ownElement(typedInput->getValue(row)));
+        } else {
+            typedBuffer->pushNull();
+        }
     }
 }
 
-template <typename ElementType>
+template <typename ColumnType>
+void reownColumn(Column* column, NLValueStore& values) {
+    values.ownRows(static_cast<ColumnType*>(column), 0);
+}
+
+template <typename ColumnType>
 void reownColumnRows(Column* column, const std::vector<size_t>& rows, NLValueStore& values) {
-    std::vector<ElementType>& raw = static_cast<ColumnVector<ElementType>*>(column)->getRaw();
+    ColumnType* typedColumn = static_cast<ColumnType*>(column);
 
     for (const size_t row : rows) {
-        raw[row] = values.ownElement(raw[row]);
+        values.ownRow(typedColumn, row);
     }
 }
 
@@ -6865,15 +7060,14 @@ void mergeKeyAppendNumericConstColumn(const Column* column, size_t row, NLSerial
 
 template <typename ElementType, typename KeyType>
 void mergeKeyAppendNumericOptColumn(const Column* column, size_t row, NLSerializedKey& key) {
-    const auto& raw = static_cast<const ColumnVector<std::optional<ElementType>>*>(column)->getRaw();
-    const std::optional<ElementType>& value = raw[row];
+    const ColumnOptVector<ElementType>* typedColumn = static_cast<const ColumnOptVector<ElementType>*>(column);
 
-    if (!value.has_value()) {
+    if (!typedColumn->isValid(row)) {
         key.push_back('\0');
         return;
     }
 
-    distinctAppendPresentValue(key, static_cast<KeyType>(*value));
+    distinctAppendPresentValue(key, static_cast<KeyType>(typedColumn->getValue(row)));
 }
 
 // Keys the way a nullable column's null row does, so a merge on a null value binds the
@@ -10789,7 +10983,7 @@ NLCaseWriteFn NLExecutor::selectOwnNullCaseWrite(NLChunkKind kind, bool untypedN
 
 NLFillNullRowsFn NLExecutor::selectFillNullRows(NLChunkKind kind) {
     NLFillNullRowsFn selected = nullptr;
-    dispatchOptChunkKind(kind, [&]<typename Element>() { selected = &fillNullRows<std::optional<Element>>; });
+    dispatchOptChunkKind(kind, [&]<typename Element>() { selected = &fillNullOptRows<Element>; });
 
     return selected;
 }
@@ -12398,13 +12592,13 @@ NLFillNullFunction NLExecutor::selectFillNullFunction(NLChunkKind kind) {
 
 NLFillNullFunction NLExecutor::selectOptFillNullFunction(NLChunkKind kind) {
     NLFillNullFunction fill = nullptr;
-    dispatchOptChunkKind(kind, [&]<typename Element>() { fill = &fillNullColumn<std::optional<Element>>; });
+    dispatchOptChunkKind(kind, [&]<typename Element>() { fill = &fillNullOptColumn<Element>; });
 
     return fill;
 }
 
 NLFillNullFunction NLExecutor::selectOptListFillNull() {
-    return &fillNullColumn<std::optional<ListView>>;
+    return &fillNullOptColumn<ListView>;
 }
 
 NLFillNullFunction NLExecutor::selectCellFillNull() {
@@ -12543,7 +12737,7 @@ NLUnaryFn NLExecutor::selectRowConstant(NLChunkKind kind, const Column* row, Loc
 NLUnaryFn NLExecutor::selectOptRowConstant(NLChunkKind kind, const Column* row, LocalMemory* memory, Column*& result) {
     NLUnaryFn read = nullptr;
     dispatchOptChunkKind(kind, [&]<typename Element>() {
-        read = selectRowConstantOf<std::optional<Element>>(row, memory, result);
+        read = selectOptRowConstantOf<Element>(row, memory, result);
     });
 
     return read;
@@ -12598,21 +12792,22 @@ NLCompareFunction NLExecutor::selectListCompareFunction() {
 // The nullable list family, which labels() produces: a node an OPTIONAL MATCH did not
 // match holds no list, where a collected list column holds one in every row.
 NLBroadcastFunction NLExecutor::selectOptListBlockRepeatFunction() {
-    return &blockRepeatColumn<std::optional<ListView>>;
+    return &blockRepeatOptColumn<ListView>;
 }
 
 NLBroadcastFunction NLExecutor::selectOptListTileFunction() {
-    return &tileColumn<std::optional<ListView>>;
+    return &tileOptColumn<ListView>;
 }
 
 NLAppendFunction NLExecutor::selectOptListAppendFunction() {
-    return &appendColumn<std::optional<ListView>>;
+    return &appendOptColumn<ListView>;
 }
 
 NLOwnedAppendFunction NLExecutor::selectOwnedAppendFunction(const Column* buffer) {
     NLOwnedAppendFunction append = nullptr;
-    dispatchViewColumn(buffer, [&]<typename ElementType>(const ColumnVector<ElementType>* column) {
-        append = &appendOwnedColumn<ElementType>;
+    dispatchViewColumn(buffer, Overloaded {
+        [&]<typename ElementType>(const ColumnVector<ElementType>* column) { append = &appendOwnedColumn<ElementType>; },
+        [&]<typename Element>(const ColumnOptVector<Element>* column) { append = &appendOwnedOptColumn<Element>; },
     });
 
     return append;
@@ -12620,8 +12815,9 @@ NLOwnedAppendFunction NLExecutor::selectOwnedAppendFunction(const Column* buffer
 
 NLReownFunction NLExecutor::selectReownFunction(const Column* column) {
     NLReownFunction reown = nullptr;
-    dispatchViewColumn(column, [&]<typename ElementType>(const ColumnVector<ElementType>* viewColumn) {
-        reown = &reownColumn<ElementType>;
+    dispatchViewColumn(column, Overloaded {
+        [&]<typename ElementType>(const ColumnVector<ElementType>* viewColumn) { reown = &reownColumn<ColumnVector<ElementType>>; },
+        [&]<typename Element>(const ColumnOptVector<Element>* viewColumn) { reown = &reownColumn<ColumnOptVector<Element>>; },
     });
 
     return reown;
@@ -12629,15 +12825,16 @@ NLReownFunction NLExecutor::selectReownFunction(const Column* column) {
 
 NLReownRowsFunction NLExecutor::selectReownRowsFunction(const Column* column) {
     NLReownRowsFunction reown = nullptr;
-    dispatchViewColumn(column, [&]<typename ElementType>(const ColumnVector<ElementType>* viewColumn) {
-        reown = &reownColumnRows<ElementType>;
+    dispatchViewColumn(column, Overloaded {
+        [&]<typename ElementType>(const ColumnVector<ElementType>* viewColumn) { reown = &reownColumnRows<ColumnVector<ElementType>>; },
+        [&]<typename Element>(const ColumnOptVector<Element>* viewColumn) { reown = &reownColumnRows<ColumnOptVector<Element>>; },
     });
 
     return reown;
 }
 
 NLGatherFunction NLExecutor::selectOptListGatherFunction() {
-    return &gatherColumn<std::optional<ListView>>;
+    return &gatherOptColumn<ListView>;
 }
 
 NLCompareFunction NLExecutor::selectOptListCompareFunction() {
@@ -12653,11 +12850,11 @@ NLCountFunction NLExecutor::selectOptListCountFunction() {
 }
 
 NLGroupKeyGatherFunction NLExecutor::selectOptListGroupKeyGatherFunction() {
-    return &groupGatherAppendColumn<std::optional<ListView>>;
+    return &groupGatherAppendOptColumn<ListView>;
 }
 
 NLCopyFunction NLExecutor::selectOptListCopyFunction() {
-    return &copyRangeColumn<std::optional<ListView>>;
+    return &copyRangeOptColumn<ListView>;
 }
 
 NLListItemReadFunction NLExecutor::selectOptNestedListItemRead() {
@@ -12691,33 +12888,30 @@ NLGatherFunction NLExecutor::selectConstGatherFunction() {
     return &gatherConstColumn;
 }
 
-// A nullable chunk is a ColumnOptVector<Element> - that is,
-// ColumnVector<std::optional<Element>> - so the templates its plain siblings name,
-// instantiated on std::optional<Element>, carry value and null together.
 NLGatherFunction NLExecutor::selectOptGatherFunction(NLChunkKind kind) {
     NLGatherFunction gather = nullptr;
-    dispatchOptChunkKind(kind, [&]<typename Element>() { gather = &gatherColumn<std::optional<Element>>; });
+    dispatchOptChunkKind(kind, [&]<typename Element>() { gather = &gatherOptColumn<Element>; });
 
     return gather;
 }
 
 NLAppendFunction NLExecutor::selectOptAppendFunction(NLChunkKind kind) {
     NLAppendFunction append = nullptr;
-    dispatchOptChunkKind(kind, [&]<typename Element>() { append = &appendColumn<std::optional<Element>>; });
+    dispatchOptChunkKind(kind, [&]<typename Element>() { append = &appendOptColumn<Element>; });
 
     return append;
 }
 
 NLCopyFunction NLExecutor::selectOptCopyFunction(NLChunkKind kind) {
     NLCopyFunction copy = nullptr;
-    dispatchOptChunkKind(kind, [&]<typename Element>() { copy = &copyRangeColumn<std::optional<Element>>; });
+    dispatchOptChunkKind(kind, [&]<typename Element>() { copy = &copyRangeOptColumn<Element>; });
 
     return copy;
 }
 
 NLGroupKeyGatherFunction NLExecutor::selectOptGroupKeyGather(NLChunkKind kind) {
     NLGroupKeyGatherFunction gather = nullptr;
-    dispatchOptChunkKind(kind, [&]<typename Element>() { gather = &groupGatherAppendColumn<std::optional<Element>>; });
+    dispatchOptChunkKind(kind, [&]<typename Element>() { gather = &groupGatherAppendOptColumn<Element>; });
 
     return gather;
 }
@@ -12740,14 +12934,14 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountOptFold(NLChunkKind kin
 
 NLBroadcastFunction NLExecutor::selectOptBlockRepeatFunction(NLChunkKind kind) {
     NLBroadcastFunction broadcast = nullptr;
-    dispatchOptChunkKind(kind, [&]<typename Element>() { broadcast = &blockRepeatColumn<std::optional<Element>>; });
+    dispatchOptChunkKind(kind, [&]<typename Element>() { broadcast = &blockRepeatOptColumn<Element>; });
 
     return broadcast;
 }
 
 NLBroadcastFunction NLExecutor::selectOptTileFunction(NLChunkKind kind) {
     NLBroadcastFunction broadcast = nullptr;
-    dispatchOptChunkKind(kind, [&]<typename Element>() { broadcast = &tileColumn<std::optional<Element>>; });
+    dispatchOptChunkKind(kind, [&]<typename Element>() { broadcast = &tileOptColumn<Element>; });
 
     return broadcast;
 }
