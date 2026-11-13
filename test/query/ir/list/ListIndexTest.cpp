@@ -50,6 +50,7 @@
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
+#include "IRTestColumns.h"
 #include "TuringException.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
@@ -100,15 +101,15 @@ private:
     std::vector<std::optional<types::Int64::Primitive>> _rows;
 
     bool appendIntegers(const Column* column, size_t offset, size_t rowCount) {
-        const auto* constantColumn = dynamic_cast<const ColumnConst<std::optional<types::Int64::Primitive>>*>(column);
-        const auto* vectorColumn = dynamic_cast<const ColumnOptVector<types::Int64::Primitive>*>(column);
+        const auto* constantColumn = columnAs<ColumnConst<std::optional<types::Int64::Primitive>>>(column);
+        const auto* vectorColumn = columnAs<ColumnOptVector<types::Int64::Primitive>>(column);
 
         if (!constantColumn && !vectorColumn) {
             return false;
         }
 
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _rows.push_back(constantColumn ? (*constantColumn)[rowIndex] : vectorColumn->getRaw()[rowIndex]);
+            _rows.push_back(constantColumn ? constantColumn->get(rowIndex) : vectorColumn->get(rowIndex));
         }
 
         return true;
@@ -180,7 +181,7 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
-        const auto* integerKeys = dynamic_cast<const ColumnOptVector<types::Int64::Primitive>*>(chunks[0]);
+        const auto* integerKeys = columnAs<ColumnOptVector<types::Int64::Primitive>>(chunks[0]);
         const ColumnVector<CellView>* cellKeys = chunks[0]->getKind() == ColumnVector<CellView>::staticKind()
             ? static_cast<const ColumnVector<CellView>*>(chunks[0])
             : nullptr;
@@ -192,7 +193,7 @@ public:
 
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
             const std::optional<types::Int64::Primitive> key = integerKeys
-                ? integerKeys->getRaw()[rowIndex]
+                ? integerKeys->get(rowIndex)
                 : elementAsInteger(cellKeys->getRaw()[rowIndex]);
 
             _rows.emplace_back(key, countRaw[rowIndex]);

@@ -41,6 +41,7 @@
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
+#include "IRTestColumns.h"
 #include "TuringException.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
@@ -57,22 +58,23 @@ using Rows = std::vector<Row>;
 // has another element type.
 template <typename T>
 std::optional<std::string> renderOptCell(const Column* column, size_t row) {
-    const auto* values = dynamic_cast<const ColumnOptVector<T>*>(column);
+    const auto* values = columnAs<ColumnOptVector<T>>(column);
     if (!values) {
         return std::nullopt;
     }
 
-    const std::optional<T>& value = (*values)[row];
-    if (!value) {
+    if (!values->isValid(row)) {
         return "null";
     }
 
+    const T& value = values->getValue(row);
+
     if constexpr (std::is_same_v<T, CustomBool>) {
-        return static_cast<bool>(*value) ? "true" : "false";
+        return static_cast<bool>(value) ? "true" : "false";
     } else if constexpr (std::is_same_v<T, std::string_view>) {
-        return std::string(*value);
+        return std::string(value);
     } else {
-        return std::to_string(*value);
+        return std::to_string(value);
     }
 }
 
@@ -138,17 +140,16 @@ std::optional<std::string> renderTaggedCell(const Column* column, size_t row) {
 // Render one cell of an optional list column - the column an UNWIND over a list of lists
 // emits, whose elements are lists rather than scalars.
 std::optional<std::string> renderOptListCell(const Column* column, size_t row) {
-    const auto* lists = dynamic_cast<const ColumnOptVector<ListView>*>(column);
+    const auto* lists = columnAs<ColumnOptVector<ListView>>(column);
     if (!lists) {
         return std::nullopt;
     }
 
-    const std::optional<ListView>& list = (*lists)[row];
-    if (!list) {
+    if (!lists->isValid(row)) {
         return "null";
     }
 
-    return renderTaggedList(*list);
+    return renderTaggedList(lists->getValue(row));
 }
 
 // Render one output cell, whatever column shape the program emitted: a node ID from a

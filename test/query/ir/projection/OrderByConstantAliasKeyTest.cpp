@@ -38,6 +38,7 @@
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
+#include "IRTestColumns.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
@@ -74,13 +75,12 @@ public:
         const auto* constants = dynamic_cast<const ColumnConst<int64_t>*>(chunks[_constantColumn]);
         ASSERT_NE(constants, nullptr);
 
-        const auto* names = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[_nameColumn]);
+        const auto* names = columnAs<ColumnOptVector<std::string_view>>(chunks[_nameColumn]);
         ASSERT_NE(names, nullptr);
 
-        const auto& nameRaw = names->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            ASSERT_TRUE(nameRaw[rowIndex].has_value());
-            _rows.emplace_back((*constants)[rowIndex], std::string(*nameRaw[rowIndex]));
+            ASSERT_TRUE(names->isValid(rowIndex));
+            _rows.emplace_back((*constants)[rowIndex], std::string(names->getValue(rowIndex)));
         }
     }
 

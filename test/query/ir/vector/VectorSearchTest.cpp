@@ -26,6 +26,7 @@
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 
+#include "IRTestColumns.h"
 #include "StringRowSink.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
@@ -52,8 +53,7 @@ public:
         _rowCount += rowCount;
 
         const ColumnNodeIDs* const ids = dynamic_cast<const ColumnNodeIDs*>(chunks.front());
-        const ScoreColumn* const scores = chunks.size() > 1 ? dynamic_cast<const ScoreColumn*>(chunks[1])
-                                                            : nullptr;
+        const ScoreColumn* const scores = chunks.size() > 1 ? columnAs<ScoreColumn>(chunks[1]) : nullptr;
 
         for (size_t row = offset; row < offset + rowCount; row++) {
             if (ids) {
@@ -61,7 +61,8 @@ public:
             }
 
             if (scores) {
-                _scores.push_back((*scores)[row].value());
+                ASSERT_TRUE(scores->isValid(row));
+                _scores.push_back(scores->getValue(row));
             }
         }
     }

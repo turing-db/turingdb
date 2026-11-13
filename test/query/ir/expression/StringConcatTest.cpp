@@ -39,6 +39,7 @@
 
 #include "TuringException.h"
 
+#include "IRTestColumns.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
@@ -59,7 +60,7 @@ public:
 
         const auto* constView = dynamic_cast<const ColumnConst<std::string_view>*>(column);
         const auto* vectorView = dynamic_cast<const ColumnVector<std::string_view>*>(column);
-        const auto* optView = dynamic_cast<const ColumnOptVector<std::string_view>*>(column);
+        const auto* optView = columnAs<ColumnOptVector<std::string_view>>(column);
         ASSERT_TRUE(constView || vectorView || optView);
 
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
@@ -68,8 +69,7 @@ public:
             } else if (vectorView) {
                 _values.emplace_back(vectorView->getRaw()[rowIndex]);
             } else {
-                const std::optional<std::string_view>& value = optView->getRaw()[rowIndex];
-                _values.push_back(value.has_value() ? std::string(*value) : std::string("<null>"));
+                _values.push_back(optView->isValid(rowIndex) ? std::string(optView->getValue(rowIndex)) : std::string("<null>"));
             }
         }
     }

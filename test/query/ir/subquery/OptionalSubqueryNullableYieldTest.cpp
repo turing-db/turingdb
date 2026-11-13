@@ -52,9 +52,9 @@ void edgeTypeExecuteImpl(ProcedureState* procedureState) {
     OptEdgeTypeColumn* edgeTypes = static_cast<OptEdgeTypeColumn*>(data.getReturnColumn(0));
     edgeTypes->clear();
     edgeTypes->push_back(EdgeTypeID(0));
-    edgeTypes->push_back(std::nullopt);
+    edgeTypes->pushNull();
     edgeTypes->push_back(EdgeTypeID(1));
-    edgeTypes->push_back(std::nullopt);
+    edgeTypes->pushNull();
 
     procedureState->finish();
 }

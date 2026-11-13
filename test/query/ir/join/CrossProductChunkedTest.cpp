@@ -36,6 +36,7 @@
 #include "NLOutputSink.h"
 #include "StorageDialect.h"
 
+#include "IRTestColumns.h"
 #include "TuringTest.h"
 
 using namespace db;
@@ -107,7 +108,7 @@ public:
 
         std::array<const ColumnOptVector<int64_t>*, Arity> columns {};
         for (size_t index = 0; index < Arity; index++) {
-            columns[index] = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[index]);
+            columns[index] = columnAs<ColumnOptVector<int64_t>>(chunks[index]);
             ASSERT_NE(columns[index], nullptr);
         }
 
@@ -116,7 +117,7 @@ public:
         for (size_t row = offset; row < offset + rowCount; row++) {
             Tuple tuple {};
             for (size_t index = 0; index < Arity; index++) {
-                tuple[index] = columns[index]->getRaw()[row];
+                tuple[index] = columns[index]->get(row);
             }
 
             _tuples.push_back(tuple);

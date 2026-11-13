@@ -30,6 +30,7 @@
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 
+#include "IRTestColumns.h"
 #include "TuringException.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
@@ -133,9 +134,8 @@ std::string renderCell(const Column* column, size_t row) {
         return std::to_string((*nodeIDs)[row].getValue());
     }
 
-    if (const auto* names = dynamic_cast<const ColumnOptVector<std::string_view>*>(column)) {
-        const std::optional<std::string_view>& name = (*names)[row];
-        return name ? std::string(*name) : "null";
+    if (const auto* names = columnAs<ColumnOptVector<std::string_view>>(column)) {
+        return names->isValid(row) ? std::string(names->getValue(row)) : "null";
     }
 
     throw TuringException("ReturnHeterogeneousListTest: unsupported output column type");
