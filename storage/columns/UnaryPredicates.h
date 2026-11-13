@@ -3,6 +3,7 @@
 #include "ColumnOptVector.h"
 #include "ColumnVector.h"
 #include "ColumnConst.h"
+#include "ColumnOperand.h"
 
 #include "TypeUtils.h"
 #include "metadata/PropertyType.h"
@@ -39,34 +40,24 @@ inline std::optional<CustomBool> optionalUnaryPredicate(T&& a) {
  * operand shape and result columns. It is not concerned with the internal type
  * of its argument.
  */
-template <typename Op, typename T>
+template <typename Op>
 struct UnaryPredicateExecutor {
-    static void apply(ColumnOptVector<CustomBool>* res, const ColumnVector<T>* arg)
-        requires TypeUtils::is_optional_v<T>
-    {
+    template <typename ResColumn, typename ArgColumn>
+    static void apply(ResColumn* res, const ArgColumn* arg) {
         const size_t size = arg->size();
-
         res->resize(size);
-        auto& resd = res->getRaw();
-        const auto& argd = arg->getRaw();
 
         auto op = Op {};
         for (size_t i = 0; i < size; i++) {
-            resd[i] = op(argd[i]);
+            writeRow(res, i, op(operandRow(arg, i)));
         }
     }
 
     // Required for RETURN NOT TRUE, etc.
-    static void apply(ColumnConst<T>* res, const ColumnConst<T>* arg)
-        requires OptionalPredicate<Op, T>
-    {
+    template <typename T>
+    static void apply(ColumnConst<T>* res, const ColumnConst<T>* arg) {
         auto op = Op {};
-        if constexpr (!TypeUtils::is_optional_v<T>) {
-            const bool result = op(arg->getRaw());
-            res->set(result);
-        } else {
-            res->set(op(arg->getRaw()));
-        }
+        writeConstant(res, op(constantOperand(arg)));
     }
 };
 
