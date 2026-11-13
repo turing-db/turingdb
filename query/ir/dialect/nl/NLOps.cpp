@@ -77,17 +77,22 @@ bool writesAMapPerRow(Type chunkType) {
     return holdsAMapPerRow(chunkType) || (chunk && isNullLiteralType(chunk.getElementType()));
 }
 
-// The value type an aggregate reduces: the T in a !nl.chunk<!storage.nullable<T>>.
-// Aggregates fold property values, so an update's input and a result's output are
-// always such chunks. Returns a null Type for anything else (an ID chunk, say), so
-// the caller can reject it.
+// The value type an aggregate reduces: the T in a !nl.chunk<!storage.nullable<T>>, or
+// !storage.any for a chunk of tagged cells, which holds its own null. Aggregates fold
+// property values, so an update's input and a result's output are always such chunks.
+// Returns a null Type for anything else (an ID chunk, say), so the caller can reject it.
 Type aggregateValueType(Type chunkType) {
     const auto chunk = dyn_cast<ChunkType>(chunkType);
     if (!chunk) {
         return Type();
     }
 
-    const auto nullable = dyn_cast<storage::NullableType>(chunk.getElementType());
+    const Type element = chunk.getElementType();
+    if (isa<storage::AnyType>(element)) {
+        return element;
+    }
+
+    const auto nullable = dyn_cast<storage::NullableType>(element);
     if (!nullable) {
         return Type();
     }
@@ -1518,7 +1523,7 @@ LogicalResult AggregateResult::verify() {
 
     const Type resultValueType = aggregateValueType(getResult().getType());
     if (!resultValueType) {
-        return emitOpError("result must be a nullable value chunk");
+        return emitOpError("result must be a nullable value chunk or a chunk of tagged cells");
     }
 
     // stdev and avg of numbers emit an f64 result from an f64 accumulator; sum/min/max

@@ -3952,16 +3952,11 @@ void NLTranslator::translateListIndex(nl::ListIndex index, NLStmtContainer* body
                                                rhs,
                                                _memory,
                                                result);
+    } else if (mlir::isa<storage::AnyType>(resultElement)) {
+        fn = NLExecutor::selectBinary<OP_INDEX>(lhs, rhs, _memory, result);
     } else {
         const auto nullableType = mlir::cast<storage::NullableType>(resultElement);
-        const mlir::Type elementType = nullableType.getValueType();
-        const bool readsATaggedCell = mlir::isa<storage::AnyType>(elementType);
-
-        if (readsATaggedCell) {
-            fn = NLExecutor::selectBinary<OP_INDEX>(lhs, rhs, _memory, result);
-        } else {
-            fn = NLExecutor::selectValueListIndex(chunkKindFromNullableValue(elementType), lhs, rhs, _memory, result);
-        }
+        fn = NLExecutor::selectValueListIndex(chunkKindFromNullableValue(nullableType.getValueType()), lhs, rhs, _memory, result);
     }
 
     bindKernelResult(index.getResult(), result);
@@ -6203,14 +6198,15 @@ void NLTranslator::translateAggregateResult(nl::AggregateResult result, NLStmtCo
     // it was not produced by an nl.aggregate.
     NLAggregateState* state = aggregateStateFor(result.getState());
 
-    // The result is a single-row nullable chunk runAggregateResult fills with the reduced
-    // value. Allocate its column on the result type and map the op result to it.
+    // The result is a single-row chunk runAggregateResult fills with the reduced value: a
+    // nullable value or a tagged cell. Allocate its column on the result type and map the op
+    // result to it.
     const mlir::Value resultChunk = result.getResult();
     const mlir::Type resultElement = mlir::cast<nl::ChunkType>(resultChunk.getType()).getElementType();
 
     Column* output = nullptr;
-    if (isNullableAny(resultElement)) {
-        output = allocOptCellColumn();
+    if (mlir::isa<storage::AnyType>(resultElement)) {
+        output = allocCellColumn();
     } else {
         output = allocOptColumnForValueType(nullableChunkValueType(resultChunk.getType()));
     }

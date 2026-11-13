@@ -52,16 +52,16 @@ class CommitWriteBuffer;
  */
 template <typename Func, typename T, typename U>
     requires OptionallyInvokable<Func, T, U>
-auto optionalGenericFunc(T&& a, U&& b) -> TypeUtils::optional_invoke_result<Func, T, U> {
+auto optionalGenericFunc(T&& a, U&& b) -> TypeUtils::nullable_invoke_result<Func, T, U> {
     if constexpr (TypeUtils::is_optional_v<T>) {
         if (!a.has_value()) {
-            return std::nullopt;
+            return TypeUtils::nullValue<TypeUtils::nullable_invoke_result<Func, T, U>>();
         }
     }
 
     if constexpr (TypeUtils::is_optional_v<U>) {
         if (!b.has_value()) {
-            return std::nullopt;
+            return TypeUtils::nullValue<TypeUtils::nullable_invoke_result<Func, T, U>>();
         }
     }
 
@@ -792,7 +792,7 @@ Result visitNumberCell(const CellView cell, std::string_view functionName, Visit
     } else if (tag == CellTag::Double) {
         return visit(cell.getAs<types::Double::Primitive>());
     } else if (tag == CellTag::Null) {
-        return std::nullopt;
+        return TypeUtils::nullValue<Result>();
     }
 
     throwCellTypeError(functionName, "a number", tag);
@@ -977,7 +977,7 @@ using ToStringListFunction = ListConversionFunction<ToStringFunction>;
 class TaggedAbsFunction {
 public:
     using ArgType = CellView;
-    using ResultType = std::optional<CellView>;
+    using ResultType = CellView;
 
     explicit TaggedAbsFunction(QueryListBuffer* listBuffer);
 
@@ -1013,7 +1013,7 @@ public:
 class TaggedNegateFunction {
 public:
     using ArgType = CellView;
-    using ResultType = std::optional<CellView>;
+    using ResultType = CellView;
 
     explicit TaggedNegateFunction(QueryListBuffer* listBuffer);
 
@@ -1032,7 +1032,7 @@ private:
 class TaggedUnaryPlusFunction {
 public:
     using ArgType = CellView;
-    using ResultType = std::optional<CellView>;
+    using ResultType = CellView;
 
     ResultType operator()(const ArgType cell) const;
     ResultType operator()(const std::optional<ArgType>& cell) const;
@@ -1473,7 +1473,7 @@ private:
 class TaggedReverseFunction {
 public:
     using ArgType = CellView;
-    using ResultType = std::optional<CellView>;
+    using ResultType = CellView;
 
     TaggedReverseFunction(QueryListBuffer* listBuffer, StringBuffer* stringBuffer);
 

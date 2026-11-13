@@ -14,6 +14,10 @@ bool isNullLiteralType(Type elementType);
 // of an entity, the tag of a cell, or the path with no node
 bool holdsItsOwnNull(Type elementType);
 
+// The element type of a column of @param valueType that can be null: the type itself where
+// it holds its own null, a nullable of it otherwise
+Type nullableElementType(Type valueType);
+
 // Whether a column of @param elementType is read only as a plain chunk of rows, never as a
 // constant nor through a nullable: a node, an edge, the label sets of a node, the types of
 // an edge, a path, a walk's handle or a mask

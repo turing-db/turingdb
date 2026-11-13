@@ -3784,9 +3784,9 @@ public:
         return stagedCell(&cells, _integer);
     }
 
-    std::optional<CellView> average(uint64_t count, QueryListBuffer& cells) const {
+    CellView average(uint64_t count, QueryListBuffer& cells) const {
         if (_tag == CellTag::Null) {
-            return std::nullopt;
+            return CellView::nullElement();
         } else if (_tag == CellTag::Duration) {
             return stagedCell(&cells, averageOf(_durationTotal, count));
         } else if (_tag == CellTag::Point) {
@@ -5972,21 +5972,21 @@ size_t pairedRowCount(const Column* lhs, const Column* rhs) {
     return lhs->size();
 }
 
-std::optional<CellView> readContainerElement(const NLContainer& container,
-                                             const NLSubscript& subscript,
-                                             NLEntityProperties& properties,
-                                             MapBuffer<>& mapBuffer) {
+CellView readContainerElement(const NLContainer& container,
+                              const NLSubscript& subscript,
+                              NLEntityProperties& properties,
+                              MapBuffer<>& mapBuffer) {
     const bool readsANull = std::holds_alternative<std::monostate>(subscript)
                          || std::holds_alternative<std::monostate>(container._keyed);
     const bool readsAPositionOfAList = container._list.has_value()
                                     && !std::holds_alternative<NLNeitherPositionNorKey>(subscript);
 
     if (readsANull) {
-        return std::nullopt;
+        return CellView::nullElement();
     } else if (const types::String::Primitive* key = std::get_if<types::String::Primitive>(&subscript)) {
         MapEntryView entry;
         if (!findKeyedEntry(container._keyed, *key, properties, mapBuffer, entry)) {
-            return std::nullopt;
+            return CellView::nullElement();
         }
 
         return entry.getValue();
@@ -6000,10 +6000,8 @@ std::optional<CellView> readContainerElement(const NLContainer& container,
 }
 
 template <typename Element>
-Element containerIndexResult(const std::optional<CellView>& element) {
-    if constexpr (std::is_same_v<Element, CellView>) {
-        return element.value_or(CellView::nullElement());
-    } else if constexpr (std::is_same_v<Element, std::optional<CellView>>) {
+Element containerIndexResult(CellView element) {
+    if constexpr (std::is_same_v<Element, CellView> || std::is_same_v<Element, std::optional<CellView>>) {
         return element;
     } else if constexpr (TypeUtils::is_optional_v<Element>) {
         return ValueListIndexImpl<typename Element::value_type>::elementValue(element);
@@ -6298,13 +6296,14 @@ void groupEmitCopy(NLGroupStatePlaces places, size_t begin, size_t count, Column
 template <typename Primitive>
 void groupEmitKeptValue(NLGroupStatePlaces places, size_t begin, size_t count, Column* output, NLStepBuffers* stepBuffers) {
     using State = NLKeptValue<Primitive>;
+    using Element = TypeUtils::nullable_t<Primitive>;
 
-    finalizeGroupStates<State, std::optional<Primitive>>(places, begin, count, output, [](const State& kept) {
+    finalizeGroupStates<State, Element>(places, begin, count, output, [](const State& kept) {
         if (!kept.isKept()) {
-            return std::optional<Primitive>();
+            return TypeUtils::nullValue<Element>();
         }
 
-        return std::optional<Primitive>(kept.getValue());
+        return Element(kept.getValue());
     });
 }
 
@@ -6342,8 +6341,8 @@ void groupEmitDeviation(NLGroupStatePlaces places, size_t begin, size_t count, C
 void groupEmitTaggedSum(NLGroupStatePlaces places, size_t begin, size_t count, Column* output, NLStepBuffers* stepBuffers) {
     QueryListBuffer& cells = stepBuffers->listBuffer();
 
-    finalizeGroupStates<NLTaggedSum, std::optional<CellView>>(places, begin, count, output, [&](const NLTaggedSum& sum) {
-        return std::optional<CellView>(sum.sum(cells));
+    finalizeGroupStates<NLTaggedSum, CellView>(places, begin, count, output, [&](const NLTaggedSum& sum) {
+        return sum.sum(cells);
     });
 }
 
@@ -6352,7 +6351,7 @@ void groupEmitTaggedAverage(NLGroupStatePlaces places, size_t begin, size_t coun
 
     QueryListBuffer& cells = stepBuffers->listBuffer();
 
-    finalizeGroupStates<State, std::optional<CellView>>(places, begin, count, output, [&](const State& average) {
+    finalizeGroupStates<State, CellView>(places, begin, count, output, [&](const State& average) {
         return average._total.average(average._count, cells);
     });
 }
@@ -10717,10 +10716,10 @@ void NLExecutor::runContainerIndex(NLExecutionContext* context, NLFunctionData* 
     outputRaw.resize(rowCount);
 
     for (size_t row = 0; row < rowCount; row++) {
-        const std::optional<CellView> element = readContainerElement(readBase(base, row),
-                                                                     readIndex(index, row),
-                                                                     properties,
-                                                                     mapBuffer);
+        const CellView element = readContainerElement(readBase(base, row),
+                                                      readIndex(index, row),
+                                                      properties,
+                                                      mapBuffer);
 
         outputRaw[row] = containerIndexResult<Element>(element);
     }

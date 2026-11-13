@@ -42,16 +42,16 @@ struct Power;
 template <typename Func, typename T, typename U>
     requires OptionallyInvokable<Func, T, U>
 inline auto optionalGeneric(T&& a,
-                            U&& b) -> TypeUtils::optional_invoke_result<Func, T, U> {
+                            U&& b) -> TypeUtils::nullable_invoke_result<Func, T, U> {
     if constexpr (TypeUtils::is_optional_v<T>) {
         if (!a.has_value()) {
-            return std::nullopt;
+            return TypeUtils::nullValue<TypeUtils::nullable_invoke_result<Func, T, U>>();
         }
     }
 
     if constexpr (TypeUtils::is_optional_v<U>) {
         if (!b.has_value()) {
-            return std::nullopt;
+            return TypeUtils::nullValue<TypeUtils::nullable_invoke_result<Func, T, U>>();
         }
     }
 
@@ -389,11 +389,11 @@ concept Temporal = std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, D
 // type its tag names, a column value as itself. A null answers null, and any other value
 // that is no number, instant or duration is handed to @param reject, which raises.
 template <typename T, typename Visit, typename Reject>
-inline std::optional<CellView> visitArithmeticOperand(const T& value, Visit&& visit, Reject&& reject) {
+inline CellView visitArithmeticOperand(const T& value, Visit&& visit, Reject&& reject) {
     using Decayed = std::decay_t<T>;
 
     if constexpr (std::is_same_v<Decayed, CellView>) {
-        auto visitor = [&visit, &reject]<typename N>(CellView view) -> std::optional<CellView> {
+        auto visitor = [&visit, &reject]<typename N>(CellView view) -> CellView {
             if constexpr (std::is_same_v<N, types::UInt64::Primitive>) {
                 return visit(static_cast<int64_t>(view.getAs<N>()));
             } else if constexpr (std::is_same_v<N, types::Int64::Primitive>
@@ -402,7 +402,7 @@ inline std::optional<CellView> visitArithmeticOperand(const T& value, Visit&& vi
                               || std::is_same_v<N, types::Duration::Primitive>) {
                 return visit(view.getAs<N>());
             } else if constexpr (std::is_same_v<N, PropertyNull>) {
-                return std::nullopt;
+                return CellView::nullElement();
             } else {
                 return reject();
             }
@@ -411,7 +411,7 @@ inline std::optional<CellView> visitArithmeticOperand(const T& value, Visit&& vi
        return CellTagDispatcher{value.getTag()}.execute(visitor, value);
 
     } else if constexpr (TypeUtils::is_optional_v<T>) {
-        return value.has_value() ? visitArithmeticOperand(*value, visit, reject) : std::nullopt;
+        return value.has_value() ? visitArithmeticOperand(*value, visit, reject) : CellView::nullElement();
     } else if constexpr (std::is_arithmetic_v<Decayed> || Temporal<Decayed>) {
         return visit(arithmeticOperand(value));
     } else {
@@ -473,6 +473,9 @@ using CellConcatenation = std::conditional_t<TaggedCell<A> && TaggedCell<B>,
                                              std::conditional_t<ListTyped<A> || ListTyped<B>,
                                                                 ListView,
                                                                 std::string_view>>;
+
+template <typename A, typename B>
+using CellConcatenationResult = TypeUtils::nullable_t<CellConcatenation<A, B>>;
 
 // The text a type-erased cell joins a string with under '+', false where its tag names a
 // value that has none
@@ -601,11 +604,11 @@ struct BinaryOp {
     // holds a string, before it computes anything.
     template <typename T, typename U>
         requires ComputesOverTaggedCell<F, T, U>
-    inline std::optional<CellView> operator()(T&& a, U&& b) const {
+    inline CellView operator()(T&& a, U&& b) const {
         bioassert(_listBuffer, "Arithmetic over a type-erased cell has no list buffer to stage its result in");
 
         if (holdsNull(a) || holdsNull(b)) {
-            return std::nullopt;
+            return CellView::nullElement();
         }
 
         if constexpr (std::is_same_v<F, std::plus<>>) {
@@ -623,12 +626,12 @@ struct BinaryOp {
             }
         }
 
-        const auto reject = [&a, &b]() -> std::optional<CellView> {
+        const auto reject = [&a, &b]() -> CellView {
             throwOperandTypeError(a, b);
         };
 
         const auto computeFrom = [this, &b, &reject](const auto lhs) {
-            const auto compute = [this, lhs](const auto rhs) -> std::optional<CellView> {
+            const auto compute = [this, lhs](const auto rhs) -> CellView {
                 if constexpr (requires { F {}(lhs, rhs); }) {
                     return stagedCell(this->_listBuffer, F {}(lhs, rhs));
                 } else {
@@ -796,11 +799,11 @@ struct Concatenate {
     // type error the two values are.
     template <typename A, typename B>
         requires ConcatenatesACell<A, B>
-    inline std::optional<CellConcatenation<A, B>> operator()(const A& a, const B& b) const {
+    inline CellConcatenationResult<A, B> operator()(const A& a, const B& b) const {
         using Result = CellConcatenation<A, B>;
 
         if (holdsNull(a) || holdsNull(b)) {
-            return std::nullopt;
+            return TypeUtils::nullValue<CellConcatenationResult<A, B>>();
         }
 
         if constexpr (!std::is_same_v<Result, ListView>) {
@@ -853,66 +856,66 @@ struct Concatenate {
 };
 
 struct ListIndexImpl {
-    inline std::optional<CellView> operator()(ListView list, int64_t index) const {
+    inline CellView operator()(ListView list, int64_t index) const {
         const int64_t size = list.size();
         const int64_t offset = index < 0 ? size + index : index;
 
         if (offset < 0 || offset >= size) {
-            return std::nullopt;
+            return CellView::nullElement();
         }
 
         return list.elements()[static_cast<size_t>(offset)];
     }
 
-    inline std::optional<CellView> operator()(CellView cell, int64_t index) const {
+    inline CellView operator()(CellView cell, int64_t index) const {
         if (holdsNull(cell)) {
-            return std::nullopt;
+            return CellView::nullElement();
         }
 
         return operator()(indexedList(cell, CellTag::Int), index);
     }
 
-    inline std::optional<CellView> operator()(ListView list, uint64_t index) const {
+    inline CellView operator()(ListView list, uint64_t index) const {
         if (index >= list.size()) {
-            return std::nullopt;
+            return CellView::nullElement();
         }
 
         return list.elements()[static_cast<size_t>(index)];
     }
 
-    inline std::optional<CellView> operator()(CellView cell, uint64_t index) const {
+    inline CellView operator()(CellView cell, uint64_t index) const {
         if (holdsNull(cell)) {
-            return std::nullopt;
+            return CellView::nullElement();
         }
 
         return operator()(indexedList(cell, CellTag::UInt), index);
     }
 
-    inline std::optional<CellView> operator()(ListView /*unused*/, PropertyNull /*unused*/) const {
-        return std::nullopt;
+    inline CellView operator()(ListView /*unused*/, PropertyNull /*unused*/) const {
+        return CellView::nullElement();
     }
 
-    inline std::optional<CellView> operator()(CellView /*unused*/, PropertyNull /*unused*/) const {
-        return std::nullopt;
+    inline CellView operator()(CellView /*unused*/, PropertyNull /*unused*/) const {
+        return CellView::nullElement();
     }
 
     // Unused but defined to satisfy dispatcher
-    std::optional<CellView> operator()(int64_t /*unused*/, ListView /*unused*/) const {
+    CellView operator()(int64_t /*unused*/, ListView /*unused*/) const {
         throw TuringException("Index operands the wrong way round.");
     }
-    std::optional<CellView> operator()(int64_t /*unused*/, CellView /*unused*/) const {
+    CellView operator()(int64_t /*unused*/, CellView /*unused*/) const {
         throw TuringException("Index operands the wrong way round.");
     }
-    std::optional<CellView> operator()(PropertyNull /*unused*/, ListView /*unused*/) const {
+    CellView operator()(PropertyNull /*unused*/, ListView /*unused*/) const {
         throw TuringException("Index operands the wrong way round.");
     }
-    std::optional<CellView> operator()(PropertyNull /*unused*/, CellView /*unused*/) const {
+    CellView operator()(PropertyNull /*unused*/, CellView /*unused*/) const {
         throw TuringException("Index operands the wrong way round.");
     }
-    std::optional<CellView> operator()(uint64_t /*unused*/, ListView /*unused*/) const {
+    CellView operator()(uint64_t /*unused*/, ListView /*unused*/) const {
         throw TuringException("Index operands the wrong way round.");
     }
-    std::optional<CellView> operator()(uint64_t /*unused*/, CellView /*unused*/) const {
+    CellView operator()(uint64_t /*unused*/, CellView /*unused*/) const {
         throw TuringException("Index operands the wrong way round.");
     }
 
@@ -938,12 +941,12 @@ struct ValueListIndexImpl {
         return elementValue(ListIndexImpl {}(base, index));
     }
 
-    static std::optional<T> elementValue(const std::optional<CellView>& cell) {
-        if (!cell.has_value() || cell->getTag() != TypeToCellTag<T>::Tag) {
+    static std::optional<T> elementValue(CellView cell) {
+        if (cell.getTag() != TypeToCellTag<T>::Tag) {
             return std::nullopt;
         }
 
-        return cell->getAs<T>();
+        return cell.getAs<T>();
     }
 };
 
