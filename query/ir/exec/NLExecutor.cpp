@@ -582,8 +582,7 @@ void unwindListPathEmit(const Column* source,
     }
 }
 
-template <typename Cell>
-size_t taggedCellRowCount(const Cell& element) {
+size_t taggedCellRowCount(const CellView& element) {
     const std::optional<ListView> list = iteratedList(element);
     if (!list) {
         return 0;
@@ -598,14 +597,6 @@ CellView taggedCellElement(const CellView& element, size_t position) {
 
 size_t unwindTaggedElementCount(const Column* source, size_t row) {
     const auto* elements = static_cast<const ColumnVector<CellView>*>(source);
-
-    return taggedCellRowCount((*elements)[row]);
-}
-
-// The nullable sibling: an absent cell contributes no row, as the tagged null it stands
-// for does.
-size_t unwindOptTaggedElementCount(const Column* source, size_t row) {
-    const auto* elements = static_cast<const ColumnOptVector<CellView>*>(source);
 
     return taggedCellRowCount((*elements)[row]);
 }
@@ -625,25 +616,6 @@ void unwindTaggedElementEmit(const Column* source,
 
     for (size_t index = 0; index < rowsRaw.size(); index++) {
         outputRaw[index] = taggedCellElement(elements[rowsRaw[index]], positionsRaw[index]);
-    }
-}
-
-// The nullable sibling: only a present cell is drained, so every row the step covers holds
-// one and the element column carries no absent value.
-void unwindOptTaggedElementEmit(const Column* source,
-                                const ColumnVector<size_t>* rows,
-                                const ColumnVector<size_t>* positions,
-                                Column* output) {
-    const std::vector<std::optional<CellView>>& elements =
-        static_cast<const ColumnOptVector<CellView>*>(source)->getRaw();
-    const std::vector<size_t>& rowsRaw = rows->getRaw();
-    const std::vector<size_t>& positionsRaw = positions->getRaw();
-
-    std::vector<CellView>& outputRaw = static_cast<ColumnVector<CellView>*>(output)->getRaw();
-    outputRaw.resize(rowsRaw.size());
-
-    for (size_t index = 0; index < rowsRaw.size(); index++) {
-        outputRaw[index] = taggedCellElement(*elements[rowsRaw[index]], positionsRaw[index]);
     }
 }
 
@@ -762,10 +734,7 @@ void applyFunctionOverVector(Functor& functor,
 bool readsTaggedCells(const Column* input) {
     const ColumnKind::Code kind = input->getKind();
 
-    return kind == ColumnVector<CellView>::staticKind()
-        || kind == ColumnConst<CellView>::staticKind()
-        || kind == ColumnOptVector<CellView>::staticKind()
-        || kind == ColumnConst<std::optional<CellView>>::staticKind();
+    return kind == ColumnVector<CellView>::staticKind() || kind == ColumnConst<CellView>::staticKind();
 }
 
 template <typename Functor>
@@ -807,28 +776,16 @@ void functionNullReadingKernel(NLExecutionContext* context, Column* result, cons
     }
 }
 
-// The kernel serving a column of type-erased cells: a cell per row, the single cell a
-// constant is, or - what an index of a stored list answers, where the row may hold no
-// element at all - a cell that can be absent. The functor reads that absence itself, as it
-// reads the null a cell's own tag carries, so its answer fills a plain column either way.
+// The kernel serving a column of type-erased cells: a cell per row, or the single cell a
+// constant is. The functor reads the null a cell's own tag carries, so its answer fills a
+// plain column either way.
 template <typename Functor>
-NLUnaryFunctionKernel selectTaggedCellFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
-    using Arg = typename Functor::ArgType;
+NLUnaryFunctionKernel selectTaggedCellFunction(const Column* input, LocalMemory* memory, Column*& result) {
     using Res = typename Functor::ResultType;
-
-    if (input->getKind() == ColumnConst<std::optional<Arg>>::staticKind()) {
-        result = memory->alloc<ColumnConst<Res>>();
-        return &functionOptConstKernel<Functor>;
-    }
 
     if (input->getContainerKind() == ContainerKind::code<ColumnConst>()) {
         result = memory->alloc<ColumnConst<Res>>();
         return &functionConstKernel<Functor>;
-    }
-
-    if (inputNullable) {
-        result = memory->alloc<ColumnVector<Res>>();
-        return &functionNullReadingKernel<Functor>;
     }
 
     result = memory->alloc<ColumnVector<Res>>();
@@ -1478,18 +1435,6 @@ void collectTaggedCellSurvivors(const Column* mask, ColumnVector<size_t>* indice
     }
 }
 
-void collectOptTaggedCellSurvivors(const Column* mask, ColumnVector<size_t>* indices) {
-    const std::vector<std::optional<CellView>>& cells =
-        static_cast<const ColumnOptVector<CellView>*>(mask)->getRaw();
-    std::vector<size_t>& survivingRaw = indices->getRaw();
-
-    for (size_t row = 0; row < cells.size(); row++) {
-        if (cells[row].has_value() && cellTruth(*cells[row]).value_or(false)) {
-            survivingRaw.push_back(row);
-        }
-    }
-}
-
 std::optional<NodeID> namedNode(NodeID node) {
     return node;
 }
@@ -1592,24 +1537,8 @@ void applyNotOnTaggedCells(Column* result, const Column* operand) {
     });
 }
 
-void applyNotOnOptTaggedCells(Column* result, const Column* operand) {
-    const std::vector<std::optional<CellView>>& operandRaw =
-        static_cast<const ColumnOptVector<CellView>*>(operand)->getRaw();
-    std::vector<std::optional<CustomBool>>& resultRaw = static_cast<ColumnOptVector<CustomBool>*>(result)->getRaw();
-
-    resultRaw.resize(operandRaw.size());
-    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](const std::optional<CellView>& cell) {
-        return negatedTruth(cell);
-    });
-}
-
 void applyNotOnConstTaggedCell(Column* result, const Column* operand) {
     const CellView cell = static_cast<const ColumnConst<CellView>*>(operand)->getRaw();
-    static_cast<ColumnConst<std::optional<CustomBool>>*>(result)->set(negatedTruth(cell));
-}
-
-void applyNotOnOptConstTaggedCell(Column* result, const Column* operand) {
-    const std::optional<CellView>& cell = static_cast<const ColumnConst<std::optional<CellView>>*>(operand)->getRaw();
     static_cast<ColumnConst<std::optional<CustomBool>>*>(result)->set(negatedTruth(cell));
 }
 
@@ -1950,17 +1879,12 @@ ID checkedEntity(const CellView cell) {
 }
 
 template <typename ID>
-ID checkedEntity(const std::optional<CellView>& cell) {
-    return cell ? checkedEntity<ID>(*cell) : ID {};
-}
-
-template <typename ID, typename Cell>
 void checkedCastColumn(Column* result, const Column* operand) {
-    const std::vector<Cell>& cells = static_cast<const ColumnVector<Cell>*>(operand)->getRaw();
+    const std::vector<CellView>& cells = static_cast<const ColumnVector<CellView>*>(operand)->getRaw();
     std::vector<ID>& ids = static_cast<ColumnVector<ID>*>(result)->getRaw();
 
     ids.resize(cells.size());
-    std::transform(cells.begin(), cells.end(), ids.begin(), [](const Cell& cell) {
+    std::transform(cells.begin(), cells.end(), ids.begin(), [](const CellView cell) {
         return checkedEntity<ID>(cell);
     });
 }
@@ -1971,10 +1895,7 @@ NLUnaryFn selectCheckedCastOf(const Column* operand, LocalMemory* memory, Column
 
     if (kind == ColumnVector<CellView>::staticKind()) {
         result = memory->alloc<ColumnVector<ID>>();
-        return &checkedCastColumn<ID, CellView>;
-    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
-        result = memory->alloc<ColumnVector<ID>>();
-        return &checkedCastColumn<ID, std::optional<CellView>>;
+        return &checkedCastColumn<ID>;
     }
 
     throw IRException("A pattern reads its node or relationship out of a column of tagged cells laid out over its rows");
@@ -2031,17 +1952,6 @@ void applyIsNotTrueOnTaggedCells(Column* result, const Column* operand) {
     resultRaw.resize(operandRaw.size());
     std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](CellView cell) {
         return CustomBool {!cellTruth(cell).value_or(false)};
-    });
-}
-
-void applyIsNotTrueOnOptTaggedCells(Column* result, const Column* operand) {
-    const std::vector<std::optional<CellView>>& operandRaw =
-        static_cast<const ColumnOptVector<CellView>*>(operand)->getRaw();
-    std::vector<CustomBool>& resultRaw = static_cast<ColumnVector<CustomBool>*>(result)->getRaw();
-
-    resultRaw.resize(operandRaw.size());
-    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](std::optional<CellView> cell) {
-        return CustomBool {!(cell.has_value() && cellTruth(*cell).value_or(false))};
     });
 }
 
@@ -2111,25 +2021,12 @@ std::optional<bool> readTaggedCellTruth(const Column* cells, size_t row) {
     return cellTruth(static_cast<const ColumnVector<CellView>*>(cells)->getRaw()[row]);
 }
 
-std::optional<bool> readOptTaggedCellTruth(const Column* cells, size_t row) {
-    const std::optional<CellView>& cell = static_cast<const ColumnOptVector<CellView>*>(cells)->getRaw()[row];
-    if (!cell.has_value()) {
-        return std::nullopt;
-    }
-
-    return cellTruth(*cell);
-}
-
 bool caseTestBoolean(const Column* condition, size_t row) {
     return readBooleanTruth(condition, row).value_or(false);
 }
 
 bool caseTestTaggedCell(const Column* condition, size_t row) {
     return readTaggedCellTruth(condition, row).value_or(false);
-}
-
-bool caseTestOptTaggedCell(const Column* condition, size_t row) {
-    return readOptTaggedCellTruth(condition, row).value_or(false);
 }
 
 template <typename IDType>
@@ -2172,15 +2069,6 @@ std::optional<PathView> taggedPath(const CellView cell) {
 
 std::optional<PathView> taggedColumnPath(const Column* paths, size_t row) {
     return taggedPath((*static_cast<const ColumnVector<CellView>*>(paths))[row]);
-}
-
-std::optional<PathView> optTaggedColumnPath(const Column* paths, size_t row) {
-    const std::optional<CellView>& cell = (*static_cast<const ColumnOptVector<CellView>*>(paths))[row];
-    if (!cell.has_value()) {
-        return std::nullopt;
-    }
-
-    return taggedPath(*cell);
 }
 
 void readPathElements(const Column* paths,
@@ -2543,36 +2431,6 @@ void caseResetOwnNullColumn(Column* result, size_t rowCount) {
 int compareCellColumn(const Column* column, size_t a, size_t b) {
     const auto& raw = static_cast<const ColumnVector<CellView>*>(column)->getRaw();
     const std::strong_ordering order = raw[a] <=> raw[b];
-
-    if (order == std::strong_ordering::less) {
-        return -1;
-    } else if (order == std::strong_ordering::greater) {
-        return 1;
-    }
-
-    return 0;
-}
-
-int compareOptCellColumn(const Column* column, size_t a, size_t b) {
-    const std::vector<std::optional<CellView>>& raw =
-        static_cast<const ColumnOptVector<CellView>*>(column)->getRaw();
-
-    const auto isNull = [](const std::optional<CellView>& element) {
-        return !element.has_value() || element->getTag() == CellTag::Null;
-    };
-
-    const bool aNull = isNull(raw[a]);
-    const bool bNull = isNull(raw[b]);
-
-    if (aNull || bNull) {
-        if (aNull && bNull) {
-            return 0;
-        }
-
-        return aNull ? 1 : -1;
-    }
-
-    const std::strong_ordering order = *raw[a] <=> *raw[b];
 
     if (order == std::strong_ordering::less) {
         return -1;
@@ -3111,19 +2969,6 @@ void distinctKeyAppendCellColumn(const Column* column, size_t row, NLSerializedK
     distinctAppendElementBytes(key, raw[row]);
 }
 
-void distinctKeyAppendOptCellColumn(const Column* column, size_t row, NLSerializedKey& key) {
-    const std::vector<std::optional<CellView>>& raw =
-        static_cast<const ColumnOptVector<CellView>*>(column)->getRaw();
-    const std::optional<CellView>& element = raw[row];
-
-    if (!element.has_value()) {
-        key.push_back(static_cast<char>(CellTag::Null));
-        return;
-    }
-
-    distinctAppendElementBytes(key, *element);
-}
-
 // Serialize one row of a list column into the row key, so two rows key alike when their
 // lists hold equal elements - the equality Cypher gives two lists.
 void distinctKeyAppendListColumn(const Column* column, size_t row, NLSerializedKey& key) {
@@ -3440,15 +3285,6 @@ size_t countNonNullElementsColumn(const Column* column) {
     });
 }
 
-size_t countPresentElementsColumn(const Column* column) {
-    const std::vector<std::optional<CellView>>& raw =
-        static_cast<const ColumnOptVector<CellView>*>(column)->getRaw();
-
-    return std::count_if(raw.begin(), raw.end(), [](const std::optional<CellView>& element) {
-        return element.has_value() && element->getTag() != CellTag::Null;
-    });
-}
-
 size_t countPresentListsColumn(const Column* column) {
     const std::vector<std::optional<ListView>>& raw =
         static_cast<const ColumnOptVector<ListView>*>(column)->getRaw();
@@ -3572,14 +3408,6 @@ std::optional<CellView> presentCell(const CellView element) {
     }
 
     return element;
-}
-
-std::optional<CellView> presentCell(const std::optional<CellView>& element) {
-    if (!element.has_value()) {
-        return std::nullopt;
-    }
-
-    return presentCell(*element);
 }
 
 template <typename Primitive>
@@ -4121,15 +3949,15 @@ void aggregateFoldMinMax(std::byte* place, const Column* input, NLCompactingValu
 
 // Fold a chunk of tagged cells into a keyless sum, or an average beside its count. A cell tagged
 // null is skipped, as a null value column row is.
-template <typename Cell, bool Averages>
+template <bool Averages>
 void aggregateFoldTaggedSum(std::byte* place, const Column* input, NLCompactingValueStore& values) {
     using State = std::conditional_t<Averages, NLAverageState<NLTaggedSum>, NLTaggedSum>;
 
     State& state = placedState<State>(place);
-    const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
+    const std::vector<CellView>& inputRaw = static_cast<const ColumnVector<CellView>*>(input)->getRaw();
 
     State running = state;
-    for (const Cell& cell : inputRaw) {
+    for (const CellView& cell : inputRaw) {
         const std::optional<CellView> value = presentCell(cell);
         if (!value) {
             continue;
@@ -4277,28 +4105,27 @@ NLAggregateFoldFunction selectMinMaxFold(ValueType inputType) {
     return nullptr;
 }
 
-template <typename Cell>
 NLAggregateFoldFunction taggedAggregateFoldFor(AggregateKind kind) {
     switch (kind) {
         case AggregateKind::Sum:
-            return &aggregateFoldTaggedSum<Cell, /*Averages=*/false>;
+            return &aggregateFoldTaggedSum</*Averages=*/false>;
         break;
 
         case AggregateKind::Avg:
-            return &aggregateFoldTaggedSum<Cell, /*Averages=*/true>;
+            return &aggregateFoldTaggedSum</*Averages=*/true>;
         break;
 
         case AggregateKind::StDev:
         case AggregateKind::StDevP:
-            return &aggregateFoldDeviation<Cell>;
+            return &aggregateFoldDeviation<CellView>;
         break;
 
         case AggregateKind::Min:
-            return &aggregateFoldMinMax<CellView, /*IsMax=*/false, Cell>;
+            return &aggregateFoldMinMax<CellView, /*IsMax=*/false, CellView>;
         break;
 
         case AggregateKind::Max:
-            return &aggregateFoldMinMax<CellView, /*IsMax=*/true, Cell>;
+            return &aggregateFoldMinMax<CellView, /*IsMax=*/true, CellView>;
         break;
     }
 
@@ -4397,7 +4224,7 @@ void groupFoldDurationTotal(NLGroupStatePlaces places,
 
 // Fold a group's tagged cells into its running sum in place, tallying the ones an average
 // folds. The type-erased sibling of groupFoldSum and groupFoldAvg.
-template <typename Cell, bool Distinct, bool Averages>
+template <bool Distinct, bool Averages>
 void groupFoldTaggedSum(NLGroupStatePlaces places,
                         const Column* input,
                         const std::vector<size_t>& groups,
@@ -4405,7 +4232,7 @@ void groupFoldTaggedSum(NLGroupStatePlaces places,
                         size_t endRow,
                         const NLGroupDistinctTally* distinct,
                         NLValueStore& values) {
-    const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
+    const std::vector<CellView>& inputRaw = static_cast<const ColumnVector<CellView>*>(input)->getRaw();
 
     for (size_t row = beginRow; row < endRow; row++) {
         const std::optional<CellView> value = presentCell(inputRaw[row]);
@@ -4482,45 +4309,44 @@ void groupFoldFirst(NLGroupStatePlaces places,
     }
 }
 
-template <typename Cell>
 NLGroupAggregateFoldFunction taggedGroupAggregateFoldFor(GroupAggregateKind kind) {
     switch (kind) {
         case GroupAggregateKind::Sum:
-            return &groupFoldTaggedSum<Cell, /*Distinct=*/false, /*Averages=*/false>;
+            return &groupFoldTaggedSum</*Distinct=*/false, /*Averages=*/false>;
         break;
 
         case GroupAggregateKind::SumDistinct:
-            return &groupFoldTaggedSum<Cell, /*Distinct=*/true, /*Averages=*/false>;
+            return &groupFoldTaggedSum</*Distinct=*/true, /*Averages=*/false>;
         break;
 
         case GroupAggregateKind::Avg:
-            return &groupFoldTaggedSum<Cell, /*Distinct=*/false, /*Averages=*/true>;
+            return &groupFoldTaggedSum</*Distinct=*/false, /*Averages=*/true>;
         break;
 
         case GroupAggregateKind::AvgDistinct:
-            return &groupFoldTaggedSum<Cell, /*Distinct=*/true, /*Averages=*/true>;
+            return &groupFoldTaggedSum</*Distinct=*/true, /*Averages=*/true>;
         break;
 
         case GroupAggregateKind::StDev:
         case GroupAggregateKind::StDevP:
-            return &groupFoldDeviation<Cell, /*Distinct=*/false>;
+            return &groupFoldDeviation<CellView, /*Distinct=*/false>;
         break;
 
         case GroupAggregateKind::StDevDistinct:
         case GroupAggregateKind::StDevPDistinct:
-            return &groupFoldDeviation<Cell, /*Distinct=*/true>;
+            return &groupFoldDeviation<CellView, /*Distinct=*/true>;
         break;
 
         case GroupAggregateKind::Min:
-            return &groupFoldMinMax<CellView, /*IsMax=*/false, Cell>;
+            return &groupFoldMinMax<CellView, /*IsMax=*/false, CellView>;
         break;
 
         case GroupAggregateKind::Max:
-            return &groupFoldMinMax<CellView, /*IsMax=*/true, Cell>;
+            return &groupFoldMinMax<CellView, /*IsMax=*/true, CellView>;
         break;
 
         case GroupAggregateKind::First:
-            return &groupFoldFirst<CellView, Cell>;
+            return &groupFoldFirst<CellView, CellView>;
         break;
 
         case GroupAggregateKind::Count:
@@ -4733,7 +4559,6 @@ void groupFoldCountDistinctPresent(NLGroupStatePlaces places,
 // Tally each group's present cells of a type-erased column of tagged scalars, so a
 // grouped count(x) over a heterogeneous unwind charges the same rows a nullable value
 // column would.
-template <typename Cell>
 void groupFoldCountPresentCell(NLGroupStatePlaces places,
                                const Column* input,
                                const std::vector<size_t>& groups,
@@ -4741,7 +4566,7 @@ void groupFoldCountPresentCell(NLGroupStatePlaces places,
                                size_t endRow,
                                const NLGroupDistinctTally* distinct,
                                NLValueStore& values) {
-    const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
+    const std::vector<CellView>& inputRaw = static_cast<const ColumnVector<CellView>*>(input)->getRaw();
 
     for (size_t row = beginRow; row < endRow; row++) {
         if (presentCell(inputRaw[row])) {
@@ -4753,7 +4578,6 @@ void groupFoldCountPresentCell(NLGroupStatePlaces places,
 // Tally each group's distinct present cells of a type-erased column of tagged scalars.
 // The key carries the tag as well as the value, so cells of different types are told
 // apart the way a whole-row DISTINCT tells them apart.
-template <typename Cell>
 void groupFoldCountDistinctCell(NLGroupStatePlaces places,
                                 const Column* input,
                                 const std::vector<size_t>& groups,
@@ -4761,7 +4585,7 @@ void groupFoldCountDistinctCell(NLGroupStatePlaces places,
                                 size_t endRow,
                                 const NLGroupDistinctTally* distinct,
                                 NLValueStore& values) {
-    const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
+    const std::vector<CellView>& inputRaw = static_cast<const ColumnVector<CellView>*>(input)->getRaw();
 
     for (size_t row = beginRow; row < endRow; row++) {
         const std::optional<CellView> element = presentCell(inputRaw[row]);
@@ -5115,7 +4939,6 @@ Item taggedItem(const CellView element) {
 
 // The type-erased sibling of collectFold: a tagged cell is there in every row, but one
 // tagged null is the null Cypher's collect drops, so only the rest join the group's list.
-template <typename Cell>
 void collectTaggedFold(Column* values,
                        const Column* input,
                        const std::vector<size_t>& groups,
@@ -5123,7 +4946,7 @@ void collectTaggedFold(Column* values,
                        const NLGroupDistinctTally* distinct,
                        NLValueStore& store) {
     auto& valuesRaw = static_cast<ColumnVector<CellView>*>(values)->getRaw();
-    const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
+    const std::vector<CellView>& inputRaw = static_cast<const ColumnVector<CellView>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
         const std::optional<CellView> element = presentCell(inputRaw[row]);
@@ -5139,7 +4962,6 @@ void collectTaggedFold(Column* values,
 
 // The dedup sibling: a tagged cell keys by the value its tag names, so the same number
 // reached under two tags keys once - the ordering rules read these cells the same way.
-template <typename Cell>
 void collectTaggedFoldDistinct(Column* values,
                                const Column* input,
                                const std::vector<size_t>& groups,
@@ -5147,7 +4969,7 @@ void collectTaggedFoldDistinct(Column* values,
                                const NLGroupDistinctTally* distinct,
                                NLValueStore& store) {
     auto& valuesRaw = static_cast<ColumnVector<CellView>*>(values)->getRaw();
-    const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
+    const std::vector<CellView>& inputRaw = static_cast<const ColumnVector<CellView>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
         const std::optional<CellView> element = presentCell(inputRaw[row]);
@@ -5422,13 +5244,6 @@ bool absentTaggedCell(const Column* source, size_t row) {
     return !iteratedList(element);
 }
 
-bool absentOptTaggedCell(const Column* source, size_t row) {
-    const std::optional<CellView>& element =
-        (*static_cast<const ColumnOptVector<CellView>*>(source))[row];
-
-    return !iteratedList(element);
-}
-
 // Read one cell of a nullable value column as the value it contributes to a list or a map:
 // the value it holds, or the tagged null Cypher leaves where the row has none.
 template <typename Item, typename Primitive>
@@ -5516,14 +5331,6 @@ NLKeyedValue readKeyedCell(const CellView cell) {
     }
 
     throw IRException("Unknown CellTag");
-}
-
-NLKeyedValue readKeyedCell(const std::optional<CellView>& cell) {
-    if (!cell) {
-        return std::monostate {};
-    }
-
-    return readKeyedCell(*cell);
 }
 
 // One cell of a column of tagged cells, read as what its own tag says it holds: a map, a
@@ -5651,13 +5458,7 @@ std::optional<types::String::Primitive> stringValueArgument(const Column* input,
 
 template <typename ColumnT>
 std::optional<types::String::Primitive> cellStringArgument(const Column* input, size_t row, std::string_view functionName) {
-    const auto* col = static_cast<const ColumnT*>(input);
-    const std::optional<CellView> cell = col->operator[](row);
-    if (!cell.has_value()) {
-        return std::nullopt;
-    }
-
-    return cellString(*cell, functionName);
+    return cellString((*static_cast<const ColumnT*>(input))[row], functionName);
 }
 
 bool listStrings(const ListView list, std::string_view functionName, std::vector<types::String::Primitive>& strings) {
@@ -5709,18 +5510,14 @@ bool cellAsStringListArgument(const Column* input,
                               std::vector<types::String::Primitive>& strings) {
     strings.clear();
 
-    const std::optional<CellView> cell = (*static_cast<const ColumnT*>(input))[row];
-    if (!cell.has_value()) {
-        return false;
-    }
-
-    const CellTag tag = cell->getTag();
+    const CellView cell = (*static_cast<const ColumnT*>(input))[row];
+    const CellTag tag = cell.getTag();
 
     if (tag == CellTag::String) {
-        strings.push_back(cell->getAs<types::String::Primitive>());
+        strings.push_back(cell.getAs<types::String::Primitive>());
         return true;
     } else if (tag == CellTag::ListView) {
-        return listStrings(cell->getAs<ListView>(), functionName, strings);
+        return listStrings(cell.getAs<ListView>(), functionName, strings);
     } else if (tag == CellTag::Null) {
         return false;
     }
@@ -5749,14 +5546,11 @@ std::optional<types::Point::Primitive> pointValueArgument(const Column* input, s
 
 template <typename ColumnT>
 std::optional<types::Point::Primitive> cellPointArgument(const Column* input, size_t row, std::string_view functionName) {
-    const std::optional<CellView> cell = (*static_cast<const ColumnT*>(input))[row];
-    if (!cell.has_value()) {
-        return std::nullopt;
-    }
+    const CellView cell = (*static_cast<const ColumnT*>(input))[row];
+    const CellTag tag = cell.getTag();
 
-    const CellTag tag = cell->getTag();
     if (tag == CellTag::Point) {
-        return cell->getAs<types::Point::Primitive>();
+        return cell.getAs<types::Point::Primitive>();
     } else if (tag == CellTag::Null) {
         return std::nullopt;
     }
@@ -5764,14 +5558,8 @@ std::optional<types::Point::Primitive> cellPointArgument(const Column* input, si
     throwCellTypeError(functionName, "a point", tag);
 }
 
-template <typename ColumnT>
 std::optional<types::Int64::Primitive> cellIntegerArgument(const Column* input, size_t row, std::string_view functionName) {
-    const std::optional<CellView> cell = (*static_cast<const ColumnT*>(input))[row];
-    if (!cell.has_value()) {
-        return std::nullopt;
-    }
-
-    return cellInteger(*cell, functionName);
+    return cellInteger((*static_cast<const ColumnVector<CellView>*>(input))[row], functionName);
 }
 
 // A key spelled null in the query holds no value to name an entry by, on any row
@@ -5793,30 +5581,8 @@ std::optional<ListView> taggedListRead(const Column* input, size_t row) {
     return cellListRead((*static_cast<const ColumnVector<CellView>*>(input))[row]);
 }
 
-std::optional<ListView> optTaggedListRead(const Column* input, size_t row) {
-    const std::optional<CellView>& cell =
-        (*static_cast<const ColumnOptVector<CellView>*>(input))[row];
-
-    if (!cell) {
-        return std::nullopt;
-    }
-
-    return cellListRead(*cell);
-}
-
 std::optional<ListView> constTaggedListRead(const Column* input, size_t) {
     return cellListRead(static_cast<const ColumnConst<CellView>*>(input)->getRaw());
-}
-
-std::optional<ListView> optConstTaggedListRead(const Column* input, size_t) {
-    const std::optional<CellView>& cell =
-        static_cast<const ColumnConst<std::optional<CellView>>*>(input)->getRaw();
-
-    if (!cell) {
-        return std::nullopt;
-    }
-
-    return cellListRead(*cell);
 }
 
 struct SortField {
@@ -5895,7 +5661,7 @@ NLContainer mapContainer(const Column* input, size_t row) {
 
 template <typename ColumnT>
 NLContainer cellContainer(const Column* input, size_t row) {
-    const std::optional<CellView> cell = (*static_cast<const ColumnT*>(input))[row];
+    const CellView cell = (*static_cast<const ColumnT*>(input))[row];
     if (!holdsAList(cell)) {
         return NLContainer {._keyed = readKeyedCell(cell)};
     }
@@ -5946,12 +5712,7 @@ NLSubscript subscriptOf(const CellView cell) {
 
 template <typename ColumnT>
 NLSubscript readSubscript(const Column* input, size_t row) {
-    const std::optional<CellView> cell = (*static_cast<const ColumnT*>(input))[row];
-    if (!cell) {
-        return std::monostate {};
-    }
-
-    return subscriptOf(*cell);
+    return subscriptOf((*static_cast<const ColumnT*>(input))[row]);
 }
 
 // A constant stands for every row of the other operand, which a WHERE may have left empty
@@ -6001,7 +5762,7 @@ CellView readContainerElement(const NLContainer& container,
 
 template <typename Element>
 Element containerIndexResult(CellView element) {
-    if constexpr (std::is_same_v<Element, CellView> || std::is_same_v<Element, std::optional<CellView>>) {
+    if constexpr (std::is_same_v<Element, CellView>) {
         return element;
     } else if constexpr (TypeUtils::is_optional_v<Element>) {
         return ValueListIndexImpl<typename Element::value_type>::elementValue(element);
@@ -6020,22 +5781,24 @@ std::optional<types::Int64::Primitive> rangeBound(const Column* input, size_t ro
     return static_cast<types::Int64::Primitive>(*cell);
 }
 
-std::optional<types::Int64::Primitive> cellBound(const std::optional<CellView>& cell) {
-    if (!cell.has_value() || cell->getTag() == CellTag::Null) {
+std::optional<types::Int64::Primitive> cellBound(const CellView cell) {
+    const CellTag tag = cell.getTag();
+
+    if (tag == CellTag::Null) {
         return std::nullopt;
-    } else if (cellHoldsAnInteger(*cell)) {
-        return cellInteger(*cell);
+    } else if (cellHoldsAnInteger(cell)) {
+        return cellInteger(cell);
     }
 
-    throw IRException(fmt::format("A range or a list slice reads an integer bound, not '{}'", queryTypeName(cell->getTag())));
+    throw IRException(fmt::format("A range or a list slice reads an integer bound, not '{}'", queryTypeName(tag)));
 }
 
-template <typename Result, Result (*ReadCell)(const std::optional<CellView>&), typename ColumnT>
+template <typename Result, Result (*ReadCell)(const CellView), typename ColumnT>
 Result readCellRow(const Column* input, size_t row) {
     return ReadCell((*static_cast<const ColumnT*>(input))[row]);
 }
 
-template <typename Result, Result (*ReadCell)(const std::optional<CellView>&), typename ColumnT>
+template <typename Result, Result (*ReadCell)(const CellView), typename ColumnT>
 Result readConstCell(const Column* input, size_t) {
     return ReadCell(static_cast<const ColumnT*>(input)->getRaw());
 }
@@ -6044,19 +5807,15 @@ template <typename Result>
 using CellRowRead = Result (*)(const Column* input, size_t row);
 
 // The read @param ReadCell makes of a row of a column of type-erased cells, in whichever of
-// the four layouts the column holds them; null for a column of another kind
-template <typename Result, Result (*ReadCell)(const std::optional<CellView>&)>
+// the two layouts the column holds them; null for a column of another kind
+template <typename Result, Result (*ReadCell)(const CellView)>
 CellRowRead<Result> selectCellRowRead(const Column* input) {
     const ColumnKind::Code kind = input->getKind();
 
     if (kind == ColumnVector<CellView>::staticKind()) {
         return &readCellRow<Result, ReadCell, ColumnVector<CellView>>;
-    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
-        return &readCellRow<Result, ReadCell, ColumnOptVector<CellView>>;
     } else if (kind == ColumnConst<CellView>::staticKind()) {
         return &readConstCell<Result, ReadCell, ColumnConst<CellView>>;
-    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
-        return &readConstCell<Result, ReadCell, ColumnConst<std::optional<CellView>>>;
     }
 
     return nullptr;
@@ -6072,15 +5831,16 @@ std::optional<types::Double::Primitive> percentileArgument(const Column* input, 
     return static_cast<types::Double::Primitive>(*cell);
 }
 
-std::optional<types::Double::Primitive> cellPercentile(const std::optional<CellView>& cell) {
-    if (!cell.has_value() || cell->getTag() == CellTag::Null) {
+std::optional<types::Double::Primitive> cellPercentile(const CellView cell) {
+    const CellTag tag = cell.getTag();
+    if (tag == CellTag::Null) {
         return std::nullopt;
     }
 
-    const std::optional<types::Double::Primitive> number = cellNumber(*cell);
+    const std::optional<types::Double::Primitive> number = cellNumber(cell);
     if (!number) {
         throw IRException(fmt::format("percentileCont() and percentileDisc() take a percentile between 0.0 and 1.0, not '{}'",
-                                      queryTypeName(cell->getTag())));
+                                      queryTypeName(tag)));
     }
 
     return number;
@@ -6247,19 +6007,6 @@ Item pathItem(const Column* input, size_t row, NLStepBuffers*) {
 template <typename Item>
 Item taggedColumnItem(const Column* input, size_t row, NLStepBuffers*) {
     return taggedItem<Item>((*static_cast<const ColumnVector<CellView>*>(input))[row]);
-}
-
-// The nullable sibling of taggedColumnItem: a column an OPTIONAL MATCH padded, or one an
-// index read off a list, has no cell in every row.
-template <typename Item>
-Item optTaggedColumnItem(const Column* input, size_t row, NLStepBuffers*) {
-    const std::optional<CellView>& element =
-        (*static_cast<const ColumnOptVector<CellView>*>(input))[row];
-    if (!element.has_value()) {
-        return Item {PropertyNull {}};
-    }
-
-    return taggedItem<Item>(*element);
 }
 
 // The fold and the list emit an entity collect of this ID reads. The list emits through
@@ -10486,12 +10233,8 @@ NLKeyedReadFunction NLExecutor::selectKeyedRead(const Column* input) {
         return &mapRead<ColumnConst<std::optional<MapView>>>;
     } else if (kind == ColumnVector<CellView>::staticKind()) {
         return &readTaggedKeyed<ColumnVector<CellView>>;
-    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
-        return &readTaggedKeyed<ColumnOptVector<CellView>>;
     } else if (kind == ColumnConst<CellView>::staticKind()) {
         return &readTaggedKeyed<ColumnConst<CellView>>;
-    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
-        return &readTaggedKeyed<ColumnConst<std::optional<CellView>>>;
     }
 
     throw IRException("a map key read reads a map column, or a column of tagged cells");
@@ -10528,12 +10271,8 @@ NLStringArgumentRead NLExecutor::selectStringArgumentRead(const Column* input) {
         return &stringValueArgument<ColumnConst<std::optional<types::String::Primitive>>>;
     } else if (kind == ColumnVector<CellView>::staticKind()) {
         return &cellStringArgument<ColumnVector<CellView>>;
-    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
-        return &cellStringArgument<ColumnOptVector<CellView>>;
     } else if (kind == ColumnConst<CellView>::staticKind()) {
         return &cellStringArgument<ColumnConst<CellView>>;
-    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
-        return &cellStringArgument<ColumnConst<std::optional<CellView>>>;
     }
 
     throw IRException("a string function reads a string argument out of a nullable string column, or a column of tagged cells");
@@ -10560,12 +10299,8 @@ NLStringListArgumentRead NLExecutor::selectStringListArgumentRead(const Column* 
         return &listAsStringListArgument<ColumnConst<std::optional<ListView>>>;
     } else if (kind == ColumnVector<CellView>::staticKind()) {
         return &cellAsStringListArgument<ColumnVector<CellView>>;
-    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
-        return &cellAsStringListArgument<ColumnOptVector<CellView>>;
     } else if (kind == ColumnConst<CellView>::staticKind()) {
         return &cellAsStringListArgument<ColumnConst<CellView>>;
-    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
-        return &cellAsStringListArgument<ColumnConst<std::optional<CellView>>>;
     }
 
     throw IRException("a string function reads a list of strings out of a nullable string column, a list column, or a column of tagged cells");
@@ -10584,12 +10319,8 @@ NLPointArgumentRead NLExecutor::selectPointArgumentRead(const Column* input) {
         return &pointValueArgument<ColumnConst<std::optional<PointValue>>>;
     } else if (kind == ColumnVector<CellView>::staticKind()) {
         return &cellPointArgument<ColumnVector<CellView>>;
-    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
-        return &cellPointArgument<ColumnOptVector<CellView>>;
     } else if (kind == ColumnConst<CellView>::staticKind()) {
         return &cellPointArgument<ColumnConst<CellView>>;
-    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
-        return &cellPointArgument<ColumnConst<std::optional<CellView>>>;
     }
 
     throw IRException("a point function reads a point argument out of a nullable point column, or a column of tagged cells");
@@ -10603,9 +10334,7 @@ NLIntegerArgumentRead NLExecutor::selectIntegerArgumentRead(const Column* input)
     } else if (kind == ColumnOptVector<types::UInt64::Primitive>::staticKind()) {
         return &unsignedValueArgument;
     } else if (kind == ColumnVector<CellView>::staticKind()) {
-        return &cellIntegerArgument<ColumnVector<CellView>>;
-    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
-        return &cellIntegerArgument<ColumnOptVector<CellView>>;
+        return &cellIntegerArgument;
     }
 
     throw IRException("a string function reads an integer argument out of a nullable integer column, or a column of tagged cells");
@@ -10725,8 +10454,8 @@ void NLExecutor::runContainerIndex(NLExecutionContext* context, NLFunctionData* 
     }
 }
 
-NLHandlerFunction NLExecutor::selectCellContainerIndex(bool nullable) {
-    return nullable ? &runContainerIndex<std::optional<CellView>> : &runContainerIndex<CellView>;
+NLHandlerFunction NLExecutor::selectCellContainerIndex() {
+    return &runContainerIndex<CellView>;
 }
 
 NLHandlerFunction NLExecutor::selectEntityContainerIndex(NLChunkKind kind) {
@@ -10767,12 +10496,8 @@ NLContainerReadFunction NLExecutor::selectContainerRead(const Column* input) {
         return &mapContainer<ColumnConst<std::optional<MapView>>>;
     } else if (kind == ColumnVector<CellView>::staticKind()) {
         return &cellContainer<ColumnVector<CellView>>;
-    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
-        return &cellContainer<ColumnOptVector<CellView>>;
     } else if (kind == ColumnConst<CellView>::staticKind()) {
         return &cellContainer<ColumnConst<CellView>>;
-    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
-        return &cellContainer<ColumnConst<std::optional<CellView>>>;
     }
 
     throw IRException("a container index reads a list column, a map column or a column of tagged cells");
@@ -10783,12 +10508,8 @@ NLSubscriptReadFunction NLExecutor::selectSubscriptRead(const Column* input) {
 
     if (kind == ColumnVector<CellView>::staticKind()) {
         return &readSubscript<ColumnVector<CellView>>;
-    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
-        return &readSubscript<ColumnOptVector<CellView>>;
     } else if (kind == ColumnConst<CellView>::staticKind()) {
         return &readSubscript<ColumnConst<CellView>>;
-    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
-        return &readSubscript<ColumnConst<std::optional<CellView>>>;
     }
 
     throw IRException("a container index reads its index out of a column of tagged cells");
@@ -10807,12 +10528,8 @@ NLListReadFunction NLExecutor::selectListRead(const Column* input) {
         return &optConstListRead;
     } else if (kind == ColumnVector<CellView>::staticKind()) {
         return &taggedListRead;
-    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
-        return &optTaggedListRead;
     } else if (kind == ColumnConst<CellView>::staticKind()) {
         return &constTaggedListRead;
-    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
-        return &optConstTaggedListRead;
     }
 
     throw IRException("a list slice reads a list column");
@@ -10887,8 +10604,6 @@ NLPathReadFunction NLExecutor::selectPathRead(const Column* paths) {
         return &columnPath;
     } else if (kind == ColumnVector<CellView>::staticKind()) {
         return &taggedColumnPath;
-    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
-        return &optTaggedColumnPath;
     }
 
     throw IRException("nodes(), relationships() and length() read a path column, or a column of tagged cells");
@@ -10906,8 +10621,8 @@ NLListItemReadFunction NLExecutor::selectNestedMapListItemRead() {
     return &plainItem<ListBuffer<>::ListItemVariant, MapView>;
 }
 
-NLListItemReadFunction NLExecutor::selectTaggedListItemRead(bool nullable) {
-    return nullable ? &optTaggedColumnItem<ListBuffer<>::ListItemVariant> : &taggedColumnItem<ListBuffer<>::ListItemVariant>;
+NLListItemReadFunction NLExecutor::selectTaggedListItemRead() {
+    return &taggedColumnItem<ListBuffer<>::ListItemVariant>;
 }
 
 NLMapValueReadFunction NLExecutor::selectValueMapValueRead(NLChunkKind kind) {
@@ -10941,8 +10656,8 @@ NLMapValueReadFunction NLExecutor::selectNestedMapValueRead() {
     return &plainItem<MapBuffer<>::MapItemVariant, MapView>;
 }
 
-NLMapValueReadFunction NLExecutor::selectTaggedMapValueRead(bool nullable) {
-    return nullable ? &optTaggedColumnItem<MapBuffer<>::MapItemVariant> : &taggedColumnItem<MapBuffer<>::MapItemVariant>;
+NLMapValueReadFunction NLExecutor::selectTaggedMapValueRead() {
+    return &taggedColumnItem<MapBuffer<>::MapItemVariant>;
 }
 
 NLCellAbsentFunction NLExecutor::selectPresentCell() {
@@ -10953,8 +10668,8 @@ NLCellAbsentFunction NLExecutor::selectListCellAbsent() {
     return &absentListCell;
 }
 
-NLCellAbsentFunction NLExecutor::selectTaggedCellAbsent(bool nullable) {
-    return nullable ? &absentOptTaggedCell : &absentTaggedCell;
+NLCellAbsentFunction NLExecutor::selectTaggedCellAbsent() {
+    return &absentTaggedCell;
 }
 
 NLCellAbsentFunction NLExecutor::selectValueCellAbsent(NLChunkKind kind) {
@@ -10985,10 +10700,6 @@ NLTruthReadFunction NLExecutor::selectTruthRead(NLTruthColumnKind kind) {
             return &readTaggedCellTruth;
         break;
 
-        case NLTruthColumnKind::NullableTaggedCells:
-            return &readOptTaggedCellTruth;
-        break;
-
         case NLTruthColumnKind::UntypedNull:
             return &readNullTruth;
         break;
@@ -11009,10 +10720,6 @@ NLCaseTestFn NLExecutor::selectCaseTest(NLTruthColumnKind kind) {
 
         case NLTruthColumnKind::TaggedCells:
             return &caseTestTaggedCell;
-        break;
-
-        case NLTruthColumnKind::NullableTaggedCells:
-            return &caseTestOptTaggedCell;
         break;
 
         case NLTruthColumnKind::UntypedNull:
@@ -11046,10 +10753,6 @@ NLUnaryFn NLExecutor::selectIsNotTrue(NLTruthColumnKind kind, LocalMemory* memor
 
         case NLTruthColumnKind::TaggedCells:
             return &applyIsNotTrueOnTaggedCells;
-        break;
-
-        case NLTruthColumnKind::NullableTaggedCells:
-            return &applyIsNotTrueOnOptTaggedCells;
         break;
 
         case NLTruthColumnKind::UntypedNull:
@@ -11142,11 +10845,6 @@ NLUnaryFn NLExecutor::selectNot(NLTruthColumnKind kind, LocalMemory* memory, Col
             return &applyNotOnTaggedCells;
         break;
 
-        case NLTruthColumnKind::NullableTaggedCells:
-            result = memory->alloc<ColumnOptVector<CustomBool>>();
-            return &applyNotOnOptTaggedCells;
-        break;
-
         case NLTruthColumnKind::UntypedNull:
             throw IRException("nl.not reads the null literal only as a constant: rows of null are laid out as nullable booleans");
         break;
@@ -11170,11 +10868,6 @@ NLUnaryFn NLExecutor::selectConstantNot(NLTruthColumnKind kind, LocalMemory* mem
         case NLTruthColumnKind::TaggedCells:
             result = memory->alloc<ColumnConst<std::optional<CustomBool>>>();
             return &applyNotOnConstTaggedCell;
-        break;
-
-        case NLTruthColumnKind::NullableTaggedCells:
-            result = memory->alloc<ColumnConst<std::optional<CustomBool>>>();
-            return &applyNotOnOptConstTaggedCell;
         break;
 
         case NLTruthColumnKind::UntypedNull:
@@ -11305,15 +10998,14 @@ NLUnaryFunctionKernel NLExecutor::selectFunction(const Column* input, bool input
     // answers over the same rows but reads its argument - and its nulls - out of the tag
     if constexpr (HasTaggedCounterpart<Functor>) {
         if (readsTaggedCells(input)) {
-            return selectTaggedCellFunction<typename Functor::TaggedCounterpart>(input, inputNullable, memory, result);
+            return selectTaggedCellFunction<typename Functor::TaggedCounterpart>(input, memory, result);
         }
     }
 
     // A constant that can be null - what a conversion of a constant answers - is the one-row
-    // form of a nullable column, and is read the way functionOptKernel reads one
-    constexpr bool hasNullableConstant = InternalKind::Types::contains<std::optional<Arg>>()
-                                         && InternalKind::Types::contains<std::optional<JustRes>>()
-                                         && !TypedInternalID<Res>;
+    // form of a nullable column, and is read the way the column is. A function reading its
+    // own nulls answers a plain result, so only the argument needs a nullable kind
+    constexpr bool hasNullableConstant = InternalKind::Types::contains<std::optional<Arg>>() && !TypedInternalID<Res>;
 
     if constexpr (hasNullableConstant) {
         if (isNullableConstantOf<Arg>(input)) {
@@ -11339,13 +11031,17 @@ NLUnaryFunctionKernel NLExecutor::selectFunction(const Column* input, bool input
         result = memory->alloc<ColumnVector<Res>>();
         return &functionEntityToEntityKernel<Functor>;
     } else {
-        if (inputNullable) {
-            if constexpr (ReadsItsNulls<Functor>) {
-                result = memory->alloc<ColumnVector<Res>>();
-                return &functionNullReadingKernel<Functor>;
-            } else {
-                result = memory->alloc<ColumnOptVector<JustRes>>();
-                return &functionOptKernel<Functor>;
+        constexpr bool hasNullableColumn = InternalKind::Types::contains<std::optional<Arg>>();
+
+        if constexpr (hasNullableColumn) {
+            if (inputNullable) {
+                if constexpr (ReadsItsNulls<Functor>) {
+                    result = memory->alloc<ColumnVector<Res>>();
+                    return &functionNullReadingKernel<Functor>;
+                } else {
+                    result = memory->alloc<ColumnOptVector<JustRes>>();
+                    return &functionOptKernel<Functor>;
+                }
             }
         }
 
@@ -11423,7 +11119,7 @@ NLUnaryFunctionKernel NLExecutor::selectReverse(const Column* input, bool inputN
     if (columnHoldsElement<types::String::Primitive>(input)) {
         return selectFunction<ReverseFunction>(input, inputNullable, memory, result);
     } else if (readsTaggedCells(input)) {
-        return selectTaggedCellFunction<TaggedReverseFunction>(input, inputNullable, memory, result);
+        return selectTaggedCellFunction<TaggedReverseFunction>(input, memory, result);
     }
 
     return selectFunction<ListReverseFunction>(input, inputNullable, memory, result);
@@ -11435,7 +11131,7 @@ NLUnaryFunctionKernel NLExecutor::selectKeys(const Column* input, bool inputNull
     } else if (columnHoldsElement<EdgeID>(input)) {
         return selectFunction<NLKeysFunction<EdgeID>>(input, inputNullable, memory, result);
     } else if (readsTaggedCells(input)) {
-        return selectTaggedCellFunction<NLTaggedKeysFunction>(input, inputNullable, memory, result);
+        return selectTaggedCellFunction<NLTaggedKeysFunction>(input, memory, result);
     } else if (columnHoldsElement<MapView>(input)) {
         return selectFunction<MapKeysFunction>(input, inputNullable, memory, result);
     }
@@ -11447,7 +11143,7 @@ NLUnaryFunctionKernel NLExecutor::selectLabels(const Column* input, bool inputNu
     if (columnHoldsElement<NodeID>(input)) {
         return selectFunction<LabelsFunction>(input, inputNullable, memory, result);
     } else if (readsTaggedCells(input)) {
-        return selectTaggedCellFunction<NLTaggedLabelsFunction>(input, inputNullable, memory, result);
+        return selectTaggedCellFunction<NLTaggedLabelsFunction>(input, memory, result);
     }
 
     throw IRException("labels() reads a node column");
@@ -11457,7 +11153,7 @@ NLUnaryFunctionKernel NLExecutor::selectEdgeType(const Column* input, bool input
     if (columnHoldsElement<EdgeID>(input)) {
         return selectFunction<EdgeTypesFunction>(input, inputNullable, memory, result);
     } else if (readsTaggedCells(input)) {
-        return selectTaggedCellFunction<NLTaggedEdgeTypeFunction>(input, inputNullable, memory, result);
+        return selectTaggedCellFunction<NLTaggedEdgeTypeFunction>(input, memory, result);
     }
 
     throw IRException("type() reads a relationship column");
@@ -11469,7 +11165,7 @@ NLUnaryFunctionKernel NLExecutor::selectProperties(const Column* input, bool inp
     } else if (columnHoldsElement<EdgeID>(input)) {
         return selectFunction<NLPropertiesFunction<EdgeID>>(input, inputNullable, memory, result);
     } else if (readsTaggedCells(input)) {
-        return selectTaggedCellFunction<NLTaggedPropertiesFunction>(input, inputNullable, memory, result);
+        return selectTaggedCellFunction<NLTaggedPropertiesFunction>(input, memory, result);
     } else if (columnHoldsElement<MapView>(input)) {
         return selectFunction<MapPropertiesFunction>(input, inputNullable, memory, result);
     }
@@ -11486,7 +11182,7 @@ NLUnaryFunctionKernel NLExecutor::selectNumberFunction(const Column* input, bool
     } else if (columnHoldsElement<types::Double::Primitive>(input)) {
         return selectFunction<NumberFunctor<types::Double::Primitive>>(input, inputNullable, memory, result);
     } else if (readsTaggedCells(input)) {
-        return selectTaggedCellFunction<typename NumberFunctor<types::Int64::Primitive>::TaggedCounterpart>(input, inputNullable, memory, result);
+        return selectTaggedCellFunction<typename NumberFunctor<types::Int64::Primitive>::TaggedCounterpart>(input, memory, result);
     }
 
     throw IRException("A numeric function reads an integer or a double column");
@@ -11502,7 +11198,7 @@ NLUnaryFunctionKernel NLExecutor::selectNegateFunction(const Column* input, bool
     } else if (columnHoldsElement<types::Duration::Primitive>(input)) {
         return selectFunction<NegateFunction<types::Duration::Primitive>>(input, inputNullable, memory, result);
     } else if (readsTaggedCells(input)) {
-        return selectTaggedCellFunction<TaggedNegateFunction>(input, inputNullable, memory, result);
+        return selectTaggedCellFunction<TaggedNegateFunction>(input, memory, result);
     }
 
     throw IRException("A unary minus reads an integer, a double or a duration column");
@@ -11518,7 +11214,7 @@ NLUnaryFunctionKernel NLExecutor::selectUnaryPlusFunction(const Column* input, b
     } else if (columnHoldsElement<types::Duration::Primitive>(input)) {
         return selectFunction<UnaryPlusFunction<types::Duration::Primitive>>(input, inputNullable, memory, result);
     } else if (readsTaggedCells(input)) {
-        return selectTaggedCellFunction<TaggedUnaryPlusFunction>(input, inputNullable, memory, result);
+        return selectTaggedCellFunction<TaggedUnaryPlusFunction>(input, memory, result);
     }
 
     throw IRException("A unary plus reads an integer, a double or a duration column");
@@ -11533,7 +11229,7 @@ NLUnaryFunctionKernel NLExecutor::selectFloatFunction(const Column* input, bool 
     } else if (columnHoldsElement<types::Double::Primitive>(input)) {
         return selectFunction<FloatFunction<Kind, types::Double::Primitive>>(input, inputNullable, memory, result);
     } else if (readsTaggedCells(input)) {
-        return selectTaggedCellFunction<TaggedFloatFunction<Kind>>(input, inputNullable, memory, result);
+        return selectTaggedCellFunction<TaggedFloatFunction<Kind>>(input, memory, result);
     }
 
     throw IRException("A numeric function reads an integer or a double column");
@@ -11630,7 +11326,7 @@ template NLUnaryFunctionKernel NLExecutor::selectConversion<ToPointFunction>(con
 template <auto StrictSelector, typename TaggedFunctor>
 NLUnaryFunctionKernel NLExecutor::selectOrNull(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
     if (readsTaggedCells(input)) {
-        return selectTaggedCellFunction<TaggedFunctor>(input, inputNullable, memory, result);
+        return selectTaggedCellFunction<TaggedFunctor>(input, memory, result);
     }
 
     return StrictSelector(input, inputNullable, memory, result);
@@ -12460,14 +12156,6 @@ NLUnwindElementEmitFunction NLExecutor::selectTaggedUnwindElementEmit() {
     return &unwindTaggedElementEmit;
 }
 
-NLUnwindElementCountFunction NLExecutor::selectOptTaggedUnwindElementCount() {
-    return &unwindOptTaggedElementCount;
-}
-
-NLUnwindElementEmitFunction NLExecutor::selectOptTaggedUnwindElementEmit() {
-    return &unwindOptTaggedElementEmit;
-}
-
 NLUnwindCollectValueEmitFunction NLExecutor::selectUnwindCollectValueEmit(NLChunkKind kind) {
     NLUnwindCollectValueEmitFunction selected = nullptr;
     dispatchCollectedChunkKind(kind, [&]<typename Element>() { selected = &unwindCollectValueEmit<Element>; });
@@ -12537,8 +12225,8 @@ template void NLExecutor::selectCollectOptContainerHandlers<MapView>(bool distin
 void NLExecutor::selectCollectTaggedHandlers(bool distinctValues,
                                              NLCollectFoldFunction& fold,
                                              NLCollectListEmitFunction& listEmit) {
-    fold = distinctValues ? &collectTaggedFoldDistinct<CellView>
-                          : &collectTaggedFold<CellView>;
+    fold = distinctValues ? &collectTaggedFoldDistinct
+                          : &collectTaggedFold;
     listEmit = &collectTaggedListEmit;
 }
 
@@ -12546,14 +12234,6 @@ void NLExecutor::selectCollectPathHandlers(bool distinctValues,
                                            NLCollectFoldFunction& fold,
                                            NLCollectListEmitFunction& listEmit) {
     fold = distinctValues ? &collectPathFoldDistinct : &collectPathFold;
-    listEmit = &collectTaggedListEmit;
-}
-
-void NLExecutor::selectCollectOptTaggedHandlers(bool distinctValues,
-                                                NLCollectFoldFunction& fold,
-                                                NLCollectListEmitFunction& listEmit) {
-    fold = distinctValues ? &collectTaggedFoldDistinct<std::optional<CellView>>
-                          : &collectTaggedFold<std::optional<CellView>>;
     listEmit = &collectTaggedListEmit;
 }
 
@@ -12727,10 +12407,6 @@ NLFillNullFunction NLExecutor::selectOptListFillNull() {
     return &fillNullColumn<std::optional<ListView>>;
 }
 
-NLFillNullFunction NLExecutor::selectOptCellFillNull() {
-    return &fillNullColumn<std::optional<CellView>>;
-}
-
 NLFillNullFunction NLExecutor::selectCellFillNull() {
     return &resetTaggedCells;
 }
@@ -12758,10 +12434,6 @@ NLMaskSurvivorFunction NLExecutor::selectMaskSurvivorFunction(NLTruthColumnKind 
 
         case NLTruthColumnKind::TaggedCells:
             return &collectTaggedCellSurvivors;
-        break;
-
-        case NLTruthColumnKind::NullableTaggedCells:
-            return &collectOptTaggedCellSurvivors;
         break;
 
         case NLTruthColumnKind::UntypedNull:
@@ -12792,8 +12464,8 @@ NLFetchNodesFunction NLExecutor::selectIntegerFetchFunction(NLChunkKind kind, bo
     }
 }
 
-NLFetchNodesFunction NLExecutor::selectTaggedFetchFunction(bool nullable) {
-    return nullable ? &fetchNamedNodes<std::optional<CellView>> : &fetchNamedNodes<CellView>;
+NLFetchNodesFunction NLExecutor::selectTaggedFetchFunction() {
+    return &fetchNamedNodes<CellView>;
 }
 
 NLBroadcastFunction NLExecutor::selectBlockRepeatFunction(NLChunkKind kind) {
@@ -12844,21 +12516,6 @@ NLBroadcastConstantFunction NLExecutor::selectConstantPlainBroadcast(NLChunkKind
     return fill;
 }
 
-NLBroadcastConstantFunction NLExecutor::selectOptCellBroadcast(const Column* value) {
-    const bool isConst = value->getContainerKind() == ContainerKind::code<ColumnConst>();
-    const bool holdsOptional = value->getInternalKind() == InternalKind::code<std::optional<CellView>>();
-
-    // A tagged cell carries its own null, so head() and last() answer with a plain cell rather
-    // than an optional even where the chunk it is laid out over is a nullable one.
-    if (!isConst) {
-        return &broadcastSingleRowColumn<CellView>;
-    } else if (holdsOptional) {
-        return &broadcastNullableConstantColumn<CellView>;
-    }
-
-    return &broadcastConstantColumn<CellView>;
-}
-
 NLBroadcastConstantFunction NLExecutor::selectConstantBroadcast(NLChunkKind kind, const Column* value) {
     const bool isConst = value->getContainerKind() == ContainerKind::code<ColumnConst>();
 
@@ -12892,9 +12549,8 @@ NLUnaryFn NLExecutor::selectOptRowConstant(NLChunkKind kind, const Column* row, 
     return read;
 }
 
-NLUnaryFn NLExecutor::selectCellRowConstant(bool nullable, const Column* row, LocalMemory* memory, Column*& result) {
-    return nullable ? selectRowConstantOf<std::optional<CellView>>(row, memory, result)
-                    : selectRowConstantOf<CellView>(row, memory, result);
+NLUnaryFn NLExecutor::selectCellRowConstant(const Column* row, LocalMemory* memory, Column*& result) {
+    return selectRowConstantOf<CellView>(row, memory, result);
 }
 
 // A !storage.any chunk is a ColumnVector<CellView> of fixed-width tagged
@@ -12915,14 +12571,6 @@ NLGatherFunction NLExecutor::selectCellGatherFunction() {
     return &gatherColumn<CellView>;
 }
 
-NLAppendFunction NLExecutor::selectOptCellAppendFunction() {
-    return &appendColumn<std::optional<CellView>>;
-}
-
-NLGatherFunction NLExecutor::selectOptCellGatherFunction() {
-    return &gatherColumn<std::optional<CellView>>;
-}
-
 NLCompareFunction NLExecutor::selectCellCompareFunction() {
     return &compareCellColumn;
 }
@@ -12941,34 +12589,6 @@ NLGroupKeyGatherFunction NLExecutor::selectCellGroupKeyGatherFunction() {
 
 NLCopyFunction NLExecutor::selectCellCopyFunction() {
     return &copyRangeColumn<CellView>;
-}
-
-NLBroadcastFunction NLExecutor::selectOptCellBlockRepeatFunction() {
-    return &blockRepeatColumn<std::optional<CellView>>;
-}
-
-NLBroadcastFunction NLExecutor::selectOptCellTileFunction() {
-    return &tileColumn<std::optional<CellView>>;
-}
-
-NLCompareFunction NLExecutor::selectOptCellCompareFunction() {
-    return &compareOptCellColumn;
-}
-
-NLKeyAppendFunction NLExecutor::selectOptCellKeyAppendFunction() {
-    return &distinctKeyAppendOptCellColumn;
-}
-
-NLCountFunction NLExecutor::selectOptCellCountFunction() {
-    return &countPresentElementsColumn;
-}
-
-NLGroupKeyGatherFunction NLExecutor::selectOptCellGroupKeyGatherFunction() {
-    return &groupGatherAppendColumn<std::optional<CellView>>;
-}
-
-NLCopyFunction NLExecutor::selectOptCellCopyFunction() {
-    return &copyRangeColumn<std::optional<CellView>>;
 }
 
 NLCompareFunction NLExecutor::selectListCompareFunction() {
@@ -13547,10 +13167,6 @@ NLJoinKeyFunctions NLExecutor::selectCellJoinKeyFunctions() {
     return joinKeyFunctions<CellView>();
 }
 
-NLJoinKeyFunctions NLExecutor::selectOptCellJoinKeyFunctions() {
-    return optJoinKeyFunctions<CellView>();
-}
-
 // The pairs `=` compares are the pairs its kernel takes, so a pair the kernel has no
 // comparison for never reaches a join: the filter it replaces could not have run.
 NLKeyEqualFunction NLExecutor::selectCrossTypeKeyEqualFunction(const Column* probe, const Column* build) {
@@ -13652,11 +13268,7 @@ NLAggregateFoldFunction NLExecutor::selectAggregateFold(AggregateKind kind, Valu
 }
 
 NLAggregateFoldFunction NLExecutor::selectTaggedAggregateFold(AggregateKind kind) {
-    return taggedAggregateFoldFor<CellView>(kind);
-}
-
-NLAggregateFoldFunction NLExecutor::selectOptTaggedAggregateFold(AggregateKind kind) {
-    return taggedAggregateFoldFor<std::optional<CellView>>(kind);
+    return taggedAggregateFoldFor(kind);
 }
 
 void NLExecutor::selectGroupAggregateState(GroupAggregateKind kind,
@@ -13716,11 +13328,7 @@ void NLExecutor::selectGroupAggregateState(GroupAggregateKind kind,
 }
 
 NLGroupAggregateFoldFunction NLExecutor::selectTaggedGroupAggregateFold(GroupAggregateKind kind) {
-    return taggedGroupAggregateFoldFor<CellView>(kind);
-}
-
-NLGroupAggregateFoldFunction NLExecutor::selectOptTaggedGroupAggregateFold(GroupAggregateKind kind) {
-    return taggedGroupAggregateFoldFor<std::optional<CellView>>(kind);
+    return taggedGroupAggregateFoldFor(kind);
 }
 
 void NLExecutor::selectTaggedGroupAggregateState(GroupAggregateKind kind, NLGroupAggregateStateType& stateType) {
@@ -13811,19 +13419,11 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupAggregateFold(GroupAggregate
 }
 
 NLGroupAggregateFoldFunction NLExecutor::selectGroupCountCellFold() {
-    return &groupFoldCountPresentCell<CellView>;
-}
-
-NLGroupAggregateFoldFunction NLExecutor::selectGroupCountOptCellFold() {
-    return &groupFoldCountPresentCell<std::optional<CellView>>;
+    return &groupFoldCountPresentCell;
 }
 
 NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctCellFold() {
-    return &groupFoldCountDistinctCell<CellView>;
-}
-
-NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctOptCellFold() {
-    return &groupFoldCountDistinctCell<std::optional<CellView>>;
+    return &groupFoldCountDistinctCell;
 }
 
 NLGroupAggregateFoldFunction NLExecutor::selectGroupCountAllFold() {

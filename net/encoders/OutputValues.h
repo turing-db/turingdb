@@ -66,7 +66,7 @@ template <typename T>
 concept IsListView = std::is_same_v<TypeUtils::unwrap_optional_t<T>, ListView>;
 
 template <typename T>
-concept IsCell = std::is_same_v<TypeUtils::unwrap_optional_t<T>, CellView>;
+concept IsCell = std::is_same_v<T, CellView>;
 
 template <typename T>
 concept IsMap = std::is_same_v<TypeUtils::unwrap_optional_t<T>, MapView>;

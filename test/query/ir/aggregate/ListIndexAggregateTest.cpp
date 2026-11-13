@@ -123,20 +123,6 @@ std::string renderTaggedElement(const CellView element) {
     }
 }
 
-std::optional<std::string> renderOptTaggedCell(const Column* column, size_t row) {
-    const auto* elements = dynamic_cast<const ColumnOptVector<CellView>*>(column);
-    if (!elements) {
-        return std::nullopt;
-    }
-
-    const std::optional<CellView>& element = (*elements)[row];
-    if (!element) {
-        return "null";
-    }
-
-    return renderTaggedElement(*element);
-}
-
 std::string renderCell(const Column* column, size_t row) {
     if (const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(column)) {
         return std::to_string((*counts)[row]);
@@ -150,8 +136,6 @@ std::string renderCell(const Column* column, size_t row) {
         return *integer;
     } else if (const std::optional<std::string> real = renderOptCell<double>(column, row)) {
         return *real;
-    } else if (const std::optional<std::string> tagged = renderOptTaggedCell(column, row)) {
-        return *tagged;
     }
 
     throw TuringException("ListIndexAggregateTest: unsupported output column type");

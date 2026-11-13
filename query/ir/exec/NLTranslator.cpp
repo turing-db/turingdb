@@ -867,16 +867,10 @@ ListPredicateKind listPredicateKind(storage::ListPredicateKind kind) {
     return ListPredicateKind::All;
 }
 
-bool isNullableAny(mlir::Type elementType) {
-    const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
-
-    return nullableType && mlir::isa<storage::AnyType>(nullableType.getValueType());
-}
-
 bool isAnyChunk(mlir::Type chunkType) {
     const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
 
-    return mlir::isa<storage::AnyType>(elementType) || isNullableAny(elementType);
+    return mlir::isa<storage::AnyType>(elementType);
 }
 
 bool isNullableList(mlir::Type elementType) {
@@ -896,8 +890,6 @@ NLTruthColumnKind truthColumnKindFromChunkType(mlir::Type chunkType) {
 
     if (isUntypedNullChunk(chunkType)) {
         return NLTruthColumnKind::UntypedNull;
-    } else if (isNullableAny(elementType)) {
-        return NLTruthColumnKind::NullableTaggedCells;
     } else if (mlir::isa<storage::AnyType>(elementType)) {
         return NLTruthColumnKind::TaggedCells;
     } else if (mlir::isa<storage::NullableType>(elementType)) {
@@ -1000,10 +992,6 @@ bool holdsTruthColumn(NLTruthColumnKind kind, const Column* column) {
 
         case NLTruthColumnKind::TaggedCells:
             return columnKind == ColumnVector<CellView>::staticKind() || columnKind == ColumnConst<CellView>::staticKind();
-        break;
-
-        case NLTruthColumnKind::NullableTaggedCells:
-            return columnKind == ColumnOptVector<CellView>::staticKind() || columnKind == ColumnConst<std::optional<CellView>>::staticKind();
         break;
 
         case NLTruthColumnKind::UntypedNull:
@@ -2180,9 +2168,6 @@ void NLTranslator::selectElementDrain(mlir::Type sourceElement,
     } else if (llvm::isa<storage::AnyType>(sourceElement)) {
         elementCount = NLExecutor::selectTaggedUnwindElementCount();
         elementEmit = NLExecutor::selectTaggedUnwindElementEmit();
-    } else if (isNullableAny(sourceElement)) {
-        elementCount = NLExecutor::selectOptTaggedUnwindElementCount();
-        elementEmit = NLExecutor::selectOptTaggedUnwindElementEmit();
     } else if (sourceNullable) {
         elementCount = NLExecutor::selectOptUnwindElementCount(chunkKindFromNullableValue(sourceNullable.getValueType()));
     } else {
@@ -2192,9 +2177,7 @@ void NLTranslator::selectElementDrain(mlir::Type sourceElement,
 
 NLCellAbsentFunction NLTranslator::selectCellAbsent(mlir::Type sourceElement) {
     if (llvm::isa<storage::AnyType>(sourceElement)) {
-        return NLExecutor::selectTaggedCellAbsent(/*nullable=*/false);
-    } else if (isNullableAny(sourceElement)) {
-        return NLExecutor::selectTaggedCellAbsent(/*nullable=*/true);
+        return NLExecutor::selectTaggedCellAbsent();
     } else if (isNullableList(sourceElement)) {
         return NLExecutor::selectListCellAbsent();
     }
@@ -3894,8 +3877,6 @@ void NLTranslator::translateBroadcastConstant(nl::BroadcastConstant broadcast, N
         fill = NLExecutor::selectConstantMapBroadcast();
     } else if (mlir::isa<storage::AnyType>(resultElement)) {
         fill = NLExecutor::selectConstantCellBroadcast();
-    } else if (isNullableAny(resultElement)) {
-        fill = NLExecutor::selectOptCellBroadcast(value);
     } else {
         fill = NLExecutor::selectConstantBroadcast(getNullableChunkKind(resultType), value);
     }
@@ -4064,11 +4045,9 @@ NLListItemReadFunction NLTranslator::selectListItemRead(mlir::Type chunkType) {
     } else if (mlir::isa<storage::MapType>(elementType)) {
         return NLExecutor::selectNestedMapListItemRead();
     } else if (mlir::isa<storage::AnyType>(elementType)) {
-        return NLExecutor::selectTaggedListItemRead(/*nullable=*/false);
+        return NLExecutor::selectTaggedListItemRead();
     } else if (isNullableList(elementType)) {
         return NLExecutor::selectOptNestedListItemRead();
-    } else if (isNullableAny(elementType)) {
-        return NLExecutor::selectTaggedListItemRead(/*nullable=*/true);
     }
 
     const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
@@ -4112,11 +4091,9 @@ NLMapValueReadFunction NLTranslator::selectMapValueRead(mlir::Type chunkType) {
     } else if (mlir::isa<storage::ListType>(elementType)) {
         return NLExecutor::selectNestedListMapValueRead();
     } else if (mlir::isa<storage::AnyType>(elementType)) {
-        return NLExecutor::selectTaggedMapValueRead(/*nullable=*/false);
+        return NLExecutor::selectTaggedMapValueRead();
     } else if (isNullableList(elementType)) {
         return NLExecutor::selectOptNestedListMapValueRead();
-    } else if (isNullableAny(elementType)) {
-        return NLExecutor::selectTaggedMapValueRead(/*nullable=*/true);
     }
 
     const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
@@ -4234,9 +4211,7 @@ void NLTranslator::translateContainerIndex(nl::ContainerIndex index, NLStmtConta
     NLHandlerFunction run = nullptr;
 
     if (mlir::isa<storage::AnyType>(resultElement)) {
-        run = NLExecutor::selectCellContainerIndex(/*nullable=*/false);
-    } else if (isNullableAny(resultElement)) {
-        run = NLExecutor::selectCellContainerIndex(/*nullable=*/true);
+        run = NLExecutor::selectCellContainerIndex();
     } else if (isEntityIDElement(resultElement)) {
         run = NLExecutor::selectEntityContainerIndex(chunkKindFromElementType(resultElement));
     } else {
@@ -5172,9 +5147,6 @@ void NLTranslator::addTruncateColumn(mlir::Value inputValue,
     } else if (isNullableList(elementType)) {
         output = allocOptListColumn();
         copyPrefix = NLExecutor::selectOptListBlockRepeatFunction();
-    } else if (isNullableAny(elementType)) {
-        output = allocOptCellColumn();
-        copyPrefix = NLExecutor::selectOptCellBlockRepeatFunction();
     } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const NLChunkKind kind = chunkKindFromNullableValue(nullableType.getValueType());
         output = allocOptColumnForKind(kind);
@@ -5270,9 +5242,6 @@ void NLTranslator::addSkipColumn(mlir::Value inputValue,
     } else if (isNullableList(elementType)) {
         output = allocOptListColumn();
         copySuffix = NLExecutor::selectOptListCopyFunction();
-    } else if (isNullableAny(elementType)) {
-        output = allocOptCellColumn();
-        copySuffix = NLExecutor::selectOptCellCopyFunction();
     } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const NLChunkKind kind = chunkKindFromNullableValue(nullableType.getValueType());
         output = allocOptColumnForKind(kind);
@@ -6270,8 +6239,6 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
             const mlir::Type countValueType = nullable ? nullable.getValueType() : mlir::Type {};
             if (isNullableList(countElementType)) {
                 aggregate._fold = NLExecutor::selectGroupCountOptListFold();
-            } else if (isNullableAny(countElementType)) {
-                aggregate._fold = NLExecutor::selectGroupCountOptCellFold();
             } else if (nullable) {
                 aggregate._fold = NLExecutor::selectGroupCountOptFold(chunkKindFromNullableValue(countValueType));
             } else if (mlir::isa<storage::AnyType>(countElementType)) {
@@ -6317,8 +6284,6 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
             const mlir::Type distinctValueType = nullable ? nullable.getValueType() : mlir::Type {};
             if (isNullableList(distinctElementType)) {
                 aggregate._fold = NLExecutor::selectGroupCountDistinctOptListFold();
-            } else if (isNullableAny(distinctElementType)) {
-                aggregate._fold = NLExecutor::selectGroupCountDistinctOptCellFold();
             } else if (nullable) {
                 aggregate._fold = NLExecutor::selectGroupCountDistinctOptFold(chunkKindFromNullableValue(distinctValueType));
             } else if (mlir::isa<storage::AnyType>(distinctElementType)) {
@@ -6350,9 +6315,7 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
             // f64, sum and avg keep a tagged sum - an integer until a float joins it, or a
             // duration - and min/max/first keep a cell.
             const mlir::Type reducedElement = mlir::cast<nl::ChunkType>(chunkType).getElementType();
-            const bool reducesNullableTaggedCells = isNullableAny(reducedElement);
-            const bool reducesTaggedCells = mlir::isa<storage::AnyType>(reducedElement)
-                                         || reducesNullableTaggedCells;
+            const bool reducesTaggedCells = mlir::isa<storage::AnyType>(reducedElement);
 
             const bool keepsAValue = (kind == GroupAggregateKind::Min)
                                   || (kind == GroupAggregateKind::Max)
@@ -6375,9 +6338,7 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
                 NLExecutor::selectGroupAggregateState(kind, accumulatorType, aggregate._stateType);
             }
 
-            if (reducesNullableTaggedCells) {
-                aggregate._fold = NLExecutor::selectOptTaggedGroupAggregateFold(kind);
-            } else if (reducesTaggedCells) {
+            if (reducesTaggedCells) {
                 aggregate._fold = NLExecutor::selectTaggedGroupAggregateFold(kind);
             } else {
                 aggregate._fold = NLExecutor::selectGroupAggregateFold(kind, inputType);
@@ -6613,14 +6574,6 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
             NLExecutor::selectCollectOptContainerHandlers<MapView>(isDistinct, fold, listEmit);
 
             value._buffer = allocColumnForKind(NLChunkKind::Map);
-            value._fold = fold;
-            value._listEmit = listEmit;
-        } else if (isNullableAny(element)) {
-            NLCollectFoldFunction fold = nullptr;
-            NLCollectListEmitFunction listEmit = nullptr;
-            NLExecutor::selectCollectOptTaggedHandlers(isDistinct, fold, listEmit);
-
-            value._buffer = allocCellColumn();
             value._fold = fold;
             value._listEmit = listEmit;
         } else if (mlir::isa<storage::NullableType>(element)) {
@@ -7251,8 +7204,6 @@ Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
 
     if (isNullableList(elementType)) {
         return allocOptListColumn();
-    } else if (isNullableAny(elementType)) {
-        return allocOptCellColumn();
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
@@ -7270,8 +7221,6 @@ NLAppendFunction NLTranslator::selectAppendForChunkType(mlir::Type chunkType) {
 
     if (isNullableList(elementType)) {
         return NLExecutor::selectOptListAppendFunction();
-    } else if (isNullableAny(elementType)) {
-        return NLExecutor::selectOptCellAppendFunction();
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
@@ -7289,8 +7238,6 @@ NLGatherFunction NLTranslator::selectGatherForChunkType(mlir::Type chunkType) {
 
     if (isNullableList(elementType)) {
         return NLExecutor::selectOptListGatherFunction();
-    } else if (isNullableAny(elementType)) {
-        return NLExecutor::selectOptCellGatherFunction();
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
@@ -7307,18 +7254,15 @@ NLFetchNodesFunction NLTranslator::selectFetchForChunkType(mlir::Type chunkType)
 
     if (mlir::isa<storage::NodeIDType>(elementType)) {
         return NLExecutor::selectNodeFetchFunction();
+    } else if (mlir::isa<storage::AnyType>(elementType)) {
+        return NLExecutor::selectTaggedFetchFunction();
     }
 
     const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
 
     const bool nullable = static_cast<bool>(nullableType);
-    const mlir::Type cellType = nullable ? nullableType.getValueType() : elementType;
-
-    if (mlir::isa<storage::AnyType>(cellType)) {
-        return NLExecutor::selectTaggedFetchFunction(nullable);
-    }
-
-    const NLChunkKind kind = nullable ? chunkKindFromNullableValue(cellType) : chunkKindFromElementType(cellType);
+    const mlir::Type valueType = nullable ? nullableType.getValueType() : elementType;
+    const NLChunkKind kind = nullable ? chunkKindFromNullableValue(valueType) : chunkKindFromElementType(valueType);
 
     return NLExecutor::selectIntegerFetchFunction(kind, nullable);
 }
@@ -7329,8 +7273,6 @@ NLFillNullFunction NLTranslator::selectFillNullForChunkType(mlir::Type chunkType
 
     if (isNullableList(elementType)) {
         return NLExecutor::selectOptListFillNull();
-    } else if (isNullableAny(elementType)) {
-        return NLExecutor::selectOptCellFillNull();
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
@@ -7346,12 +7288,10 @@ NLUnaryFn NLTranslator::selectRowConstantForChunkType(mlir::Type chunkType, cons
     const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
     const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
 
-    if (isNullableAny(elementType)) {
-        return NLExecutor::selectCellRowConstant(true, row, _memory, result);
-    } else if (nullableType) {
+    if (nullableType) {
         return NLExecutor::selectOptRowConstant(chunkKindFromNullableValue(nullableType.getValueType()), row, _memory, result);
     } else if (mlir::isa<storage::AnyType>(elementType)) {
-        return NLExecutor::selectCellRowConstant(false, row, _memory, result);
+        return NLExecutor::selectCellRowConstant(row, _memory, result);
     }
 
     return NLExecutor::selectRowConstant(chunkKindFromElementType(elementType), row, _memory, result);
@@ -7363,8 +7303,6 @@ NLCompareFunction NLTranslator::selectCompareForChunkType(mlir::Type chunkType) 
 
     if (isNullableList(elementType)) {
         return NLExecutor::selectOptListCompareFunction();
-    } else if (isNullableAny(elementType)) {
-        return NLExecutor::selectOptCellCompareFunction();
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
@@ -7414,8 +7352,6 @@ NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkTy
 
     if (isNullableList(elementType)) {
         return NLExecutor::selectOptListKeyAppendFunction();
-    } else if (isNullableAny(elementType)) {
-        return NLExecutor::selectOptCellKeyAppendFunction();
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
@@ -7458,9 +7394,7 @@ NLJoinKeyFunctions NLTranslator::selectJoinKeyFunctionsForChunkType(mlir::Type c
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
 
-    if (isNullableAny(elementType)) {
-        return NLExecutor::selectOptCellJoinKeyFunctions();
-    } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         return NLExecutor::selectOptJoinKeyFunctions(chunkKindFromNullableValue(nullableType.getValueType()));
     } else if (mlir::isa<storage::AnyType>(elementType)) {
         return NLExecutor::selectCellJoinKeyFunctions();
@@ -7475,9 +7409,7 @@ NLAggregateFoldFunction NLTranslator::selectAggregateFoldForChunkType(AggregateK
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
 
-    if (isNullableAny(elementType)) {
-        return NLExecutor::selectOptTaggedAggregateFold(kind);
-    } else if (mlir::isa<storage::AnyType>(elementType)) {
+    if (mlir::isa<storage::AnyType>(elementType)) {
         return NLExecutor::selectTaggedAggregateFold(kind);
     }
 
@@ -7490,8 +7422,6 @@ NLCountFunction NLTranslator::selectCountForChunkType(mlir::Type chunkType) {
 
     if (isNullableList(elementType)) {
         return NLExecutor::selectOptListCountFunction();
-    } else if (isNullableAny(elementType)) {
-        return NLExecutor::selectOptCellCountFunction();
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
@@ -7519,8 +7449,6 @@ NLGroupKeyGatherFunction NLTranslator::selectGroupKeyGatherForChunkType(mlir::Ty
 
     if (isNullableList(elementType)) {
         return NLExecutor::selectOptListGroupKeyGatherFunction();
-    } else if (isNullableAny(elementType)) {
-        return NLExecutor::selectOptCellGroupKeyGatherFunction();
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
@@ -7538,8 +7466,6 @@ NLCopyFunction NLTranslator::selectCopyForChunkType(mlir::Type chunkType) {
 
     if (isNullableList(elementType)) {
         return NLExecutor::selectOptListCopyFunction();
-    } else if (isNullableAny(elementType)) {
-        return NLExecutor::selectOptCellCopyFunction();
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
@@ -7650,10 +7576,6 @@ void NLTranslator::allocBroadcastColumn(mlir::Value inputValue,
         output = allocOptListColumn();
         broadcast = isOuter ? NLExecutor::selectOptListBlockRepeatFunction()
                             : NLExecutor::selectOptListTileFunction();
-    } else if (isNullableAny(elementType)) {
-        output = allocOptCellColumn();
-        broadcast = isOuter ? NLExecutor::selectOptCellBlockRepeatFunction()
-                            : NLExecutor::selectOptCellTileFunction();
     } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const NLChunkKind kind = chunkKindFromNullableValue(nullableType.getValueType());
         output = allocOptColumnForKind(kind);
@@ -7796,13 +7718,6 @@ Column* NLTranslator::allocCellColumn() {
 
 Column* NLTranslator::allocConstCellColumn() {
     return _memory->alloc<ColumnConst<CellView>>();
-}
-
-Column* NLTranslator::allocOptCellColumn() {
-    ColumnOptVector<CellView>* column = _memory->alloc<ColumnOptVector<CellView>>();
-    column->reserve(_program->getChunkSize());
-
-    return column;
 }
 
 Column* NLTranslator::allocOptColumn(ValueType valueType, size_t reserveSize) {

@@ -235,8 +235,6 @@ public:
             for (size_t row = _offset; row < endRow; row++) {
                 _nestedWriter.writeMapView(col->getValue(row));
             }
-        } else if constexpr (db::IsCell<T>) {
-            _nestedWriter.writeOptionalCells(col, _offset, rowCount);
         } else if constexpr (db::IsNull<T>) {
             // Don't send anything for property null
         } else {
@@ -309,8 +307,6 @@ public:
             _nestedWriter.writeListView(value);
         } else if constexpr (db::IsMap<T>) {
             _nestedWriter.writeMapView(value);
-        } else if constexpr (db::IsCell<T>) {
-            _nestedWriter.writeCells(std::span<const db::CellView>(&value, 1));
         } else if constexpr (db::IsNull<T>) {
             // Don't send anything for property null
         } else {

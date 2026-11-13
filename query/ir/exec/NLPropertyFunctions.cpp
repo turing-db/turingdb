@@ -79,10 +79,6 @@ std::optional<ListView> NLTaggedKeysFunction::operator()(const CellView cell) {
     throwCellTypeError("keys", "a node, a relationship or a map", tag);
 }
 
-std::optional<ListView> NLTaggedKeysFunction::operator()(const std::optional<CellView>& cell) {
-    return cell.has_value() ? (*this)(*cell) : std::nullopt;
-}
-
 NLTaggedLabelsFunction::NLTaggedLabelsFunction(NLExecutionContext* context, NLStepBuffers* memory)
     : _labels(*context->getView(), &memory->listBuffer(), context->getWriteBuffer())
 {
@@ -103,10 +99,6 @@ std::optional<ListView> NLTaggedLabelsFunction::operator()(const CellView cell) 
     throwCellTypeError("labels", "a node", tag);
 }
 
-std::optional<ListView> NLTaggedLabelsFunction::operator()(const std::optional<CellView>& cell) {
-    return cell.has_value() ? (*this)(*cell) : std::nullopt;
-}
-
 NLTaggedEdgeTypeFunction::NLTaggedEdgeTypeFunction(NLExecutionContext* context, NLStepBuffers* memory)
     : _edgeType(*context->getView(), &memory->stringBuffer(), context->getWriteBuffer())
 {
@@ -125,10 +117,6 @@ std::optional<types::String::Primitive> NLTaggedEdgeTypeFunction::operator()(con
     }
 
     throwCellTypeError("type", "a relationship", tag);
-}
-
-std::optional<types::String::Primitive> NLTaggedEdgeTypeFunction::operator()(const std::optional<CellView>& cell) {
-    return cell.has_value() ? (*this)(*cell) : std::nullopt;
 }
 
 NLTaggedPropertiesFunction::NLTaggedPropertiesFunction(NLExecutionContext* context, NLStepBuffers* memory)
@@ -154,10 +142,6 @@ std::optional<MapView> NLTaggedPropertiesFunction::operator()(const CellView cel
     }
 
     throw TuringException(fmt::format("Reading every property needs a node, a relationship or a map, not '{}'", queryTypeName(tag)));
-}
-
-std::optional<MapView> NLTaggedPropertiesFunction::operator()(const std::optional<CellView>& cell) {
-    return cell.has_value() ? (*this)(*cell) : std::nullopt;
 }
 
 namespace db {

@@ -51,13 +51,26 @@ struct KindPairListFromTuple<std::tuple<Pairs...>> {
     using Type = KindPairList<Pairs...>;
 };
 
+// The kinds a column of @param T can be: a cell holds its own null, so it is never optional
+template <typename T>
+using NullableKinds = std::conditional_t<std::is_same_v<T, CellView>,
+                                         std::tuple<T>,
+                                         std::tuple<T, std::optional<T>>>;
+
+template <typename L, typename... Rs>
+using KindPairRow = std::tuple<KindPair<L, Rs>...>;
+
+template <typename Ls, typename Rs>
+struct CrossKindPairs;
+
+template <typename... Ls, typename... Rs>
+struct CrossKindPairs<std::tuple<Ls...>, std::tuple<Rs...>> {
+    using Pairs = typename TupleFlatten<KindPairRow<Ls, Rs...>...>::Type;
+};
+
 template <typename L, typename R>
 struct OptionalKindPairs {
-    using Pairs = std::tuple<
-        KindPair<L, R>,
-        KindPair<std::optional<L>, R>,
-        KindPair<L, std::optional<R>>,
-        KindPair<std::optional<L>, std::optional<R>>>;
+    using Pairs = typename CrossKindPairs<NullableKinds<L>, NullableKinds<R>>::Pairs;
 };
 
 template <typename T>
@@ -207,8 +220,7 @@ struct PairRestrictions<Op> {
         CellKindPairs<PropertyTypeID>::Pairs,
         CellKindPairs<ValueType>::Pairs,
         std::tuple<
-            KindPair<CellView, GraphPath>,
-            KindPair<std::optional<CellView>, GraphPath>
+            KindPair<CellView, GraphPath>
         >,
 
         // Equality against a map value, which holds its own type as a list element does
@@ -345,8 +357,7 @@ struct PairRestrictions<Op> {
             // A null of unknown type, which the truth tables read as an unknown truth
             // value: the lowering reads the other side as nullable to meet it
             KindPair<std::optional<types::Bool::Primitive>, PropertyNull>,
-            KindPair<CellView, PropertyNull>,
-            KindPair<std::optional<CellView>, PropertyNull>
+            KindPair<CellView, PropertyNull>
         >
     >;
 
@@ -495,15 +506,13 @@ struct PairRestrictions<Op> {
         std::tuple<
             KindPair<GraphPath, ListView>,
             KindPair<GraphPath, std::optional<ListView>>,
-            KindPair<GraphPath, CellView>,
-            KindPair<GraphPath, std::optional<CellView>>
+            KindPair<GraphPath, CellView>
         >,
 
         std::tuple<
             KindPair<PropertyNull, ListView>,
             KindPair<PropertyNull, std::optional<ListView>>,
-            KindPair<PropertyNull, CellView>,
-            KindPair<PropertyNull, std::optional<CellView>>
+            KindPair<PropertyNull, CellView>
         >
     >;
 
@@ -521,15 +530,13 @@ struct PairRestrictions<Op> {
         std::tuple<
             KindPair<ListView, GraphPath>,
             KindPair<std::optional<ListView>, GraphPath>,
-            KindPair<CellView, GraphPath>,
-            KindPair<std::optional<CellView>, GraphPath>
+            KindPair<CellView, GraphPath>
         >,
 
         std::tuple<
             KindPair<ListView, PropertyNull>,
             KindPair<std::optional<ListView>, PropertyNull>,
-            KindPair<CellView, PropertyNull>,
-            KindPair<std::optional<CellView>, PropertyNull>
+            KindPair<CellView, PropertyNull>
         >
     >;
 
@@ -553,8 +560,7 @@ struct PairRestrictions<Op> {
         std::tuple<
             KindPair<ListView, PropertyNull>,
             KindPair<std::optional<ListView>, PropertyNull>,
-            KindPair<CellView, PropertyNull>,
-            KindPair<std::optional<CellView>, PropertyNull>
+            KindPair<CellView, PropertyNull>
         >
     >;
 
@@ -693,7 +699,6 @@ struct OutputtedTypes {
         ListView,
         std::optional<ListView>,
         CellView,
-        std::optional<CellView>,
 
         MapView,
         std::optional<MapView>

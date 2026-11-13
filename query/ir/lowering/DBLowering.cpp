@@ -210,7 +210,7 @@ mlir::Value emitNLNormalFormFunction(mlir::OpBuilder& builder,
     return builder.create<NLOp>(loc, resultType, input, normalFormOp.getForm()).getResult();
 }
 
-bool holdsTaggedCells(mlir::Type chunkType);
+bool isTaggedCellChunk(mlir::Type chunkType);
 
 // A number or a duration is its own unary plus, which the analyzer already checked. Only a
 // cell, whose type is the row's, is checked when the program runs.
@@ -219,7 +219,7 @@ mlir::Value emitUnaryPlus(mlir::OpBuilder& builder,
                           nl::ChunkType resultType,
                           mlir::Value input,
                           mlir::Operation* source) {
-    if (!holdsTaggedCells(input.getType())) {
+    if (!isTaggedCellChunk(input.getType())) {
         return input;
     }
 
@@ -797,21 +797,6 @@ bool isTaggedCellChunk(mlir::Type chunkType) {
 
 bool mayHoldANull(mlir::Type chunkType) {
     return isNullableChunk(chunkType) || isTaggedCellChunk(chunkType);
-}
-
-// The same cell behind the nullable an index wraps it in: reading an element out of a list
-// answers no cell where the row has no such element, and a cell carrying its own tag where
-// it has one
-bool holdsTaggedCells(mlir::Type chunkType) {
-    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
-    if (!chunk) {
-        return false;
-    }
-
-    const mlir::Type element = chunk.getElementType();
-    const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
-
-    return mlir::isa<storage::AnyType>(nullable ? nullable.getValueType() : element);
 }
 
 mlir::Type promoteNumeric(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type rhs) {
@@ -6404,7 +6389,7 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
             const bool comparesTwoMaps = isMapChunk(lhsType) && isMapChunk(rhsType);
 
             // A cell may hold a null, or a value of another type than the one it meets
-            const bool comparesATaggedCell = holdsTaggedCells(lhsType) || holdsTaggedCells(rhsType);
+            const bool comparesATaggedCell = isTaggedCellChunk(lhsType) || isTaggedCellChunk(rhsType);
 
             // An ID column carries its null in the ID: the invalid one an OPTIONAL MATCH leaves
             const bool lhsIsAnEntity = isEntityChunk(lhsType);
@@ -6432,7 +6417,7 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
         break;
 
         case BinaryResultKind::Numeric: {
-            if (holdsTaggedCells(lhsType) || holdsTaggedCells(rhsType)) {
+            if (isTaggedCellChunk(lhsType) || isTaggedCellChunk(rhsType)) {
                 const mlir::Type cell = storage::AnyType::get(ctx);
 
                 // A cell beside a list joins it, as the list it holds or as one element
@@ -6481,8 +6466,8 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
         case BinaryResultKind::Concat: {
             const bool lhsIsAList = isListChunk(lhsType);
             const bool rhsIsAList = isListChunk(rhsType);
-            const bool lhsIsACell = holdsTaggedCells(lhsType);
-            const bool rhsIsACell = holdsTaggedCells(rhsType);
+            const bool lhsIsACell = isTaggedCellChunk(lhsType);
+            const bool rhsIsACell = isTaggedCellChunk(rhsType);
             const bool readsACell = lhsIsACell || rhsIsACell;
 
             // A type-erased cell holds a string or a list only where its row says so, and
@@ -6542,7 +6527,7 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
         case BinaryResultKind::Membership: {
             // A tagged cell holds whatever its row put there, so the test reads the list the
             // cell is iterated as rather than the column's own type
-            if (!isListChunk(rhsType) && !holdsTaggedCells(rhsType)) {
+            if (!isListChunk(rhsType) && !isTaggedCellChunk(rhsType)) {
                 throw IRException("db.in requires a list as its right operand");
             }
 
@@ -6551,7 +6536,7 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
         break;
 
         case BinaryResultKind::Position: {
-            if (!isListChunk(lhsType) && !holdsTaggedCells(lhsType)) {
+            if (!isListChunk(lhsType) && !isTaggedCellChunk(lhsType)) {
                 throw IRException("db.index_of requires a list as its searched operand");
             }
 
@@ -6600,8 +6585,8 @@ void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
                                       || std::is_same_v<NLOp, nl::Xor>;
 
     if constexpr (CONNECTS_TRUTH_VALUES) {
-        const bool lhsHoldsCells = holdsTaggedCells(lhsChunkType);
-        const bool rhsHoldsCells = holdsTaggedCells(rhsChunkType);
+        const bool lhsHoldsCells = isTaggedCellChunk(lhsChunkType);
+        const bool rhsHoldsCells = isTaggedCellChunk(rhsChunkType);
 
         if (lhsHoldsCells && !rhsHoldsCells && !isUntypedNullChunk(rhsChunkType)) {
             rhsChunk = nullableValueChunk(rhsChunk);
@@ -7046,7 +7031,7 @@ void DBLowering::lowerNot(mlir::db::NotOp notOp) {
     const mlir::Type operandType = operandChunk.getType();
 
     // A cell may hold a null, so its negation may be one
-    const bool resultNull = isNullableChunk(operandType) || holdsTaggedCells(operandType);
+    const bool resultNull = isNullableChunk(operandType) || isTaggedCellChunk(operandType);
 
     mlir::MLIRContext* bldCtxt = _builder.getContext();
 
@@ -7789,7 +7774,7 @@ mlir::Value DBLowering::nullableValueChunk(mlir::Value chunk) {
 }
 
 mlir::Value DBLowering::numberOperandChunk(mlir::Value chunk) {
-    if (holdsTaggedCells(chunk.getType())) {
+    if (isTaggedCellChunk(chunk.getType())) {
         return chunk;
     }
 

@@ -496,14 +496,6 @@ WrittenMap writtenMap(const CellView cell) {
     return WrittenMap {std::nullopt, tag};
 }
 
-WrittenMap writtenMap(const std::optional<CellView>& cell) {
-    if (!cell) {
-        return WrittenMap {std::nullopt, CellTag::Null};
-    }
-
-    return writtenMap(*cell);
-}
-
 template <typename ColumnType>
 void readWrittenMaps(const Column* column, std::vector<WrittenMap>& maps) {
     const auto& values = static_cast<const ColumnType*>(column)->getRaw();
@@ -536,16 +528,9 @@ void visitWrittenCells(const Column* column, size_t rowCount, const ColumnVector
     if (kind == ColumnConst<CellView>::staticKind()) {
         const CellView cell = static_cast<const ColumnConst<CellView>*>(column)->getRaw();
         visitRows([cell](size_t) { return cell; });
-    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
-        const std::optional<CellView>& held = static_cast<const ColumnConst<std::optional<CellView>>*>(column)->getRaw();
-        const CellView cell = held.value_or(CellView::nullElement());
-        visitRows([cell](size_t) { return cell; });
     } else if (kind == ColumnVector<CellView>::staticKind()) {
         const auto& cells = static_cast<const ColumnVector<CellView>*>(column)->getRaw();
         visitRows([&cells](size_t row) { return cells[row]; });
-    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
-        const auto& cells = static_cast<const ColumnOptVector<CellView>*>(column)->getRaw();
-        visitRows([&cells](size_t row) { return cells[row].value_or(CellView::nullElement()); });
     } else {
         throw IRException("A property write of cells reads a column of cells");
     }
@@ -660,12 +645,8 @@ void db::extractWrittenMaps(const Column* column,
         readWrittenConstMap<ColumnConst<std::optional<MapView>>>(column, rowCount, maps);
     } else if (kind == ColumnVector<CellView>::staticKind()) {
         readWrittenMaps<ColumnVector<CellView>>(column, maps);
-    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
-        readWrittenMaps<ColumnOptVector<CellView>>(column, maps);
     } else if (kind == ColumnConst<CellView>::staticKind()) {
         readWrittenConstMap<ColumnConst<CellView>>(column, rowCount, maps);
-    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
-        readWrittenConstMap<ColumnConst<std::optional<CellView>>>(column, rowCount, maps);
     } else {
         throw IRException("A properties write reads a column of maps or of cells");
     }

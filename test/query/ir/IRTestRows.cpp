@@ -300,16 +300,6 @@ void turing::test::renderCell(const Column* column, size_t row, std::string& out
     } else if (const auto* constElement = dynamic_cast<const ColumnConst<CellView>*>(column)) {
         out.clear();
         renderCellView(constElement->at(0), out);
-    } else if (const auto* constOptElement =
-                   dynamic_cast<const ColumnConst<std::optional<CellView>>*>(column)) {
-        const std::optional<CellView>& element = constOptElement->at(0);
-
-        out.clear();
-        if (element) {
-            renderCellView(*element, out);
-        } else {
-            out = "null";
-        }
     } else if (const auto* optLists = dynamic_cast<const ColumnOptVector<ListView>*>(column)) {
         const std::optional<ListView>& list = (*optLists)[row];
         out.clear();
@@ -324,15 +314,6 @@ void turing::test::renderCell(const Column* column, size_t row, std::string& out
     } else if (const auto* elements = dynamic_cast<const ColumnVector<CellView>*>(column)) {
         out.clear();
         renderCellView((*elements)[row], out);
-    } else if (const auto* optElements = dynamic_cast<const ColumnOptVector<CellView>*>(column)) {
-        const std::optional<CellView>& element = (*optElements)[row];
-
-        out.clear();
-        if (element) {
-            renderCellView(*element, out);
-        } else {
-            out = "null";
-        }
     } else if (const auto* constMap = dynamic_cast<const ColumnConst<MapView>*>(column)) {
         out.clear();
         renderMap(constMap->at(0), out);
