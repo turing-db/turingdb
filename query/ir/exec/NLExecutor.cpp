@@ -1344,7 +1344,7 @@ bool readBoundConstant(const Column* bound, std::optional<T>& value) {
         return true;
     } else if constexpr (!std::same_as<T, CellView>) {
         if (bound->getKind() == ColumnConst<std::optional<T>>::staticKind()) {
-            value = static_cast<const ColumnConst<std::optional<T>>*>(bound)->getRaw();
+            value = static_cast<const ColumnConst<std::optional<T>>*>(bound)->get(0);
             return true;
         }
     }
@@ -1783,7 +1783,7 @@ void writeEdgeRows(std::span<const EdgeRecord> rows,
 
 template <typename Cell>
 void fetchNamedEdges(const NLExecutionContext* context, NLFetchEdgesData* fetch) {
-    const std::vector<Cell>& cells = static_cast<const ColumnVector<Cell>*>(fetch->getIDs())->getRaw();
+    const ColumnVectorOf<Cell>* cells = static_cast<const ColumnVectorOf<Cell>*>(fetch->getIDs());
     std::vector<size_t>& indices = fetch->getIndices()->getRaw();
     const bool undirected = fetch->isUndirected();
 
@@ -1792,8 +1792,9 @@ void fetchNamedEdges(const NLExecutionContext* context, NLFetchEdgesData* fetch)
     std::vector<EdgeRecord>& rows = fetch->getRows();
     rows.clear();
 
-    for (size_t row = 0; row < cells.size(); row++) {
-        const std::optional<EdgeID> edge = namedEntity<EdgeID>(cells[row]);
+    const size_t rowCount = cells->size();
+    for (size_t row = 0; row < rowCount; row++) {
+        const std::optional<EdgeID> edge = namedEntity<EdgeID>(operandRow(cells, row));
         if (!edge.has_value() || !scanned.contains(*edge)) {
             continue;
         }
