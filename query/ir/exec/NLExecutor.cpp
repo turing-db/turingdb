@@ -403,8 +403,7 @@ void fillHomogeneousChunk(Column* output, ValueType valueType, const ListView li
 
         ColumnOptVector<Primitive>* typed = static_cast<ColumnOptVector<Primitive>*>(output);
 
-        std::vector<std::optional<Primitive>>& raw = typed->getRaw();
-        raw.resize(rows);
+        typed->resize(rows);
 
         // CellView::getAs reinterprets the element's bytes as the primitive
         // without consulting its type tag, so check the tag against the one the
@@ -417,13 +416,13 @@ void fillHomogeneousChunk(Column* output, ValueType valueType, const ListView li
             const CellTag tag = element.getTag();
 
             if (tag == CellTag::Null) {
-                raw[index] = std::nullopt;
+                typed->setNull(index);
                 continue;
             }
 
             bioassert(tag == expectedTag, "Unwound element does not have the unwind's value type.");
 
-            raw[index] = element.getAs<Primitive>();
+            typed->set(index, element.getAs<Primitive>());
         }
     };
 
@@ -438,7 +437,7 @@ ListView sourceList(const ColumnVector<ListView>* source, size_t row) {
 }
 
 ListView sourceList(const ColumnOptVector<ListView>* source, size_t row) {
-    return *source->getRaw()[row];
+    return source->getValue(row);
 }
 
 // The rows one cell of a list column unwinds into: one per element, so an empty list
@@ -450,8 +449,8 @@ size_t unwindListElementCount(const Column* source, size_t row) {
 
 // The nullable sibling: an absent list unwinds into no row at all, as a null value does.
 size_t unwindOptListElementCount(const Column* source, size_t row) {
-    const std::optional<ListView>& list = static_cast<const ColumnOptVector<ListView>*>(source)->getRaw()[row];
-    return list.has_value() ? list->size() : 0;
+    const ColumnOptVector<ListView>* lists = static_cast<const ColumnOptVector<ListView>*>(source);
+    return lists->isValid(row) ? lists->getValue(row).size() : 0;
 }
 
 // The rows one cell of a nullable value column unwinds into: the single row a present
@@ -459,7 +458,7 @@ size_t unwindOptListElementCount(const Column* source, size_t row) {
 template <typename Primitive>
 size_t unwindOptElementCount(const Column* source, size_t row) {
     const auto* values = static_cast<const ColumnOptVector<Primitive>*>(source);
-    return (*values)[row].has_value() ? 1 : 0;
+    return values->isValid(row) ? 1 : 0;
 }
 
 // The rows one cell of a column holding a value in every row unwinds into: the single
@@ -502,8 +501,8 @@ void unwindListValueEmit(const Column* source,
     const std::vector<size_t>& rowsRaw = rows->getRaw();
     const std::vector<size_t>& positionsRaw = positions->getRaw();
 
-    std::vector<std::optional<Primitive>>& outputRaw = static_cast<ColumnOptVector<Primitive>*>(output)->getRaw();
-    outputRaw.resize(rowsRaw.size());
+    ColumnOptVector<Primitive>* typedOutput = static_cast<ColumnOptVector<Primitive>*>(output);
+    typedOutput->resize(rowsRaw.size());
 
     constexpr CellTag expectedTag = TypeToCellTag<Primitive>::Tag;
 
@@ -512,13 +511,13 @@ void unwindListValueEmit(const Column* source,
         const CellTag tag = element.getTag();
 
         if (tag == CellTag::Null) {
-            outputRaw[index] = std::nullopt;
+            typedOutput->setNull(index);
             continue;
         }
 
         bioassert(tag == expectedTag, "Unwound element does not have the unwound list's value type.");
 
-        outputRaw[index] = element.getAs<Primitive>();
+        typedOutput->set(index, element.getAs<Primitive>());
     }
 }
 
@@ -1490,14 +1489,15 @@ std::optional<NodeID> namedNode(const std::optional<Cell>& cell) {
 
 template <typename Cell>
 void fetchNamedNodes(const Column* ids, const NLExecutionContext* context, ColumnVector<size_t>* indices, ColumnNodeIDs* nodes) {
-    const std::vector<Cell>& cells = static_cast<const ColumnVector<Cell>*>(ids)->getRaw();
+    const ColumnVectorOf<Cell>* cells = static_cast<const ColumnVectorOf<Cell>*>(ids);
     std::vector<size_t>& rows = indices->getRaw();
     std::vector<NodeID>& fetched = nodes->getRaw();
 
     const ScannedNodes scanned(*context->getView(), context->getWriteBuffer(), context->getFirstQueryNode());
 
-    for (size_t row = 0; row < cells.size(); row++) {
-        const std::optional<NodeID> node = namedNode(cells[row]);
+    const size_t rowCount = cells->size();
+    for (size_t row = 0; row < rowCount; row++) {
+        const std::optional<NodeID> node = namedNode(operandRow(cells, row));
 
         if (node.has_value() && scanned.contains(*node)) {
             rows.push_back(row);
@@ -2105,10 +2105,32 @@ void applyNullTestOnVector(Column* result, const Column* operand) {
     });
 }
 
+template <typename Element, bool TESTS_NULL>
+void applyNullTestOnOptVector(Column* result, const Column* operand) {
+    const ColumnOptVector<Element>* typedOperand = static_cast<const ColumnOptVector<Element>*>(operand);
+    std::vector<CustomBool>& resultRaw = static_cast<ColumnVector<CustomBool>*>(result)->getRaw();
+
+    const size_t rowCount = typedOperand->size();
+    resultRaw.resize(rowCount);
+
+    for (size_t row = 0; row < rowCount; row++) {
+        const bool holds = typedOperand->isValid(row) && holdsAValue(typedOperand->getValue(row));
+        resultRaw[row] = CustomBool {holds != TESTS_NULL};
+    }
+}
+
 template <typename ElementType, bool TESTS_NULL>
 void applyNullTestOnConst(Column* result, const Column* operand) {
     const ElementType& value = static_cast<const ColumnConst<ElementType>*>(operand)->getRaw();
     static_cast<ColumnConst<CustomBool>*>(result)->set(CustomBool {holdsAValue(value) != TESTS_NULL});
+}
+
+template <typename Element, bool TESTS_NULL>
+void applyNullTestOnOptConst(Column* result, const Column* operand) {
+    const ColumnConst<std::optional<Element>>* typedOperand = static_cast<const ColumnConst<std::optional<Element>>*>(operand);
+
+    const bool holds = typedOperand->isValid(0) && holdsAValue(typedOperand->getValue(0));
+    static_cast<ColumnConst<CustomBool>*>(result)->set(CustomBool {holds != TESTS_NULL});
 }
 
 template <bool TESTS_NULL>
@@ -2123,10 +2145,22 @@ struct NullTestSelector {
         _fn = &applyNullTestOnVector<ElementType, TESTS_NULL>;
     }
 
+    template <typename Element>
+    void operator()(const ColumnOptVector<Element>* operand) {
+        _result = _memory->alloc<ColumnVector<CustomBool>>();
+        _fn = &applyNullTestOnOptVector<Element, TESTS_NULL>;
+    }
+
     template <typename ElementType>
     void operator()(const ColumnConst<ElementType>* operand) {
         _result = _memory->alloc<ColumnConst<CustomBool>>();
         _fn = &applyNullTestOnConst<ElementType, TESTS_NULL>;
+    }
+
+    template <typename Element>
+    void operator()(const ColumnConst<std::optional<Element>>* operand) {
+        _result = _memory->alloc<ColumnConst<CustomBool>>();
+        _fn = &applyNullTestOnOptConst<Element, TESTS_NULL>;
     }
 
     template <typename ElementType>
@@ -2360,19 +2394,19 @@ void runElementBody(NLExecutionContext* context, NLElementBodyData* data, NLElem
 
 template <typename Primitive>
 void caseWriteOptCell(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
-    std::vector<std::optional<Primitive>>& results = static_cast<ColumnOptVector<Primitive>*>(result)->getRaw();
-    results[resultRow] = static_cast<const ColumnOptVector<Primitive>*>(value)->getRaw()[valueRow];
+    const ColumnOptVector<Primitive>* values = static_cast<const ColumnOptVector<Primitive>*>(value);
+    static_cast<ColumnOptVector<Primitive>*>(result)->setOptional(resultRow, values->get(valueRow));
 }
 
 template <typename Primitive>
 void caseWritePlainCell(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
-    std::vector<std::optional<Primitive>>& results = static_cast<ColumnOptVector<Primitive>*>(result)->getRaw();
-    results[resultRow] = static_cast<const ColumnVector<Primitive>*>(value)->getRaw()[valueRow];
+    const ColumnVector<Primitive>* values = static_cast<const ColumnVector<Primitive>*>(value);
+    static_cast<ColumnOptVector<Primitive>*>(result)->set(resultRow, (*values)[valueRow]);
 }
 
 template <typename Primitive>
 void caseWriteNull(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
-    static_cast<ColumnOptVector<Primitive>*>(result)->getRaw()[resultRow] = std::nullopt;
+    static_cast<ColumnOptVector<Primitive>*>(result)->setNull(resultRow);
 }
 
 template <typename Element>
@@ -2574,8 +2608,10 @@ void resetTaggedCells(Column* result, size_t rowCount) {
 
 template <typename Primitive>
 void caseResetColumn(Column* result, size_t rowCount) {
-    std::vector<std::optional<Primitive>>& results = static_cast<ColumnOptVector<Primitive>*>(result)->getRaw();
-    results.assign(rowCount, std::optional<Primitive> {});
+    ColumnOptVector<Primitive>* results = static_cast<ColumnOptVector<Primitive>*>(result);
+
+    results->clear();
+    results->resize(rowCount);
 }
 
 // A default-constructed ID is the invalid one and a default-constructed path the one with
@@ -7224,28 +7260,28 @@ void shortestPathSearch(NLExecutionContext* context, NLShortestPathLoopData* loo
             for (size_t row = 0; row < properties->size(); row++) {
                 const CommitWriteBuffer::SupportedTypeVariant* update = written.findEdgeUpdate((*outputEdges)[row], weightType);
                 if (update) {
-                    (*properties)[row] = written.read<T>(*update, weightValues);
+                    properties->setOptional(row, written.read<T>(*update, weightValues));
                 }
             }
         }
 
         // loop over all the edge properties
         for (size_t i = 0; i < properties->size(); ++i) {
-            const std::optional<EdgePropType>& weight = (*properties)[i];
-
-            if (!weight.has_value()) {
+            if (!properties->isValid(i)) {
                 continue;
             }
 
+            const EdgePropType& weight = properties->getValue(i);
+
             if constexpr (std::is_signed_v<EdgePropType>) {
-                if (*weight < 0) {
+                if (weight < 0) {
                     throw IRException("Cannot Do Shortest Path With Negative Weights");
                 }
             }
 
             const auto outputNodeId = (*outputNodes)[i];
             const auto outputEdgeId = (*outputEdges)[i];
-            const auto dist = val.distance + *weight;
+            const auto dist = val.distance + weight;
 
             const auto it = heapValueMap.find(outputNodeId);
             if (it == heapValueMap.end()) {
@@ -7998,9 +8034,10 @@ void NLExecutor::runVectorSearchLoop(NLExecutionContext* context, NLFunctionData
         rawIDs.resize(rows);
         std::copy(ids.begin() + cursor, ids.begin() + cursor + rows, rawIDs.begin());
 
-        std::vector<std::optional<types::Double::Primitive>>& rawScores = scoreColumn->getRaw();
-        rawScores.resize(rows);
-        std::copy(scores.begin() + cursor, scores.begin() + cursor + rows, rawScores.begin());
+        scoreColumn->resize(rows);
+        for (size_t row = 0; row < rows; row++) {
+            scoreColumn->setOptional(row, scores[cursor + row]);
+        }
 
         cursor += rows;
 
@@ -11106,7 +11143,7 @@ NLUnaryFunctionKernel NLExecutor::selectFunction(const Column* input, bool input
     using JustRes = TypeUtils::unwrap_optional_t<Res>;
 
     // Early exit noop for NULL literals
-    if (dynamic_cast<const ColumnConst<PropertyNull>*>(input)) {
+    if (input->getKind() == ColumnConst<PropertyNull>::staticKind()) {
         result = memory->alloc<ColumnConst<PropertyNull>>();
         return &functionNullKernel;
     }
@@ -12640,7 +12677,7 @@ NLBroadcastConstantFunction NLExecutor::selectConstantBroadcast(NLChunkKind kind
     dispatchOptChunkKind(kind, [&]<typename Element>() {
         if (!isConst) {
             fill = &broadcastSingleRowColumn<Element>;
-        } else if (value->getInternalKind() == InternalKind::code<std::optional<Element>>()) {
+        } else if (value->getKind() == ColumnConst<std::optional<Element>>::staticKind()) {
             fill = &broadcastNullableConstantColumn<Element>;
         } else {
             fill = &broadcastConstantColumn<Element>;
@@ -14059,22 +14096,23 @@ void NLExecutor::runPropertyFetch(NLExecutionContext* context, NLFunctionData* d
         return;
     }
 
-    auto& raw = output->getRaw();
     const auto& inputRaw = inputIDs->getRaw();
-    for (size_t row = 0; row < raw.size(); row++) {
+    const size_t rowCount = output->size();
+    for (size_t row = 0; row < rowCount; row++) {
         if (pendingRows.has(row, inputRaw[row].getValue())) {
-            raw[row] = readPendingEntityProperty<ID, T>(writeBuffer,
-                                                        written,
-                                                        fetchedValues,
-                                                        &view,
-                                                        inputRaw[row].getValue(),
-                                                        propertyTypeID);
+            output->setOptional(row,
+                                readPendingEntityProperty<ID, T>(writeBuffer,
+                                                                 written,
+                                                                 fetchedValues,
+                                                                 &view,
+                                                                 inputRaw[row].getValue(),
+                                                                 propertyTypeID));
             continue;
         }
 
         const CommitWriteBuffer::SupportedTypeVariant* update = written.findUpdate(inputRaw[row], propertyTypeID);
         if (update) {
-            raw[row] = written.read<T>(*update, fetchedValues);
+            output->setOptional(row, written.read<T>(*update, fetchedValues));
         }
     }
 }
