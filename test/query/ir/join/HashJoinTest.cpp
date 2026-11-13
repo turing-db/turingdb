@@ -213,18 +213,7 @@ TEST_F(HashJoinTest, joinsTwoPropertiesOfOneTypeAsTheProductDoes) {
 
     const Rows expected {{"0", std::to_string(remyAlias.getValue())},
                          {"1", std::to_string(adamAlias.getValue())}};
-
-    StringRowSink joined;
-    runQuery(query, joined);
-    Rows joinedRows;
-    joined.sortedRows(joinedRows);
-    EXPECT_EQ(joinedRows, expected);
-
-    StringRowSink product;
-    runQuery(query, product, false);
-    Rows productRows;
-    product.sortedRows(productRows);
-    EXPECT_EQ(productRows, expected);
+    expectJoinedRows(query, expected);
 }
 
 // A hash join answers equality alone; an ordering predicate stays a filter over the

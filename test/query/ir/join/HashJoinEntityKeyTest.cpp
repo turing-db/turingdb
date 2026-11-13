@@ -2,7 +2,6 @@
 
 #include <stdint.h>
 
-#include <algorithm>
 #include <string>
 #include <string_view>
 
@@ -15,7 +14,6 @@
 
 #include "HashJoinQueryTest.h"
 #include "IRTestOps.h"
-#include "StringRowSink.h"
 #include "TuringTest.h"
 
 using namespace db;
@@ -54,23 +52,6 @@ protected:
         mlir::db::HashJoin join = joins.front();
         printKeyType(join.getLeftFactor(), join.getLeftKey(), probeKey);
         printKeyType(join.getRightFactor(), join.getRightKey(), buildKey);
-    }
-
-    void expectJoinedRows(std::string_view query, const Rows& expected) {
-        Rows sortedExpected = expected;
-        std::sort(sortedExpected.begin(), sortedExpected.end());
-
-        StringRowSink joined;
-        runQuery(query, joined);
-        Rows joinedRows;
-        joined.sortedRows(joinedRows);
-        EXPECT_EQ(joinedRows, sortedExpected) << "query: " << query;
-
-        StringRowSink product;
-        runQuery(query, product, false);
-        Rows productRows;
-        product.sortedRows(productRows);
-        EXPECT_EQ(productRows, sortedExpected) << "query: " << query;
     }
 };
 

@@ -48,6 +48,7 @@ protected:
 
     void expectCount(std::string_view query, size_t expected);
     void expectRows(std::string_view query, const Rows& expected);
+    void expectJoinedRows(std::string_view query, const Rows& expected);
 
     static bool contains(std::string_view text, std::string_view part);
 

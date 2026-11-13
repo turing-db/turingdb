@@ -1,5 +1,7 @@
 #include "HashJoinQueryTest.h"
 
+#include <algorithm>
+
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -120,6 +122,23 @@ void HashJoinQueryTest::expectRows(std::string_view query, const Rows& expected)
     runQuery(query, sink);
 
     EXPECT_EQ(sink.getRows(), expected) << "query: " << query;
+}
+
+void HashJoinQueryTest::expectJoinedRows(std::string_view query, const Rows& expected) {
+    Rows sortedExpected = expected;
+    std::sort(sortedExpected.begin(), sortedExpected.end());
+
+    StringRowSink joined;
+    runQuery(query, joined);
+    Rows joinedRows;
+    joined.sortedRows(joinedRows);
+    EXPECT_EQ(joinedRows, sortedExpected) << "query: " << query;
+
+    StringRowSink product;
+    runQuery(query, product, false);
+    Rows productRows;
+    product.sortedRows(productRows);
+    EXPECT_EQ(productRows, sortedExpected) << "query: " << query;
 }
 
 bool HashJoinQueryTest::contains(std::string_view text, std::string_view part) {
