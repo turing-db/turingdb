@@ -21,6 +21,9 @@ class ColumnSet;
 
 class ColumnStringTable;
 
+template <typename T>
+class SplitColumnVector;
+
 // Implementation
 
 class ContainerKind {
@@ -29,7 +32,8 @@ public:
         TemplateKind<ColumnVector>,
         TemplateKind<ColumnConst>,
         TemplateKind<ColumnSet>,
-        ColumnStringTable>;
+        ColumnStringTable,
+        TemplateKind<SplitColumnVector>>;
 
     using Code = uint8_t;
 
