@@ -180,7 +180,7 @@ TEST(ColumnNullableAccessorTest, valueOverloadsMarkRowsValid) {
     EXPECT_EQ(strings.getValue(2), "text");
 }
 
-TEST(ColumnNullableAccessorTest, setOptionalAndPushBackAnOptional) {
+TEST(ColumnNullableAccessorTest, setOptionalWritesAWholeOptional) {
     ColumnOptVector<int64_t> column;
     column.resize(3);
 
@@ -194,16 +194,25 @@ TEST(ColumnNullableAccessorTest, setOptionalAndPushBackAnOptional) {
 
     column.setOptional(0, std::optional<int64_t> {5});
     EXPECT_EQ(column.get(0), std::optional<int64_t> {5});
-    column.setOptional(0, present);
+}
 
-    column.push_back(present);
-    column.push_back(absent);
-    column.push_back(std::nullopt);
-    column.push_back(std::optional<int64_t> {6});
-    EXPECT_EQ(column.size(), 7);
-    EXPECT_EQ(column.getNullCount(), 4);
-    EXPECT_EQ(column.get(3), present);
-    EXPECT_EQ(column.get(6), std::optional<int64_t> {6});
+TEST(ColumnNullableAccessorTest, appendRowsCopiesAWindowWithItsNulls) {
+    ColumnOptVector<int64_t> source;
+    source.push_back(1);
+    source.pushNull();
+    source.push_back(3);
+    source.pushNull();
+
+    ColumnOptVector<int64_t> destination;
+    destination.push_back(7);
+    destination.appendRows(source, 1, 2);
+    destination.appendRows(source, 4, 0);
+
+    ASSERT_EQ(destination.size(), 3);
+    EXPECT_EQ(destination.getNullCount(), 1);
+    EXPECT_EQ(destination.get(0), std::optional<int64_t> {7});
+    EXPECT_FALSE(destination.isValid(1));
+    EXPECT_EQ(destination.get(2), std::optional<int64_t> {3});
 }
 
 TEST(ColumnNullableAccessorTest, constColumnReadAccessors) {

@@ -2,7 +2,6 @@ set(storage_sources
         Graph.cpp
         ChangeManager.cpp
         DebugDump.cpp
-        RowStore.cpp
         GraphPath.cpp
         CellOrder.cpp
         QueryTypeName.cpp
