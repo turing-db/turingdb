@@ -38,6 +38,16 @@ public:
         _empty = false;
     }
 
+    void setOptional(const T& value) requires isOptional<T> {
+        _value = value;
+        _empty = false;
+    }
+
+    void setOptional(T&& value) requires isOptional<T> {
+        _value = std::move(value);
+        _empty = false;
+    }
+
     void clear() override { _empty = true; }
 
 private:

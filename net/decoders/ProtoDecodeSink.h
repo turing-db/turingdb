@@ -40,7 +40,11 @@ concept OptionalVectorColumn = requires(Column column, const Column constColumn,
 };
 
 template <typename Column, typename T>
-concept OptionalConstColumn = ConstColumn<Column, std::optional<T>>;
+concept OptionalConstColumn = ConstColumn<Column, T>
+&& requires(Column column, const std::optional<T>& constValue, std::optional<T> value) {
+    { column.setOptional(constValue) };
+    { column.setOptional(std::move(value)) };
+};
 
 // The whole contract the decode layer places on a sink family: the column aliases
 // (probed with one representative element type), the family's container handle types, the

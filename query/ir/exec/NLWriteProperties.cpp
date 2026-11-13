@@ -11,6 +11,7 @@
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnKind.h"
+#include "columns/ColumnOperand.h"
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
@@ -164,38 +165,34 @@ public:
     // buffer stages and must not be wrapped in a second one.
     template <typename T>
     void operator()(const ColumnConst<std::optional<T>>* typed) {
-        fillRows(typed->getRaw());
+        fillRows(typed->get(0));
     }
 
     void operator()(const ColumnConst<std::optional<types::String::Primitive>>* typed) {
-        const std::optional<types::String::Primitive>& value = typed->getRaw();
-
         std::optional<types::String::OwningPrimitive> owned;
-        if (value.has_value()) {
-            owned.emplace(*value);
+        if (typed->isValid(0)) {
+            owned.emplace(typed->getValue(0));
         }
 
         fillRows(owned);
     }
 
     void operator()(const ColumnConst<std::optional<types::Embedding::Primitive>>* typed) {
-        const std::optional<types::Embedding::Primitive>& value = typed->getRaw();
-
         std::optional<types::Embedding::OwningPrimitive> owned;
-        if (value.has_value()) {
-            owned.emplace(value->begin(), value->end());
+        if (typed->isValid(0)) {
+            const types::Embedding::Primitive value = typed->getValue(0);
+            owned.emplace(value.begin(), value.end());
         }
 
         fillRows(owned);
     }
 
     void operator()(const ColumnConst<std::optional<ListView>>* typed) {
-        const std::optional<ListView>& value = typed->getRaw();
-
         std::optional<types::List::OwningPrimitive> owned;
-        if (value.has_value()) {
-            throwIfHoldsAnUnstorableValue(*value);
-            owned.emplace(*value);
+        if (typed->isValid(0)) {
+            const ListView value = typed->getValue(0);
+            throwIfHoldsAnUnstorableValue(value);
+            owned.emplace(value);
         }
 
         fillRows(owned);
@@ -280,73 +277,81 @@ public:
     }
 
     template <typename T>
-    void operator()(const ColumnVector<std::optional<T>>* typed) {
+    void operator()(const ColumnOptVector<T>* typed) {
+        const size_t rowCount = typed->size();
         _buf.clear();
-        _buf.reserve(typed->size());
-        for (const std::optional<T>& val : *typed) {
-            _buf.emplace_back(_propID, val);
+        _buf.reserve(rowCount);
+        for (size_t row = 0; row < rowCount; row++) {
+            _buf.emplace_back(_propID, typed->get(row));
         }
     }
 
     /// Owning string as outlives query
-    void operator()(const ColumnVector<std::optional<types::String::Primitive>>* typed) {
+    void operator()(const ColumnOptVector<types::String::Primitive>* typed) {
+        const size_t rowCount = typed->size();
         _buf.clear();
-        _buf.reserve(typed->size());
-        for (const std::optional<types::String::Primitive>& val : *typed) {
-            if (!val.has_value()) {
+        _buf.reserve(rowCount);
+        for (size_t row = 0; row < rowCount; row++) {
+            if (!typed->isValid(row)) {
                 using Disengaged = std::optional<types::String::OwningPrimitive>;
                 _buf.emplace_back(_propID, Disengaged {});
                 continue;
             }
 
-            _buf.emplace_back(_propID, std::make_optional(std::string(*val)));
+            _buf.emplace_back(_propID, std::make_optional(std::string(typed->getValue(row))));
         }
     }
 
     /// Owning vec as outlives query
-    void operator()(const ColumnVector<std::optional<types::Embedding::Primitive>>* typed) {
+    void operator()(const ColumnOptVector<types::Embedding::Primitive>* typed) {
+        const size_t rowCount = typed->size();
         _buf.clear();
-        _buf.reserve(typed->size());
-        for (const std::optional<types::Embedding::Primitive>& val : *typed) {
-            if (!val.has_value()) {
+        _buf.reserve(rowCount);
+        for (size_t row = 0; row < rowCount; row++) {
+            if (!typed->isValid(row)) {
                 using Disengaged = std::optional<types::Embedding::OwningPrimitive>;
                 _buf.emplace_back(_propID, Disengaged {});
                 continue;
             }
-            types::Embedding::OwningPrimitive emb(val->begin(), val->end());
+            const types::Embedding::Primitive value = typed->getValue(row);
+            types::Embedding::OwningPrimitive emb(value.begin(), value.end());
             _buf.emplace_back(_propID, std::make_optional(std::move(emb)));
         }
     }
 
     /// Owning encoding as outlives query
-    void operator()(const ColumnVector<std::optional<ListView>>* typed) {
+    void operator()(const ColumnOptVector<ListView>* typed) {
+        const size_t rowCount = typed->size();
         _buf.clear();
-        _buf.reserve(typed->size());
-        for (const std::optional<ListView>& val : *typed) {
-            if (!val.has_value()) {
+        _buf.reserve(rowCount);
+        for (size_t row = 0; row < rowCount; row++) {
+            if (!typed->isValid(row)) {
                 using Disengaged = std::optional<types::List::OwningPrimitive>;
                 _buf.emplace_back(_propID, Disengaged {});
                 continue;
             }
 
-            throwIfHoldsAnUnstorableValue(*val);
-            _buf.emplace_back(_propID, types::List::OwningPrimitive(*val));
+            const ListView value = typed->getValue(row);
+            throwIfHoldsAnUnstorableValue(value);
+            _buf.emplace_back(_propID, types::List::OwningPrimitive(value));
         }
     }
 
     /// Owning encoding as outlives query
-    void operator()(const ColumnVector<std::optional<MapView>>* typed) {
+    void operator()(const ColumnOptVector<MapView>* typed) {
+        const size_t rowCount = typed->size();
         _buf.clear();
-        _buf.reserve(typed->size());
-        for (const std::optional<MapView>& val : *typed) {
-            if (!val.has_value()) {
+        _buf.reserve(rowCount);
+        for (size_t row = 0; row < rowCount; row++) {
+            if (!typed->isValid(row)) {
                 using Disengaged = std::optional<types::Map::OwningPrimitive>;
                 _buf.emplace_back(_propID, Disengaged {});
                 continue;
             }
 
-            throwIfHoldsAnUnstorableValue(*val);
-            _buf.emplace_back(_propID, types::Map::OwningPrimitive(*val));
+            const MapView value = typed->getValue(row);
+            throwIfHoldsAnUnstorableValue(value);
+            _buf.emplace_back(_propID, types::Map::OwningPrimitive(value));
         }
     }
 
@@ -498,17 +503,20 @@ WrittenMap writtenMap(const CellView cell) {
 
 template <typename ColumnType>
 void readWrittenMaps(const Column* column, std::vector<WrittenMap>& maps) {
-    const auto& values = static_cast<const ColumnType*>(column)->getRaw();
+    const ColumnType* typedColumn = static_cast<const ColumnType*>(column);
+    const size_t rowCount = typedColumn->size();
 
-    maps.resize(values.size());
-    std::transform(values.begin(), values.end(), maps.begin(), [](const auto& value) { return writtenMap(value); });
+    maps.resize(rowCount);
+    for (size_t row = 0; row < rowCount; row++) {
+        maps[row] = writtenMap(operandRow(typedColumn, row));
+    }
 }
 
 template <typename ColumnType>
 void readWrittenConstMap(const Column* column, size_t rowCount, std::vector<WrittenMap>& maps) {
     const ColumnType* constant = static_cast<const ColumnType*>(column);
 
-    maps.assign(rowCount, writtenMap(constant->getRaw()));
+    maps.assign(rowCount, writtenMap(constantOperand(constant)));
 }
 
 // The cell of each row @param written holds, or of every row for a null mask. A constant

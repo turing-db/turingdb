@@ -913,16 +913,16 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalConstantColumns) {
     db::Dataframe source;
 
     auto* maybeId = localMem.alloc<db::ColumnConst<std::optional<UInt64>>>();
-    maybeId->set(std::optional<UInt64> {42});
+    maybeId->setOptional(std::optional<UInt64> {42});
     addColumn(&dfMan, &source, "maybe_id", maybeId);
 
     const std::string hugeLabel(512, 'q');
     auto* maybeLabel = localMem.alloc<db::ColumnConst<OptionalString>>();
-    maybeLabel->set(OptionalString {std::string_view(hugeLabel)});
+    maybeLabel->setOptional(OptionalString {std::string_view(hugeLabel)});
     addColumn(&dfMan, &source, "maybe_label", maybeLabel);
 
     auto* emptyLabel = localMem.alloc<db::ColumnConst<OptionalString>>();
-    emptyLabel->set(std::nullopt);
+    emptyLabel->setOptional(std::nullopt);
     addColumn(&dfMan, &source, "empty_label", emptyLabel);
 
     const auto packets = encodeDataframeWithChunkSize(source, 96);
@@ -2304,21 +2304,21 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalConstantListsAndMaps) {
     items.emplace_back(StringView {"nine"});
 
     auto* list = localMem.alloc<db::ColumnConst<std::optional<db::ListView>>>();
-    list->set(std::optional<db::ListView> {localMem.listBuffer().insert(items)});
+    list->setOptional(std::optional<db::ListView> {localMem.listBuffer().insert(items)});
     addColumn(&dfMan, &source, "list", list);
 
     auto* noList = localMem.alloc<db::ColumnConst<std::optional<db::ListView>>>();
-    noList->set(std::nullopt);
+    noList->setOptional(std::nullopt);
     addColumn(&dfMan, &source, "no_list", noList);
 
     const std::vector<db::MapBuffer<>::MapKeyValuePair> entries = {{"crs", StringView {"OXF"}}, {"minutes", Int64 {5}}};
 
     auto* map = localMem.alloc<db::ColumnConst<std::optional<db::MapView>>>();
-    map->set(std::optional<db::MapView> {localMem.mapBuffer().insert(entries)});
+    map->setOptional(std::optional<db::MapView> {localMem.mapBuffer().insert(entries)});
     addColumn(&dfMan, &source, "map", map);
 
     auto* noMap = localMem.alloc<db::ColumnConst<std::optional<db::MapView>>>();
-    noMap->set(std::nullopt);
+    noMap->setOptional(std::nullopt);
     addColumn(&dfMan, &source, "no_map", noMap);
 
     const auto packets = encodeDataframeWithChunkSize(source, 128);

@@ -39,7 +39,7 @@ public:
 
         const ColumnIDProp* idColumn = static_cast<const ColumnIDProp*>(chunks.front());
         for (size_t row = offset; row < offset + rowCount; row++) {
-            _ids.insert(idColumn->at(row).value());
+            _ids.insert(idColumn->get(row).value());
         }
     }
 

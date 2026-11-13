@@ -194,7 +194,7 @@ TEST_F(NullableRowMoverTest, ownsThePresentValueOfANullableConstant) {
     present.set(view);
 
     ColumnConst<std::optional<std::string_view>> absent;
-    absent.set(std::nullopt);
+    absent.setOptional(std::nullopt);
 
     NLValueStore store;
     store.ownColumnRows(&present, 0);
