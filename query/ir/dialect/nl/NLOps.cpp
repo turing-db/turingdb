@@ -1474,7 +1474,7 @@ LogicalResult AggregateUpdate::verify() {
     const auto rowsNullable = dyn_cast<storage::NullableType>(rowsElement);
     const Type reducedElement = rowsNullable ? rowsNullable.getValueType() : rowsElement;
     const bool foldsIntoDouble = storage::reducesToADouble(kind, reducedElement);
-    const bool taggedCells = isa<storage::AnyType>(reducedElement);
+    const bool taggedCells = isa<storage::AnyType>(rowsElement);
     if (taggedCells && !foldsIntoDouble && !isa<storage::AnyType>(accumulatorType)) {
         return emitOpError("a sum, avg, min or max over type-erased cells must fold into a tagged cell accumulator state");
     }

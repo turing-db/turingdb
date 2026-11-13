@@ -223,6 +223,5 @@ static_assert(WasmOptionalVectorColumn<db::types::String::Primitive>);
 static_assert(WasmOptionalVectorColumn<db::types::Embedding::Primitive>);
 static_assert(WasmOptionalVectorColumn<WasmSink::ListView>);
 static_assert(WasmOptionalVectorColumn<WasmSink::MapView>);
-static_assert(WasmOptionalVectorColumn<WasmSink::CellView>);
 
 }

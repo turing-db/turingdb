@@ -1,6 +1,5 @@
 #pragma once
 
-#include <optional>
 #include <span>
 #include <stack>
 #include <stdint.h>
@@ -12,7 +11,6 @@
 #include "TuringProtoHeaders.h"
 #include "TuringProtoOutBuf.h"
 #include "CellUtils.h"
-#include "columns/ColumnOptVector.h"
 
 namespace net::proto {
 
@@ -35,31 +33,6 @@ inline WireSize computeListByteSize(std::span<const db::CellView> elements) {
     for (const auto& elem : elements) {
         db::CellTagDispatcher dispatcher {elem.getTag()};
         totalSize += dispatcher.execute(sizeVisitor, elem);
-    }
-
-    bioassert(totalSize <= MAX_WIRE_SIZE, "List length exceeds maximum wire size");
-    return static_cast<WireSize>(totalSize);
-}
-
-// The same for rows [offset, offset + rowCount) of an optional column, counting a row that
-// holds no element as the null it is written as.
-inline WireSize computeOptionalListByteSize(const db::ColumnOptVector<db::CellView>* column,
-                                            size_t offset,
-                                            size_t rowCount) {
-    const CellByteSizeVisitor sizeVisitor;
-
-    const size_t endRow = offset + rowCount;
-
-    size_t totalSize = 0;
-    for (size_t row = offset; row < endRow; row++) {
-        if (!column->isValid(row)) {
-            totalSize += sizeof(db::PropertyNull);
-            continue;
-        }
-
-        const db::CellView& element = column->getValue(row);
-        db::CellTagDispatcher dispatcher {element.getTag()};
-        totalSize += dispatcher.execute(sizeVisitor, element);
     }
 
     bioassert(totalSize <= MAX_WIRE_SIZE, "List length exceeds maximum wire size");
@@ -183,13 +156,6 @@ public:
     // row count having already given their number.
     void writeCells(std::span<const db::CellView> elements);
 
-    // The same for an optional column. A row holding no element is written as a null one so
-    // the elements stay one per row; the column's null mask, already on the wire, is what
-    // tells such a row from one holding a null read out of a list.
-    void writeOptionalCells(const db::ColumnOptVector<db::CellView>* column,
-                            size_t offset,
-                            size_t rowCount);
-
     // A column whose rows are each one map entry: [mapByteSize] then the entries, the row
     // count having already given their number. Written exactly as a map's entries are, so
     // each row carries the key it was read under.
@@ -202,7 +168,6 @@ private:
     void drainNestedValues();
     void writeCellValues(std::span<const db::CellView> elements);
     void writeMapKey(std::string_view key);
-    void writeNullCell();
 };
 
 }

@@ -20,15 +20,6 @@ inline std::optional<ListView> iteratedList(const CellView& cell) {
     return ListView::singleton(cell);
 }
 
-inline std::optional<ListView> iteratedList(const std::optional<CellView>& cell) {
-    if (!cell) {
-        return std::nullopt;
-    }
-
-    return iteratedList(*cell);
-}
-
 std::optional<ListView> iteratedList(const CellView&&) = delete;
-std::optional<ListView> iteratedList(const std::optional<CellView>&&) = delete;
 
 }

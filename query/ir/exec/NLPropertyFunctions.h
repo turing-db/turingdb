@@ -64,7 +64,6 @@ public:
     ~NLTaggedKeysFunction();
 
     ResultType operator()(CellView cell);
-    ResultType operator()(const std::optional<CellView>& cell);
 
 private:
     NLKeysFunction<NodeID> _nodeKeys;
@@ -81,7 +80,6 @@ public:
     ~NLTaggedLabelsFunction();
 
     ResultType operator()(CellView cell);
-    ResultType operator()(const std::optional<CellView>& cell);
 
 private:
     LabelsFunction _labels;
@@ -96,7 +94,6 @@ public:
     ~NLTaggedEdgeTypeFunction();
 
     ResultType operator()(CellView cell);
-    ResultType operator()(const std::optional<CellView>& cell);
 
 private:
     EdgeTypesFunction _edgeType;
@@ -111,7 +108,6 @@ public:
     ~NLTaggedPropertiesFunction();
 
     ResultType operator()(CellView cell);
-    ResultType operator()(const std::optional<CellView>& cell);
 
 private:
     NLPropertiesFunction<NodeID> _nodeProperties;

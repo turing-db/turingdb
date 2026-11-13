@@ -39,8 +39,10 @@ template <typename T, typename Sink>
 concept SupportedColumnVectorTypes = (TrivialInternalTypes<T> || VariableWidthTypes<T, Sink> || std::is_same_v<T, db::GraphPath>)
 && Sink::template holds<typename Sink::template ColumnVector<T>>();
 
+// A tagged cell holds its own null, so no column of cells is sent as an optional one
 template <typename T, typename Sink>
 concept SupportedColumnOptVectorTypes = (TrivialInternalTypes<T> || VariableWidthTypes<T, Sink>)
+&& !std::is_same_v<T, typename Sink::CellView>
 && Sink::template holds<typename Sink::template ColumnOptVector<T>>();
 
 template <typename T, typename Sink>
@@ -49,6 +51,7 @@ concept SupportedColumnConstTypes = (TrivialInternalTypes<T> || VariableWidthTyp
 
 template <typename T, typename Sink>
 concept SupportedColumnOptConstTypes = (TrivialInternalTypes<T> || VariableWidthTypes<T, Sink> || std::is_same_v<T, db::GraphPath>)
+&& !std::is_same_v<T, typename Sink::CellView>
 && Sink::template holds<typename Sink::template ColumnOptConst<T>>();
 
 }
