@@ -20,6 +20,7 @@
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnOperatorDispatcher.h"
+#include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "dataframe/Dataframe.h"
 #include "metadata/PropertyNull.h"
@@ -223,8 +224,18 @@ struct Stringify {
     }
 
     template <typename T>
+    void operator()(const db::ColumnOptVector<T>* typed) {
+        _string = valueToString(typed->get(_row));
+    }
+
+    template <typename T>
     void operator()(const db::ColumnConst<T>* typed) {
         _string = valueToString(typed->at(_row));
+    }
+
+    template <typename T>
+    void operator()(const db::ColumnConst<std::optional<T>>* typed) {
+        _string = valueToString(typed->get(_row));
     }
 };
 

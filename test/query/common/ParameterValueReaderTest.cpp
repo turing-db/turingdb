@@ -12,6 +12,7 @@
 #include "ParameterValueReader.h"
 #include "TuringException.h"
 #include "columns/ColumnConst.h"
+#include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "list/ListBuffer.h"
 #include "map/MapBuffer.h"
@@ -69,16 +70,30 @@ TEST_F(ParameterValueReaderTest, scalarsKeepTheirTypes) {
     EXPECT_EQ(value.getDateTime(), DateTime {1'793'887'500'000'000});
 }
 
+TEST_F(ParameterValueReaderTest, aNullableColumnReadsItsValueOrNull) {
+    ParameterValue value;
+
+    ColumnOptVector<Int64>* maybe = _memory.alloc<ColumnOptVector<Int64>>();
+    maybe->push_back(Int64 {5});
+    maybe->pushNull();
+
+    readParameterValue(maybe, 0, value);
+    EXPECT_EQ(value.getInt64(), 5);
+
+    readParameterValue(maybe, 1, value);
+    EXPECT_TRUE(value.isNull());
+}
+
 TEST_F(ParameterValueReaderTest, aNullIsNull) {
     ParameterValue value;
 
     ColumnConst<std::optional<Int64>>* nothing = _memory.alloc<ColumnConst<std::optional<Int64>>>();
-    nothing->set(std::nullopt);
+    nothing->setOptional(std::nullopt);
     readParameterValue(nothing, 0, value);
     EXPECT_TRUE(value.isNull());
 
     ColumnConst<std::optional<Int64>>* something = _memory.alloc<ColumnConst<std::optional<Int64>>>();
-    something->set(std::optional<Int64> {3});
+    something->setOptional(std::optional<Int64> {3});
     readParameterValue(something, 0, value);
     EXPECT_EQ(value.getInt64(), 3);
 

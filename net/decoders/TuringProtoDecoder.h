@@ -316,7 +316,7 @@ bool TuringProtoDecoder<Sink>::decodeColumn(SinkColumnOptConst<T, Sink>* column)
         _context._inBuf->readData(&hasValue, sizeof(hasValue));
 
         if (hasValue == 0) {
-            column->set(std::nullopt);
+            column->setOptional(std::nullopt);
             return true;
         }
         _context._rowIndex = 1;

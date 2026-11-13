@@ -64,12 +64,11 @@ void fetchMergeProperty(const GraphView& view,
         return;
     }
 
-    auto& values = typed->getRaw();
     const auto& entities = ids->getRaw();
     for (size_t row = 0; row < entities.size(); row++) {
         const NLWrittenValues::Value* update = written.findUpdate(entities[row], propertyTypeID);
         if (update) {
-            values[row] = written.read<T>(*update, readValues);
+            typed->setOptional(row, written.read<T>(*update, readValues));
         }
     }
 }
@@ -107,11 +106,10 @@ void readStagedValue(NLWrittenValues& written,
     const auto read = [&]<SupportedType T>() {
         auto* column = static_cast<ColumnOptVector<typename T::Primitive>*>(property._values);
         column->clear();
+        column->resize(1);
 
         if (value) {
-            column->push_back(written.read<T>(*value, readValues));
-        } else {
-            column->push_back(std::nullopt);
+            column->setOptional(0, written.read<T>(*value, readValues));
         }
     };
 

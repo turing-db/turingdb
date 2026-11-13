@@ -6,6 +6,8 @@
 #include <concepts>
 #include <functional>
 
+#include "columns/ColumnOptVector.h"
+
 #include "NLKeyHash.h"
 
 using namespace db;
@@ -391,16 +393,14 @@ NLGroupHashTableKind NLStringGroupHashTable<Element>::getKind() const {
 
 template <typename Element>
 void NLStringGroupHashTable<Element>::assign(std::span<const Column* const> keyColumns, NLGroupAssignment& assignment) {
-    const std::vector<Element>& inputRaw = static_cast<const ColumnVector<Element>*>(keyColumns.front())->getRaw();
+    const ColumnVectorOf<Element>* input = static_cast<const ColumnVectorOf<Element>*>(keyColumns.front());
     const size_t rowCount = assignment.getRowCount();
 
     for (size_t row = 0; row < rowCount; row++) {
-        const Element& element = inputRaw[row];
-
         if constexpr (std::same_as<Element, std::string_view>) {
-            assignment.setGroup(row, _cells.findOrCreateGroup(element, row, assignment));
-        } else if (element.has_value()) {
-            assignment.setGroup(row, _cells.findOrCreateGroup(*element, row, assignment));
+            assignment.setGroup(row, _cells.findOrCreateGroup((*input)[row], row, assignment));
+        } else if (input->isValid(row)) {
+            assignment.setGroup(row, _cells.findOrCreateGroup(input->getValue(row), row, assignment));
         } else {
             assignment.assignNullGroup(row, &_nullGroup);
         }

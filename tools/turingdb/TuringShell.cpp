@@ -791,8 +791,18 @@ struct CellWriter {
     }
 
     template <typename T>
+    void operator()(const ColumnOptVector<T>* column) {
+        writeValue(_table, column->get(_row));
+    }
+
+    template <typename T>
     void operator()(const ColumnConst<T>* column) {
         writeValue(_table, column->at(_row));
+    }
+
+    template <typename T>
+    void operator()(const ColumnConst<std::optional<T>>* column) {
+        writeValue(_table, column->get(_row));
     }
 };
 
