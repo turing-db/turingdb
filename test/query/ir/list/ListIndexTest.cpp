@@ -64,12 +64,12 @@ using GroupRows = std::vector<std::pair<std::optional<types::Int64::Primitive>, 
 // The integer an index read produced, or nothing where the position held no value - past
 // the end of the list, or a null inside it. getAs reads the cell without checking its
 // tag, so a null has to be told from a value before the read, not after.
-std::optional<types::Int64::Primitive> elementAsInteger(const std::optional<CellView>& element) {
-    if (!element.has_value() || element->getTag() == CellTag::Null) {
+std::optional<types::Int64::Primitive> elementAsInteger(CellView element) {
+    if (element.getTag() == CellTag::Null) {
         return std::nullopt;
     }
 
-    return element->getAs<types::Int64::Primitive>();
+    return element.getAs<types::Int64::Primitive>();
 }
 
 // Reads the first projected column as one optional integer per row, accepting every shape
@@ -128,16 +128,20 @@ private:
     }
 
     bool appendCells(const Column* column, size_t offset, size_t rowCount) {
-        const auto* constantColumn = dynamic_cast<const ColumnConst<std::optional<CellView>>*>(column);
-        const auto* vectorColumn = dynamic_cast<const ColumnOptVector<CellView>*>(column);
+        const ColumnKind::Code kind = column->getKind();
+        const ColumnConst<CellView>* constantColumn = kind == ColumnConst<CellView>::staticKind()
+            ? static_cast<const ColumnConst<CellView>*>(column)
+            : nullptr;
+        const ColumnVector<CellView>* vectorColumn = kind == ColumnVector<CellView>::staticKind()
+            ? static_cast<const ColumnVector<CellView>*>(column)
+            : nullptr;
 
         if (!constantColumn && !vectorColumn) {
             return false;
         }
 
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            const std::optional<CellView> element =
-                constantColumn ? (*constantColumn)[rowIndex] : vectorColumn->getRaw()[rowIndex];
+            const CellView element = constantColumn ? (*constantColumn)[rowIndex] : vectorColumn->getRaw()[rowIndex];
 
             _rows.push_back(elementAsInteger(element));
         }
@@ -177,7 +181,9 @@ public:
         ASSERT_EQ(chunks.size(), 2u);
 
         const auto* integerKeys = dynamic_cast<const ColumnOptVector<types::Int64::Primitive>*>(chunks[0]);
-        const auto* cellKeys = dynamic_cast<const ColumnOptVector<CellView>*>(chunks[0]);
+        const ColumnVector<CellView>* cellKeys = chunks[0]->getKind() == ColumnVector<CellView>::staticKind()
+            ? static_cast<const ColumnVector<CellView>*>(chunks[0])
+            : nullptr;
         const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[1]);
         ASSERT_TRUE(integerKeys || cellKeys);
         ASSERT_NE(counts, nullptr);
@@ -351,12 +357,11 @@ TEST_F(ListIndexTest, typesAnIndexIntoAListOfIntegersAsANullableInteger) {
 }
 
 // A mixed list names no type to read its cells out as, so the access hands back the tagged
-// scalar the cell carries.
-TEST_F(ListIndexTest, typesAnIndexIntoAMixedListAsANullableTaggedScalar) {
+// scalar the cell carries, which holds its own null.
+TEST_F(ListIndexTest, typesAnIndexIntoAMixedListAsATaggedScalar) {
     const std::string resultType = indexResultType("MATCH (n) WHERE n.name = 'Remy' RETURN [1, 'a'][1]");
 
-    EXPECT_NE(resultType.find("nullable"), std::string::npos) << "index result type: " << resultType;
-    EXPECT_NE(resultType.find("!storage.any"), std::string::npos) << "index result type: " << resultType;
+    EXPECT_EQ(resultType, "!storage.any");
 }
 
 // Out of range reads null, so the result is nullable however the index is written.

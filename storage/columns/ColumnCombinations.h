@@ -27,12 +27,12 @@ class InternalCombination {
     // NOTE: This will never be a predicate (Boolean) result
     using AbsInternalRes = std::invoke_result_t<Op, AbsInternalT, AbsInternalU>;
 
-    // Internal result type is optional wrap of the absolute internal result type if
+    // Internal result type is the nullable form of the absolute internal result type if
     // either type is optional, or otherwise is the absolute internal type.
     using InternalResImpl = std::conditional_t<
                                TypeUtils::is_optional_v<InternalT>
                                    || TypeUtils::is_optional_v<InternalU>,
-                               TypeUtils::wrap_optional_t<AbsInternalRes>,
+                               TypeUtils::nullable_t<AbsInternalRes>,
                                AbsInternalRes>;
 public:
     using type = InternalResImpl;

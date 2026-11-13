@@ -51,12 +51,12 @@ protected:
 TEST_F(ContainerIndexVerifierTest, acceptsTheElementsOfAList) {
     EXPECT_TRUE(verifies("!storage.list<i64>", "!storage.any", "!storage.nullable<i64>"));
     EXPECT_TRUE(verifies("!storage.list<!storage.node_id>", "!storage.any", "!storage.node_id"));
-    EXPECT_TRUE(verifies("!storage.list<!storage.any>", "!storage.nullable<!storage.any>", "!storage.nullable<!storage.any>"));
+    EXPECT_TRUE(verifies("!storage.list<!storage.any>", "!storage.any", "!storage.any"));
 }
 
 TEST_F(ContainerIndexVerifierTest, acceptsTaggedCellsOverAMapOrACell) {
     EXPECT_TRUE(verifies("!storage.map", "!storage.any", "!storage.any"));
-    EXPECT_TRUE(verifies("!storage.any", "!storage.nullable<!storage.any>", "!storage.any"));
+    EXPECT_TRUE(verifies("!storage.any", "!storage.any", "!storage.any"));
 }
 
 TEST_F(ContainerIndexVerifierTest, rejectsAListElementAnsweredAsAPlainValue) {

@@ -31,7 +31,7 @@ constexpr std::array<std::string_view, 12> PLAIN_SCALARS {
     "!storage.value_type",
 };
 
-constexpr std::array<std::string_view, 9> READ_AS_CELLS {
+constexpr std::array<std::string_view, 8> READ_AS_CELLS {
     "!storage.nullable<i64>",
     "!storage.nullable<!storage.label_id>",
     "!storage.nullable<none>",
@@ -40,7 +40,6 @@ constexpr std::array<std::string_view, 9> READ_AS_CELLS {
     "!storage.list<i64>",
     "!storage.map",
     "!storage.any",
-    "!storage.nullable<!storage.any>",
 };
 
 std::string substituted(std::string_view text, std::string_view placeholder, std::string_view element) {
