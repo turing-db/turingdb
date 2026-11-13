@@ -39,6 +39,7 @@
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
+#include "IRTestColumns.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
@@ -102,7 +103,7 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
-        const auto* names = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
+        const auto* names = columnAs<ColumnOptVector<std::string_view>>(chunks[0]);
         ASSERT_NE(names, nullptr);
 
         const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[1]);
@@ -110,13 +111,9 @@ public:
 
         _appendCalls++;
 
-        const auto& nameRaw = names->getRaw();
         const auto& countRaw = counts->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            std::optional<std::string> name;
-            if (nameRaw[rowIndex]) {
-                name = std::string(*nameRaw[rowIndex]);
-            }
+            const std::optional<std::string> name = getOptionalString(names, rowIndex);
 
             _rows.emplace_back(name, countRaw[rowIndex]);
         }
@@ -139,16 +136,15 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
-        const auto* ages = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[0]);
+        const auto* ages = columnAs<ColumnOptVector<int64_t>>(chunks[0]);
         ASSERT_NE(ages, nullptr);
 
         const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[1]);
         ASSERT_NE(counts, nullptr);
 
-        const auto& ageRaw = ages->getRaw();
         const auto& countRaw = counts->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _rows.emplace_back(ageRaw[rowIndex], countRaw[rowIndex]);
+            _rows.emplace_back(ages->get(rowIndex), countRaw[rowIndex]);
         }
     }
 

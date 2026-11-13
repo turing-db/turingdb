@@ -40,6 +40,7 @@
 
 #include "TuringException.h"
 
+#include "IRTestColumns.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
@@ -60,21 +61,15 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
-        const auto* keys = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[0]);
+        const auto* keys = columnAs<ColumnOptVector<int64_t>>(chunks[0]);
         const auto* values = dynamic_cast<const ColumnVector<int64_t>*>(chunks[1]);
         ASSERT_NE(keys, nullptr);
         ASSERT_NE(values, nullptr);
         ASSERT_EQ(keys->size(), values->size());
 
-        const auto& keyRaw = keys->getRaw();
         const auto& valueRaw = values->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            std::optional<int64_t> key;
-            if (keyRaw[rowIndex]) {
-                key = *keyRaw[rowIndex];
-            }
-
-            _rows.push_back({key, valueRaw[rowIndex]});
+            _rows.push_back({keys->get(rowIndex), valueRaw[rowIndex]});
         }
     }
 

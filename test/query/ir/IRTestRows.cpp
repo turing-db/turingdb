@@ -25,6 +25,8 @@
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
+#include "IRTestColumns.h"
+
 #include "ID.h"
 
 using namespace db;
@@ -45,18 +47,17 @@ void renderEntityCell(ID id, std::string& out) {
 
 template <typename ID>
 bool renderOptIDCell(const Column* column, size_t row, std::string& out) {
-    const auto* ids = dynamic_cast<const ColumnOptVector<ID>*>(column);
+    const ColumnOptVector<ID>* ids = columnAs<ColumnOptVector<ID>>(column);
     if (!ids) {
         return false;
     }
 
-    const std::optional<ID>& id = (*ids)[row];
-    if (!id) {
+    if (!ids->isValid(row)) {
         out = "null";
         return true;
     }
 
-    renderEntityCell(*id, out);
+    renderEntityCell(ids->getValue(row), out);
 
     return true;
 }
@@ -238,39 +239,37 @@ void renderValue(const T& value, std::string& out) {
 
 template <typename T>
 bool renderValueCell(const Column* column, size_t row, std::string& out) {
-    if (const auto* constCol = dynamic_cast<const ColumnConst<T>*>(column)) {
+    if (const auto* constCol = columnAs<ColumnConst<T>>(column)) {
         renderValue<T>(constCol->at(0), out);
         return true;
     }
 
-    if (const auto* optConstCol = dynamic_cast<const ColumnConst<std::optional<T>>*>(column)) {
-        const std::optional<T>& value = optConstCol->at(0);
-        if (!value) {
+    if (const auto* optConstCol = columnAs<ColumnConst<std::optional<T>>>(column)) {
+        if (!optConstCol->isValid(0)) {
             out = "null";
             return true;
         }
 
-        renderValue<T>(*value, out);
+        renderValue<T>(optConstCol->getValue(0), out);
         return true;
     }
 
-    if (const auto* plain = dynamic_cast<const ColumnVector<T>*>(column)) {
+    if (const auto* plain = columnAs<ColumnVector<T>>(column)) {
         renderValue<T>((*plain)[row], out);
         return true;
     }
 
-    const auto* values = dynamic_cast<const ColumnOptVector<T>*>(column);
+    const ColumnOptVector<T>* values = columnAs<ColumnOptVector<T>>(column);
     if (!values) {
         return false;
     }
 
-    const std::optional<T> value = (*values)[row];
-    if (!value) {
+    if (!values->isValid(row)) {
         out = "null";
         return true;
     }
 
-    renderValue<T>(*value, out);
+    renderValue<T>(values->getValue(row), out);
 
     return true;
 }
@@ -278,62 +277,58 @@ bool renderValueCell(const Column* column, size_t row, std::string& out) {
 }
 
 void turing::test::renderCell(const Column* column, size_t row, std::string& out) {
-    if (const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(column)) {
+    if (const auto* nodeIDs = columnAs<ColumnNodeIDs>(column)) {
         renderEntityCell((*nodeIDs)[row], out);
-    } else if (const auto* edgeIDs = dynamic_cast<const ColumnEdgeIDs*>(column)) {
+    } else if (const auto* edgeIDs = columnAs<ColumnEdgeIDs>(column)) {
         renderEntityCell((*edgeIDs)[row], out);
-    } else if (const auto* edgeTypes = dynamic_cast<const ColumnEdgeTypes*>(column)) {
+    } else if (const auto* edgeTypes = columnAs<ColumnEdgeTypes>(column)) {
         renderEntityCell((*edgeTypes)[row], out);
-    } else if (dynamic_cast<const ColumnConst<PropertyNull>*>(column)) {
+    } else if (columnAs<ColumnConst<PropertyNull>>(column)) {
         out = "null";
-    } else if (const auto* constList = dynamic_cast<const ColumnConst<ListView>*>(column)) {
+    } else if (const auto* constList = columnAs<ColumnConst<ListView>>(column)) {
         out.clear();
         renderList(constList->at(0), out);
-    } else if (const auto* constOptList = dynamic_cast<const ColumnConst<std::optional<ListView>>*>(column)) {
-        const std::optional<ListView>& list = constOptList->at(0);
+    } else if (const auto* constOptList = columnAs<ColumnConst<std::optional<ListView>>>(column)) {
         out.clear();
-        if (list) {
-            renderList(*list, out);
+        if (constOptList->isValid(0)) {
+            renderList(constOptList->getValue(0), out);
         } else {
             out = "null";
         }
-    } else if (const auto* constElement = dynamic_cast<const ColumnConst<CellView>*>(column)) {
+    } else if (const auto* constElement = columnAs<ColumnConst<CellView>>(column)) {
         out.clear();
         renderCellView(constElement->at(0), out);
-    } else if (const auto* optLists = dynamic_cast<const ColumnOptVector<ListView>*>(column)) {
-        const std::optional<ListView>& list = (*optLists)[row];
+    } else if (const auto* optLists = columnAs<ColumnOptVector<ListView>>(column)) {
         out.clear();
-        if (list) {
-            renderList(*list, out);
+        if (optLists->isValid(row)) {
+            renderList(optLists->getValue(row), out);
         } else {
             out = "null";
         }
-    } else if (const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(column)) {
+    } else if (const auto* lists = columnAs<ColumnVector<ListView>>(column)) {
         out.clear();
         renderList((*lists)[row], out);
-    } else if (const auto* elements = dynamic_cast<const ColumnVector<CellView>*>(column)) {
+    } else if (const auto* elements = columnAs<ColumnVector<CellView>>(column)) {
         out.clear();
         renderCellView((*elements)[row], out);
-    } else if (const auto* constMap = dynamic_cast<const ColumnConst<MapView>*>(column)) {
+    } else if (const auto* constMap = columnAs<ColumnConst<MapView>>(column)) {
         out.clear();
         renderMap(constMap->at(0), out);
-    } else if (const auto* constOptMap = dynamic_cast<const ColumnConst<std::optional<MapView>>*>(column)) {
-        const std::optional<MapView>& map = constOptMap->at(0);
+    } else if (const auto* constOptMap = columnAs<ColumnConst<std::optional<MapView>>>(column)) {
         out.clear();
-        if (map) {
-            renderMap(*map, out);
+        if (constOptMap->isValid(0)) {
+            renderMap(constOptMap->getValue(0), out);
         } else {
             out = "null";
         }
-    } else if (const auto* optMaps = dynamic_cast<const ColumnOptVector<MapView>*>(column)) {
-        const std::optional<MapView>& map = (*optMaps)[row];
+    } else if (const auto* optMaps = columnAs<ColumnOptVector<MapView>>(column)) {
         out.clear();
-        if (map) {
-            renderMap(*map, out);
+        if (optMaps->isValid(row)) {
+            renderMap(optMaps->getValue(row), out);
         } else {
             out = "null";
         }
-    } else if (const auto* maps = dynamic_cast<const ColumnVector<MapView>*>(column)) {
+    } else if (const auto* maps = columnAs<ColumnVector<MapView>>(column)) {
         out.clear();
         renderMap((*maps)[row], out);
     } else if (renderOptIDCell<EdgeTypeID>(column, row, out)) {

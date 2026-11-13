@@ -32,6 +32,7 @@
 
 #include "SimpleGraph.h"
 
+#include "IRTestColumns.h"
 #include "TuringTest.h"
 
 using namespace db;
@@ -48,19 +49,15 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
-        const auto* keys = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
+        const auto* keys = columnAs<ColumnOptVector<std::string_view>>(chunks[0]);
         const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(chunks[1]);
         ASSERT_NE(keys, nullptr);
         ASSERT_NE(lists, nullptr);
         ASSERT_EQ(keys->size(), lists->size());
 
-        const auto& keyRaw = keys->getRaw();
         const auto& listRaw = lists->getRaw();
         for (size_t row = offset; row < offset + rowCount; row++) {
-            std::optional<std::string> key;
-            if (keyRaw[row]) {
-                key = std::string(*keyRaw[row]);
-            }
+            const std::optional<std::string> key = getOptionalString(keys, row);
 
             std::vector<std::string> names;
             for (const CellView& element : listRaw[row]) {

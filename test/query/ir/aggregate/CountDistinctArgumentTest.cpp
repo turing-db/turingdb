@@ -43,6 +43,7 @@
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
+#include "IRTestColumns.h"
 #include "TuringException.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
@@ -143,18 +144,14 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
-        const auto* names = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
+        const auto* names = columnAs<ColumnOptVector<std::string_view>>(chunks[0]);
         const auto* values = dynamic_cast<const ColumnVector<int64_t>*>(chunks[1]);
         ASSERT_NE(names, nullptr);
         ASSERT_NE(values, nullptr);
 
-        const std::vector<std::optional<std::string_view>>& nameRaw = names->getRaw();
         const std::vector<int64_t>& valueRaw = values->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            std::optional<std::string> name;
-            if (nameRaw[rowIndex]) {
-                name = std::string(*nameRaw[rowIndex]);
-            }
+            const std::optional<std::string> name = getOptionalString(names, rowIndex);
 
             _rows.emplace_back(name, valueRaw[rowIndex]);
         }
@@ -220,12 +217,11 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
 
-        const auto* values = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[0]);
+        const auto* values = columnAs<ColumnOptVector<int64_t>>(chunks[0]);
         ASSERT_NE(values, nullptr);
 
-        const std::vector<std::optional<int64_t>>& raw = values->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _values.push_back(raw[rowIndex]);
+            _values.push_back(values->get(rowIndex));
         }
     }
 
@@ -241,12 +237,11 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
 
-        const auto* values = dynamic_cast<const ColumnOptVector<double>*>(chunks[0]);
+        const auto* values = columnAs<ColumnOptVector<double>>(chunks[0]);
         ASSERT_NE(values, nullptr);
 
-        const std::vector<std::optional<double>>& raw = values->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _values.push_back(raw[rowIndex]);
+            _values.push_back(values->get(rowIndex));
         }
     }
 
@@ -296,18 +291,14 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
-        const auto* names = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
+        const auto* names = columnAs<ColumnOptVector<std::string_view>>(chunks[0]);
         const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[1]);
         ASSERT_NE(names, nullptr);
         ASSERT_NE(counts, nullptr);
 
-        const std::vector<std::optional<std::string_view>>& nameRaw = names->getRaw();
         const std::vector<uint64_t>& countRaw = counts->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            std::optional<std::string> name;
-            if (nameRaw[rowIndex]) {
-                name = std::string(*nameRaw[rowIndex]);
-            }
+            const std::optional<std::string> name = getOptionalString(names, rowIndex);
 
             _rows.emplace_back(name, countRaw[rowIndex]);
         }
@@ -329,20 +320,15 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
-        const auto* names = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
-        const auto* sums = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[1]);
+        const auto* names = columnAs<ColumnOptVector<std::string_view>>(chunks[0]);
+        const auto* sums = columnAs<ColumnOptVector<int64_t>>(chunks[1]);
         ASSERT_NE(names, nullptr);
         ASSERT_NE(sums, nullptr);
 
-        const std::vector<std::optional<std::string_view>>& nameRaw = names->getRaw();
-        const std::vector<std::optional<int64_t>>& sumRaw = sums->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            std::optional<std::string> name;
-            if (nameRaw[rowIndex]) {
-                name = std::string(*nameRaw[rowIndex]);
-            }
+            const std::optional<std::string> name = getOptionalString(names, rowIndex);
 
-            _rows.emplace_back(name, sumRaw[rowIndex]);
+            _rows.emplace_back(name, sums->get(rowIndex));
         }
     }
 
