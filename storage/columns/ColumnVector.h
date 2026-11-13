@@ -71,17 +71,17 @@ public:
     bool empty() const { return _data.empty(); }
     size_t size() const override { return _data.size(); }
 
-    T* data() { return _data.data(); }
-    const T* data() const { return _data.data(); }
+    T* data() requires (!IS_NULLABLE) { return _data.data(); }
+    const T* data() const requires (!IS_NULLABLE) { return _data.data(); }
 
-    const T& operator[](size_t i) const { return _data[i]; }
-    T& operator[](size_t i) { return _data[i]; }
-    const T& at(size_t i) const { return _data.at(i); }
-    T& at(size_t i) { return _data.at(i); }
+    const T& operator[](size_t i) const requires (!IS_NULLABLE) { return _data[i]; }
+    T& operator[](size_t i) requires (!IS_NULLABLE) { return _data[i]; }
+    const T& at(size_t i) const requires (!IS_NULLABLE) { return _data.at(i); }
+    T& at(size_t i) requires (!IS_NULLABLE) { return _data.at(i); }
 
-    void set(size_t i, T&& v) { _data[i] = std::move(v); }
-    void set(size_t i, const T& v) { _data[i] = v; }
-    T getCopy(size_t i) const { return _data[i]; }
+    void set(size_t i, T&& v) requires (!IS_NULLABLE) { _data[i] = std::move(v); }
+    void set(size_t i, const T& v) requires (!IS_NULLABLE) { _data[i] = v; }
+    T getCopy(size_t i) const requires (!IS_NULLABLE) { return _data[i]; }
 
     bool isValid(size_t row) const requires IS_NULLABLE { return _data[row].has_value(); }
     T get(size_t row) const requires IS_NULLABLE { return _data[row]; }
@@ -114,19 +114,19 @@ public:
         return std::ranges::any_of(_data, [](const T& slot) { return !slot.has_value(); });
     }
 
-    Iterator begin() { return _data.begin(); }
-    ConstIterator begin() const { return _data.begin(); }
-    ConstIterator cbegin() const { return _data.cbegin(); }
-    ReverseIterator rbegin() { return _data.rbegin(); }
-    ConstReverseIterator rbegin() const { return _data.rbegin(); }
-    ConstReverseIterator crbegin() const { return _data.crbegin(); }
+    Iterator begin() requires (!IS_NULLABLE) { return _data.begin(); }
+    ConstIterator begin() const requires (!IS_NULLABLE) { return _data.begin(); }
+    ConstIterator cbegin() const requires (!IS_NULLABLE) { return _data.cbegin(); }
+    ReverseIterator rbegin() requires (!IS_NULLABLE) { return _data.rbegin(); }
+    ConstReverseIterator rbegin() const requires (!IS_NULLABLE) { return _data.rbegin(); }
+    ConstReverseIterator crbegin() const requires (!IS_NULLABLE) { return _data.crbegin(); }
 
-    Iterator end() { return _data.end(); }
-    ConstIterator end() const { return _data.end(); }
-    ConstIterator cend() const { return _data.cend(); }
-    ReverseIterator rend() { return _data.rend(); }
-    ConstReverseIterator rend() const { return _data.rend(); }
-    ConstReverseIterator crend() const { return _data.crend(); }
+    Iterator end() requires (!IS_NULLABLE) { return _data.end(); }
+    ConstIterator end() const requires (!IS_NULLABLE) { return _data.end(); }
+    ConstIterator cend() const requires (!IS_NULLABLE) { return _data.cend(); }
+    ReverseIterator rend() requires (!IS_NULLABLE) { return _data.rend(); }
+    ConstReverseIterator rend() const requires (!IS_NULLABLE) { return _data.rend(); }
+    ConstReverseIterator crend() const requires (!IS_NULLABLE) { return _data.crend(); }
 
     void assign(const Column* other) override {
         const ColumnVector<T>* otherCol = dynamic_cast<const ColumnVector<T>*>(other);
@@ -147,8 +147,8 @@ public:
 
     void resize(size_t size) { _data.resize(size); }
 
-    void push_back(const T& v) { _data.push_back(v); }
-    void push_back(T&& v) { _data.push_back(std::move(v)); }
+    void push_back(const T& v) requires (!IS_NULLABLE) { _data.push_back(v); }
+    void push_back(T&& v) requires (!IS_NULLABLE) { _data.push_back(std::move(v)); }
     void reserve(size_t capacity) { _data.reserve(capacity); }
 
     void appendRows(const ColumnVector& source, size_t startLine, size_t rowCount) {
@@ -163,7 +163,7 @@ public:
     size_t capacity() const { return _data.capacity(); }
 
     template <typename... Args>
-    auto& emplace_back(Args&&... args) {
+    auto& emplace_back(Args&&... args) requires (!IS_NULLABLE) {
         return _data.emplace_back(std::forward<Args>(args)...);
     }
 
@@ -177,13 +177,13 @@ public:
         }
     }
 
-    const T& back() const { return _data.back(); }
-    T& back() { return _data.back(); }
-    const T& front() const { return _data.front(); }
-    T& front() { return _data.front(); }
+    const T& back() const requires (!IS_NULLABLE) { return _data.back(); }
+    T& back() requires (!IS_NULLABLE) { return _data.back(); }
+    const T& front() const requires (!IS_NULLABLE) { return _data.front(); }
+    T& front() requires (!IS_NULLABLE) { return _data.front(); }
 
-    std::vector<T>& getRaw() { return _data; }
-    const std::vector<T>& getRaw() const { return _data; }
+    std::vector<T>& getRaw() requires (!IS_NULLABLE) { return _data; }
+    const std::vector<T>& getRaw() const requires (!IS_NULLABLE) { return _data; }
 
     static consteval auto staticKind() { return _staticKind; }
 
