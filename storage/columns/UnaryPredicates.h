@@ -1,6 +1,5 @@
 #pragma once
 
-#include "ColumnMask.h"
 #include "ColumnOptMask.h"
 #include "ColumnVector.h"
 #include "ColumnConst.h"
@@ -42,19 +41,6 @@ inline std::optional<CustomBool> optionalUnaryPredicate(T&& a) {
  */
 template <typename Op, typename T>
 struct UnaryPredicateExecutor {
-    static void apply(ColumnMask* res, const ColumnMask* arg) {
-        const size_t size = arg->size();
-
-        res->resize(size);
-        auto& resd = res->getRaw();
-        const auto& argd = arg->getRaw();
-
-        auto op = Op {};
-        for (size_t i = 0; i < size; i++) {
-            resd[i] = op(argd[i]);
-        }
-    }
-
     static void apply(ColumnOptMask* res, const ColumnVector<T>* arg)
         requires TypeUtils::is_optional_v<T>
     {
@@ -97,7 +83,7 @@ struct UnaryPredicate {
     }
 
     template <typename T>
-    inline ColumnMask::Bool_t operator()(T&& a) {
+    inline CustomBool operator()(T&& a) {
         return F {}(std::forward<T>(a));
     }
 };

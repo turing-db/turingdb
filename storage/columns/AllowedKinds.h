@@ -134,17 +134,6 @@ template <typename... Tuples>
 using GenerateKindPairList =
     KindPairListFromTuple<typename TupleFlatten<Tuples...>::Type>::Type;
 
-template <typename NonTemplated, typename K>
-struct MixedKind {
-    using NonTemplatedType = NonTemplated;
-    using Kind = K;
-};
-
-template <typename... Mixed>
-struct AllowedMixedList {
-    static constexpr std::size_t size = sizeof...(Mixed);
-};
-
 template <ContainerKind::Code... Excluded>
 struct ExcludedContainers {
     // Contains
@@ -262,13 +251,6 @@ struct PairRestrictions<Op> {
         >
     >;
 
-    using AllowedMixed = AllowedMixedList<
-        MixedKind<ColumnMask, CustomBool>,
-        MixedKind<ColumnMask, std::optional<CustomBool>>,
-        MixedKind<ColumnMask, CellView>,
-        MixedKind<ColumnMask, std::optional<CellView>>
-    >;
-
     using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnSet>()
     >;
@@ -322,13 +304,6 @@ struct PairRestrictions<Op> {
         CellKindPairs<ListView>::Pairs
     >;
 
-    using AllowedMixed = AllowedMixedList<
-        MixedKind<ColumnMask, CustomBool>,
-        MixedKind<ColumnMask, std::optional<CustomBool>>,
-        MixedKind<ColumnMask, CellView>,
-        MixedKind<ColumnMask, std::optional<CellView>>
-    >;
-
     using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnSet>()
     >;
@@ -350,11 +325,8 @@ struct PairRestrictions<Op> {
         std::tuple<KindPair<CellView, CellView>>
     >;
 
-    using AllowedMixed = AllowedMixedList<>;
-
     using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnSet>()
     >;
 };
 
@@ -378,12 +350,6 @@ struct PairRestrictions<Op> {
         >
     >;
 
-    using AllowedMixed = AllowedMixedList<
-        MixedKind<ColumnMask, CustomBool>,
-        MixedKind<ColumnMask, std::optional<CustomBool>>
-    >;
-
-    // Mask operations also included
     using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnSet>()
     >;
@@ -509,11 +475,8 @@ struct PairRestrictions<Op> {
         typename CellListElementKindPairs<Op>::Pairs
     >;
 
-    using AllowedMixed = AllowedMixedList<>;
-
     using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnSet>()
     >;
 };
 
@@ -544,11 +507,8 @@ struct PairRestrictions<Op> {
         TextKindPairs<types::Bool::Primitive>::Pairs
     >;
 
-    using AllowedMixed = AllowedMixedList<>;
-
     using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnSet>()
     >;
 };
 
@@ -574,11 +534,8 @@ struct PairRestrictions<Op> {
         >
     >;
 
-    using AllowedMixed = AllowedMixedList<>;
-
     using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnSet>()
     >;
 };
 
@@ -603,11 +560,8 @@ struct PairRestrictions<Op> {
         >
     >;
 
-    using AllowedMixed = AllowedMixedList<>;
-
     using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnSet>()
     >;
 };
 
@@ -631,11 +585,8 @@ struct PairRestrictions<Op> {
         >
     >;
 
-    using AllowedMixed = AllowedMixedList<>;
-
     using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnSet>()
     >;
 };
 
@@ -651,8 +602,7 @@ struct TypeRestrictions<OP_NOT> {
     >>;
 
     using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnSet>()
     >;
 };
 
@@ -664,7 +614,6 @@ struct TypeRestrictions<OP_FUNC_LABELS> {
 
     using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>(),
         ContainerKind::code<ColumnConst>()
     >;
 };
@@ -677,7 +626,6 @@ struct TypeRestrictions<OP_FUNC_EDGE_TYPES> {
 
     using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>(),
         ContainerKind::code<ColumnConst>()
     >;
 };
@@ -694,8 +642,7 @@ struct TypeRestrictions<Func> {
     >>;
 
     using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnSet>()
     >;
 };
 
@@ -708,8 +655,7 @@ struct TypeRestrictions<Func> {
     >>;
 
     using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnSet>()
     >;
 };
 
@@ -721,10 +667,8 @@ struct PairRestrictions<Op> {
         CellKindPairs<types::Embedding::Primitive>::Pairs,
         OptionalKindPairs<CellView, CellView>::Pairs
     >;
-    using AllowedMixed = AllowedMixedList<>;
     using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnSet>()
     >;
 };
 
@@ -853,15 +797,13 @@ struct WriteProcessorPropertyTypes {
     // Used for specialised dispatching logic for only vectors
     using ExcludedVector = ExcludedContainers<
         ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnConst>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnConst>()
     >;
 
     // Used for specialised dispatching logic for only consts
     using ExcludedConst = ExcludedContainers<
         ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnVector>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnVector>()
     >;
 
 };
@@ -880,8 +822,7 @@ struct ConstScanTypes {
 
     using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnConst>(),
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnSet>()
     >;
 };
 
@@ -897,8 +838,7 @@ struct IndexedTypes {
     >>;
     using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnConst>(),
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnSet>()
     >;
 };
 
@@ -909,8 +849,7 @@ struct ListableTypes {
     /// For constructing list literals: all elements should be const
     using LiteralExcluded = ExcludedContainers<
         ContainerKind::code<ColumnVector>(),
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnSet>()
     >;
 };
 
@@ -920,8 +859,7 @@ struct MappableTypes {
     /// For constructing map literals: all elements should be const
     using LiteralExcluded = ExcludedContainers<
         ContainerKind::code<ColumnVector>(),
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnSet>()
     >;
 };
 
@@ -953,12 +891,9 @@ struct ValueHashJoinPairs {
         OptionalKindPairs<std::string_view, std::string_view>::Pairs
     >;
 
-    using AllowedMixed = AllowedMixedList<>;
-
     using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnConst>(),
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnSet>()
     >;
 };
 
@@ -1006,8 +941,7 @@ struct CartesianProductKinds {
     >>;
 
     using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnSet>()
     >;
 };
 
@@ -1025,8 +959,7 @@ struct NumericallyAggregatedTypes {
     >>;
 
     using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnSet>()
     >;
 };
 
@@ -1037,8 +970,7 @@ struct GraphSAGEInputs {
     >>;
 
     using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnSet>()
     >;
 };
 

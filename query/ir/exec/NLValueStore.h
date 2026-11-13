@@ -48,9 +48,6 @@ public:
     {
     }
 
-    void operator()(const ColumnMask* column) {
-    }
-
     template <template <typename> typename Container, typename ElementType>
     void operator()(const Container<ElementType>* column) {
         constexpr bool holdsViews = NLViewElement<ElementType> || NLOptionalViewElement<ElementType>;

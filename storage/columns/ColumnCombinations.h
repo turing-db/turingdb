@@ -4,6 +4,7 @@
 
 #include "ColumnVector.h"
 #include "ColumnMask.h"
+#include "ColumnOptMask.h"
 #include "ColumnConst.h"
 #include "TypeUtils.h"
 #include "CellView.h"
@@ -40,106 +41,6 @@ public:
 
 template <typename Op, typename ColT, typename ColU>
 class ColumnCombinationImpl;
-
-/*
- * @brief Mask Operations
- * @detail Resultant type is the type of the non-mask operand
- */
-template <typename Op>
-class ColumnCombinationImpl<Op, ColumnMask, ColumnMask> {
-public:
-    using ResultColumnType = ColumnMask;
-};
-
-template <typename Op, typename T>
-class ColumnCombinationImpl<Op, ColumnMask, ColumnVector<T>> {
-public:
-    using ResultColumnType = ColumnVector<T>;
-};
-
-template <typename Op, typename T>
-class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnMask> {
-public:
-    using ResultColumnType = ColumnVector<T>;
-};
-
-/// A predicate over two booleans that hold no null answers a mask, whether each is a mask
-/// or a plain boolean column
-template <typename Op>
-class ColumnCombinationImpl<Op, ColumnMask, ColumnVector<CustomBool>> {
-public:
-    using ResultColumnType = ColumnMask;
-};
-
-template <typename Op>
-class ColumnCombinationImpl<Op, ColumnVector<CustomBool>, ColumnMask> {
-public:
-    using ResultColumnType = ColumnMask;
-};
-
-/// A type-erased cell holds no truth value of its own, so comparing a mask against one
-/// answers a mask rather than a column of cells - a nullable one, since the cell may hold a
-/// null or a value of another type
-template <typename Op>
-class ColumnCombinationImpl<Op, ColumnMask, ColumnVector<CellView>> {
-public:
-    using ResultColumnType = ColumnOptMask;
-};
-
-template <typename Op>
-class ColumnCombinationImpl<Op, ColumnVector<CellView>, ColumnMask> {
-public:
-    using ResultColumnType = ColumnOptMask;
-};
-
-template <typename Op>
-class ColumnCombinationImpl<Op, ColumnMask, ColumnConst<CellView>> {
-public:
-    using ResultColumnType = ColumnOptMask;
-};
-
-template <typename Op>
-class ColumnCombinationImpl<Op, ColumnConst<CellView>, ColumnMask> {
-public:
-    using ResultColumnType = ColumnOptMask;
-};
-
-template <typename Op>
-class ColumnCombinationImpl<Op, ColumnMask, ColumnVector<std::optional<CellView>>> {
-public:
-    using ResultColumnType = ColumnOptMask;
-};
-
-template <typename Op>
-class ColumnCombinationImpl<Op, ColumnVector<std::optional<CellView>>, ColumnMask> {
-public:
-    using ResultColumnType = ColumnOptMask;
-};
-
-/// Const and a mask, e.g. MASK && TRUE
-template <typename Op, typename T>
-class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnMask> {
-public:
-    using ResultColumnType = ColumnMask;
-};
-
-template <typename Op, typename T>
-class ColumnCombinationImpl<Op, ColumnMask, ColumnConst<T>> {
-public:
-    using ResultColumnType = ColumnMask;
-};
-
-template <typename Op, typename T>
-class ColumnCombinationImpl<Op, ColumnMask, ColumnConst<std::optional<T>>> {
-public:
-    using ResultColumnType = ColumnOptMask;
-};
-
-template <typename Op, typename T>
-class ColumnCombinationImpl<Op, ColumnConst<std::optional<T>>, ColumnMask> {
-public:
-    using ResultColumnType = ColumnOptMask;
-};
 
 /*
  * @brief Predicate Operations (non-optional)

@@ -32,7 +32,7 @@ public:
 
         if constexpr (std::is_same_v<U, std::false_type>) {
             // Column is not a template class
-            // It is either ColumnMask or ListColumnConst
+            // It is ColumnStringTable
             constexpr Code container = ContainerKind::code<T>();
             static_assert(container != ContainerKind::Invalid);
             constexpr Code colKind = container << InternalKind::BitCount;

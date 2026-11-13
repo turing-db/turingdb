@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "CellTag.h"
+#include "columns/ColumnMask.h"
 #include "map/MapView.h"
 #include "metadata/PropertyType.h"
 #include "versioning/CommitWriteBuffer.h"
@@ -16,7 +17,6 @@
 namespace db {
 
 class Column;
-class ColumnMask;
 class GraphView;
 class MetadataBuilder;
 

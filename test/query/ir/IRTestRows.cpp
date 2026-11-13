@@ -11,7 +11,6 @@
 #include "columns/ColumnConst.h"
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
-#include "columns/ColumnMask.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "dataframe/Dataframe.h"
@@ -285,8 +284,6 @@ void turing::test::renderCell(const Column* column, size_t row, std::string& out
         renderEntityCell((*edgeIDs)[row], out);
     } else if (const auto* edgeTypes = dynamic_cast<const ColumnEdgeTypes*>(column)) {
         renderEntityCell((*edgeTypes)[row], out);
-    } else if (const auto* mask = dynamic_cast<const ColumnMask*>(column)) {
-        out = (*mask)[row] ? "true" : "false";
     } else if (dynamic_cast<const ColumnConst<PropertyNull>*>(column)) {
         out = "null";
     } else if (const auto* constList = dynamic_cast<const ColumnConst<ListView>*>(column)) {

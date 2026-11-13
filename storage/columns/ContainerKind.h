@@ -19,7 +19,6 @@ class ColumnConst;
 template <typename T>
 class ColumnSet;
 
-class ColumnMask;
 class ColumnStringTable;
 
 // Implementation
@@ -30,7 +29,6 @@ public:
         TemplateKind<ColumnVector>,
         TemplateKind<ColumnConst>,
         TemplateKind<ColumnSet>,
-        ColumnMask,
         ColumnStringTable>;
 
     using Code = uint8_t;
