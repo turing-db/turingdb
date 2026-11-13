@@ -750,7 +750,7 @@ public:
     void markSearched(std::string_view indexName, size_t neighbourCount, std::span<const float> queryVector);
 
     std::vector<NodeID>& neighbourIDs() { return _neighbourIDs; }
-    std::vector<std::optional<types::Double::Primitive>>& neighbourScores() { return _neighbourScores; }
+    std::vector<types::Double::Primitive>& neighbourScores() { return _neighbourScores; }
 
 private:
     ColumnNodeIDs* _ids {nullptr};
@@ -763,7 +763,7 @@ private:
     const Column* _boundQueryVector {nullptr};
     NLLimitState* _limit {nullptr};
     std::vector<NodeID> _neighbourIDs;
-    std::vector<std::optional<types::Double::Primitive>> _neighbourScores;
+    std::vector<types::Double::Primitive> _neighbourScores;
     std::string _searchedIndexName;
     size_t _searchedNeighbourCount {0};
     std::vector<float> _searchedVector;
