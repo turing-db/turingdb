@@ -357,14 +357,13 @@ private:
     // for an absent value; returns whether the column matched T
     template <typename T>
     static bool printValueCell(const Column* column, size_t row) {
-        const auto* values = dynamic_cast<const ColumnOptVector<T>*>(column);
-        if (!values) {
+        if (column->getKind() != ColumnOptVector<T>::staticKind()) {
             return false;
         }
 
-        const std::optional<T> value = (*values)[row];
-        if (value) {
-            std::cout << *value;
+        const ColumnOptVector<T>* values = static_cast<const ColumnOptVector<T>*>(column);
+        if (values->isValid(row)) {
+            std::cout << values->getValue(row);
         } else {
             std::cout << "null";
         }
@@ -401,23 +400,24 @@ private:
     // An embedding cell needs its own printer: the value is a span of floats,
     // which has no operator<<, so render it as [a, b, c]
     static bool printEmbeddingCell(const Column* column, size_t row) {
-        const auto* values = dynamic_cast<const ColumnOptVector<std::span<const float>>*>(column);
-        if (!values) {
+        using EmbeddingColumn = ColumnOptVector<std::span<const float>>;
+        if (column->getKind() != EmbeddingColumn::staticKind()) {
             return false;
         }
 
-        const std::optional<std::span<const float>> value = (*values)[row];
-        if (!value) {
+        const EmbeddingColumn* values = static_cast<const EmbeddingColumn*>(column);
+        if (!values->isValid(row)) {
             std::cout << "null";
             return true;
         }
 
+        const std::span<const float> value = values->getValue(row);
         std::cout << "[";
-        for (size_t component = 0; component < value->size(); component++) {
+        for (size_t component = 0; component < value.size(); component++) {
             if (component > 0) {
                 std::cout << ", ";
             }
-            std::cout << (*value)[component];
+            std::cout << value[component];
         }
         std::cout << "]";
 
