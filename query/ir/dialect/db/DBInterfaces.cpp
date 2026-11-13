@@ -20,7 +20,7 @@ MutableOperandRange unsegmentedRun(Operation* op, size_t offset, size_t count) {
 // the op holding it pads or merges them
 bool matchYieldedRun(Region& region, size_t& resultOffset, size_t& count) {
     mlir::db::ColumnCarrierOpInterface carrier = dyn_cast<mlir::db::ColumnCarrierOpInterface>(region.getParentOp());
-    if (!carrier || !carrier.getYieldedResultOffset(region, resultOffset)) {
+    if (!carrier || !mlir::db::terminatorOf(region) || !carrier.getYieldedResultOffset(region, resultOffset)) {
         return false;
     }
 
@@ -46,16 +46,19 @@ Value mlir::db::carrySetRowSource(Operation* op, OpResult result) {
     return op->getOperand(carrySet._operandOffset + resultNumber - carrySet._resultOffset);
 }
 
-void mlir::db::collectRowSource(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    const OpResult result = dyn_cast<OpResult>(value);
-    if (!result) {
-        return;
-    }
-
+void mlir::db::collectRowSource(OpResult result, llvm::SmallVectorImpl<Value>& carried) {
     ColumnCarrierOpInterface carrier = cast<ColumnCarrierOpInterface>(result.getOwner());
     if (const Value rowSource = carrier.getRowSource(result)) {
         carried.push_back(rowSource);
     }
+}
+
+bool mlir::db::carrySetRepeatsRows(Operation* op, OpResult result) {
+    ColumnCarrierOpInterface carrier = cast<ColumnCarrierOpInterface>(op);
+
+    CarrySet carrySet;
+
+    return carrier.getCarrySet(carrySet) && carrySet._repeatsRows && carrier.getRowSource(result);
 }
 
 MutableOperandRange mlir::db::unsegmentedCarrySet(Operation* op) {
@@ -115,6 +118,8 @@ bool mlir::db::matchForwardedArgument(BlockArgument argument, Region*& source, s
 
         if (!carrier.forwardsColumns(earlier)) {
             continue;
+        } else if (!terminatorOf(earlier)) {
+            return false;
         }
 
         const size_t forwardedCount = carrier.getForwardedColumnsMutable(earlier).size();
@@ -128,6 +133,19 @@ bool mlir::db::matchForwardedArgument(BlockArgument argument, Region*& source, s
     }
 
     return false;
+}
+
+Value mlir::db::forwardedColumnOf(BlockArgument argument) {
+    Region* source = nullptr;
+    size_t forwardIndex = 0;
+    if (!matchForwardedArgument(argument, source, forwardIndex)) {
+        return {};
+    }
+
+    ColumnCarrierOpInterface carrier = cast<ColumnCarrierOpInterface>(source->getParentOp());
+    const MutableOperandRange forwarded = carrier.getForwardedColumnsMutable(*source);
+
+    return forwarded[static_cast<unsigned>(forwardIndex)].get();
 }
 
 bool mlir::db::matchRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
@@ -199,10 +217,20 @@ Value mlir::db::elementSourceOf(BlockArgument argument) {
     return bindsTheElement ? source : Value();
 }
 
-MutableOperandRange mlir::db::yieldedColumnsOf(Block& body) {
-    Operation* const terminator = body.getTerminator();
+Operation* mlir::db::terminatorOf(Block& body) {
+    return body.mightHaveTerminator() ? body.getTerminator() : nullptr;
+}
 
-    if (Yield yield = dyn_cast<Yield>(terminator)) {
+Operation* mlir::db::terminatorOf(Region& region) {
+    return region.empty() ? nullptr : terminatorOf(region.front());
+}
+
+MutableOperandRange mlir::db::yieldedColumnsOf(Block& body) {
+    Operation* const terminator = terminatorOf(body);
+
+    if (!terminator) {
+        return MutableOperandRange(body.getParentOp(), 0, 0);
+    } else if (Yield yield = dyn_cast<Yield>(terminator)) {
         return yield.getColumnsMutable();
     } else if (SubqueryYield yield = dyn_cast<SubqueryYield>(terminator)) {
         return yield.getColumnsMutable();
@@ -223,6 +251,23 @@ ResultRange mlir::db::yieldedResultsOf(Region& region) {
     }
 
     return results.slice(resultOffset, yieldCount);
+}
+
+ResultRange mlir::db::yieldedOrPaddedResultsOf(Region& region) {
+    const ResultRange results = region.getParentOp()->getResults();
+
+    size_t resultOffset = 0;
+    size_t yieldCount = 0;
+    if (matchYieldedRun(region, resultOffset, yieldCount)) {
+        return results.slice(resultOffset, yieldCount);
+    }
+
+    ColumnCarrierOpInterface carrier = dyn_cast<ColumnCarrierOpInterface>(region.getParentOp());
+    if (!carrier || !terminatorOf(region) || !carrier.getPaddedResultOffset(region, resultOffset)) {
+        return results.take_front(0);
+    }
+
+    return results.slice(resultOffset, yieldedColumnsOf(region.front()).size());
 }
 
 bool mlir::db::matchYieldedResult(OpResult result, Region*& region, size_t& yieldIndex) {

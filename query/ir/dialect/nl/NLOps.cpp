@@ -676,6 +676,10 @@ LogicalResult Constant::verify() {
     return success();
 }
 
+OpFoldResult Constant::fold(FoldAdaptor adaptor) {
+    return getValue();
+}
+
 // A truncate passes its columns through unchanged - only the row count is cut -
 // so each result keeps its input column's chunk type.
 LogicalResult LimitTruncate::inferReturnTypes(MLIRContext* context,

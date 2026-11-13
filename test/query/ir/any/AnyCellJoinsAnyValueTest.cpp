@@ -3,9 +3,12 @@
 #include <string>
 #include <string_view>
 
+#include "QueryStatus.h"
+
 #include "CallV3Test.h"
 #include "IRTestRows.h"
 
+using namespace db;
 using namespace turing::test;
 
 class AnyCellJoinsAnyValueTest : public CallV3Test {
@@ -18,6 +21,11 @@ protected:
         sink.sortedRows(rows);
 
         EXPECT_EQ(rows, expected) << query;
+    }
+
+    // A type-erased cell is typed on each row, so the addition raises at run time
+    void expectRunTimeError(std::string_view query, std::string_view reason) {
+        runQueryExpectingError(query, QueryStatus::Status::EXEC_ERROR, reason);
     }
 
     void readRemyAdamEdgeID(std::string& edgeID) {
@@ -93,22 +101,22 @@ TEST_F(AnyCellJoinsAnyValueTest, answersNullForAnEntityAnOptionalMatchMissed) {
 }
 
 TEST_F(AnyCellJoinsAnyValueTest, raisesWhereTheCellHoldsNoList) {
-    runQueryExpectingError("RETURN [[1], 'a'][1] + {k: 1}", "'String' and 'Map'");
-    runQueryExpectingError("RETURN {k: 1} + [[1], 'a'][1]", "'Map' and 'String'");
-    runQueryExpectingError("RETURN [1, 'a'][0] + {k: 1}", "'Integer' and 'Map'");
-    runQueryExpectingError("RETURN [{k: 1}, 'a'][0] + {k: 2}", "'Map' and 'Map'");
-    runQueryExpectingError("MATCH (n:Person {name: 'Remy'}) RETURN [1, 'a'][0] + n", "'Integer' and 'NodePattern'");
-    runQueryExpectingError("MATCH (n:Person {name: 'Remy'}) RETURN n + ['a', 1][0]", "'NodePattern' and 'String'");
-    runQueryExpectingError("MATCH (:Person {name: 'Remy'})-[e:KNOWS_WELL]->(:Person {name: 'Adam'}) RETURN [true, 'a'][0] + e",
-                           "'Bool' and 'EdgePattern'");
-    runQueryExpectingError("RETURN [1.5, 'a'][0] + point({x: 1, y: 2})", "'Double' and 'Point'");
-    runQueryExpectingError("RETURN ['a', 1][0] + (1, 5)", "'String' and 'Embedding'");
-    runQueryExpectingError("MATCH p = (:Person {name: 'Remy'})-[:KNOWS_WELL]->(:Person {name: 'Adam'}) RETURN p + [1, 'a'][0]",
-                           "'GraphPath' and 'Integer'");
+    expectRunTimeError("RETURN [[1], 'a'][1] + {k: 1}", "'String' and 'Map'");
+    expectRunTimeError("RETURN {k: 1} + [[1], 'a'][1]", "'Map' and 'String'");
+    expectRunTimeError("RETURN [1, 'a'][0] + {k: 1}", "'Integer' and 'Map'");
+    expectRunTimeError("RETURN [{k: 1}, 'a'][0] + {k: 2}", "'Map' and 'Map'");
+    expectRunTimeError("MATCH (n:Person {name: 'Remy'}) RETURN [1, 'a'][0] + n", "'Integer' and 'NodePattern'");
+    expectRunTimeError("MATCH (n:Person {name: 'Remy'}) RETURN n + ['a', 1][0]", "'NodePattern' and 'String'");
+    expectRunTimeError("MATCH (:Person {name: 'Remy'})-[e:KNOWS_WELL]->(:Person {name: 'Adam'}) RETURN [true, 'a'][0] + e",
+                       "'Bool' and 'EdgePattern'");
+    expectRunTimeError("RETURN [1.5, 'a'][0] + point({x: 1, y: 2})", "'Double' and 'Point'");
+    expectRunTimeError("RETURN ['a', 1][0] + (1, 5)", "'String' and 'Embedding'");
+    expectRunTimeError("MATCH p = (:Person {name: 'Remy'})-[:KNOWS_WELL]->(:Person {name: 'Adam'}) RETURN p + [1, 'a'][0]",
+                       "'GraphPath' and 'Integer'");
 }
 
 TEST_F(AnyCellJoinsAnyValueTest, raisesOnTheRowWhoseCellHoldsNoList) {
-    runQueryExpectingError("UNWIND [[[1], 'a'], ['b', [2]]] AS xs RETURN xs[0] + {k: 1}", "'String' and 'Map'");
+    expectRunTimeError("UNWIND [[[1], 'a'], ['b', [2]]] AS xs RETURN xs[0] + {k: 1}", "'String' and 'Map'");
 }
 
 int main(int argc, char** argv) {

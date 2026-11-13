@@ -2,9 +2,12 @@
 
 #include <string_view>
 
+#include "QueryStatus.h"
+
 #include "CallV3Test.h"
 #include "IRTestRows.h"
 
+using namespace db;
 using namespace turing::test;
 
 class AnyCellAdditionTypeErrorTest : public CallV3Test {
@@ -19,76 +22,77 @@ protected:
         EXPECT_EQ(rows, expected) << query;
     }
 
-    void expectError(std::string_view query) {
-        runQueryExpectingError(query, "Operands are not valid and compatible types");
+    // A type-erased cell is typed on each row, so the addition raises at run time
+    void expectRunTimeError(std::string_view query) {
+        runQueryExpectingError(query, QueryStatus::Status::EXEC_ERROR, "Operands are not valid and compatible types");
     }
 };
 
 TEST_F(AnyCellAdditionTypeErrorTest, addsNoBooleanToTheNumberARowHolds) {
-    expectError("UNWIND [1, 'a'] AS x RETURN x + true");
-    expectError("UNWIND [1, 'a'] AS x RETURN true + x");
+    expectRunTimeError("UNWIND [1, 'a'] AS x RETURN x + true");
+    expectRunTimeError("UNWIND [1, 'a'] AS x RETURN true + x");
 }
 
 TEST_F(AnyCellAdditionTypeErrorTest, addsNoBooleanToANumberCell) {
-    expectError("RETURN [1, 'a'][0] + true");
-    expectError("RETURN [1.5, 'a'][0] + false");
-    expectError("RETURN false + [1.5, 'a'][0]");
+    expectRunTimeError("RETURN [1, 'a'][0] + true");
+    expectRunTimeError("RETURN [1.5, 'a'][0] + false");
+    expectRunTimeError("RETURN false + [1.5, 'a'][0]");
 }
 
 TEST_F(AnyCellAdditionTypeErrorTest, addsNoNumberToABooleanCell) {
-    expectError("RETURN [true, 'a'][0] + 1");
-    expectError("RETURN 1.5 + [true, 'a'][0]");
+    expectRunTimeError("RETURN [true, 'a'][0] + 1");
+    expectRunTimeError("RETURN 1.5 + [true, 'a'][0]");
 }
 
 TEST_F(AnyCellAdditionTypeErrorTest, addsNoBooleanToABooleanCell) {
-    expectError("RETURN [true, 'a'][0] + true");
-    expectError("RETURN [true, 'a'][0] + [false, 'a'][0]");
+    expectRunTimeError("RETURN [true, 'a'][0] + true");
+    expectRunTimeError("RETURN [true, 'a'][0] + [false, 'a'][0]");
 }
 
 TEST_F(AnyCellAdditionTypeErrorTest, addsNoBooleanCellToANumberCell) {
-    expectError("RETURN [true, 'a'][0] + [1, 'a'][0]");
-    expectError("RETURN [1, 'a'][0] + [true, 'a'][0]");
+    expectRunTimeError("RETURN [true, 'a'][0] + [1, 'a'][0]");
+    expectRunTimeError("RETURN [1, 'a'][0] + [true, 'a'][0]");
 }
 
 TEST_F(AnyCellAdditionTypeErrorTest, addsNoBooleanPropertyToANumberCell) {
-    expectError("MATCH (p:Person {name: 'Remy'}) RETURN [1, 'a'][0] + p.isFrench");
+    expectRunTimeError("MATCH (p:Person {name: 'Remy'}) RETURN [1, 'a'][0] + p.isFrench");
 }
 
 TEST_F(AnyCellAdditionTypeErrorTest, addsNoBooleanMapValueToANumberMapValue) {
-    expectError("WITH {a: 1, b: true} AS m RETURN m.a + m.b");
+    expectRunTimeError("WITH {a: 1, b: true} AS m RETURN m.a + m.b");
 }
 
 TEST_F(AnyCellAdditionTypeErrorTest, addsNoMapCell) {
-    expectError("RETURN [{k: 1}, 'a'][0] + 1");
-    expectError("RETURN 'x' + [{k: 1}, 'a'][0]");
-    expectError("RETURN [{k: 1}, 'a'][0] + true");
-    expectError("RETURN [{k: 1}, 'a'][0] + [{k: 2}, 'a'][0]");
+    expectRunTimeError("RETURN [{k: 1}, 'a'][0] + 1");
+    expectRunTimeError("RETURN 'x' + [{k: 1}, 'a'][0]");
+    expectRunTimeError("RETURN [{k: 1}, 'a'][0] + true");
+    expectRunTimeError("RETURN [{k: 1}, 'a'][0] + [{k: 2}, 'a'][0]");
 }
 
 TEST_F(AnyCellAdditionTypeErrorTest, addsNoNodeCell) {
-    expectError("MATCH (n:Person {name: 'Remy'}) RETURN [n, 'a'][0] + 1");
-    expectError("MATCH (n:Person {name: 'Remy'}) RETURN 'x' + [n, 'a'][0]");
+    expectRunTimeError("MATCH (n:Person {name: 'Remy'}) RETURN [n, 'a'][0] + 1");
+    expectRunTimeError("MATCH (n:Person {name: 'Remy'}) RETURN 'x' + [n, 'a'][0]");
 }
 
 TEST_F(AnyCellAdditionTypeErrorTest, addsNoEdgeCell) {
-    expectError("MATCH (:Person {name: 'Remy'})-[e]->() WITH e LIMIT 1 RETURN [e, 'a'][0] + 1");
-    expectError("MATCH (:Person {name: 'Remy'})-[e]->() WITH e LIMIT 1 RETURN [e, 'a'][0] + 'x'");
+    expectRunTimeError("MATCH (:Person {name: 'Remy'})-[e]->() WITH e LIMIT 1 RETURN [e, 'a'][0] + 1");
+    expectRunTimeError("MATCH (:Person {name: 'Remy'})-[e]->() WITH e LIMIT 1 RETURN [e, 'a'][0] + 'x'");
 }
 
 TEST_F(AnyCellAdditionTypeErrorTest, addsNothingButADurationToATemporalCell) {
-    expectError("RETURN [datetime('2024-01-01T00:00:00Z'), 'a'][0] + true");
-    expectError("RETURN true + [duration(3600000000), 'a'][0]");
-    expectError("RETURN [datetime('2024-01-01T00:00:00Z'), 'a'][0] + 1");
-    expectError("RETURN 1 + [duration(3600000000), 'a'][0]");
-    expectError("RETURN [datetime('2024-01-01T00:00:00Z'), 'a'][0] + datetime('2024-01-01T00:00:00Z')");
+    expectRunTimeError("RETURN [datetime('2024-01-01T00:00:00Z'), 'a'][0] + true");
+    expectRunTimeError("RETURN true + [duration(3600000000), 'a'][0]");
+    expectRunTimeError("RETURN [datetime('2024-01-01T00:00:00Z'), 'a'][0] + 1");
+    expectRunTimeError("RETURN 1 + [duration(3600000000), 'a'][0]");
+    expectRunTimeError("RETURN [datetime('2024-01-01T00:00:00Z'), 'a'][0] + datetime('2024-01-01T00:00:00Z')");
 }
 
 TEST_F(AnyCellAdditionTypeErrorTest, addsNoBooleanInAReduceBody) {
-    expectError("RETURN reduce(acc = 0, y IN [1, true] | acc + y)");
+    expectRunTimeError("RETURN reduce(acc = 0, y IN [1, true] | acc + y)");
 }
 
 TEST_F(AnyCellAdditionTypeErrorTest, addsNoBooleanInAComprehension) {
-    expectError("RETURN [x IN [1, true] | x + 1]");
+    expectRunTimeError("RETURN [x IN [1, true] | x + 1]");
 }
 
 TEST_F(AnyCellAdditionTypeErrorTest, addsABooleanToAStringCell) {

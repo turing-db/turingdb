@@ -435,7 +435,7 @@ def UnwindRange : TuringOp<"unwind_range", [OpensRows, MayRaise, AttrSizedOperan
 /**
 * UnwindComputed
 */
-def UnwindComputed : TuringOp<"unwind_computed", [OpensRows, RecursivelyPure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "collectCarriedColumns"]>]> {
+def UnwindComputed : TuringOp<"unwind_computed", [OpensRows, RecursivelyPure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet", "getRegionCarrySet"]>]> {
   let summary = "Produce one row per element of a value its region computes for each input row";
 
   let description = [{
@@ -1002,7 +1002,7 @@ def ComprehensionYield : TuringOp<"comprehension_yield",
 /**
 * ScanEdges
 */
-def ScanEdges : TuringOp<"scan_edges", [ReadsNoRowsInFlight, OpensRows, Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface]> {
+def ScanEdges : TuringOp<"scan_edges", [ReadsNoRowsInFlight, OpensRows, Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["holdsRepeatedRows"]>]> {
   let summary = "Produce every edge in the graph as four row-aligned columns";
 
   let description = [{
@@ -1041,7 +1041,7 @@ def ScanEdges : TuringOp<"scan_edges", [ReadsNoRowsInFlight, OpensRows, Pure, De
 /**
 * ScanEdgesByType
 */
-def ScanEdgesByType : TuringOp<"scan_edges_by_type", [ReadsNoRowsInFlight, OpensRows, Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface]> {
+def ScanEdgesByType : TuringOp<"scan_edges_by_type", [ReadsNoRowsInFlight, OpensRows, Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["holdsRepeatedRows"]>]> {
   let summary = "Produce every edge of the named types in the graph as four row-aligned columns";
 
   let description = [{
@@ -1085,7 +1085,7 @@ def ScanEdgesByType : TuringOp<"scan_edges_by_type", [ReadsNoRowsInFlight, Opens
 /**
 * ScanOutEdgesByLabelSrc
 */
-def ScanOutEdgesByLabelSrc : TuringOp<"scan_out_edges_by_label_src", [ReadsNoRowsInFlight, OpensRows, Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface]> {
+def ScanOutEdgesByLabelSrc : TuringOp<"scan_out_edges_by_label_src", [ReadsNoRowsInFlight, OpensRows, Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["holdsRepeatedRows"]>]> {
   let summary = "Produce every out-edge of the nodes carrying every given label as four row-aligned columns";
 
   let description = [{
@@ -1132,7 +1132,7 @@ def ScanOutEdgesByLabelSrc : TuringOp<"scan_out_edges_by_label_src", [ReadsNoRow
 /**
 * ScanInEdgesByLabelTgt
 */
-def ScanInEdgesByLabelTgt : TuringOp<"scan_in_edges_by_label_tgt", [ReadsNoRowsInFlight, OpensRows, Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface]> {
+def ScanInEdgesByLabelTgt : TuringOp<"scan_in_edges_by_label_tgt", [ReadsNoRowsInFlight, OpensRows, Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["holdsRepeatedRows"]>]> {
   let summary = "Produce every in-edge of the nodes carrying every given label as four row-aligned columns";
 
   let description = [{
@@ -1171,7 +1171,7 @@ def ScanInEdgesByLabelTgt : TuringOp<"scan_in_edges_by_label_tgt", [ReadsNoRowsI
 /**
 * ScanOutEdgesByLabelTgt
 */
-def ScanOutEdgesByLabelTgt : TuringOp<"scan_out_edges_by_label_tgt", [ReadsNoRowsInFlight, OpensRows, Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface]> {
+def ScanOutEdgesByLabelTgt : TuringOp<"scan_out_edges_by_label_tgt", [ReadsNoRowsInFlight, OpensRows, Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["holdsRepeatedRows"]>]> {
   let summary = "Produce every out-edge arriving at the nodes carrying every given label as four row-aligned columns";
 
   let description = [{
@@ -1210,7 +1210,7 @@ def ScanOutEdgesByLabelTgt : TuringOp<"scan_out_edges_by_label_tgt", [ReadsNoRow
 /**
 * ScanInEdgesByLabelSrc
 */
-def ScanInEdgesByLabelSrc : TuringOp<"scan_in_edges_by_label_src", [ReadsNoRowsInFlight, OpensRows, Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface]> {
+def ScanInEdgesByLabelSrc : TuringOp<"scan_in_edges_by_label_src", [ReadsNoRowsInFlight, OpensRows, Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["holdsRepeatedRows"]>]> {
   let summary = "Produce every in-edge leaving the nodes carrying every given label as four row-aligned columns";
 
   let description = [{
@@ -1248,7 +1248,7 @@ def ScanInEdgesByLabelSrc : TuringOp<"scan_in_edges_by_label_src", [ReadsNoRowsI
 /**
 * ScanOutEdgesByLabelSrcTgt
 */
-def ScanOutEdgesByLabelSrcTgt : TuringOp<"scan_out_edges_by_label_src_tgt", [ReadsNoRowsInFlight, OpensRows, Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface]> {
+def ScanOutEdgesByLabelSrcTgt : TuringOp<"scan_out_edges_by_label_src_tgt", [ReadsNoRowsInFlight, OpensRows, Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["holdsRepeatedRows"]>]> {
   let summary = "Produce every edge whose source and target each carry every given label of their end as four row-aligned columns";
 
   let description = [{
@@ -1285,7 +1285,7 @@ def ScanOutEdgesByLabelSrcTgt : TuringOp<"scan_out_edges_by_label_src_tgt", [Rea
 /**
 * ScanInEdgesByLabelSrcTgt
 */
-def ScanInEdgesByLabelSrcTgt : TuringOp<"scan_in_edges_by_label_src_tgt", [ReadsNoRowsInFlight, OpensRows, Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface]> {
+def ScanInEdgesByLabelSrcTgt : TuringOp<"scan_in_edges_by_label_src_tgt", [ReadsNoRowsInFlight, OpensRows, Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>, EdgeTypesOutputOpInterface, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["holdsRepeatedRows"]>]> {
   let summary = "Produce every edge whose target and source each carry every given label of their end, read off the target's index";
 
   let description = [{
@@ -4412,7 +4412,7 @@ def ShortestPath : TuringOp<"shortest_path", [OpensRows, Pure]> {
 /**
 * OptionalMatch
 */
-def OptionalMatch : TuringOp<"optional_match", [OpensRows, RecursivelyPure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet"]>]> {
+def OptionalMatch : TuringOp<"optional_match", [OpensRows, RecursivelyPure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet", "getPaddedResultOffset"]>]> {
   let summary = "Match a pattern against the rows in flight, keeping the rows it does not match";
 
   let description = [{
@@ -4499,7 +4499,7 @@ def OptionalYield : TuringOp<"optional_yield", [Pure, Terminator, AttrSizedOpera
 /**
 * CallSubquery
 */
-def CallSubquery : TuringOp<"call_subquery", [OpensRows, ReadsNoRowsInFlight, RecursiveMemoryEffects, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet", "getYieldedResultOffset"]>]> {
+def CallSubquery : TuringOp<"call_subquery", [OpensRows, ReadsNoRowsInFlight, RecursiveMemoryEffects, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet", "getYieldedResultOffset", "getPaddedResultOffset"]>]> {
   let summary = "Run a query of its own once per row in flight";
 
   let description = [{
@@ -4584,7 +4584,7 @@ def SubqueryYield : TuringOp<"subquery_yield", [ReadsNoRowsInFlight, Pure, Termi
 /**
 * ExistsSubquery
 */
-def ExistsSubquery : TuringOp<"exists_subquery", [RecursivelyPure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet"]>]> {
+def ExistsSubquery : TuringOp<"exists_subquery", [RecursivelyPure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet"]>]> {
   let summary = "Answer, per row in flight, whether a body produces a row of its own for it";
 
   let description = [{
@@ -4660,7 +4660,7 @@ def ExistsYield : TuringOp<"exists_yield", [Pure, Terminator, AttrSizedOperandSe
 /**
 * CountSubquery
 */
-def CountSubquery : TuringOp<"count_subquery", [RecursivelyPure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet"]>]> {
+def CountSubquery : TuringOp<"count_subquery", [RecursivelyPure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet"]>]> {
   let summary = "Answer, per row in flight, how many rows a body produces for it";
 
   let description = [{
@@ -4722,7 +4722,7 @@ def CountSubqueryYield : TuringOp<"count_subquery_yield", [Pure, Terminator, Att
 /**
 * CollectSubquery
 */
-def CollectSubquery : TuringOp<"collect_subquery", [RecursivelyPure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["collectCarriedColumns", "getRegionCarrySet", "getListedValue"]>]> {
+def CollectSubquery : TuringOp<"collect_subquery", [RecursivelyPure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getRegionCarrySet", "getListedValue"]>]> {
   let summary = "Build, per row in flight, the list of what a body returns for it";
 
   let description = [{

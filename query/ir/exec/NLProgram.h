@@ -5477,12 +5477,12 @@ class NLSubqueryExpressionState {
 public:
     virtual ~NLSubqueryExpressionState();
 
-    // One chunk of the step the subquery answers for; borrowed, since they are the
-    // enclosing loop's own variables.
-    void addInputColumn(const Column* input) { _inputColumns.push_back(input); }
+    // A chunk of the step the subquery answers for; borrowed, since it is the enclosing
+    // loop's own variable.
+    void setCardinality(const Column* cardinality) { _cardinality = cardinality; }
 
-    // The rows this step answers for: the input chunks' row count, and one - the single
-    // empty row a subquery over nothing in flight joins onto - when there are none.
+    // The rows this step answers for: the cardinality chunk's row count, and one - the
+    // single empty row a subquery over nothing in flight joins onto - when there is none.
     size_t getRowCount() const;
 
     // Clear every answer, so the accumulator covers this step alone. Runs each time the
@@ -5490,7 +5490,7 @@ public:
     virtual void reset() = 0;
 
 private:
-    std::vector<const Column*> _inputColumns;
+    const Column* _cardinality {nullptr};
 };
 
 class NLExistsState : public NLSubqueryExpressionState {

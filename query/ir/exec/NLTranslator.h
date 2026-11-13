@@ -812,7 +812,7 @@ private:
     NLRowState* rowStateFor(mlir::Value handle) const;
 
     // Translate an nl.exists_buffer: allocate the runtime accumulator, map the handle to
-    // it, record this step's input chunks and the row tag column, and record the reset
+    // it, record the step's cardinality chunk and the row tag column, and record the reset
     // statement (run each time the block runs).
     void translateExistsBuffer(mlir::nl::ExistsBuffer buffer, NLStmtContainer* body);
 
@@ -835,10 +835,10 @@ private:
 
     NLCountSubqueryState* countSubqueryStateFor(mlir::Value handle) const;
 
-    // Record an EXISTS or COUNT buffer's input chunks and row tag on its accumulator, and the
-    // reset statement that runs each time the buffer's block runs
+    // Record an EXISTS or COUNT buffer's cardinality chunk and row tag on its accumulator, and
+    // the reset statement that runs each time the buffer's block runs
     void translateSubqueryExpressionReset(NLSubqueryExpressionState* state,
-                                          mlir::OperandRange inputColumns,
+                                          mlir::Value cardinality,
                                           mlir::Value tag,
                                           NLStmtContainer* body);
 

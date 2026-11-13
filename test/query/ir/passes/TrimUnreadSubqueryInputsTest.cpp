@@ -296,8 +296,8 @@ func.func @main() {
 }
 )mlir";
 
-// A subquery reads its row count off its first input, so n stays ahead of k
-TEST_F(TrimUnreadSubqueryInputsTest, keepsARowCarryingInputAheadOfAConstantOne) {
+// n.age holds the rows of n, so the unread n goes, though the constant k then leads the inputs
+TEST_F(TrimUnreadSubqueryInputsTest, dropsAnUnreadInputThoughAConstantThenLeads) {
     mlir::OwningOpRef<mlir::ModuleOp> module;
     trimProgram(existsReadingAConstantInput, module);
     ASSERT_FALSE(HasFatalFailure());
@@ -309,10 +309,9 @@ TEST_F(TrimUnreadSubqueryInputsTest, keepsARowCarryingInputAheadOfAConstantOne) 
     ASSERT_TRUE(exists);
 
     const mlir::OperandRange inputs = exists.getInputColumns();
-    ASSERT_EQ(inputs.size(), 3u);
-    EXPECT_TRUE(mlir::isa<mlir::db::ScanNodes>(inputs[0].getDefiningOp()));
-    EXPECT_TRUE(mlir::isa<mlir::db::ConstantOp>(inputs[1].getDefiningOp()));
-    EXPECT_TRUE(mlir::isa<mlir::db::GetNodeProperties>(inputs[2].getDefiningOp()));
+    ASSERT_EQ(inputs.size(), 2u);
+    EXPECT_TRUE(mlir::isa<mlir::db::ConstantOp>(inputs[0].getDefiningOp()));
+    EXPECT_TRUE(mlir::isa<mlir::db::GetNodeProperties>(inputs[1].getDefiningOp()));
 }
 
 int main(int argc, char** argv) {

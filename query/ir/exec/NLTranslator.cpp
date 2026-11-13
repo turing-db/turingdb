@@ -5629,7 +5629,7 @@ void NLTranslator::translateExistsBuffer(nl::ExistsBuffer buffer, NLStmtContaine
     NLExistsState* state = _program->allocExistsState();
     _existsStates[buffer.getState()] = state;
 
-    translateSubqueryExpressionReset(state, buffer.getInputColumns(), buffer.getTag(), body);
+    translateSubqueryExpressionReset(state, buffer.getCardinality(), buffer.getTag(), body);
 }
 
 void NLTranslator::translateExistsMark(nl::ExistsMark mark, NLStmtContainer* body) {
@@ -5674,17 +5674,17 @@ void NLTranslator::translateCountSubqueryBuffer(nl::CountSubqueryBuffer buffer, 
     NLCountSubqueryState* state = _program->allocCountSubqueryState();
     _countSubqueryStates[buffer.getState()] = state;
 
-    translateSubqueryExpressionReset(state, buffer.getInputColumns(), buffer.getTag(), body);
+    translateSubqueryExpressionReset(state, buffer.getCardinality(), buffer.getTag(), body);
 }
 
 void NLTranslator::translateSubqueryExpressionReset(NLSubqueryExpressionState* state,
-                                                    mlir::OperandRange inputColumns,
+                                                    mlir::Value cardinality,
                                                     mlir::Value tag,
                                                     NLStmtContainer* body) {
-    // This step's own chunks: their row count is how many answers the reset clears, and how
-    // many the result lays out.
-    for (const mlir::Value column : inputColumns) {
-        state->addInputColumn(getColumn(column));
+    // The step's row count is how many answers the reset clears, and how many the result
+    // lays out.
+    if (cardinality) {
+        state->setCardinality(getColumn(cardinality));
     }
 
     ColumnVector<uint64_t>* tagColumn = static_cast<ColumnVector<uint64_t>*>(allocColumn(tag));

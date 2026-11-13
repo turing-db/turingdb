@@ -4,6 +4,7 @@
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 
@@ -37,61 +38,73 @@ void collectReadValues(mlir::Operation* operation, llvm::SmallVectorImpl<mlir::V
     });
 }
 
+struct ConeValue {
+    mlir::Value _value;
+    size_t _reader {0};
+};
+
+bool isConstantLike(mlir::Value value) {
+    mlir::Operation* const definingOp = value.getDefiningOp();
+
+    return isFunctionArgument(value)
+        || (definingOp
+            && (definingOp->hasTrait<mlir::OpTrait::ConstantLike>() || definingOp->hasTrait<mlir::OpTrait::ConstantResult>()));
+}
+
+// Whether @param value is computed from its operands alone, so it holds one value where they do
+bool dependsOnOperands(mlir::Value value) {
+    mlir::Operation* const definingOp = value.getDefiningOp();
+
+    return !isConstantLike(value)
+        && definingOp
+        && definingOp->hasTrait<mlir::OpTrait::ConstantThroughOperands>()
+        && mlir::isSpeculatable(definingOp);
+}
+
+// The cone is walked breadth first, so the read holding rows nearest @param root decides it, and every
+// value on the way, however deep the cone runs elsewhere
 bool isConstantColumn(mlir::Value root, llvm::DenseMap<mlir::Value, bool>& classified) {
-    llvm::SmallVector<mlir::Value> worklist {root};
+    llvm::SmallVector<ConeValue> cone {ConeValue {._value = root}};
+    llvm::DenseSet<mlir::Value> visited {root};
     llvm::SmallVector<mlir::Value> reads;
-    llvm::SmallVector<mlir::Value> pendingOperands;
 
-    while (!worklist.empty()) {
-        const mlir::Value value = worklist.back();
-        if (classified.contains(value)) {
-            worklist.pop_back();
-            continue;
-        }
+    for (size_t coneIndex = 0; coneIndex < cone.size(); coneIndex++) {
+        const mlir::Value value = cone[coneIndex]._value;
 
-        mlir::Operation* const definingOp = value.getDefiningOp();
-        const bool isConstantLike = isFunctionArgument(value)
-                                 || (definingOp
-                                     && (definingOp->hasTrait<mlir::OpTrait::ConstantLike>()
-                                         || definingOp->hasTrait<mlir::OpTrait::ConstantResult>()));
-        const bool constantThroughOperands = definingOp
-                                          && definingOp->hasTrait<mlir::OpTrait::ConstantThroughOperands>()
-                                          && mlir::isSpeculatable(definingOp);
-        const bool dependsOnOperands = !isConstantLike && constantThroughOperands;
+        bool holdsRows = false;
+        const auto classifiedIt = classified.find(value);
+        if (classifiedIt != classified.end()) {
+            holdsRows = !classifiedIt->second;
+        } else if (!dependsOnOperands(value)) {
+            holdsRows = !isConstantLike(value);
+            classified[value] = !holdsRows;
+        } else {
+            reads.clear();
+            collectReadValues(value.getDefiningOp(), reads);
 
-        if (!dependsOnOperands) {
-            classified[value] = isConstantLike;
-            worklist.pop_back();
-            continue;
-        }
-
-        reads.clear();
-        collectReadValues(definingOp, reads);
-
-        pendingOperands.clear();
-        bool readsANonConstant = false;
-        for (const mlir::Value operand : reads) {
-            const auto classifiedIt = classified.find(operand);
-            if (classifiedIt == classified.end()) {
-                pendingOperands.push_back(operand);
-            } else if (!classifiedIt->second) {
-                readsANonConstant = true;
-                break;
+            for (const mlir::Value read : reads) {
+                if (visited.insert(read).second) {
+                    cone.push_back(ConeValue {._value = read, ._reader = coneIndex});
+                }
             }
         }
 
-        if (readsANonConstant) {
-            classified[value] = false;
-            worklist.pop_back();
-        } else if (pendingOperands.empty()) {
-            classified[value] = true;
-            worklist.pop_back();
-        } else {
-            worklist.append(pendingOperands);
+        if (!holdsRows) {
+            continue;
         }
+
+        for (size_t onTheWay = coneIndex; onTheWay > 0; onTheWay = cone[onTheWay]._reader) {
+            classified[cone[cone[onTheWay]._reader]._value] = false;
+        }
+
+        return false;
     }
 
-    return classified.at(root);
+    for (const ConeValue& coneValue : cone) {
+        classified[coneValue._value] = true;
+    }
+
+    return true;
 }
 
 }

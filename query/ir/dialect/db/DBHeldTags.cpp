@@ -214,6 +214,9 @@ private:
         if (const mlir::Value carriedColumn = mlir::db::carriedColumnOf(argument)) {
             reach(carriedColumn, path);
             return true;
+        } else if (const mlir::Value forwarded = mlir::db::forwardedColumnOf(argument)) {
+            reach(forwarded, path);
+            return true;
         } else if (const mlir::Value list = mlir::db::elementSourceOf(argument)) {
             reach(list, prependElement(path));
             return true;
@@ -246,8 +249,12 @@ private:
             return walkMadeValue(value, element, path);
         }
 
+        const mlir::OpResult result = mlir::dyn_cast<mlir::OpResult>(value);
+
         llvm::SmallVector<mlir::Value, 4> carried;
-        carrier.collectCarriedColumns(value, carried);
+        if (result) {
+            carrier.collectCarriedColumns(result, carried);
+        }
 
         for (const mlir::Value carriedColumn : carried) {
             reach(carriedColumn, path);
@@ -260,7 +267,6 @@ private:
         llvm::SmallVector<mlir::Value, 2> accumulated;
         carrier.collectAccumulatedValues(value, accumulated);
 
-        const mlir::OpResult result = mlir::dyn_cast<mlir::OpResult>(value);
         const mlir::Value listed = result ? carrier.getListedValue(result) : mlir::Value();
 
         if (!accumulated.empty()) {
@@ -293,8 +299,11 @@ private:
         } else if (mlir::db::Unwind unwind = mlir::dyn_cast_or_null<mlir::db::Unwind>(made)) {
             reach(unwind.getSource(), prependElement(path));
         } else if (mlir::db::UnwindComputed unwind = mlir::dyn_cast_or_null<mlir::db::UnwindComputed>(made)) {
-            mlir::Block& sourceBlock = unwind.getSource().front();
-            mlir::db::UnwindYield yield = mlir::cast<mlir::db::UnwindYield>(sourceBlock.getTerminator());
+            mlir::db::UnwindYield yield = mlir::dyn_cast_or_null<mlir::db::UnwindYield>(mlir::db::terminatorOf(unwind.getSource()));
+            if (!yield) {
+                return walkType(element, path);
+            }
+
             reach(yield.getSource(), prependElement(path));
         } else if (mlir::db::MakeList list = mlir::dyn_cast_or_null<mlir::db::MakeList>(made)) {
             return walkMadeList(list, path);

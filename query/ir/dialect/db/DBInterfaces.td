@@ -36,10 +36,10 @@ def ColumnCarrierOpInterface : OpInterface<"ColumnCarrierOpInterface"> {
       (ins "::mlir::OpResult":$result), [{}],
       [{ return ::mlir::db::carrySetRowSource($_op.getOperation(), result); }]>,
     InterfaceMethod<
-      "Append the columns `value`, a result of the op or an argument of one of its regions, carries; none where the op makes it",
+      "Append the columns `result` carries; none where the op makes it",
       "void", "collectCarriedColumns",
-      (ins "::mlir::Value":$value, "::llvm::SmallVectorImpl<::mlir::Value>&":$carried), [{}],
-      [{ ::mlir::db::collectRowSource(value, carried); }]>,
+      (ins "::mlir::OpResult":$result, "::llvm::SmallVectorImpl<::mlir::Value>&":$carried), [{}],
+      [{ ::mlir::db::collectRowSource(result, carried); }]>,
     InterfaceMethod<
       "Fill `carrySet` with the run of operands the op carries into `region` as a run of its arguments; false where it carries none",
       "bool", "getRegionCarrySet",
@@ -66,10 +66,20 @@ def ColumnCarrierOpInterface : OpInterface<"ColumnCarrierOpInterface"> {
       (ins "::mlir::Region&":$region, "size_t&":$resultOffset), [{}],
       [{ return false; }]>,
     InterfaceMethod<
+      "Set `resultOffset` to the result the first column `region` yields comes out as, each next one coming out as the next result, where the op pads them: a row it runs the region for that the region yields no row for comes out once, with each of them null; false where it does not pad them",
+      "bool", "getPaddedResultOffset",
+      (ins "::mlir::Region&":$region, "size_t&":$resultOffset), [{}],
+      [{ return false; }]>,
+    InterfaceMethod<
       "Whether a row `region` yields may come out as more than one row of the results, as the op pairs it with every row of another region",
       "bool", "repeatsYieldedRows",
       (ins "::mlir::Region&":$region), [{}],
       [{ return false; }]>,
+    InterfaceMethod<
+      "Whether each value `result` holds is the value of one row of rows the op carries or walks, repeated on every row the op makes from it, as a hop repeats the node it walks from for each of its edges and a scan of edges repeats the node at each of its ends",
+      "bool", "holdsRepeatedRows",
+      (ins "::mlir::OpResult":$result), [{}],
+      [{ return ::mlir::db::carrySetRepeatsRows($_op.getOperation(), result); }]>,
     InterfaceMethod<
       "Whether `region` reads the columns of the block holding the op where they stand, each with the rows it holds there, rather than taking them as arguments",
       "bool", "readsColumnsFromAbove",

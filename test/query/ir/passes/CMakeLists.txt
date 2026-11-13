@@ -122,6 +122,8 @@ add_call_v3_test(test_query_ir_reroot_id_operand_read_twice RerootIDOperandReadT
 
 add_call_v3_test(test_query_ir_seed_ids_below_a_filter SeedIDsBelowAFilterTest.cpp)
 
+add_call_v3_test(test_query_ir_reroot_seed_through_a_filter RerootSeedThroughAFilterTest.cpp)
+
 add_call_v3_test(test_query_ir_reroot_at_scanned_nodes RerootAtScannedNodesTest.cpp)
 
 add_call_v3_test(test_query_ir_reroot_pattern_at_cheapest_node RerootPatternAtCheapestNodeTest.cpp)
@@ -147,6 +149,10 @@ add_call_v3_test(test_query_ir_forwarded_region_reads ForwardedRegionReadsTest.c
 add_ir_tests(test_query_ir_forwarded_columns ForwardedColumnsTest.cpp)
 
 add_ir_tests(test_query_ir_yielded_results YieldedResultsTest.cpp)
+
+add_ir_tests(test_query_ir_unwind_computed_region_carry_set UnwindComputedRegionCarrySetTest.cpp)
+
+add_ir_tests(test_query_ir_region_argument_layout RegionArgumentLayoutTest.cpp)
 
 add_turing_test(test_query_ir_reroot_control_graph RerootControlGraphTest.cpp)
 target_sources(test_query_ir_reroot_control_graph PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
@@ -250,4 +256,16 @@ add_ir_tests(test_query_ir_place_row_invariant_ops PlaceRowInvariantOpsTest.cpp)
 
 add_call_v3_test(test_query_ir_place_row_invariant_ops_growth PlaceRowInvariantOpsGrowthTest.cpp)
 
+add_ir_tests(test_query_ir_trim_subquery_yield TrimSubqueryYieldTest.cpp)
+
+add_ir_tests(test_query_ir_place_handed_back_reads PlaceHandedBackReadsTest.cpp)
+
+add_ir_tests(test_query_ir_place_edge_scan_reads PlaceEdgeScanReadsTest.cpp)
+
 add_call_v3_test(test_query_ir_row_source_climb_growth RowSourceClimbGrowthTest.cpp)
+
+add_call_v3_test(test_query_ir_trim_unread_columns_growth TrimUnreadColumnsGrowthTest.cpp)
+
+add_ir_tests(test_query_ir_unterminated_body UnterminatedBodyTest.cpp)
+
+add_ir_tests(test_query_ir_unread_raising_op_erase UnreadRaisingOpEraseTest.cpp)

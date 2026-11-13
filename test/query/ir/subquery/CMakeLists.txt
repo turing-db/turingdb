@@ -289,3 +289,6 @@ add_ir_tests(test_query_ir_per_run_import_walk PerRunImportWalkTest.cpp)
 
 # A CASE or coalesce in a CALL body over a constant the body binds, in a SET, a CREATE, a MERGE and a RETURN: TUR-376.
 add_turing_test(test_query_ir_call_body_case_over_bound_constant CallBodyCaseOverBoundConstantTest.cpp)
+
+# An op with a body answers over the rows of an input holding rows, wherever a constant input stands.
+add_ir_tests(test_query_ir_region_input_order RegionInputOrderTest.cpp)

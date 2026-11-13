@@ -161,14 +161,28 @@ bool isSafeLiteralDivisor(Value divisor, bool minusOneOverflows) {
     return false;
 }
 
-size_t factorResultOffset(Region& leftFactor, Region& factor) {
+// False while the left factor, whose yield the right factor's results follow, has no yield yet
+bool factorResultOffset(Region& leftFactor, Region& factor, size_t& resultOffset) {
     if (&factor == &leftFactor) {
-        return 0;
+        resultOffset = 0;
+        return true;
     }
 
-    Yield leftYield = cast<Yield>(leftFactor.front().getTerminator());
+    Yield leftYield = dyn_cast_or_null<Yield>(terminatorOf(leftFactor));
+    if (!leftYield) {
+        return false;
+    }
 
-    return leftYield.getColumns().size();
+    resultOffset = leftYield.getColumns().size();
+
+    return true;
+}
+
+// Whether every region of @param op ends on its terminator, which codegen adds last
+bool endsEveryRegion(Operation* op) {
+    return llvm::all_of(op->getRegions(), [](Region& region) {
+        return terminatorOf(region) != nullptr;
+    });
 }
 
 void fillTrailingRegionCarrySet(Operation* op, Region& region, size_t count, RegionCarrySet& carrySet) {
@@ -181,22 +195,14 @@ constexpr size_t HOP_FIXED_RESULT_COUNT = 4;
 constexpr size_t PATH_FIXED_RESULT_COUNT = 3;
 constexpr unsigned FOLD_ACCUMULATOR_ARGUMENT = 1;
 
-void collectCarriedResult(Value value, size_t firstCarriedResult, ValueRange carriedColumns, llvm::SmallVectorImpl<Value>& carried) {
-    const OpResult result = dyn_cast<OpResult>(value);
-    if (!result || result.getResultNumber() < firstCarriedResult) {
+void collectCarriedResult(OpResult result, size_t firstCarriedResult, ValueRange carriedColumns, llvm::SmallVectorImpl<Value>& carried) {
+    if (result.getResultNumber() < firstCarriedResult) {
         return;
     }
 
     const size_t carriedIndex = result.getResultNumber() - firstCarriedResult;
     if (carriedIndex < carriedColumns.size()) {
         carried.push_back(carriedColumns[carriedIndex]);
-    }
-}
-
-void collectCarriedArgument(Value value, ValueRange carriedColumns, llvm::SmallVectorImpl<Value>& carried) {
-    const BlockArgument argument = dyn_cast<BlockArgument>(value);
-    if (argument && argument.getArgNumber() < carriedColumns.size()) {
-        carried.push_back(carriedColumns[argument.getArgNumber()]);
     }
 }
 
@@ -214,9 +220,13 @@ Value hopRowSource(Operation* hop, size_t inputResult, OpResult result) {
     return carrySetRowSource(hop, result);
 }
 
-void collectBranchYields(Value value, MutableArrayRef<Region> branches, llvm::SmallVectorImpl<Value>& carried) {
-    const OpResult result = dyn_cast<OpResult>(value);
-    if (!result) {
+template <typename EdgeScan>
+bool holdsAnEnd(EdgeScan scan, OpResult result) {
+    return result == scan.getSrcids() || result == scan.getTgtids();
+}
+
+void collectBranchYields(OpResult result, MutableArrayRef<Region> branches, llvm::SmallVectorImpl<Value>& carried) {
+    if (!endsEveryRegion(result.getOwner())) {
         return;
     }
 
@@ -869,30 +879,13 @@ LogicalResult verifyCarriedRegions(Operation* op, MutableArrayRef<Region> region
     return success();
 }
 
-// A region of a CASE or a coalesce takes the columns forwarded to it, then the carried ones
-void collectSelectionArgument(Value value, ValueRange carriedColumns, llvm::SmallVectorImpl<Value>& carried) {
-    BlockArgument argument = dyn_cast<BlockArgument>(value);
-    if (!argument) {
-        return;
-    }
-
-    Region& region = *argument.getParentRegion();
-    ColumnCarrierOpInterface carrier = cast<ColumnCarrierOpInterface>(region.getParentOp());
-
-    Region* source = nullptr;
-    size_t forwardIndex = 0;
-    if (matchForwardedArgument(argument, source, forwardIndex)) {
-        const MutableOperandRange forwarded = carrier.getForwardedColumnsMutable(*source);
-        carried.push_back(forwarded[static_cast<unsigned>(forwardIndex)].get());
-        return;
-    }
-
-    const size_t carriedIndex = argument.getArgNumber() - forwardedArgumentCount(region);
-    carried.push_back(carriedColumns[carriedIndex]);
-}
-
 MutableOperandRange caseYieldForwards(Region& region) {
-    return cast<CaseYield>(region.front().getTerminator()).getForwardedMutable();
+    CaseYield yield = dyn_cast_or_null<CaseYield>(terminatorOf(region));
+    if (!yield) {
+        return MutableOperandRange(region.getParentOp(), 0, 0);
+    }
+
+    return yield.getForwardedMutable();
 }
 
 bool givesNoRowAValue(Region& argument) {
@@ -1042,6 +1035,38 @@ void ScanInEdgesByLabelSrcTgt::getAsmResultNames(OpAsmSetValueNameFn setNameFn) 
     for (Value result : getResults()) {
         setNameFn(result, "");
     }
+}
+
+bool ScanEdges::holdsRepeatedRows(OpResult result) {
+    return holdsAnEnd(*this, result);
+}
+
+bool ScanEdgesByType::holdsRepeatedRows(OpResult result) {
+    return holdsAnEnd(*this, result);
+}
+
+bool ScanOutEdgesByLabelSrc::holdsRepeatedRows(OpResult result) {
+    return holdsAnEnd(*this, result);
+}
+
+bool ScanInEdgesByLabelTgt::holdsRepeatedRows(OpResult result) {
+    return holdsAnEnd(*this, result);
+}
+
+bool ScanOutEdgesByLabelTgt::holdsRepeatedRows(OpResult result) {
+    return holdsAnEnd(*this, result);
+}
+
+bool ScanInEdgesByLabelSrc::holdsRepeatedRows(OpResult result) {
+    return holdsAnEnd(*this, result);
+}
+
+bool ScanOutEdgesByLabelSrcTgt::holdsRepeatedRows(OpResult result) {
+    return holdsAnEnd(*this, result);
+}
+
+bool ScanInEdgesByLabelSrcTgt::holdsRepeatedRows(OpResult result) {
+    return holdsAnEnd(*this, result);
 }
 
 // Ensures each variable has a numeric name
@@ -3023,9 +3048,9 @@ bool UnwindComputed::getCarrySet(CarrySet& carrySet) {
     return true;
 }
 
-void UnwindComputed::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectRowSource(value, carried);
-    collectCarriedArgument(value, getColumnsToFilter(), carried);
+bool UnwindComputed::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
+    carrySet = RegionCarrySet {._resultOffset = 1, ._count = getColumnsToFilter().size(), ._handsBack = true};
+    return true;
 }
 
 bool CallProcedure::getCarrySet(CarrySet& carrySet) {
@@ -3151,8 +3176,7 @@ Value CrossProduct::getRowSource(OpResult result) {
 }
 
 bool CrossProduct::getYieldedResultOffset(Region& region, size_t& resultOffset) {
-    resultOffset = factorResultOffset(getLeftFactor(), region);
-    return true;
+    return factorResultOffset(getLeftFactor(), region, resultOffset);
 }
 
 bool CrossProduct::repeatsYieldedRows(Region& region) {
@@ -3168,8 +3192,7 @@ Value HashJoin::getRowSource(OpResult result) {
 }
 
 bool HashJoin::getYieldedResultOffset(Region& region, size_t& resultOffset) {
-    resultOffset = factorResultOffset(getLeftFactor(), region);
-    return true;
+    return factorResultOffset(getLeftFactor(), region, resultOffset);
 }
 
 bool HashJoin::repeatsYieldedRows(Region& region) {
@@ -3192,8 +3215,8 @@ Value ListComprehension::getRegionElementSource(Region& region, size_t& elementA
 }
 
 Value ListComprehension::getListedValue(OpResult result) {
-    ComprehensionYield yield = cast<ComprehensionYield>(getBody().front().getTerminator());
-    return yield.getValue();
+    ComprehensionYield yield = dyn_cast_or_null<ComprehensionYield>(terminatorOf(getBody()));
+    return yield ? yield.getValue() : Value();
 }
 
 bool ListPredicate::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
@@ -3221,11 +3244,11 @@ Value Reduce::getRegionElementSource(Region& region, size_t& elementArgument) {
 void Reduce::collectAccumulatedValues(Value value, llvm::SmallVectorImpl<Value>& accumulated) {
     Block& body = getBody().front();
     const bool holdsTheAccumulator = value == getResult() || value == body.getArgument(FOLD_ACCUMULATOR_ARGUMENT);
-    if (!holdsTheAccumulator) {
+    ReduceYield yield = dyn_cast_or_null<ReduceYield>(terminatorOf(body));
+    if (!holdsTheAccumulator || !yield) {
         return;
     }
 
-    ReduceYield yield = cast<ReduceYield>(body.getTerminator());
     accumulated.push_back(getInitialValue());
     accumulated.push_back(yield.getValue());
 }
@@ -3245,9 +3268,11 @@ Value AllReduce::getRegionElementSource(Region& region, size_t& elementArgument)
 void AllReduce::collectAccumulatedValues(Value value, llvm::SmallVectorImpl<Value>& accumulated) {
     Block& body = getBody().front();
     Block& predicate = getPredicate().front();
-    ReduceYield yield = cast<ReduceYield>(body.getTerminator());
+    ReduceYield yield = dyn_cast_or_null<ReduceYield>(terminatorOf(body));
 
-    if (value == body.getArgument(FOLD_ACCUMULATOR_ARGUMENT)) {
+    if (!yield) {
+        return;
+    } else if (value == body.getArgument(FOLD_ACCUMULATOR_ARGUMENT)) {
         accumulated.push_back(getInitialValue());
         accumulated.push_back(yield.getValue());
     } else if (value == predicate.getArgument(FOLD_ACCUMULATOR_ARGUMENT)) {
@@ -3261,8 +3286,8 @@ bool PatternComprehension::getRegionCarrySet(Region& region, RegionCarrySet& car
 }
 
 Value PatternComprehension::getListedValue(OpResult result) {
-    ComprehensionYield yield = cast<ComprehensionYield>(getPattern().front().getTerminator());
-    return yield.getValue();
+    ComprehensionYield yield = dyn_cast_or_null<ComprehensionYield>(terminatorOf(getPattern()));
+    return yield ? yield.getValue() : Value();
 }
 
 bool OptionalMatch::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
@@ -3270,27 +3295,32 @@ bool OptionalMatch::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) 
     return true;
 }
 
-void OptionalMatch::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    OptionalYield yield = cast<OptionalYield>(getPattern().front().getTerminator());
+bool OptionalMatch::getPaddedResultOffset(Region& region, size_t& resultOffset) {
+    resultOffset = 0;
+    return true;
+}
 
-    collectCarriedResult(value, 0, yield.getColumns(), carried);
-    collectCarriedArgument(value, getInputColumns(), carried);
+void OptionalMatch::collectCarriedColumns(OpResult result, llvm::SmallVectorImpl<Value>& carried) {
+    OptionalYield yield = dyn_cast_or_null<OptionalYield>(terminatorOf(getPattern()));
+    if (yield) {
+        collectCarriedResult(result, 0, yield.getColumns(), carried);
+    }
 }
 
 // A body carrying its scope yields the inputs back ahead of its own columns; otherwise the
 // inputs come back unchanged ahead of what the body yields
-void CallSubquery::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    SubqueryYield yield = cast<SubqueryYield>(getBody().front().getTerminator());
+void CallSubquery::collectCarriedColumns(OpResult result, llvm::SmallVectorImpl<Value>& carried) {
+    SubqueryYield yield = dyn_cast_or_null<SubqueryYield>(terminatorOf(getBody()));
     const OperandRange inputs = getInputColumns();
+    const size_t yieldOffset = getCarriesScope() ? 0 : inputs.size();
 
-    if (getCarriesScope()) {
-        collectCarriedResult(value, 0, yield.getColumns(), carried);
-    } else {
-        collectCarriedResult(value, 0, inputs, carried);
-        collectCarriedResult(value, inputs.size(), yield.getColumns(), carried);
+    if (!getCarriesScope()) {
+        collectCarriedResult(result, 0, inputs, carried);
     }
 
-    collectCarriedArgument(value, inputs, carried);
+    if (yield) {
+        collectCarriedResult(result, yieldOffset, yield.getColumns(), carried);
+    }
 }
 
 bool CallSubquery::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
@@ -3311,8 +3341,13 @@ bool CallSubquery::getYieldedResultOffset(Region& region, size_t& resultOffset) 
     return true;
 }
 
-void ExistsSubquery::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectCarriedArgument(value, getInputColumns(), carried);
+bool CallSubquery::getPaddedResultOffset(Region& region, size_t& resultOffset) {
+    if (getUnit() || !getOptional()) {
+        return false;
+    }
+
+    resultOffset = getCarriesScope() ? 0 : getInputColumns().size();
+    return true;
 }
 
 bool ExistsSubquery::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
@@ -3320,17 +3355,9 @@ bool ExistsSubquery::getRegionCarrySet(Region& region, RegionCarrySet& carrySet)
     return true;
 }
 
-void CountSubquery::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectCarriedArgument(value, getInputColumns(), carried);
-}
-
 bool CountSubquery::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
     carrySet = RegionCarrySet {._count = getInputColumns().size()};
     return true;
-}
-
-void CollectSubquery::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectCarriedArgument(value, getInputColumns(), carried);
 }
 
 bool CollectSubquery::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
@@ -3339,22 +3366,22 @@ bool CollectSubquery::getRegionCarrySet(Region& region, RegionCarrySet& carrySet
 }
 
 Value CollectSubquery::getListedValue(OpResult result) {
-    CollectSubqueryYield yield = cast<CollectSubqueryYield>(getBody().front().getTerminator());
-    return yield.getValue();
+    CollectSubqueryYield yield = dyn_cast_or_null<CollectSubqueryYield>(terminatorOf(getBody()));
+    return yield ? yield.getValue() : Value();
 }
 
-void Union::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    collectBranchYields(value, getBranches(), carried);
+void Union::collectCarriedColumns(OpResult result, llvm::SmallVectorImpl<Value>& carried) {
+    collectBranchYields(result, getBranches(), carried);
 }
 
-void ScanMaterialized::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+void ScanMaterialized::collectCarriedColumns(OpResult result, llvm::SmallVectorImpl<Value>& carried) {
     Materialize materialize = getRows().getDefiningOp<Materialize>();
     if (materialize) {
-        collectCarriedResult(value, 0, materialize.getColumns(), carried);
+        collectCarriedResult(result, 0, materialize.getColumns(), carried);
     }
 }
 
-void BroadcastConstant::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+void BroadcastConstant::collectCarriedColumns(OpResult result, llvm::SmallVectorImpl<Value>& carried) {
     carried.push_back(getValue());
 }
 
@@ -3362,28 +3389,26 @@ Value RowConstant::getRowSource(OpResult result) {
     return getRow();
 }
 
-void RowConstant::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+void RowConstant::collectCarriedColumns(OpResult result, llvm::SmallVectorImpl<Value>& carried) {
     carried.push_back(getRow());
 }
 
-void ToNullable::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+void ToNullable::collectCarriedColumns(OpResult result, llvm::SmallVectorImpl<Value>& carried) {
     carried.push_back(getOperand());
 }
 
-void ToAny::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+void ToAny::collectCarriedColumns(OpResult result, llvm::SmallVectorImpl<Value>& carried) {
     carried.push_back(getOperand());
 }
 
-void Case::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
+void Case::collectCarriedColumns(OpResult result, llvm::SmallVectorImpl<Value>& carried) {
     collectSelectedValues(carried);
 }
 
-void LazyCase::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    if (isa<OpResult>(value)) {
+void LazyCase::collectCarriedColumns(OpResult result, llvm::SmallVectorImpl<Value>& carried) {
+    if (endsEveryRegion(getOperation())) {
         collectSelectedValues(carried);
     }
-
-    collectSelectionArgument(value, getColumnsToFilter(), carried);
 }
 
 bool LazyCase::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
@@ -3401,12 +3426,10 @@ MutableOperandRange LazyCase::getForwardedColumnsMutable(Region& region) {
     return caseYieldForwards(region);
 }
 
-void Coalesce::collectCarriedColumns(Value value, llvm::SmallVectorImpl<Value>& carried) {
-    if (isa<OpResult>(value)) {
+void Coalesce::collectCarriedColumns(OpResult result, llvm::SmallVectorImpl<Value>& carried) {
+    if (endsEveryRegion(getOperation())) {
         collectSelectedValues(carried);
     }
-
-    collectSelectionArgument(value, getColumnsToFilter(), carried);
 }
 
 bool Coalesce::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {

@@ -121,11 +121,11 @@ protected:
         }
     }
 
-    void expectLinearGrowth(const ChainQuery& chain) {
+    void expectLinearGrowth(const ChainQuery& chain, size_t shortLength = SHORT_CHAIN, size_t longLength = LONG_CHAIN) {
         std::string shortProgram;
         std::string longProgram;
-        ASSERT_NO_FATAL_FAILURE(programBeforeThePass(chain, SHORT_CHAIN, shortProgram));
-        ASSERT_NO_FATAL_FAILURE(programBeforeThePass(chain, LONG_CHAIN, longProgram));
+        ASSERT_NO_FATAL_FAILURE(programBeforeThePass(chain, shortLength, shortProgram));
+        ASSERT_NO_FATAL_FAILURE(programBeforeThePass(chain, longLength, longProgram));
 
         double shortSeconds = 0;
         double longSeconds = 0;
@@ -133,7 +133,7 @@ protected:
         ASSERT_NO_FATAL_FAILURE(fastestPlacement(longProgram, longSeconds));
 
         EXPECT_LT(longSeconds, LINEAR_GROWTH_BOUND * shortSeconds)
-            << SHORT_CHAIN << " clauses: " << shortSeconds << " s, " << LONG_CHAIN << " clauses: " << longSeconds << " s";
+            << shortLength << " clauses: " << shortSeconds << " s, " << longLength << " clauses: " << longSeconds << " s";
     }
 
     void placeChain(const ChainQuery& chain, PlacedChain& placed) {
@@ -281,6 +281,67 @@ TEST_F(PlaceRowInvariantOpsGrowthTest, computesWhatIsReadOffTheSeedInFrontOfTheH
     EXPECT_EQ(countBefore<mlir::db::GetOutEdges>(*placed._module, isSum), SHORT_CHAIN);
 
     expectRows(chain, {{"0"}});
+}
+
+// The pattern is walked from the nodes 0, 2 and 7 the unwound values name, so every equality
+// compares two columns in front of the hop, and so does each conjunction chaining them, which
+// reads the one before it. Nodes 0, 2 and 7 have 5 edges into them.
+TEST_F(PlaceRowInvariantOpsGrowthTest, placesAChainOfConjunctionsOfEqualitiesInFrontOfTheHop) {
+    const ChainQuery chain {"MATCH (a)-[e]->(b) UNWIND [0, 2, 7] AS y WITH a, b, y", " WITH a, b, y WHERE b = y", " RETURN count(a)"};
+    ASSERT_NO_FATAL_FAILURE(expectLinearGrowth(chain));
+
+    PlacedChain placed;
+    ASSERT_NO_FATAL_FAILURE(placeChain(chain, placed));
+
+    const auto isEquality = [](mlir::Operation* op) {
+        return mlir::isa<mlir::db::EqOp>(op);
+    };
+    const auto isConjunction = [](mlir::Operation* op) {
+        return mlir::isa<mlir::db::AndOp>(op);
+    };
+    EXPECT_EQ(countBefore<mlir::db::GetInEdges>(*placed._module, isEquality), SHORT_CHAIN - 1);
+    EXPECT_EQ(countBefore<mlir::db::GetInEdges>(*placed._module, isConjunction), SHORT_CHAIN - 2);
+
+    expectRows(chain, {{"5"}});
+}
+
+// Each conjunction reads the one before it, so the pass places one per sweep. Below 1000 clauses a
+// sweep costing what the sweeps before it staged stays under the bound, so these chains are twice
+// as long as the others. Remy and Adam, the people with an age, have 7 edges out.
+TEST_F(PlaceRowInvariantOpsGrowthTest, placesAChainOfConjunctionsOverTheSeedInFrontOfAnOptionalMatch) {
+    const ChainQuery chain {"MATCH (s:Person) OPTIONAL MATCH (s)-->(b) WITH s, b", " WITH s, b WHERE s.age > -#", " RETURN count(b)"};
+    ASSERT_NO_FATAL_FAILURE(expectLinearGrowth(chain, 2 * SHORT_CHAIN, 2 * LONG_CHAIN));
+
+    PlacedChain placed;
+    ASSERT_NO_FATAL_FAILURE(placeChain(chain, placed));
+    EXPECT_EQ(countReadsBefore<mlir::db::OptionalMatch>(*placed._module, "age"), SHORT_CHAIN);
+
+    const auto isComparison = [](mlir::Operation* op) {
+        return mlir::isa<mlir::db::GtOp>(op);
+    };
+    const auto isConjunction = [](mlir::Operation* op) {
+        return mlir::isa<mlir::db::AndOp>(op);
+    };
+    EXPECT_EQ(countBefore<mlir::db::OptionalMatch>(*placed._module, isComparison), SHORT_CHAIN);
+    EXPECT_EQ(countBefore<mlir::db::OptionalMatch>(*placed._module, isConjunction), SHORT_CHAIN - 1);
+
+    expectRows(chain, {{"7"}});
+}
+
+TEST_F(PlaceRowInvariantOpsGrowthTest, placesAChainOfConjunctionsOverTheInputInFrontOfACall) {
+    const ChainQuery chain {"MATCH (s:Person) CALL { WITH s MATCH (s)-->(b) RETURN b } WITH s, b", " WITH s, b WHERE s.age > -#", " RETURN count(b)"};
+    ASSERT_NO_FATAL_FAILURE(expectLinearGrowth(chain, 2 * SHORT_CHAIN, 2 * LONG_CHAIN));
+
+    PlacedChain placed;
+    ASSERT_NO_FATAL_FAILURE(placeChain(chain, placed));
+    EXPECT_EQ(countReadsBefore<mlir::db::CallSubquery>(*placed._module, "age"), SHORT_CHAIN);
+
+    const auto isConjunction = [](mlir::Operation* op) {
+        return mlir::isa<mlir::db::AndOp>(op);
+    };
+    EXPECT_EQ(countBefore<mlir::db::CallSubquery>(*placed._module, isConjunction), SHORT_CHAIN - 1);
+
+    expectRows(chain, {{"7"}});
 }
 
 // Every projected age is only used after the filter, so each is read for the 3 edges it keeps

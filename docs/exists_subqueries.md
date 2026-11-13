@@ -67,7 +67,7 @@ with no tag names the columns it holds instead, which it is answered off.
 The lowering is an accumulator over one step of the input rows:
 
 ```
-%state, %tag = nl.exists_buffer (%p) : {!nl.chunk<!storage.node_id>}
+%state, %tag = nl.exists_buffer(%p) : !nl.chunk<!storage.node_id>
 nl.for ... {                                  // the body's own nest
   nl.exists_mark %state, %tag2, ()
 }

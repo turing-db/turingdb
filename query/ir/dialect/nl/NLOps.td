@@ -2598,6 +2598,7 @@ def Constant : NLOp<"constant", [Pure, ConstantLike]> {
     static bool isBuildableWith(::mlir::Attribute value, ::mlir::Type type);
   }];
 
+  let hasFolder = 1;
   let hasVerifier = 1;
 
   let assemblyFormat = "`(` $value `)` attr-dict `` custom<ConstantChunkType>(type($result), ref($value))";
@@ -4168,30 +4169,29 @@ def ExistsBuffer : NLOp<"exists_buffer", [RowAlignedThroughOperands]> {
   let description = [{
     Sits at the top of the block whose step it covers - the innermost loop body
     binding the columns the EXISTS answers for - so the accumulator is empty again at
-    every step. It records this step's input chunks, clears the matched flag of each
-    of their rows, and produces the row tag: a chunk holding each input row's
-    position, which the body carries alongside the columns it walks so nl.exists_mark
-    knows which rows it produced a row for.
+    every step. It sizes itself to the rows of the cardinality chunk, a chunk of that
+    step holding rows, clears the matched flag of each, and produces the row tag: a
+    chunk holding each input row's position, which the body carries alongside the
+    columns it walks so nl.exists_mark knows which rows it produced a row for.
 
-      %state, %tag = nl.exists_buffer (%p) : {!nl.chunk<!storage.node_id>}
+      %state, %tag = nl.exists_buffer(%p) : !nl.chunk<!storage.node_id>
 
-    With no input columns - an EXISTS over the single empty row Cypher starts from -
-    the accumulator holds one flag and the tag one row. The body has nothing to join
-    onto there, so it never carries that tag, which is why the op is row-aligned
-    through its operands: a tag over input rows holds exactly the rows those chunks do.
+    With no cardinality - an EXISTS over the single empty row Cypher starts from - the
+    accumulator holds one flag and the tag one row. The body has nothing to join onto
+    there, so it never carries that tag, which is why the op is row-aligned through its
+    operands: a tag over the step's rows holds exactly the rows that chunk does.
   }];
 
-  // The chunks the EXISTS answers for; the accumulator reads its row count from the
-  // first of them, and nl.exists_result lays its answer out over the same rows.
-  let arguments = (ins Variadic<NLChunk>:$input_columns);
+  // A chunk of the step the EXISTS answers for, whose rows nl.exists_result lays the
+  // answer out over too.
+  let arguments = (ins Optional<NLChunk>:$cardinality);
 
   // The accumulator, then the row tag over this step's input rows.
   let results = (outs NLExistsState:$state, NLUInt64Chunk:$tag);
 
-  // The tag's type is buildable and so omitted; only the input chunk types are
-  // spelled, in braces as nl.optional_buffer spells its own.
+  // The tag's type is buildable and so omitted; only the cardinality chunk's is spelled.
   let assemblyFormat = [{
-    `(` $input_columns `)` attr-dict (`:` `{` qualified(type($input_columns))^ `}`)?
+    `(` ($cardinality^)? `)` attr-dict (`:` qualified(type($cardinality))^)?
   }];
 }
 
@@ -4242,10 +4242,10 @@ def ExistsResult : NLOp<"exists_result", [Pure, RowAlignedThroughOperands]> {
   let description = [{
     The answer phase of an EXISTS. Consumes a filled nl.exists_state and produces one
     boolean per input row of the step - true for a row the body produced a row for -
-    row-aligned with the chunks the accumulator was opened over, which is what lets the
-    result stand beside them in the rows in flight. The cardinality operand is one of
-    those chunks; it is absent when the accumulator was opened over none, which is one
-    row of its own.
+    row-aligned with the chunk the accumulator was sized to, which is what lets the
+    result stand beside the step's chunks in the rows in flight. The cardinality operand
+    is that chunk; it is absent when the accumulator was sized to none, which is one row
+    of its own.
 
       %b = nl.exists_result(%state, %p) : (!nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.bool>
 
@@ -4268,21 +4268,21 @@ def CountSubqueryBuffer : NLOp<"count_subquery_buffer", [RowAlignedThroughOperan
   let summary = "Create (and reset) the accumulator for one COUNT subquery over this step's rows";
   let description = [{
     nl.exists_buffer's counting sibling: it sits at the top of the block whose step it
-    covers, records this step's input chunks, zeroes the count of each of their rows and
-    produces the row tag the body carries.
+    covers, sizes itself to the rows of the cardinality chunk, zeroes the count of each
+    and produces the row tag the body carries.
 
-      %state, %tag = nl.count_subquery_buffer (%p) : {!nl.chunk<!storage.node_id>}
+      %state, %tag = nl.count_subquery_buffer(%p) : !nl.chunk<!storage.node_id>
 
-    With no input columns the accumulator holds one count, for the single empty row
-    Cypher starts from.
+    With no cardinality the accumulator holds one count, for the single empty row Cypher
+    starts from.
   }];
 
-  let arguments = (ins Variadic<NLChunk>:$input_columns);
+  let arguments = (ins Optional<NLChunk>:$cardinality);
 
   let results = (outs NLCountSubqueryState:$state, NLUInt64Chunk:$tag);
 
   let assemblyFormat = [{
-    `(` $input_columns `)` attr-dict (`:` `{` qualified(type($input_columns))^ `}`)?
+    `(` ($cardinality^)? `)` attr-dict (`:` qualified(type($cardinality))^)?
   }];
 }
 
@@ -4327,9 +4327,9 @@ def CountSubqueryTally : NLOp<"count_subquery_tally", [AttrSizedOperandSegments]
 def CountSubqueryResult : NLOp<"count_subquery_result", [Pure, RowAlignedThroughOperands]> {
   let summary = "Read a COUNT subquery accumulator's counts as a chunk";
   let description = [{
-    Produces one count per input row of the step, row-aligned with the chunks the
-    accumulator was opened over. The cardinality operand is one of those chunks; it is
-    absent when the accumulator was opened over none, which is one row of its own.
+    Produces one count per input row of the step, row-aligned with the chunk the
+    accumulator was sized to. The cardinality operand is that chunk; it is absent when
+    the accumulator was sized to none, which is one row of its own.
 
       %n = nl.count_subquery_result(%state, %p) : (!nl.chunk<!storage.node_id>) -> !nl.chunk<ui64>
   }];

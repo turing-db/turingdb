@@ -76,3 +76,5 @@ target_include_directories(test_query_ir_compiler_context_reuse PRIVATE ${IR_TES
 add_ir_tests(test_query_ir_db_pass_pipeline_reuse DBPassPipelineReuseTest.cpp)
 
 add_ir_tests(test_query_ir_insertion_ordered_map InsertionOrderedMapTest.cpp)
+
+add_ir_tests(test_query_ir_constant_like_fold ConstantLikeFoldTest.cpp)

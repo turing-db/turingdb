@@ -228,12 +228,12 @@ def HoistUnconditionalRegions : Pass<"hoist_unconditional_regions"> {
 }
 
 def PlaceRowInvariantOps : Pass<"place_row_invariant_ops"> {
-    let summary = "Place an op computing a value per row from the columns in front of an op repeating rows - a hop, a walk, an unwind, a product, a region run more than once per row - and that raises on no row and has no effect: in front of that op, its column carried back through the steps between, where a use of it comes before any filter after that op, and after the last filter or limit every use follows otherwise";
+    let summary = "Place an op computing a value per row from the columns in front of an op repeating rows - a hop, a walk, an unwind, a product, an OPTIONAL MATCH or a CALL handing back the rows it repeats, a region run more than once per row, a scan of edges repeating the node at each end - and that raises on no row and has no effect: in front of that op, its column carried back through the steps between, where a use of it comes before any filter after that op, and after the last filter or limit every use follows otherwise";
     let dependentDialects = ["mlir::db::DB"];
 }
 
 def TrimUnreadColumns : Pass<"trim_unread_columns"> {
-    let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products, grouping ops, calls, CASEs, optional matches and the ops over the elements of a list, the inputs no region of a subquery, a CALL, an optional match, a CASE or a list op reads but to yield them back, and the constants and values computed per row that nothing reads";
+    let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products, grouping ops, calls, CASEs, optional matches, CALL subqueries and the ops over the elements of a list, the inputs no region of a subquery, a CALL, an optional match, a CASE or a list op reads but to yield them back, and the constants and values computed per row that nothing reads";
     let dependentDialects = ["mlir::db::DB"];
 }
 

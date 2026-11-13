@@ -3,9 +3,12 @@
 #include <string_view>
 #include <vector>
 
+#include "QueryStatus.h"
+
 #include "CallV3Test.h"
 #include "StringRowSink.h"
 
+using namespace db;
 using namespace turing::test;
 
 // A minus or a less-than before a bracket or another minus is an operator, unless it follows a
@@ -28,7 +31,9 @@ TEST_F(MinusBeforeAListTest, subtractsAnElementOfAList) {
 }
 
 TEST_F(MinusBeforeAListTest, subtractsAListFromAnInteger) {
-    runQueryExpectingError("RETURN 1 - [1, 2]", "not valid and compatible numeric types: 'Integer' and 'List'");
+    runQueryExpectingError("RETURN 1 - [1, 2]",
+                           QueryStatus::Status::ANALYZE_ERROR,
+                           "not valid and compatible numeric types: 'Integer' and 'List'");
 }
 
 TEST_F(MinusBeforeAListTest, negatesAnElementOfAList) {

@@ -97,7 +97,7 @@ TEST_F(OptionalMatchYieldsTest, carriesNoUnreadRelationship) {
     std::string dump;
     stageDump("EXPLAIN (db) MATCH (n:Person) OPTIONAL MATCH (n)-[e:KNOWS_WELL]->(c) RETURN n.name", "db", dump);
 
-    EXPECT_TRUE(contains(dump, "} : {!db.column<!storage.node_id>}")) << dump;
+    EXPECT_TRUE(contains(dump, "} : {!db.column<!storage.node_id>, !db.column<!storage.nullable<!storage.string>>}")) << dump;
 }
 
 TEST_F(OptionalMatchYieldsTest, expandsNoUnreadWalk) {

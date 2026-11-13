@@ -319,11 +319,11 @@ NLSubqueryExpressionState::~NLSubqueryExpressionState() {
 }
 
 size_t NLSubqueryExpressionState::getRowCount() const {
-    if (_inputColumns.empty()) {
+    if (!_cardinality) {
         return 1;
     }
 
-    return _inputColumns.front()->size();
+    return _cardinality->size();
 }
 
 void NLExistsState::reset() {

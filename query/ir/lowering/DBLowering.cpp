@@ -2480,10 +2480,7 @@ void DBLowering::lowerPatternComprehension(mlir::db::PatternComprehension compre
     // read beside, so it is emptied once per chunk of them - and the pattern's nest and
     // the build both go there, the build after the nest.
     mlir::Block* const stepBlock = deepestOwnerBlock(inputChunks, _rootBlock);
-
-    // Any chunk of the step counts its rows; a comprehension read where nothing is in
-    // flight has none, and covers the single empty row instead.
-    const mlir::Value cardinality = inputChunks.empty() ? mlir::Value {} : cardinalityDriver(inputChunks);
+    const mlir::Value cardinality = stepCardinality(inputChunks);
 
     setInsertionInto(stepBlock);
     nl::RowListsBuffer buffer = _builder.create<nl::RowListsBuffer>(loc, cardinality);
@@ -3391,6 +3388,22 @@ mlir::Block* DBLowering::deepestOwnerBlock(llvm::ArrayRef<mlir::Value> chunks, m
     return deepest;
 }
 
+nl::For DBLowering::buildRowLoop(mlir::Block* stepBlock, llvm::ArrayRef<mlir::Value> chunks, mlir::Value limitHandle) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+
+    llvm::SmallVector<mlir::Value, 4> rowChunks(chunks.begin(), chunks.end());
+    rowAlignBufferedChunks(rowChunks);
+
+    setInsertionInto(stepBlock);
+    nl::EachRow eachRow = _builder.create<nl::EachRow>(loc, rowChunks);
+
+    return _builder.create<nl::For>(loc, eachRow.getResult(), limitHandle);
+}
+
+mlir::Value DBLowering::stepCardinality(llvm::ArrayRef<mlir::Value> inputChunks) {
+    return inputChunks.empty() ? mlir::Value() : cardinalityDriver(inputChunks);
+}
+
 void DBLowering::lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch) {
     const mlir::Location loc = _builder.getUnknownLoc();
 
@@ -3404,8 +3417,11 @@ void DBLowering::lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch) {
     // loop both go there, the drain after the nest.
     mlir::Block* const stepBlock = deepestOwnerBlock(inputChunks, _rootBlock);
 
+    llvm::SmallVector<mlir::Value, 4> bufferedChunks(inputChunks.begin(), inputChunks.end());
+    rowAlignBufferedChunks(bufferedChunks);
+
     setInsertionInto(stepBlock);
-    nl::OptionalBuffer buffer = _builder.create<nl::OptionalBuffer>(loc, inputChunks);
+    nl::OptionalBuffer buffer = _builder.create<nl::OptionalBuffer>(loc, bufferedChunks);
     const mlir::Value state = buffer.getState();
 
     // Every row drained reaches the cut, so once the pattern has matched as many rows as
@@ -3471,12 +3487,14 @@ void DBLowering::lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch) {
         throw IRException("db.optional_match pattern yields no column");
     }
 
+    rowAlignBufferedChunks(matchedChunks);
+
     // The drain rebuilds a missed row's carried columns out of this step's input chunks, so
     // the two must be the same chunk type however the db types were spelled: a column a
     // CALL yielded enters type-erased and comes back refined, and the chunk behind it is
     // the same one either way.
-    for (size_t inputIndex = 0; inputIndex < inputChunks.size(); inputIndex++) {
-        if (matchedChunks[inputIndex].getType() != inputChunks[inputIndex].getType()) {
+    for (size_t inputIndex = 0; inputIndex < bufferedChunks.size(); inputIndex++) {
+        if (matchedChunks[inputIndex].getType() != bufferedChunks[inputIndex].getType()) {
             throw IRException("db.optional_match carries an input column back as another chunk type");
         }
     }
@@ -3640,9 +3658,7 @@ void DBLowering::lowerSubqueryPerRow(mlir::db::CallSubquery call,
     // as the loops feeding that limit do, so a spent budget stops the walk over the rows
     const mlir::Value limitHandle = loopLimitHandle(call.getOperation());
 
-    setInsertionInto(stepBlock);
-    nl::EachRow eachRow = _builder.create<nl::EachRow>(loc, inputChunks);
-    nl::For rowLoop = _builder.create<nl::For>(loc, eachRow.getResult(), limitHandle);
+    nl::For rowLoop = buildRowLoop(stepBlock, inputChunks, limitHandle);
     mlir::Block* const rowBody = rowLoop.getBody();
 
     llvm::SmallVector<mlir::Value, 4> rowChunks;
@@ -3696,9 +3712,7 @@ void DBLowering::lowerOptionalSubquery(mlir::db::CallSubquery call,
     if (perRow) {
         const mlir::Value limitHandle = loopLimitHandle(call.getOperation());
 
-        setInsertionInto(stepBlock);
-        nl::EachRow eachRow = _builder.create<nl::EachRow>(loc, inputChunks);
-        nl::For rowLoop = _builder.create<nl::For>(loc, eachRow.getResult(), limitHandle);
+        nl::For rowLoop = buildRowLoop(stepBlock, inputChunks, limitHandle);
         bodyRoot = rowLoop.getBody();
 
         stepChunks.clear();
@@ -3707,8 +3721,11 @@ void DBLowering::lowerOptionalSubquery(mlir::db::CallSubquery call,
         }
     }
 
+    llvm::SmallVector<mlir::Value, 4> bufferedChunks(stepChunks.begin(), stepChunks.end());
+    rowAlignBufferedChunks(bufferedChunks);
+
     setInsertionInto(bodyRoot);
-    nl::OptionalBuffer buffer = _builder.create<nl::OptionalBuffer>(loc, stepChunks);
+    nl::OptionalBuffer buffer = _builder.create<nl::OptionalBuffer>(loc, bufferedChunks);
     const mlir::Value state = buffer.getState();
 
     // A body carrying the scope reads the tag through its trailing argument and hands it
@@ -3734,10 +3751,10 @@ void DBLowering::lowerOptionalSubquery(mlir::db::CallSubquery call,
     // A body carrying the scope hands the input columns back ahead of its own. The drain
     // rebuilds those out of the step's chunks rather than padding them, so they stay the
     // chunk the accumulator recorded; only the body's own columns need a null to pad with.
-    const size_t carriedInputs = call.getCarriesScope() ? stepChunks.size() : 0;
+    const size_t carriedInputs = call.getCarriesScope() ? bufferedChunks.size() : 0;
 
     for (size_t inputIndex = 0; inputIndex < carriedInputs; inputIndex++) {
-        if (yieldedChunks[inputIndex].getType() != stepChunks[inputIndex].getType()) {
+        if (yieldedChunks[inputIndex].getType() != bufferedChunks[inputIndex].getType()) {
             throw IRException("db.call_subquery carries an input column back as another chunk type");
         }
     }
@@ -3804,7 +3821,7 @@ void DBLowering::lowerSubqueryExpression(SubqueryOp subquery) {
     // for, so it is emptied once per chunk of them - and the body's nest and the read of
     // the answers both go there, the read after the nest.
     mlir::Block* const stepBlock = deepestOwnerBlock(inputChunks, _rootBlock);
-    const mlir::Value cardinality = inputChunks.empty() ? mlir::Value() : inputChunks.front();
+    const mlir::Value cardinality = stepCardinality(inputChunks);
 
     setInsertionInto(stepBlock);
 
@@ -3816,11 +3833,11 @@ void DBLowering::lowerSubqueryExpression(SubqueryOp subquery) {
         state = buffer.getState();
         tag = buffer.getTag();
     } else if constexpr (countsRows) {
-        nl::CountSubqueryBuffer buffer = _builder.create<nl::CountSubqueryBuffer>(loc, inputChunks);
+        nl::CountSubqueryBuffer buffer = _builder.create<nl::CountSubqueryBuffer>(loc, cardinality);
         state = buffer.getState();
         tag = buffer.getTag();
     } else {
-        nl::ExistsBuffer buffer = _builder.create<nl::ExistsBuffer>(loc, inputChunks);
+        nl::ExistsBuffer buffer = _builder.create<nl::ExistsBuffer>(loc, cardinality);
         state = buffer.getState();
         tag = buffer.getTag();
     }
@@ -3840,8 +3857,7 @@ void DBLowering::lowerSubqueryExpression(SubqueryOp subquery) {
         llvm::SmallVector<mlir::Value, 4> rowChunks(inputChunks.begin(), inputChunks.end());
         rowChunks.push_back(tag);
 
-        nl::EachRow eachRow = _builder.create<nl::EachRow>(loc, rowChunks);
-        nl::For rowLoop = _builder.create<nl::For>(loc, eachRow.getResult(), mlir::Value());
+        nl::For rowLoop = buildRowLoop(stepBlock, rowChunks, mlir::Value());
         bodyRoot = rowLoop.getBody();
 
         bodyChunks.assign(bodyRoot->args_begin(), bodyRoot->args_begin() + inputChunks.size());

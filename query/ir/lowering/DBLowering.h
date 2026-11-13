@@ -574,6 +574,16 @@ private:
                              mlir::Block* stepBlock,
                              llvm::ArrayRef<mlir::Value> inputChunks);
 
+    // Opens in @param stepBlock an nl.for over an nl.each_row binding one row of each of
+    // @param chunks per step. The loop reads its row count off the first chunk and the row of
+    // each by position, so a constant, holding one value for every row, is laid out first.
+    mlir::nl::For buildRowLoop(mlir::Block* stepBlock, llvm::ArrayRef<mlir::Value> chunks, mlir::Value limitHandle);
+
+    // The chunk holding the rows of the step an op with a body runs over, read off
+    // @param inputChunks, the op's inputs; null where it has none and runs over the single
+    // empty row
+    mlir::Value stepCardinality(llvm::ArrayRef<mlir::Value> inputChunks);
+
     // The most deeply nested block any of @param chunks is bound in, or @param fallback
     // when they are all bound at or above it: where an op reading them all belongs
     static mlir::Block* deepestOwnerBlock(llvm::ArrayRef<mlir::Value> chunks, mlir::Block* fallback);

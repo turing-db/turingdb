@@ -4,9 +4,12 @@
 #include <string_view>
 #include <vector>
 
+#include "QueryStatus.h"
+
 #include "CallV3Test.h"
 #include "StringRowSink.h"
 
+using namespace db;
 using namespace turing::test;
 
 // NOT, unary minus and unary plus over a CASE whose branches have different types, so each
@@ -35,6 +38,10 @@ protected:
 
         EXPECT_EQ(rows, expected) << text;
     }
+
+    void expectRunTimeError(std::string_view names, std::string_view returned, std::string_view reason) {
+        runQueryExpectingError(query(names, returned), QueryStatus::Status::EXEC_ERROR, reason);
+    }
 };
 
 TEST_F(CaseAnyUnaryOperatorTest, negatesABoolean) {
@@ -51,7 +58,7 @@ TEST_F(CaseAnyUnaryOperatorTest, filtersOnANegatedBoolean) {
 
 // NOT reads a boolean, as a WHERE does, and a number is not one
 TEST_F(CaseAnyUnaryOperatorTest, rejectsANumberUnderNot) {
-    runQueryExpectingError(query("'Remy'", "RETURN NOT v"), "A logical operand must be a boolean, not 'Integer'");
+    expectRunTimeError("'Remy'", "RETURN NOT v", "A logical operand must be a boolean, not 'Integer'");
 }
 
 TEST_F(CaseAnyUnaryOperatorTest, negatesANumberOrADuration) {
@@ -73,16 +80,16 @@ TEST_F(CaseAnyUnaryOperatorTest, negatesTwice) {
 
 // Minus reads a number or a duration, and a string is neither
 TEST_F(CaseAnyUnaryOperatorTest, rejectsAStringUnderMinus) {
-    runQueryExpectingError(query("'Cyrus'", "RETURN -v"), "must be an integer, a double or a duration");
+    expectRunTimeError("'Cyrus'", "RETURN -v", "must be an integer, a double or a duration");
 }
 
 // Plus reads a number or a duration too, so a string or a boolean is a type error there
 TEST_F(CaseAnyUnaryOperatorTest, rejectsAStringUnderPlus) {
-    runQueryExpectingError(query("'Cyrus'", "RETURN +v"), "must be an integer, a double or a duration");
+    expectRunTimeError("'Cyrus'", "RETURN +v", "must be an integer, a double or a duration");
 }
 
 TEST_F(CaseAnyUnaryOperatorTest, rejectsABooleanUnderPlus) {
-    runQueryExpectingError(query("'Maxime'", "RETURN +v"), "must be an integer, a double or a duration");
+    expectRunTimeError("'Maxime'", "RETURN +v", "must be an integer, a double or a duration");
 }
 
 // Plus has no opposite to take, so the lowest int64 passes through it unchanged

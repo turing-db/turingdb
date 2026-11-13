@@ -20,13 +20,14 @@ struct CarrySet {
 };
 
 // _count operands from _operandOffset, each coming into a region as the argument at the same
-// position from _argumentOffset. An op that _handsBack those columns leads its results with
-// them: as the region left them where it _yieldsBack, the region then leading its yield with
-// them, and as the operands hold them otherwise. An op that _repeatsRows may run the region
-// more than once for one operand row, as a body runs once per element of a list.
+// position from _argumentOffset. An op that _handsBack those columns returns them as its results
+// from _resultOffset: as the region left them where it _yieldsBack, the region then leading its
+// yield with them, and as the operands hold them otherwise. An op that _repeatsRows may run the
+// region more than once for one operand row, as a body runs once per element of a list.
 struct RegionCarrySet {
     size_t _operandOffset {0};
     size_t _argumentOffset {0};
+    size_t _resultOffset {0};
     size_t _count {0};
     bool _handsBack {false};
     bool _yieldsBack {false};
@@ -37,8 +38,12 @@ struct RegionCarrySet {
 // outside it or an op with none
 Value carrySetRowSource(Operation* op, OpResult result);
 
-// Appends the row source of @param value where it is a result that has one
-void collectRowSource(Value value, llvm::SmallVectorImpl<Value>& carried);
+// Appends the row source of @param result where it has one
+void collectRowSource(OpResult result, llvm::SmallVectorImpl<Value>& carried);
+
+// Whether @param result comes back from an operand of @param op's carry set, of an op that
+// _repeatsRows
+bool carrySetRepeatsRows(Operation* op, OpResult result);
 
 // The carry set, or the carry set into its regions, of an op that does not size its
 // operand segments
@@ -57,6 +62,10 @@ size_t forwardedArgumentCount(Region& region);
 // argument no region forwards
 bool matchForwardedArgument(BlockArgument argument, Region*& source, size_t& forwardIndex);
 
+// The column a region before the one of @param argument forwards as it; null for an argument no
+// region forwards
+Value forwardedColumnOf(BlockArgument argument);
+
 bool matchRegionCarrySet(Region& region, RegionCarrySet& carrySet);
 
 // Sets @param carriedIndex to the position in the region carry set of the column @param argument
@@ -72,12 +81,23 @@ Value carriedColumnOf(BlockArgument argument);
 // no element
 Value elementSourceOf(BlockArgument argument);
 
-// The columns the terminator of @param body yields to the op holding it
+// The terminator of @param body, or of the one block of @param region; null while codegen is
+// still building it and it ends on no terminator yet
+Operation* terminatorOf(Block& body);
+Operation* terminatorOf(Region& region);
+
+// The columns the terminator of @param body yields to the op holding it; none while it has no
+// terminator yet
 MutableOperandRange yieldedColumnsOf(Block& body);
 
 // The results the columns @param region yields come out as, one row for each row it yields;
 // none where the op holding it pads or merges what it yields
 ResultRange yieldedResultsOf(Region& region);
+
+// The results the columns @param region yields come out as, each row they hold one the region
+// yields or, where the op pads them, null on a row the region yields none for; none where the
+// op merges what it yields
+ResultRange yieldedOrPaddedResultsOf(Region& region);
 
 // Sets @param region to the region whose yield @param result comes out of, row for row, and
 // @param yieldIndex to its place in that yield; false for a result no region yields so

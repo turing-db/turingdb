@@ -79,6 +79,17 @@ void CallV3Test::runQueryExpectingError(std::string_view query, const ParameterM
     EXPECT_NE(error.find(reason), std::string::npos) << query << ": " << error;
 }
 
+void CallV3Test::runQueryExpectingError(std::string_view query, QueryStatus::Status stage, std::string_view reason) {
+    NullSink sink;
+    QueryStatus status;
+    _interpreter->execute(status, query, _graphName, CommitHash::head(), ChangeID::head(), &sink);
+    ASSERT_FALSE(status.isOk()) << "accepted: " << query;
+
+    const std::string error = status.getError();
+    EXPECT_EQ(QueryStatusDescription::value(status.getStatus()), QueryStatusDescription::value(stage)) << query << ": " << error;
+    EXPECT_NE(error.find(reason), std::string::npos) << query << ": " << error;
+}
+
 void CallV3Test::runWrite(std::string_view query) {
     NullSink sink;
     runWrite(query, sink);

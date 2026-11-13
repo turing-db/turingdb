@@ -5,6 +5,7 @@
 #include <string_view>
 
 #include "QueryConfig.h"
+#include "QueryStatus.h"
 #include "versioning/ChangeID.h"
 
 #include "TuringTest.h"
@@ -34,6 +35,11 @@ protected:
     void runQuery(std::string_view query, const db::ParameterMap& parameters, db::NLOutputSink& sink);
     void runQueryExpectingError(std::string_view query, std::string_view reason);
     void runQueryExpectingError(std::string_view query, const db::ParameterMap& parameters, std::string_view reason);
+
+    // A query turned away at @param stage: the analyzer rejects a query whatever the graph
+    // holds, the runtime only on a row that reaches the failing op
+    void runQueryExpectingError(std::string_view query, db::QueryStatus::Status stage, std::string_view reason);
+
     void runWrite(std::string_view query);
     void runWrite(std::string_view query, const db::ParameterMap& parameters);
     void runWrite(std::string_view query, const db::ParameterMap& parameters, db::NLOutputSink& sink);

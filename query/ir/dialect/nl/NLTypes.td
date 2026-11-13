@@ -143,7 +143,7 @@ def NLExistsState : NLType<"ExistsState", "exists_state"> {
     let summary = "An EXISTS accumulator handle";
     let description = [{
         Stands for one EXISTS subquery's state over the current step of the rows it
-        answers for: the input chunks and a matched flag per input row. Produced by
+        answers for: the step's row count and a matched flag per input row. Produced by
         nl.exists_buffer at the top of the block whose step it covers - so it is
         reset once per step - marked by nl.exists_mark as the body walks, and read
         by nl.exists_result, which lays the flags out as the boolean chunk the op
@@ -156,7 +156,7 @@ def NLCountSubqueryState : NLType<"CountSubqueryState", "count_subquery_state"> 
     let summary = "A COUNT subquery accumulator handle";
     let description = [{
         Stands for one COUNT subquery's state over the current step of the rows it
-        answers for: the input chunks and a count per input row. Produced by
+        answers for: the step's row count and a count per input row. Produced by
         nl.count_subquery_buffer, which zeroes the counts once per step, added to by
         nl.count_subquery_tally as the body walks, and read by
         nl.count_subquery_result. The counting sibling of !nl.exists_state.

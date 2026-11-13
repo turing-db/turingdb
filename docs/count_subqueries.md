@@ -42,7 +42,7 @@ together, and that sum is an `i64`, as any arithmetic over a count is.
 It lowers to three nl ops, the counting siblings of the EXISTS ones:
 
 ```
-%state, %tag = nl.count_subquery_buffer (%p) : {!nl.chunk<!storage.node_id>}
+%state, %tag = nl.count_subquery_buffer(%p) : !nl.chunk<!storage.node_id>
 nl.for ... {
   nl.count_subquery_tally %state, %tag2              // tagged: +1 per tag entry
 }
@@ -69,7 +69,7 @@ buffer's tag. The accumulator is opened over the whole step ahead of the loop, a
 are read over the step once the loop closes:
 
 ```
-%state, %tag = nl.count_subquery_buffer(%p) : {!nl.chunk<!storage.node_id>}
+%state, %tag = nl.count_subquery_buffer(%p) : !nl.chunk<!storage.node_id>
 %rows = nl.each_row{%p, %tag} : {!nl.chunk<!storage.node_id>, !nl.chunk<ui64>}
 nl.for %p1, %r in %rows {
   ...

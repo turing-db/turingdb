@@ -6,6 +6,7 @@
 
 #include "ParameterMap.h"
 #include "ParameterValue.h"
+#include "QueryStatus.h"
 
 #include "CallV3Test.h"
 #include "StringRowSink.h"
@@ -143,19 +144,25 @@ TEST_F(EntityDynamicPropertyTest, readsNullOffAnEntityAnOptionalMatchMissed) {
 
 TEST_F(EntityDynamicPropertyTest, rejectsAKeyThatIsNoString) {
     runQueryExpectingError("MATCH (n:Person) WHERE n.age > 100 RETURN n[0]",
+                           QueryStatus::Status::ANALYZE_ERROR,
                            "A node is indexed by a string key, not by 'Integer'");
     runQueryExpectingError("MATCH (n:Person) WHERE n.age > 100 WITH n, 1 AS k RETURN n[k]",
+                           QueryStatus::Status::ANALYZE_ERROR,
                            "A node is indexed by a string key, not by 'Integer'");
     runQueryExpectingError("MATCH ()-[e]->() WHERE e.duration > 1000 RETURN e[0]",
+                           QueryStatus::Status::ANALYZE_ERROR,
                            "A relationship is indexed by a string key, not by 'Integer'");
 }
 
 TEST_F(EntityDynamicPropertyTest, raisesOnACellKeyHoldingAnInteger) {
     runQueryExpectingError("UNWIND [{k: 1}] AS m MATCH (n:Person {name: 'Remy'}) RETURN n[m.k]",
+                           QueryStatus::Status::EXEC_ERROR,
                            "A node is indexed by a string key, not by 'Integer'");
     runQueryExpectingError("UNWIND ['name', 1] AS k MATCH (n:Person {name: 'Remy'}) RETURN n[k]",
+                           QueryStatus::Status::EXEC_ERROR,
                            "A node is indexed by a string key, not by 'Integer'");
     runQueryExpectingError("UNWIND [{k: 1}] AS m MATCH ()-[e:KNOWS_WELL]->() RETURN e[m.k]",
+                           QueryStatus::Status::EXEC_ERROR,
                            "A relationship is indexed by a string key, not by 'Integer'");
 }
 
