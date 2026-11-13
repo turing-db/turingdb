@@ -5,6 +5,7 @@
 #include "ColumnVector.h"
 #include "ColumnOptVector.h"
 #include "ColumnConst.h"
+#include "ColumnOperand.h"
 #include "TypeUtils.h"
 #include "CellView.h"
 #include "metadata/PropertyType.h"
@@ -38,142 +39,42 @@ public:
     using type = InternalResImpl;
 };
 
-template <typename Op, typename ColT, typename ColU>
-class ColumnCombinationImpl;
-
-/*
- * @brief Predicate Operations (non-optional)
- * @detail Predicates applied to two non-optional operands produce a @ref ColumnVector<CustomBool>
- */
-template <typename Op, typename T, typename U>
-    requires TuringPredicate<Op, T, U>
-class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnVector<U>> {
-public:
-    using ResultColumnType = ColumnVector<CustomBool>;
+template <typename Result, bool READS_CONSTANTS>
+struct ResultColumnOf {
+    using type = std::conditional_t<READS_CONSTANTS, ColumnConst<Result>, ColumnVector<Result>>;
 };
 
-template <typename Op, typename T, typename U>
-    requires TuringPredicate<Op, T, U>
-class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnConst<U>> {
-public:
-    using ResultColumnType = ColumnVector<CustomBool>;
+template <typename Result>
+struct ResultColumnOf<std::optional<Result>, false> {
+    using type = ColumnOptVector<Result>;
 };
 
-template <typename Op, typename T, typename U>
-    requires TuringPredicate<Op, T, U>
-class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnVector<U>> {
-public:
-    using ResultColumnType = ColumnVector<CustomBool>;
-};
-
-template <typename Op, typename T, typename U>
-    requires TuringPredicate<Op, T, U>
-class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnConst<U>> {
-public:
-    using ResultColumnType = ColumnConst<CustomBool>;
-};
-
-/*
- * @brief Predicate Operations (optional)
- * @detail Predicates applied to two optional operands produce a @ref ColumnOptVector<CustomBool>
- */
-template <typename Op, typename T, typename U>
-    requires OptionalPredicate<Op, T, U> && (TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>)
-class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnVector<U>> {
-public:
-    using ResultColumnType = ColumnOptVector<CustomBool>;
-};
-
-template <typename Op, typename T, typename U>
-    requires OptionalPredicate<Op, T, U> && (TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>)
-class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnConst<U>> {
-public:
-    using ResultColumnType = ColumnOptVector<CustomBool>;
-};
-
-template <typename Op, typename T, typename U>
-    requires OptionalPredicate<Op, T, U> && (TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>)
-class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnVector<U>> {
-public:
-    using ResultColumnType = ColumnOptVector<CustomBool>;
-};
-
-template <typename Op, typename T, typename U>
-    requires OptionalPredicate<Op, T, U> && (TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>)
-class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnConst<U>> {
-public:
-    using ResultColumnType = ColumnConst<std::optional<CustomBool>>;
-};
-
-template <typename Op, typename T, typename U>
-    requires NullableResultPredicate<Op, T, U>
-class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnVector<U>> {
-public:
-    using ResultColumnType = ColumnOptVector<CustomBool>;
-};
-
-template <typename Op, typename T, typename U>
-    requires NullableResultPredicate<Op, T, U>
-class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnConst<U>> {
-public:
-    using ResultColumnType = ColumnOptVector<CustomBool>;
-};
-
-template <typename Op, typename T, typename U>
-    requires NullableResultPredicate<Op, T, U>
-class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnVector<U>> {
-public:
-    using ResultColumnType = ColumnOptVector<CustomBool>;
-};
-
-template <typename Op, typename T, typename U>
-    requires NullableResultPredicate<Op, T, U>
-class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnConst<U>> {
-public:
-    using ResultColumnType = ColumnConst<std::optional<CustomBool>>;
-};
-
-/*
- * @brief General operators (potentially optional)
- * @detail Operators whose result container/internal type is determined by their operands.
- * General rules:
- * - if at least one operand is optional, the result is optional
- * - if at least one operand is a ColumnVector, the result is a ColumnVector
- */
-template <typename Op, typename T, typename U>
-class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnVector<U>> {
-public:
-    using ResultColumnType =
-        ColumnVector<typename InternalCombination<Op, T, U>::type>;
-};
-
-template <typename Op, typename T, typename U>
-class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnConst<U>> {
-public:
-    using ResultColumnType =
-        ColumnVector<typename InternalCombination<Op, T, U>::type>;
-};
-
-template <typename Op, typename T, typename U>
-class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnVector<U>> {
-public:
-    using ResultColumnType =
-        ColumnVector<typename InternalCombination<Op, T, U>::type>;
-};
-
-template <typename Op, typename T, typename U>
-class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnConst<U>> {
-public:
-    using ResultColumnType =
-        ColumnConst<typename InternalCombination<Op, T, U>::type>;
-};
+template <typename Op, typename T, typename U, bool READS_CONSTANTS>
+consteval auto resultColumnOf() {
+    if constexpr (TuringPredicate<Op, T, U>) {
+        return std::type_identity<typename ResultColumnOf<CustomBool, READS_CONSTANTS>::type> {};
+    } else if constexpr (NullableResultPredicate<Op, T, U>
+                         || (OptionalPredicate<Op, T, U>
+                             && (TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>))) {
+        return std::type_identity<typename ResultColumnOf<std::optional<CustomBool>, READS_CONSTANTS>::type> {};
+    } else {
+        using Result = typename InternalCombination<Op, T, U>::type;
+        return std::type_identity<typename ResultColumnOf<Result, READS_CONSTANTS>::type> {};
+    }
+}
 
 template <typename Op, typename PColT, typename PColU>
 class ColumnCombination {
+    using LhsColumn = TypeUtils::decay_col_t<PColT>;
+    using RhsColumn = TypeUtils::decay_col_t<PColU>;
+
+    static constexpr bool READS_CONSTANTS = IS_CONSTANT_COLUMN<LhsColumn> && IS_CONSTANT_COLUMN<RhsColumn>;
+
 public:
-    using ResultColumnType =
-        ColumnCombinationImpl<Op, TypeUtils::decay_col_t<PColT>,
-                              TypeUtils::decay_col_t<PColU>>::ResultColumnType;
+    using ResultColumnType = typename decltype(resultColumnOf<Op,
+                                                             ColumnOperand<LhsColumn>,
+                                                             ColumnOperand<RhsColumn>,
+                                                             READS_CONSTANTS>())::type;
 };
 
 template <typename Op, typename ColT, typename ColU, typename ColRes>
