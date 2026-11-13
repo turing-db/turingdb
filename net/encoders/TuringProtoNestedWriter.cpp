@@ -49,18 +49,21 @@ void NestedContainerWriter::writeCells(std::span<const db::CellView> elements) {
     writeCellValues(elements);
 }
 
-void NestedContainerWriter::writeOptionalCells(std::span<const std::optional<db::CellView>> elements) {
-    const WireSize listByteSize = computeOptionalListByteSize(elements);
+void NestedContainerWriter::writeOptionalCells(const db::ColumnOptVector<db::CellView>* column,
+                                               size_t offset,
+                                               size_t rowCount) {
+    const WireSize listByteSize = computeOptionalListByteSize(column, offset, rowCount);
 
     _outBuf->copyFixedLenData(&listByteSize, sizeof(listByteSize));
 
-    for (const std::optional<db::CellView>& element : elements) {
-        if (!element.has_value()) {
+    const size_t endRow = offset + rowCount;
+    for (size_t row = offset; row < endRow; row++) {
+        if (!column->isValid(row)) {
             writeNullCell();
             continue;
         }
 
-        writeCellValues(std::span<const db::CellView>(&element.value(), 1));
+        writeCellValues(std::span<const db::CellView>(&column->getValue(row), 1));
     }
 }
 

@@ -13,10 +13,13 @@
 #include "TuringProtoEncoder.h"
 #include "TuringProtoOutBuf.h"
 #include "LocalMemory.h"
+#include "columns/ColumnConst.h"
 #include "columns/ColumnOptVector.h"
 #include "list/ListBuffer.h"
 #include "map/MapBuffer.h"
 #include "metadata/PropertyType.h"
+
+#include "FatalException.h"
 
 using namespace db;
 
@@ -173,4 +176,10 @@ TEST(TuringProtoNullableWindowTest, EncodesTheWindowOfNullableListMapAndCellColu
     }
 
     expectWindowsEncodeLikeTheirRows<CellView>({cells[0], std::nullopt, cells[1], std::nullopt, cells[0]});
+}
+
+TEST(TuringProtoNullableWindowTest, RejectsAnEmptyNullableConstant) {
+    const ColumnConst<std::optional<Int64>> empty;
+
+    EXPECT_THROW(encodeRows(&empty, 0, 1), FatalException);
 }
