@@ -22,15 +22,7 @@ struct BinaryOperators {
     static void exec(ColW* res, const ColT* lhs, const ColU* rhs, Op op = {}) {
         static_assert(std::is_trivially_copyable_v<Op>, "NOTE: Op passed by value");
 
-        using DecayColT = TypeUtils::decay_col_t<ColT>;
-        using DecayColU = TypeUtils::decay_col_t<ColU>;
-        using DecayColW = TypeUtils::decay_col_t<ColW>;
-
-        using InternalT = InnerTypeHelper<DecayColT>::type;
-        using InternalU = InnerTypeHelper<DecayColU>::type;
-        using InternalRes = InnerTypeHelper<DecayColW>::type;
-
-        BinaryOpExecutor<Op, InternalRes, InternalT, InternalU>::apply(res, lhs, rhs, op);
+        BinaryOpExecutor<Op>::apply(res, lhs, rhs, op);
     }
 };
 
@@ -130,33 +122,6 @@ struct ColumnFunctions {
         using InternalRes = InnerTypeHelper<DecayColW>::type;
 
         BinaryFunctionExecutor<Op, InternalRes, InternalT, InternalU>::apply(res, lhs, rhs);
-    }
-};
-
-/// Generic Column projection and manipulation
-struct ColumnOperators {
-    template <typename T>
-    static void copyChunk(typename ColumnVector<T>::ConstIterator srcStart,
-                          typename ColumnVector<T>::ConstIterator srcEnd,
-                          ColumnVector<T>* dst) {
-        const size_t count = std::distance(srcStart, srcEnd);
-        dst->resize(count);
-        std::copy(srcStart, srcEnd, dst->begin());
-    }
-
-    template <typename T>
-    static void copyTransformedChunk(const ColumnVector<size_t>* transform,
-                                     const ColumnVector<T>* src,
-                                     ColumnVector<T>* dst) {
-        const auto& srcd = src->getRaw();
-        const auto& transformd = transform->getRaw();
-        const size_t count = transform->size();
-        dst->resize(count);
-
-        auto& dstd = dst->getRaw();
-        for (size_t i = 0; i < count; i++) {
-            dstd[i] = srcd[transformd[i]];
-        }
     }
 };
 

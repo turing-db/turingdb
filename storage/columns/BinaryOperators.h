@@ -14,6 +14,7 @@
 #include "ColumnVector.h"
 #include "ValueText.h"
 #include "ColumnConst.h"
+#include "ColumnOptVector.h"
 #include "TypeUtils.h"
 #include "buffers/StringBuffer.h"
 #include "list/ListBuffer.h"
@@ -63,6 +64,46 @@ inline auto optionalGeneric(T&& a,
     return Func {}(av, bv);
 }
 
+template <typename T>
+const T& operandRow(const ColumnVector<T>* column, size_t row) {
+    return (*column)[row];
+}
+
+template <typename T>
+auto operandRow(const ColumnOptVector<T>* column, size_t row) {
+    return column->get(row);
+}
+
+template <typename T>
+const T& constantOperand(const ColumnConst<T>* column) {
+    return column->getRaw();
+}
+
+template <typename T>
+std::optional<T> constantOperand(const ColumnConst<std::optional<T>>* column) {
+    return column->get(0);
+}
+
+template <typename ColumnType, typename T>
+void writeRow(ColumnType* column, size_t row, const T& value) {
+    column->set(row, value);
+}
+
+template <typename ColumnType, typename T>
+void writeRow(ColumnType* column, size_t row, const std::optional<T>& value) {
+    column->setOptional(row, value);
+}
+
+template <typename T>
+void writeConstant(ColumnConst<T>* column, const T& value) {
+    column->set(value);
+}
+
+template <typename T>
+void writeConstant(ColumnConst<std::optional<T>>* column, const std::optional<T>& value) {
+    column->setOptional(value);
+}
+
 /**
  * @brief Wrapper of overloads of @ref apply functions for different combinations of
  * operands shapes and outputs for executing operators.
@@ -70,63 +111,59 @@ inline auto optionalGeneric(T&& a,
  * combination of operand and result columns. It is not concerned with the internal types
  * of its arguments.
  */
-template <typename Op, typename Res, typename T, typename U>
+template <typename Op>
 struct BinaryOpExecutor {
-    static void apply(ColumnVector<Res>* res,
-                      const ColumnVector<T>* lhs,
-                      const ColumnVector<U>* rhs,
+    template <typename ResColumn, typename LhsColumn, typename RhsColumn>
+    static void apply(ResColumn* res,
+                      const LhsColumn* lhs,
+                      const RhsColumn* rhs,
                       Op op = {}) {
         bioassert(lhs->size() == rhs->size(), "Misshapen ColumnVectors.");
         const size_t size = lhs->size();
         res->resize(size);
 
-        const auto& lhsd = lhs->getRaw();
-        const auto& rhsd = rhs->getRaw();
-        auto& resd = res->getRaw();
-
         for (size_t i = 0; i < size; i++) {
-            resd[i] = op(lhsd[i], rhsd[i]);
+            writeRow(res, i, op(operandRow(lhs, i), operandRow(rhs, i)));
         }
     }
 
-    static void apply(ColumnVector<Res>* res,
-                      const ColumnVector<T>* lhs,
+    template <typename ResColumn, typename LhsColumn, typename U>
+    static void apply(ResColumn* res,
+                      const LhsColumn* lhs,
                       const ColumnConst<U>* rhs,
                       Op op = {}) {
-       const size_t size = lhs->size();
+        const size_t size = lhs->size();
+        res->resize(size);
 
-       res->resize(size);
-       auto& resd = res->getRaw();
-       const auto& lhsd = lhs->getRaw();
-       const auto& val = rhs->getRaw();
+        const auto& value = constantOperand(rhs);
 
-       for (size_t i = 0; i < size; i++) {
-           resd[i] = op(lhsd[i], val);
-       }
+        for (size_t i = 0; i < size; i++) {
+            writeRow(res, i, op(operandRow(lhs, i), value));
+        }
     }
 
-    static void apply(ColumnVector<Res>* res,
+    template <typename ResColumn, typename T, typename RhsColumn>
+    static void apply(ResColumn* res,
                       const ColumnConst<T>* lhs,
-                      const ColumnVector<U>* rhs,
+                      const RhsColumn* rhs,
                       Op op = {}) {
-       const size_t size = rhs->size();
+        const size_t size = rhs->size();
+        res->resize(size);
 
-       res->resize(size);
-       auto& resd = res->getRaw();
-       const auto& val = lhs->getRaw();
-       const auto& rhsd = rhs->getRaw();
+        const auto& value = constantOperand(lhs);
 
-       for (size_t i = 0; i < size; i++) {
-           resd[i] = op(val, rhsd[i]);
-       }
+        for (size_t i = 0; i < size; i++) {
+            writeRow(res, i, op(value, operandRow(rhs, i)));
+        }
     }
 
+    template <typename Res, typename T, typename U>
     static void apply(ColumnConst<Res>* res,
                       const ColumnConst<T>* lhs,
                       const ColumnConst<U>* rhs,
                       Op op = {}) {
-        const Res& result = op(lhs->getRaw(), rhs->getRaw());
-        res->set(result);
+        const Res& result = op(constantOperand(lhs), constantOperand(rhs));
+        writeConstant(res, result);
     }
 
     static_assert(std::is_trivially_copyable_v<Op>, "NOTE: Op passed by value in apply");
