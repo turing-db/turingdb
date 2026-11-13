@@ -39,15 +39,15 @@ public:
     ColumnConst(const ColumnConst&) = default;
     ColumnConst(ColumnConst&&) noexcept = default;
 
-    ColumnConst& operator=(T&& value) { _value = std::move(value); _empty = false; return *this; }
+    ColumnConst& operator=(T&& value) requires (!IS_NULLABLE) { _value = std::move(value); _empty = false; return *this; }
     ColumnConst& operator=(const ColumnConst&) = default;
     ColumnConst& operator=(ColumnConst&&) noexcept = default;
 
-    explicit operator T() const { return _value; }
+    explicit operator T() const requires (!IS_NULLABLE) { return _value; }
 
     /// Subscript operators to match API of ColumnVector
-    const T& operator[](size_t /*unused*/) const { return _value; }
-    const T& at(size_t /*unused*/) const {
+    const T& operator[](size_t /*unused*/) const requires (!IS_NULLABLE) { return _value; }
+    const T& at(size_t /*unused*/) const requires (!IS_NULLABLE) {
         if (_empty) {
             throw FatalException("ColumnConst::at called on empty column");
         }
@@ -93,8 +93,8 @@ public:
         _value = otherCol->_value;
     }
 
-    void set(const T& value) { _value = value; _empty = false; }
-    void set(T&& value) { _value = std::move(value); _empty = false; }
+    void set(const T& value) requires (!IS_NULLABLE) { _value = value; _empty = false; }
+    void set(T&& value) requires (!IS_NULLABLE) { _value = std::move(value); _empty = false; }
 
     void set(const UnwrappedType& value) requires IS_NULLABLE { _value = value; _empty = false; }
     void set(UnwrappedType&& value) requires IS_NULLABLE { _value = std::move(value); _empty = false; }
@@ -106,8 +106,8 @@ public:
         DebugDump::dump(out, _value);
     }
 
-    T& getRaw() { return _value; }
-    const T& getRaw() const { return _value; }
+    T& getRaw() requires (!IS_NULLABLE) { return _value; }
+    const T& getRaw() const requires (!IS_NULLABLE) { return _value; }
 
     static consteval auto staticKind() { return _staticKind; }
 
