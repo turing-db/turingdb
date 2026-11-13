@@ -18,6 +18,7 @@
 #include "PathView.h"
 #include "metadata/LabelSet.h"
 #include "metadata/PropertyType.h"
+#include "OptionalTraits.h"
 #include "views/NodeView.h"
 
 namespace db {
@@ -32,11 +33,6 @@ concept NLViewElement = std::same_as<T, types::String::Primitive>
                      || std::same_as<T, PathView>
                      || std::same_as<T, CellView>;
 
-template <typename T>
-concept NLOptionalViewElement = requires { typename T::value_type; }
-                             && std::same_as<T, std::optional<typename T::value_type>>
-                             && NLViewElement<typename T::value_type>;
-
 // Invoke handler with a column whose rows are views - strings, lists, maps, embeddings, paths,
 // list or map cells, present or nullable - typed on its container, when handler takes that
 // container. A column of values is left alone.
@@ -50,7 +46,7 @@ public:
 
     template <template <typename> typename Container, typename ElementType>
     void operator()(const Container<ElementType>* column) {
-        constexpr bool holdsViews = NLViewElement<ElementType> || NLOptionalViewElement<ElementType>;
+        constexpr bool holdsViews = NLViewElement<OptionalTraits::unwrap_optional_t<ElementType>>;
 
         if constexpr (holdsViews) {
             if constexpr (std::invocable<Handler&, const Container<ElementType>*>) {
@@ -99,20 +95,34 @@ public:
     // is copied whole, and a column of values is left as it is
     void ownColumnRows(Column* column, size_t firstRow);
 
-    // The copy of a column element: a view, present or not, is copied in, and any other
-    // value is its own copy already
+    // The copy of a column element: a view is copied in, and any other value is its own
+    // copy already
     template <typename ElementType>
     ElementType ownElement(const ElementType& element) {
         if constexpr (NLViewElement<ElementType>) {
             return own(element);
-        } else if constexpr (NLOptionalViewElement<ElementType>) {
-            if (!element.has_value()) {
-                return std::nullopt;
-            }
-
-            return own(*element);
         } else {
             return element;
+        }
+    }
+
+    // Copy in the view a row of a column of views holds, if it holds one
+    template <typename ColumnType>
+    void ownRow(ColumnType* column, size_t row) {
+        if constexpr (ColumnType::IS_NULLABLE) {
+            if (column->isValid(row)) {
+                column->set(row, own(column->getValue(row)));
+            }
+        } else {
+            column->set(row, own((*column)[row]));
+        }
+    }
+
+    template <typename ColumnType>
+    void ownRows(ColumnType* column, size_t firstRow) {
+        const size_t rowCount = column->size();
+        for (size_t row = firstRow; row < rowCount; row++) {
+            ownRow(column, row);
         }
     }
 
