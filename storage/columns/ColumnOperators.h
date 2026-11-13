@@ -18,15 +18,7 @@ struct BinaryOperators {
     static void exec(ColW* res, const ColT* lhs, const ColU* rhs, Op op = {}) {
         static_assert(std::is_trivially_copyable_v<Op>, "NOTE: Op passed by value");
 
-        using DecayColT = TypeUtils::decay_col_t<ColT>;
-        using DecayColU = TypeUtils::decay_col_t<ColU>;
-        using DecayColW = TypeUtils::decay_col_t<ColW>;
-
-        using InternalT = InnerTypeHelper<DecayColT>::type;
-        using InternalU = InnerTypeHelper<DecayColU>::type;
-        using InternalRes = InnerTypeHelper<DecayColW>::type;
-
-        BinaryOpExecutor<Op, InternalRes, InternalT, InternalU>::apply(res, lhs, rhs, op);
+        BinaryOpExecutor<Op>::apply(res, lhs, rhs, op);
     }
 };
 
