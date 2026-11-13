@@ -11,6 +11,7 @@
 #include "NestedContainerCursor.h"
 #include "TuringSinkColumnContainer.h"
 #include "columns/ColumnConst.h"
+#include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "list/ListBuffer.h"
 #include "CellUtils.h"
@@ -30,7 +31,7 @@ public:
     using ColumnVector = db::ColumnVector<T>;
 
     template <typename T>
-    using ColumnOptVector = db::ColumnVector<std::optional<T>>;
+    using ColumnOptVector = db::ColumnOptVector<T>;
 
     template <typename T>
     using ColumnConst = db::ColumnConst<T>;

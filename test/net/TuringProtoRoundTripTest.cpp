@@ -51,6 +51,16 @@ struct FramedPacket {
     std::string _bytes;
 };
 
+template <typename T>
+void expectNullableRows(const db::ColumnOptVector<T>* column, const std::vector<std::optional<T>>& expected) {
+    ASSERT_EQ(column->size(), expected.size());
+
+    for (size_t row = 0; row < expected.size(); row++) {
+        SCOPED_TRACE(::testing::Message() << "row=" << row);
+        EXPECT_EQ(column->get(row), expected[row]);
+    }
+}
+
 template <typename ColumnT>
 void addColumn(db::DataframeManager* dfMan, db::Dataframe* df, std::string_view name, ColumnT* column) {
     auto* namedColumn = db::NamedColumn::create(dfMan, column, dfMan->allocTag());
@@ -310,8 +320,6 @@ TEST(TuringProtoRoundTripTest, RoundTripsNumericColumnsAcrossChunkSizes) {
 // would be indistinguishable from otherwise. The nullable shape is the one a property read
 // produces, so both go over.
 TEST(TuringProtoRoundTripTest, RoundTripsDateTimeColumnsAcrossChunkSizes) {
-    using OptionalDateTime = std::optional<DateTime>;
-
     constexpr int64_t microsecondsPerHour = 3600LL * 1000000;
 
     for (const size_t chunkSize : std::array<size_t, 4> {48, 64, 97, 256}) {
@@ -331,9 +339,9 @@ TEST(TuringProtoRoundTripTest, RoundTripsDateTimeColumnsAcrossChunkSizes) {
 
         auto* joined = localMem.alloc<db::ColumnOptVector<DateTime>>();
         joined->push_back(DateTime {microsecondsPerHour});
-        joined->push_back(std::nullopt);
+        joined->pushNull();
         joined->push_back(DateTime {2 * microsecondsPerHour});
-        joined->push_back(std::nullopt);
+        joined->pushNull();
         addColumn(&dfMan, &source, "joined", joined);
 
         const auto packets = encodeDataframeWithChunkSize(source, chunkSize);
@@ -362,20 +370,17 @@ TEST(TuringProtoRoundTripTest, RoundTripsDateTimeColumnsAcrossChunkSizes) {
                                           DateTime {-microsecondsPerHour},
                                           DateTime {1790172300LL * 1000000}}));
 
-        EXPECT_EQ(decodedJoined->getRaw(),
-                  (std::vector<OptionalDateTime> {DateTime {microsecondsPerHour},
-                                                  std::nullopt,
-                                                  DateTime {2 * microsecondsPerHour},
-                                                  std::nullopt}));
+        expectNullableRows<DateTime>(decodedJoined,
+                                     {DateTime {microsecondsPerHour},
+                                      std::nullopt,
+                                      DateTime {2 * microsecondsPerHour},
+                                      std::nullopt});
     }
 }
 
 // An invalid ID is how an unmatched OPTIONAL MATCH entity is spelled, so an entity column
 // always goes out as an optional vector whose mask is the IDs' validity
 TEST(TuringProtoRoundTripTest, RoundTripsEntityIDColumnsAsOptionalVectors) {
-    using OptionalNodeID = std::optional<db::NodeID>;
-    using OptionalEdgeID = std::optional<db::EdgeID>;
-
     for (const size_t chunkSize : std::array<size_t, 4> {48, 64, 97, 256}) {
         SCOPED_TRACE(::testing::Message() << "chunkSize=" << chunkSize);
 
@@ -417,25 +422,23 @@ TEST(TuringProtoRoundTripTest, RoundTripsEntityIDColumnsAsOptionalVectors) {
         ASSERT_NE(decodedNodes, nullptr);
         ASSERT_NE(decodedEdges, nullptr);
 
-        EXPECT_EQ(decodedNodes->getRaw(),
-                  (std::vector<OptionalNodeID> {db::NodeID {2},
-                                                std::nullopt,
-                                                db::NodeID {0},
-                                                std::nullopt}));
+        expectNullableRows<db::NodeID>(decodedNodes,
+                                       {db::NodeID {2},
+                                        std::nullopt,
+                                        db::NodeID {0},
+                                        std::nullopt});
 
-        EXPECT_EQ(decodedEdges->getRaw(),
-                  (std::vector<OptionalEdgeID> {std::nullopt,
-                                                db::EdgeID {5},
-                                                db::EdgeID {0},
-                                                std::nullopt}));
+        expectNullableRows<db::EdgeID>(decodedEdges,
+                                       {std::nullopt,
+                                        db::EdgeID {5},
+                                        db::EdgeID {0},
+                                        std::nullopt});
     }
 }
 
 // A duration is eight bytes on the wire like a datetime and an integer, under a type code
 // of its own
 TEST(TuringProtoRoundTripTest, RoundTripsDurationColumnsAcrossChunkSizes) {
-    using OptionalDuration = std::optional<Duration>;
-
     constexpr int64_t microsecondsPerMinute = 60LL * 1000000;
 
     for (const size_t chunkSize : std::array<size_t, 4> {48, 64, 97, 256}) {
@@ -454,9 +457,9 @@ TEST(TuringProtoRoundTripTest, RoundTripsDurationColumnsAcrossChunkSizes) {
 
         auto* waited = localMem.alloc<db::ColumnOptVector<Duration>>();
         waited->push_back(Duration {microsecondsPerMinute});
-        waited->push_back(std::nullopt);
+        waited->pushNull();
         waited->push_back(Duration {2 * microsecondsPerMinute});
-        waited->push_back(std::nullopt);
+        waited->pushNull();
         addColumn(&dfMan, &source, "waited", waited);
 
         const auto packets = encodeDataframeWithChunkSize(source, chunkSize);
@@ -485,17 +488,15 @@ TEST(TuringProtoRoundTripTest, RoundTripsDurationColumnsAcrossChunkSizes) {
                                           Duration {-microsecondsPerMinute},
                                           Duration {std::numeric_limits<int64_t>::max()}}));
 
-        EXPECT_EQ(decodedWaited->getRaw(),
-                  (std::vector<OptionalDuration> {Duration {microsecondsPerMinute},
-                                                  std::nullopt,
-                                                  Duration {2 * microsecondsPerMinute},
-                                                  std::nullopt}));
+        expectNullableRows<Duration>(decodedWaited,
+                                     {Duration {microsecondsPerMinute},
+                                      std::nullopt,
+                                      Duration {2 * microsecondsPerMinute},
+                                      std::nullopt});
     }
 }
 
 TEST(TuringProtoRoundTripTest, RoundTripsPointColumnsAcrossChunkSizes) {
-    using OptionalPoint = std::optional<Point>;
-
     const Point cartesian(db::PointCRS::Cartesian, 1.5, -2.0, 0.0);
     const Point cartesian3D(db::PointCRS::Cartesian3D, 1.5, -2.0, 3.25);
     const Point wgs84(db::PointCRS::WGS84, 2.3522, 48.8566, 0.0);
@@ -517,9 +518,9 @@ TEST(TuringProtoRoundTripTest, RoundTripsPointColumnsAcrossChunkSizes) {
 
         auto* home = localMem.alloc<db::ColumnOptVector<Point>>();
         home->push_back(wgs84);
-        home->push_back(std::nullopt);
+        home->pushNull();
         home->push_back(cartesian3D);
-        home->push_back(std::nullopt);
+        home->pushNull();
         addColumn(&dfMan, &source, "home", home);
 
         std::vector<db::ListBuffer<>::ListItemVariant> items;
@@ -553,7 +554,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsPointColumnsAcrossChunkSizes) {
         ASSERT_NE(decodedRoute, nullptr);
 
         EXPECT_EQ(decodedAt->getRaw(), (std::vector<Point> {cartesian, cartesian3D, wgs84, wgs84With3D}));
-        EXPECT_EQ(decodedHome->getRaw(), (std::vector<OptionalPoint> {wgs84, std::nullopt, cartesian3D, std::nullopt}));
+        expectNullableRows<Point>(decodedHome, {wgs84, std::nullopt, cartesian3D, std::nullopt});
 
         const std::span<const db::CellView> elements = decodedRoute->at(0).elements();
         ASSERT_EQ(elements.size(), 2u);
@@ -607,7 +608,6 @@ TEST(TuringProtoRoundTripTest, RoundTripsMaskColumns) {
 // CHUNK boundary mid-string. Verifies the decoder reassembles it correctly
 // and preserves nulls in the right positions.
 TEST(TuringProtoRoundTripTest, RoundTripsOptionalStringColumnsAcrossChunkSizes) {
-    using OptionalString = std::optional<StringView>;
     using namespace std::string_view_literals;
 
     for (const size_t chunkSize : std::array<size_t, 4> {48, 63, 95, 192}) {
@@ -625,10 +625,10 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalStringColumnsAcrossChunkSizes) 
         addColumn(&dfMan, &source, "id", ids);
 
         auto* labels = localMem.alloc<db::ColumnOptVector<StringView>>();
-        labels->push_back(OptionalString {"alpha"sv});
-        labels->push_back(std::nullopt);
-        labels->push_back(OptionalString {"this string is deliberately long enough to cross chunk boundaries"sv});
-        labels->push_back(OptionalString {"omega"sv});
+        labels->push_back("alpha"sv);
+        labels->pushNull();
+        labels->push_back("this string is deliberately long enough to cross chunk boundaries"sv);
+        labels->push_back("omega"sv);
         addColumn(&dfMan, &source, "label", labels);
 
         const auto packets = encodeDataframeWithChunkSize(source, chunkSize);
@@ -653,12 +653,11 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalStringColumnsAcrossChunkSizes) 
 
         EXPECT_EQ(decodedIds->getRaw(),
                   (std::vector<UInt64> {101, 102, 103, 104}));
-        EXPECT_EQ(decodedLabels->getRaw(),
-                  (std::vector<OptionalString> {
-                      "alpha"sv,
-                      std::nullopt,
-                      "this string is deliberately long enough to cross chunk boundaries"sv,
-                      "omega"sv}));
+        expectNullableRows<StringView>(decodedLabels,
+                                       {"alpha"sv,
+                                        std::nullopt,
+                                        "this string is deliberately long enough to cross chunk boundaries"sv,
+                                        "omega"sv});
     }
 }
 
@@ -671,7 +670,6 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalStringColumnsAcrossChunkSizes) 
 // reserved like any other and simply leaves its entry empty. Small chunk sizes force the
 // header and the elements of one row to land in different packets.
 TEST(TuringProtoRoundTripTest, RoundTripsOptionalListColumnsAcrossChunkSizes) {
-    using OptionalList = std::optional<db::ListView>;
     using namespace std::string_view_literals;
 
     for (const size_t chunkSize : std::array<size_t, 4> {48, 63, 95, 192}) {
@@ -695,10 +693,10 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalListColumnsAcrossChunkSizes) {
         const db::ListView last = localMem.listBuffer().insert(lastItems);
 
         auto* tags = localMem.alloc<db::ColumnOptVector<db::ListView>>();
-        tags->push_back(OptionalList {first});
-        tags->push_back(std::nullopt);
-        tags->push_back(OptionalList {empty});
-        tags->push_back(OptionalList {last});
+        tags->push_back(first);
+        tags->pushNull();
+        tags->push_back(empty);
+        tags->push_back(last);
         addColumn(&dfMan, &source, "tags", tags);
 
         const auto packets = encodeDataframeWithChunkSize(source, chunkSize);
@@ -719,29 +717,29 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalListColumnsAcrossChunkSizes) {
         const auto* decodedTags = decoded.cols().at(0)->as<db::ColumnOptVector<db::ListView>>();
         ASSERT_NE(decodedTags, nullptr);
 
-        const std::vector<OptionalList>& rows = decodedTags->getRaw();
-        ASSERT_EQ(rows.size(), 4u);
+        ASSERT_EQ(decodedTags->size(), 4u);
 
-        ASSERT_TRUE(rows[0].has_value());
-        ASSERT_EQ(rows[0]->size(), 2u);
-        EXPECT_EQ(rows[0]->front().getAs<Int64>(), 1);
-        EXPECT_EQ(rows[0]->back().getAs<StringView>(),
+        ASSERT_TRUE(decodedTags->isValid(0));
+        const db::ListView& decodedFirst = decodedTags->getValue(0);
+        ASSERT_EQ(decodedFirst.size(), 2u);
+        EXPECT_EQ(decodedFirst.front().getAs<Int64>(), 1);
+        EXPECT_EQ(decodedFirst.back().getAs<StringView>(),
                   "this element is deliberately long enough to cross chunk boundaries"sv);
 
-        EXPECT_FALSE(rows[1].has_value());
+        EXPECT_FALSE(decodedTags->isValid(1));
 
-        ASSERT_TRUE(rows[2].has_value());
-        EXPECT_EQ(rows[2]->size(), 0u);
+        ASSERT_TRUE(decodedTags->isValid(2));
+        EXPECT_EQ(decodedTags->getValue(2).size(), 0u);
 
-        ASSERT_TRUE(rows[3].has_value());
-        ASSERT_EQ(rows[3]->size(), 2u);
-        EXPECT_EQ(rows[3]->front().getAs<Int64>(), 7);
-        EXPECT_EQ(rows[3]->back().getAs<Int64>(), 8);
+        ASSERT_TRUE(decodedTags->isValid(3));
+        const db::ListView& decodedLast = decodedTags->getValue(3);
+        ASSERT_EQ(decodedLast.size(), 2u);
+        EXPECT_EQ(decodedLast.front().getAs<Int64>(), 7);
+        EXPECT_EQ(decodedLast.back().getAs<Int64>(), 8);
     }
 }
 
 TEST(TuringProtoRoundTripTest, RoundTripsOptionalMapColumnsAcrossChunkSizes) {
-    using OptionalMap = std::optional<db::MapView>;
     using MapEntry = db::MapBuffer<>::MapKeyValuePair;
     using namespace std::string_view_literals;
 
@@ -765,10 +763,10 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalMapColumnsAcrossChunkSizes) {
         const db::MapView last = localMem.mapBuffer().insert(lastEntries);
 
         auto* attrs = localMem.alloc<db::ColumnOptVector<db::MapView>>();
-        attrs->push_back(OptionalMap {first});
-        attrs->push_back(std::nullopt);
-        attrs->push_back(OptionalMap {empty});
-        attrs->push_back(OptionalMap {last});
+        attrs->push_back(first);
+        attrs->pushNull();
+        attrs->push_back(empty);
+        attrs->push_back(last);
         addColumn(&dfMan, &source, "attrs", attrs);
 
         const auto packets = encodeDataframeWithChunkSize(source, chunkSize);
@@ -789,26 +787,27 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalMapColumnsAcrossChunkSizes) {
         const auto* decodedAttrs = decoded.cols().at(0)->as<db::ColumnOptVector<db::MapView>>();
         ASSERT_NE(decodedAttrs, nullptr);
 
-        const std::vector<OptionalMap>& rows = decodedAttrs->getRaw();
-        ASSERT_EQ(rows.size(), 4u);
+        ASSERT_EQ(decodedAttrs->size(), 4u);
 
-        ASSERT_TRUE(rows[0].has_value());
-        ASSERT_EQ(rows[0]->size(), 2u);
-        EXPECT_EQ(rows[0]->front().getKey(), "a"sv);
-        EXPECT_EQ(rows[0]->front().getValue().getAs<Int64>(), 1);
-        EXPECT_EQ(rows[0]->back().getKey(), "b"sv);
-        EXPECT_EQ(rows[0]->back().getValue().getAs<StringView>(),
+        ASSERT_TRUE(decodedAttrs->isValid(0));
+        const db::MapView& decodedFirst = decodedAttrs->getValue(0);
+        ASSERT_EQ(decodedFirst.size(), 2u);
+        EXPECT_EQ(decodedFirst.front().getKey(), "a"sv);
+        EXPECT_EQ(decodedFirst.front().getValue().getAs<Int64>(), 1);
+        EXPECT_EQ(decodedFirst.back().getKey(), "b"sv);
+        EXPECT_EQ(decodedFirst.back().getValue().getAs<StringView>(),
                   "this value is deliberately long enough to cross chunk boundaries"sv);
 
-        EXPECT_FALSE(rows[1].has_value());
+        EXPECT_FALSE(decodedAttrs->isValid(1));
 
-        ASSERT_TRUE(rows[2].has_value());
-        EXPECT_EQ(rows[2]->size(), 0u);
+        ASSERT_TRUE(decodedAttrs->isValid(2));
+        EXPECT_EQ(decodedAttrs->getValue(2).size(), 0u);
 
-        ASSERT_TRUE(rows[3].has_value());
-        ASSERT_EQ(rows[3]->size(), 1u);
-        EXPECT_EQ(rows[3]->front().getKey(), "z"sv);
-        EXPECT_EQ(rows[3]->front().getValue().getAs<Int64>(), 8);
+        ASSERT_TRUE(decodedAttrs->isValid(3));
+        const db::MapView& decodedLast = decodedAttrs->getValue(3);
+        ASSERT_EQ(decodedLast.size(), 1u);
+        EXPECT_EQ(decodedLast.front().getKey(), "z"sv);
+        EXPECT_EQ(decodedLast.front().getValue().getAs<Int64>(), 8);
     }
 }
 
@@ -947,9 +946,9 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalConstantColumns) {
     ASSERT_NE(decodedLabel, nullptr);
     ASSERT_NE(decodedEmptyLabel, nullptr);
 
-    EXPECT_EQ(decodedIds->at(0), std::optional<UInt64> {42});
-    EXPECT_EQ(decodedLabel->at(0), OptionalString {hugeLabel});
-    EXPECT_EQ(decodedEmptyLabel->at(0), std::nullopt);
+    EXPECT_EQ(decodedIds->get(0), std::optional<UInt64> {42});
+    EXPECT_EQ(decodedLabel->get(0), OptionalString {hugeLabel});
+    EXPECT_FALSE(decodedEmptyLabel->isValid(0));
 }
 
 // Encode a constant list column whose single list mixes a fixed element, a string, and an
@@ -1464,7 +1463,7 @@ TEST(TuringProtoRoundTripTest, RejectsSchemaLargerThanChunkSize) {
     addColumn(&dfMan, &source, "identifier", ids);
 
     auto* labels = localMem.alloc<db::ColumnOptVector<StringView>>();
-    labels->push_back(std::optional<StringView> {std::string_view("value")});
+    labels->push_back(std::string_view("value"));
     addColumn(&dfMan, &source, "longer_column_name", labels);
 
     EXPECT_THROW(encodeDataframeWithChunkSize(source, 24), TuringException);
@@ -1475,8 +1474,6 @@ TEST(TuringProtoRoundTripTest, RejectsSchemaLargerThanChunkSize) {
 // out of a list both travel as a null-tagged element, so what tells them apart on the
 // far side is the column's null mask; the two must not collapse into one.
 TEST(TuringProtoRoundTripTest, RoundTripsOptionalCellViewColumns) {
-    using OptionalElement = std::optional<db::CellView>;
-
     db::LocalMemory localMem;
     db::DataframeManager dfMan;
     db::Dataframe source;
@@ -1497,11 +1494,11 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalCellViewColumns) {
     ASSERT_EQ(elements.size(), 3u);
 
     auto* col = localMem.alloc<db::ColumnOptVector<db::CellView>>();
-    col->push_back(OptionalElement {elements[0]});
-    col->push_back(std::nullopt);
-    col->push_back(OptionalElement {elements[1]});
-    col->push_back(OptionalElement {elements[2]});
-    col->push_back(std::nullopt);
+    col->push_back(elements[0]);
+    col->pushNull();
+    col->push_back(elements[1]);
+    col->push_back(elements[2]);
+    col->pushNull();
     addColumn(&dfMan, &source, "element", col);
 
     // Small enough to split the header, the mask and the string element's payload
@@ -1524,23 +1521,24 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalCellViewColumns) {
         const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnOptVector<db::CellView>>();
         ASSERT_NE(decodedCol, nullptr);
 
-        const std::vector<OptionalElement>& raw = decodedCol->getRaw();
-        ASSERT_EQ(raw.size(), 5u);
+        ASSERT_EQ(decodedCol->size(), 5u);
 
-        ASSERT_TRUE(raw[0].has_value());
-        EXPECT_EQ(raw[0]->getTag(), db::CellTag::Int);
-        EXPECT_EQ(raw[0]->getAs<Int64>(), -3);
+        ASSERT_TRUE(decodedCol->isValid(0));
+        const db::CellView& decodedInt = decodedCol->getValue(0);
+        EXPECT_EQ(decodedInt.getTag(), db::CellTag::Int);
+        EXPECT_EQ(decodedInt.getAs<Int64>(), -3);
 
-        EXPECT_FALSE(raw[1].has_value());
+        EXPECT_FALSE(decodedCol->isValid(1));
 
-        ASSERT_TRUE(raw[2].has_value());
-        EXPECT_EQ(raw[2]->getTag(), db::CellTag::String);
-        EXPECT_EQ(raw[2]->getAs<StringView>(), std::string_view(text));
+        ASSERT_TRUE(decodedCol->isValid(2));
+        const db::CellView& decodedString = decodedCol->getValue(2);
+        EXPECT_EQ(decodedString.getTag(), db::CellTag::String);
+        EXPECT_EQ(decodedString.getAs<StringView>(), std::string_view(text));
 
-        ASSERT_TRUE(raw[3].has_value());
-        EXPECT_EQ(raw[3]->getTag(), db::CellTag::Null);
+        ASSERT_TRUE(decodedCol->isValid(3));
+        EXPECT_EQ(decodedCol->getValue(3).getTag(), db::CellTag::Null);
 
-        EXPECT_FALSE(raw[4].has_value());
+        EXPECT_FALSE(decodedCol->isValid(4));
     }
 }
 
@@ -1589,12 +1587,12 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalConstantCellViewColumns) {
     ASSERT_NE(decodedElement, nullptr);
     ASSERT_NE(decodedMissing, nullptr);
 
-    const OptionalElement decodedValue = decodedElement->at(0);
-    ASSERT_TRUE(decodedValue.has_value());
-    EXPECT_EQ(decodedValue->getTag(), db::CellTag::String);
-    EXPECT_EQ(decodedValue->getAs<StringView>(), std::string_view(text));
+    ASSERT_TRUE(decodedElement->isValid(0));
+    const db::CellView& decodedValue = decodedElement->getValue(0);
+    EXPECT_EQ(decodedValue.getTag(), db::CellTag::String);
+    EXPECT_EQ(decodedValue.getAs<StringView>(), std::string_view(text));
 
-    EXPECT_FALSE(decodedMissing->at(0).has_value());
+    EXPECT_FALSE(decodedMissing->isValid(0));
 }
 
 // A projection of constants alone - MATCH (n) RETURN 5 - has no column whose length
@@ -2471,21 +2469,21 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalConstantListsAndMaps) {
     ASSERT_NE(decodedMap, nullptr);
     ASSERT_NE(decodedNoMap, nullptr);
 
-    ASSERT_TRUE(decodedList->at(0).has_value());
-    const db::ListView listView = *decodedList->at(0);
+    ASSERT_TRUE(decodedList->isValid(0));
+    const db::ListView& listView = decodedList->getValue(0);
     ASSERT_EQ(listView.size(), 2u);
     EXPECT_EQ(listView.begin()->getAs<Int64>(), 8);
     EXPECT_EQ((listView.begin() + 1)->getAs<StringView>(), std::string_view("nine"));
 
-    EXPECT_FALSE(decodedNoList->at(0).has_value());
+    EXPECT_FALSE(decodedNoList->isValid(0));
 
-    ASSERT_TRUE(decodedMap->at(0).has_value());
-    const db::MapView mapView = *decodedMap->at(0);
+    ASSERT_TRUE(decodedMap->isValid(0));
+    const db::MapView& mapView = decodedMap->getValue(0);
     ASSERT_EQ(mapView.size(), 2u);
     EXPECT_EQ(mapView.front().getKey(), "crs");
     EXPECT_EQ(mapView.front().getValue().getAs<StringView>(), std::string_view("OXF"));
 
-    EXPECT_FALSE(decodedNoMap->at(0).has_value());
+    EXPECT_FALSE(decodedNoMap->isValid(0));
 }
 
 TEST(TuringProtoRoundTripTest, RoundTripsConstantEntityIDs) {

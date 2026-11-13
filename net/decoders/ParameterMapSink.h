@@ -12,6 +12,7 @@
 #include "ParameterValue.h"
 #include "TuringSinkColumnContainer.h"
 #include "columns/ColumnConst.h"
+#include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "CellView.h"
 #include "list/ListView.h"
@@ -39,7 +40,7 @@ public:
     using ColumnVector = db::ColumnVector<T>;
 
     template <typename T>
-    using ColumnOptVector = db::ColumnVector<std::optional<T>>;
+    using ColumnOptVector = db::ColumnOptVector<T>;
 
     // The map decoder hands the root map to a constant column; the sink has already filled
     // the ParameterMap, so the root column keeps nothing.
