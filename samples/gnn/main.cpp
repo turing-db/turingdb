@@ -241,7 +241,7 @@ int main(int argc, const char** argv) {
             for (size_t i = offset; i < offset + rowCount; i++) {
                 const NodeID nid = (*idCol)[i];
                 const size_t idx = nodeIDs.size();
-                const std::string name = nameCol->at(i) ? std::string(*nameCol->at(i)) : "";
+                const std::string name = nameCol->isValid(i) ? std::string(nameCol->getValue(i)) : "";
 
                 idToIdx[nid.getValue()] = idx;
                 nodeIDs.push_back(nid);
@@ -511,7 +511,7 @@ int main(int argc, const char** argv) {
                     = static_cast<const ColumnOptVector<types::Embedding::Primitive>*>(chunks[1]);
 
                 for (size_t i = offset; i < offset + rowCount; i++) {
-                    if (!embCol->at(i)) {
+                    if (!embCol->isValid(i)) {
                         continue;
                     }
 
@@ -521,7 +521,7 @@ int main(int argc, const char** argv) {
                     }
 
                     const size_t idx = it->second;
-                    const auto& emb = *embCol->at(i);
+                    const auto& emb = embCol->getValue(i);
                     const size_t copyDim = std::min(emb.size(), DIM);
                     for (size_t d = 0; d < copyDim; d++) {
                         embeddings.at(idx, d) = emb[d];
@@ -649,7 +649,7 @@ int main(int argc, const char** argv) {
                 = static_cast<const ColumnOptVector<types::Embedding::Primitive>*>(chunks[1]);
 
             for (size_t i = offset; i < offset + rowCount; i++) {
-                if (!embCol->at(i)) {
+                if (!embCol->isValid(i)) {
                     continue;
                 }
 
@@ -658,7 +658,7 @@ int main(int argc, const char** argv) {
                     continue;
                 }
 
-                const auto& emb = *embCol->at(i);
+                const auto& emb = embCol->getValue(i);
                 for (size_t d = 0; d < std::min(emb.size(), DIM); d++) {
                     embeddings.at(it->second, d) = emb[d];
                 }
