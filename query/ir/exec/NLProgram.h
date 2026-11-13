@@ -29,7 +29,6 @@
 #include "ProcedureState.h"
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
-#include "columns/ColumnMask.h"
 #include "columns/ColumnStringTable.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
@@ -1442,8 +1441,8 @@ public:
     // The rows naming an entity this change wrote, by the ID it will commit as, or null
     // for an input no merge produced. Such a row reads its value out of the write buffer.
     // A column a create produced is such a row throughout, which is what _allPending says.
-    const ColumnMask* getPending() const { return _pending; }
-    void setPending(const ColumnMask* pending) { _pending = pending; }
+    const ColumnVector<CustomBool>* getPending() const { return _pending; }
+    void setPending(const ColumnVector<CustomBool>* pending) { _pending = pending; }
 
     bool isAllPending() const { return _allPending; }
     void setAllPending(bool allPending) { _allPending = allPending; }
@@ -1454,7 +1453,7 @@ public:
 private:
     const Column* _input {nullptr};
     Column* _output {nullptr};
-    const ColumnMask* _pending {nullptr};
+    const ColumnVector<CustomBool>* _pending {nullptr};
     PropertyTypeID _propertyTypeID;
     bool _allPending {false};
     NLValueStore _fetchedValues;
@@ -3514,11 +3513,11 @@ public:
     // Row by row, which endpoints are pending, for a column a merge produced and so
     // mixed. Null for a column that is pending in every row or in none, which the two
     // flags above then answer for.
-    const ColumnMask* getSrcPendingMask() const { return _srcPendingMask; }
-    const ColumnMask* getTgtPendingMask() const { return _tgtPendingMask; }
+    const ColumnVector<CustomBool>* getSrcPendingMask() const { return _srcPendingMask; }
+    const ColumnVector<CustomBool>* getTgtPendingMask() const { return _tgtPendingMask; }
 
-    void setSrcPendingMask(const ColumnMask* mask) { _srcPendingMask = mask; }
-    void setTgtPendingMask(const ColumnMask* mask) { _tgtPendingMask = mask; }
+    void setSrcPendingMask(const ColumnVector<CustomBool>* mask) { _srcPendingMask = mask; }
+    void setTgtPendingMask(const ColumnVector<CustomBool>* mask) { _tgtPendingMask = mask; }
 
     ColumnEdgeIDs* getResult() const { return _result; }
 
@@ -3533,8 +3532,8 @@ private:
     EdgeTypeID _edgeTypeID;
     const ColumnNodeIDs* _src {nullptr};
     const ColumnNodeIDs* _tgt {nullptr};
-    const ColumnMask* _srcPendingMask {nullptr};
-    const ColumnMask* _tgtPendingMask {nullptr};
+    const ColumnVector<CustomBool>* _srcPendingMask {nullptr};
+    const ColumnVector<CustomBool>* _tgtPendingMask {nullptr};
     ColumnEdgeIDs* _result {nullptr};
     bool _srcIsPending {false};
     bool _tgtIsPending {false};
@@ -3702,11 +3701,11 @@ public:
         std::vector<NLMergeProperty> _properties;
 
         const ColumnNodeIDs* _boundColumn {nullptr};
-        const ColumnMask* _boundPending {nullptr};
+        const ColumnVector<CustomBool>* _boundPending {nullptr};
         NLMergeNodeIndex* _index {nullptr};
         LabelSetHandle _labelSetHandle;
         ColumnNodeIDs* _output {nullptr};
-        ColumnMask* _outputPending {nullptr};
+        ColumnVector<CustomBool>* _outputPending {nullptr};
     };
 
     // One hop of the chain, joining the node ahead of it to the one behind. The match
@@ -3725,10 +3724,10 @@ public:
         ColumnNodeIDs* _scanSources {nullptr};
         ColumnEdgeIDs* _scanEdges {nullptr};
         ColumnEdgeIDs* _output {nullptr};
-        ColumnMask* _outputPending {nullptr};
+        ColumnVector<CustomBool>* _outputPending {nullptr};
     };
 
-    NLMergeData(NLMergePendingEdges* pendingEdges, ColumnMask* created, LocalMemory* memory);
+    NLMergeData(NLMergePendingEdges* pendingEdges, ColumnVector<CustomBool>* created, LocalMemory* memory);
     ~NLMergeData() override;
 
     const std::vector<Node>& nodes() const { return _nodes; }
@@ -3739,7 +3738,7 @@ public:
     std::vector<Hop>& hops() { return _hops; }
 
     NLMergePendingEdges* getPendingEdges() const { return _pendingEdges; }
-    ColumnMask* getCreated() const { return _created; }
+    ColumnVector<CustomBool>* getCreated() const { return _created; }
 
     LocalMemory* getMemory() const { return _memory; }
 
@@ -3764,7 +3763,7 @@ private:
     std::vector<Hop> _hops;
     std::vector<NLCarriedColumn> _carriedColumns;
     NLMergePendingEdges* _pendingEdges {nullptr};
-    ColumnMask* _created {nullptr};
+    ColumnVector<CustomBool>* _created {nullptr};
     LocalMemory* _memory {nullptr};
     const Column* _rowCarrier {nullptr};
     std::unique_ptr<NLMergeWorkingSet> _workingSet;
@@ -3792,16 +3791,16 @@ public:
     // The rows whose node this change wrote and has not committed: those are updated in
     // the write buffer's pending node rather than recorded as an update to a committed
     // one. Null for an input no merge produced.
-    const ColumnMask* getPending() const { return _pending; }
-    void setPending(const ColumnMask* pending) { _pending = pending; }
+    const ColumnVector<CustomBool>* getPending() const { return _pending; }
+    void setPending(const ColumnVector<CustomBool>* pending) { _pending = pending; }
 
     bool isAllPending() const { return _allPending; }
     void setAllPending(bool allPending) { _allPending = allPending; }
 
     // The rows the write touches, or null for a write that touches every one: Cypher's
     // ON CREATE hands over the merge's created mask and ON MATCH its negation.
-    const ColumnMask* getRows() const { return _rows; }
-    void setRows(const ColumnMask* rows) { _rows = rows; }
+    const ColumnVector<CustomBool>* getRows() const { return _rows; }
+    void setRows(const ColumnVector<CustomBool>* rows) { _rows = rows; }
 
     // A null or a column of tagged cells reaches a property the program types as it runs:
     // a removal stages a null of the type it has by then, and every cell is checked against
@@ -3813,16 +3812,16 @@ public:
     void setWritesNull(bool writesNull) { _writesNull = writesNull; }
 
     // The rows of this step the write reaches, which alone type and check its cells
-    ColumnMask* getWrittenRows() const { return _writtenRows; }
-    void setWrittenRows(ColumnMask* writtenRows) { _writtenRows = writtenRows; }
+    ColumnVector<CustomBool>* getWrittenRows() const { return _writtenRows; }
+    void setWrittenRows(ColumnVector<CustomBool>* writtenRows) { _writtenRows = writtenRows; }
 
 private:
     const ColumnNodeIDs* _input {nullptr};
     const Column* _value {nullptr};
-    const ColumnMask* _pending {nullptr};
-    const ColumnMask* _rows {nullptr};
+    const ColumnVector<CustomBool>* _pending {nullptr};
+    const ColumnVector<CustomBool>* _rows {nullptr};
     NLRuntimeProperty* _runtimeProperty {nullptr};
-    ColumnMask* _writtenRows {nullptr};
+    ColumnVector<CustomBool>* _writtenRows {nullptr};
     PropertyTypeID _propertyTypeID;
     bool _writesNull {false};
     bool _allPending {false};
@@ -3843,14 +3842,14 @@ public:
     const ColumnEdgeIDs* getInput() const { return _input; }
     const Column* getValue() const { return _value; }
 
-    const ColumnMask* getPending() const { return _pending; }
-    void setPending(const ColumnMask* pending) { _pending = pending; }
+    const ColumnVector<CustomBool>* getPending() const { return _pending; }
+    void setPending(const ColumnVector<CustomBool>* pending) { _pending = pending; }
 
     bool isAllPending() const { return _allPending; }
     void setAllPending(bool allPending) { _allPending = allPending; }
 
-    const ColumnMask* getRows() const { return _rows; }
-    void setRows(const ColumnMask* rows) { _rows = rows; }
+    const ColumnVector<CustomBool>* getRows() const { return _rows; }
+    void setRows(const ColumnVector<CustomBool>* rows) { _rows = rows; }
 
     // A null or a column of tagged cells reaches a property the program types as it runs:
     // a removal stages a null of the type it has by then, and every cell is checked against
@@ -3862,16 +3861,16 @@ public:
     void setWritesNull(bool writesNull) { _writesNull = writesNull; }
 
     // The rows of this step the write reaches, which alone type and check its cells
-    ColumnMask* getWrittenRows() const { return _writtenRows; }
-    void setWrittenRows(ColumnMask* writtenRows) { _writtenRows = writtenRows; }
+    ColumnVector<CustomBool>* getWrittenRows() const { return _writtenRows; }
+    void setWrittenRows(ColumnVector<CustomBool>* writtenRows) { _writtenRows = writtenRows; }
 
 private:
     const ColumnEdgeIDs* _input {nullptr};
     const Column* _value {nullptr};
-    const ColumnMask* _pending {nullptr};
-    const ColumnMask* _rows {nullptr};
+    const ColumnVector<CustomBool>* _pending {nullptr};
+    const ColumnVector<CustomBool>* _rows {nullptr};
     NLRuntimeProperty* _runtimeProperty {nullptr};
-    ColumnMask* _writtenRows {nullptr};
+    ColumnVector<CustomBool>* _writtenRows {nullptr};
     PropertyTypeID _propertyTypeID;
     bool _writesNull {false};
     bool _allPending {false};
@@ -3893,14 +3892,14 @@ public:
     const Column* getValue() const { return _value; }
     bool getReplaces() const { return _replaces; }
 
-    const ColumnMask* getPending() const { return _pending; }
-    void setPending(const ColumnMask* pending) { _pending = pending; }
+    const ColumnVector<CustomBool>* getPending() const { return _pending; }
+    void setPending(const ColumnVector<CustomBool>* pending) { _pending = pending; }
 
     bool isAllPending() const { return _allPending; }
     void setAllPending(bool allPending) { _allPending = allPending; }
 
-    const ColumnMask* getRows() const { return _rows; }
-    void setRows(const ColumnMask* rows) { _rows = rows; }
+    const ColumnVector<CustomBool>* getRows() const { return _rows; }
+    void setRows(const ColumnVector<CustomBool>* rows) { _rows = rows; }
 
     bool writesNull() const { return _writesNull; }
     void setWritesNull(bool writesNull) { _writesNull = writesNull; }
@@ -3916,8 +3915,8 @@ public:
 private:
     const IDColumn* _input {nullptr};
     const Column* _value {nullptr};
-    const ColumnMask* _pending {nullptr};
-    const ColumnMask* _rows {nullptr};
+    const ColumnVector<CustomBool>* _pending {nullptr};
+    const ColumnVector<CustomBool>* _rows {nullptr};
     bool _allPending {false};
     bool _replaces {false};
     bool _writesNull {false};
@@ -3948,8 +3947,8 @@ public:
     // The rows naming a node this change wrote and has not committed - a write-buffer
     // offset rather than an ID the graph holds - or null when no row does. A column a
     // create produced is such a row throughout, which is what _allPending says.
-    const ColumnMask* getPending() const { return _pending; }
-    void setPending(const ColumnMask* pending) { _pending = pending; }
+    const ColumnVector<CustomBool>* getPending() const { return _pending; }
+    void setPending(const ColumnVector<CustomBool>* pending) { _pending = pending; }
 
     bool isAllPending() const { return _allPending; }
     void setAllPending(bool allPending) { _allPending = allPending; }
@@ -3960,7 +3959,7 @@ public:
 
 private:
     const ColumnNodeIDs* _input {nullptr};
-    const ColumnMask* _pending {nullptr};
+    const ColumnVector<CustomBool>* _pending {nullptr};
     ColumnNodeIDs* _committed {nullptr};
     bool _detaching {false};
     bool _allPending {false};
@@ -3975,8 +3974,8 @@ public:
     }
 
     // The edge siblings of NLDeleteNodeData's
-    const ColumnMask* getPending() const { return _pending; }
-    void setPending(const ColumnMask* pending) { _pending = pending; }
+    const ColumnVector<CustomBool>* getPending() const { return _pending; }
+    void setPending(const ColumnVector<CustomBool>* pending) { _pending = pending; }
 
     bool isAllPending() const { return _allPending; }
     void setAllPending(bool allPending) { _allPending = allPending; }
@@ -3987,7 +3986,7 @@ public:
 
 private:
     const ColumnEdgeIDs* _input {nullptr};
-    const ColumnMask* _pending {nullptr};
+    const ColumnVector<CustomBool>* _pending {nullptr};
     ColumnEdgeIDs* _committed {nullptr};
     bool _allPending {false};
 };
@@ -4205,26 +4204,26 @@ private:
 };
 
 // Each row @param nullRows marks takes the next row of @param fill, every other row its own
-using NLFillNullRowsFn = void (*)(Column* result, const Column* value, const ColumnMask* nullRows, const Column* fill);
+using NLFillNullRowsFn = void (*)(Column* result, const Column* value, const ColumnVector<CustomBool>* nullRows, const Column* fill);
 
 class NLFillNullsData : public NLFunctionData {
 public:
     NLFillNullsData(const Column* value,
-                    const ColumnMask* nullRows,
+                    const ColumnVector<CustomBool>* nullRows,
                     const Column* fill,
                     Column* result,
                     NLFillNullRowsFn fillNullRows);
     ~NLFillNullsData();
 
     const Column* getValue() const { return _value; }
-    const ColumnMask* getNullRows() const { return _nullRows; }
+    const ColumnVector<CustomBool>* getNullRows() const { return _nullRows; }
     const Column* getFill() const { return _fill; }
     Column* getResult() const { return _result; }
     NLFillNullRowsFn getFillNullRows() const { return _fillNullRows; }
 
 private:
     const Column* _value {nullptr};
-    const ColumnMask* _nullRows {nullptr};
+    const ColumnVector<CustomBool>* _nullRows {nullptr};
     const Column* _fill {nullptr};
     Column* _result {nullptr};
     NLFillNullRowsFn _fillNullRows {nullptr};
@@ -5704,18 +5703,18 @@ private:
 // stands for, row-aligned with the chunks the accumulator was opened over.
 class NLExistsResultData : public NLFunctionData {
 public:
-    NLExistsResultData(NLExistsState* state, ColumnMask* result)
+    NLExistsResultData(NLExistsState* state, ColumnVector<CustomBool>* result)
         : _state(state),
         _result(result)
     {
     }
 
     NLExistsState* getState() const { return _state; }
-    ColumnMask* getResult() const { return _result; }
+    ColumnVector<CustomBool>* getResult() const { return _result; }
 
 private:
     NLExistsState* _state {nullptr};
-    ColumnMask* _result {nullptr};
+    ColumnVector<CustomBool>* _result {nullptr};
 };
 
 // A count per row of the step

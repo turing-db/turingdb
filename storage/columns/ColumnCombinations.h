@@ -3,8 +3,7 @@
 #include <type_traits>
 
 #include "ColumnVector.h"
-#include "ColumnMask.h"
-#include "ColumnOptMask.h"
+#include "ColumnOptVector.h"
 #include "ColumnConst.h"
 #include "TypeUtils.h"
 #include "CellView.h"
@@ -44,27 +43,27 @@ class ColumnCombinationImpl;
 
 /*
  * @brief Predicate Operations (non-optional)
- * @detail Predicates applied to two non-optional operands produce a @ref ColumnMask
+ * @detail Predicates applied to two non-optional operands produce a @ref ColumnVector<CustomBool>
  */
 template <typename Op, typename T, typename U>
     requires TuringPredicate<Op, T, U>
 class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnVector<U>> {
 public:
-    using ResultColumnType = ColumnMask;
+    using ResultColumnType = ColumnVector<CustomBool>;
 };
 
 template <typename Op, typename T, typename U>
     requires TuringPredicate<Op, T, U>
 class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnConst<U>> {
 public:
-    using ResultColumnType = ColumnMask;
+    using ResultColumnType = ColumnVector<CustomBool>;
 };
 
 template <typename Op, typename T, typename U>
     requires TuringPredicate<Op, T, U>
 class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnVector<U>> {
 public:
-    using ResultColumnType = ColumnMask;
+    using ResultColumnType = ColumnVector<CustomBool>;
 };
 
 template <typename Op, typename T, typename U>
@@ -76,27 +75,27 @@ public:
 
 /*
  * @brief Predicate Operations (optional)
- * @detail Predicates applied to two optional operands produce a @ref ColumnOptMask
+ * @detail Predicates applied to two optional operands produce a @ref ColumnOptVector<CustomBool>
  */
 template <typename Op, typename T, typename U>
     requires OptionalPredicate<Op, T, U> && (TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>)
 class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnVector<U>> {
 public:
-    using ResultColumnType = ColumnOptMask;
+    using ResultColumnType = ColumnOptVector<CustomBool>;
 };
 
 template <typename Op, typename T, typename U>
     requires OptionalPredicate<Op, T, U> && (TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>)
 class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnConst<U>> {
 public:
-    using ResultColumnType = ColumnOptMask;
+    using ResultColumnType = ColumnOptVector<CustomBool>;
 };
 
 template <typename Op, typename T, typename U>
     requires OptionalPredicate<Op, T, U> && (TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>)
 class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnVector<U>> {
 public:
-    using ResultColumnType = ColumnOptMask;
+    using ResultColumnType = ColumnOptVector<CustomBool>;
 };
 
 template <typename Op, typename T, typename U>
@@ -110,21 +109,21 @@ template <typename Op, typename T, typename U>
     requires NullableResultPredicate<Op, T, U>
 class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnVector<U>> {
 public:
-    using ResultColumnType = ColumnOptMask;
+    using ResultColumnType = ColumnOptVector<CustomBool>;
 };
 
 template <typename Op, typename T, typename U>
     requires NullableResultPredicate<Op, T, U>
 class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnConst<U>> {
 public:
-    using ResultColumnType = ColumnOptMask;
+    using ResultColumnType = ColumnOptVector<CustomBool>;
 };
 
 template <typename Op, typename T, typename U>
     requires NullableResultPredicate<Op, T, U>
 class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnVector<U>> {
 public:
-    using ResultColumnType = ColumnOptMask;
+    using ResultColumnType = ColumnOptVector<CustomBool>;
 };
 
 template <typename Op, typename T, typename U>

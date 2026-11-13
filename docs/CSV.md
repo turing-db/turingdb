@@ -712,7 +712,6 @@ using Types = KindTypes<
     TemplateKind<ColumnVector>,
     TemplateKind<ColumnConst>,
     TemplateKind<ColumnSet>,
-    ColumnMask,
     ColumnStringTable>;
 ```
 

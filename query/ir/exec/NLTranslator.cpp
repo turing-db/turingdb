@@ -40,8 +40,6 @@
 #include "ProcedureData.h"
 #include "ProcedureManager.h"
 #include "columns/ColumnConst.h"
-#include "columns/ColumnMask.h"
-#include "columns/ColumnOptMask.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/Functions.h"
 #include "list/ListView.h"
@@ -832,7 +830,7 @@ ValueType nullableChunkValueType(mlir::Type chunkType) {
 }
 
 // Whether a chunk holds a value that may be absent (!nl.chunk<!storage.nullable<T>>), as
-// opposed to a plain value column or a mask
+// opposed to a plain value column
 bool isNullableChunk(mlir::Type chunkType) {
     const auto chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
 
@@ -997,7 +995,7 @@ bool holdsTruthColumn(NLTruthColumnKind kind, const Column* column) {
         break;
 
         case NLTruthColumnKind::NullableBooleans:
-            return columnKind == ColumnOptMask::staticKind() || columnKind == ColumnConst<std::optional<CustomBool>>::staticKind();
+            return columnKind == ColumnOptVector<CustomBool>::staticKind() || columnKind == ColumnConst<std::optional<CustomBool>>::staticKind();
         break;
 
         case NLTruthColumnKind::TaggedCells:
@@ -3199,9 +3197,9 @@ void NLTranslator::translateCheckLabelConstraint(nl::CheckLabelConstraint op, NL
     }
 
     if (nullable) {
-        body->emplaceStmt(&NLExecutor::runCheckLabelConstraint<ColumnOptMask>, data);
+        body->emplaceStmt(&NLExecutor::runCheckLabelConstraint<ColumnOptVector<CustomBool>>, data);
     } else {
-        body->emplaceStmt(&NLExecutor::runCheckLabelConstraint<ColumnMask>, data);
+        body->emplaceStmt(&NLExecutor::runCheckLabelConstraint<ColumnVector<CustomBool>>, data);
     }
 }
 
@@ -3209,12 +3207,12 @@ Column* NLTranslator::allocCheckMask(bool nullable) {
     const size_t chunkSize = _program->getChunkSize();
 
     if (nullable) {
-        ColumnOptMask* mask = _memory->alloc<ColumnOptMask>();
+        ColumnOptVector<CustomBool>* mask = _memory->alloc<ColumnOptVector<CustomBool>>();
         mask->reserve(chunkSize);
         return mask;
     }
 
-    ColumnMask* mask = _memory->alloc<ColumnMask>();
+    ColumnVector<CustomBool>* mask = _memory->alloc<ColumnVector<CustomBool>>();
     mask->reserve(chunkSize);
 
     return mask;
@@ -3260,9 +3258,9 @@ void NLTranslator::translateCheckEdgeTypeConstraint(nl::CheckEdgeTypeConstraint 
     }
 
     if (nullable) {
-        body->emplaceStmt(&NLExecutor::runCheckEdgeTypeConstraint<ColumnOptMask>, data);
+        body->emplaceStmt(&NLExecutor::runCheckEdgeTypeConstraint<ColumnOptVector<CustomBool>>, data);
     } else {
-        body->emplaceStmt(&NLExecutor::runCheckEdgeTypeConstraint<ColumnMask>, data);
+        body->emplaceStmt(&NLExecutor::runCheckEdgeTypeConstraint<ColumnVector<CustomBool>>, data);
     }
 }
 
@@ -3384,7 +3382,7 @@ void NLTranslator::translateMerge(nl::Merge merge, NLStmtContainer* body) {
     const mlir::OperandRange carriedColumns = merge.getCarriedColumns();
     const mlir::ResultRange results = merge.getResults();
 
-    ColumnMask* created = _memory->alloc<ColumnMask>();
+    ColumnVector<CustomBool>* created = _memory->alloc<ColumnVector<CustomBool>>();
     created->reserve(_program->getChunkSize());
 
     NLMergeData* data = _program->allocFunctionData<NLMergeData>(_program->getMergePendingEdges(), created, _memory);
@@ -3409,7 +3407,7 @@ void NLTranslator::translateMerge(nl::Merge merge, NLStmtContainer* body) {
             translateMergeNodeSpec(labels, propNames, nodePropValues.slice(nodeValueIndex, propNames.size()), node);
 
             node._output = static_cast<ColumnNodeIDs*>(allocColumn(results[resultIndex]));
-            node._outputPending = static_cast<ColumnMask*>(allocColumn(results[resultIndex + 1]));
+            node._outputPending = static_cast<ColumnVector<CustomBool>*>(allocColumn(results[resultIndex + 1]));
             resultIndex += 2;
         }
 
@@ -3466,7 +3464,7 @@ void NLTranslator::translateMerge(nl::Merge merge, NLStmtContainer* body) {
         hop._scanEdges = _memory->alloc<ColumnEdgeIDs>();
 
         hop._output = static_cast<ColumnEdgeIDs*>(allocColumn(results[resultIndex]));
-        hop._outputPending = static_cast<ColumnMask*>(allocColumn(results[resultIndex + 1]));
+        hop._outputPending = static_cast<ColumnVector<CustomBool>*>(allocColumn(results[resultIndex + 1]));
         resultIndex += 2;
 
         data->addHop(hop);
@@ -3655,7 +3653,7 @@ void NLTranslator::translateSetNodeProperty(nl::SetNodeProperty setNodeProperty,
         data->setWritesNull(writesNull);
 
         if (!writesNull) {
-            ColumnMask* writtenRows = _memory->alloc<ColumnMask>();
+            ColumnVector<CustomBool>* writtenRows = _memory->alloc<ColumnVector<CustomBool>>();
             writtenRows->reserve(_program->getChunkSize());
             data->setWrittenRows(writtenRows);
         }
@@ -3694,7 +3692,7 @@ void NLTranslator::translateSetEdgeProperty(nl::SetEdgeProperty setEdgeProperty,
         data->setWritesNull(writesNull);
 
         if (!writesNull) {
-            ColumnMask* writtenRows = _memory->alloc<ColumnMask>();
+            ColumnVector<CustomBool>* writtenRows = _memory->alloc<ColumnVector<CustomBool>>();
             writtenRows->reserve(_program->getChunkSize());
             data->setWrittenRows(writtenRows);
         }
@@ -4793,10 +4791,10 @@ void NLTranslator::translateFillNulls(nl::FillNulls fillNulls, NLStmtContainer* 
     const ColumnKind::Code resultKind = result->getKind();
     bioassert(value->getKind() == resultKind && fill->getKind() == resultKind,
               "nl.fill_nulls reads columns of another kind than the column it writes.");
-    bioassert(nullRows->getKind() == ColumnMask::staticKind(), "nl.fill_nulls reads its null rows off a mask.");
+    bioassert(nullRows->getKind() == ColumnVector<CustomBool>::staticKind(), "nl.fill_nulls reads its null rows off a boolean column.");
 
     NLFillNullsData* data = _program->allocFunctionData<NLFillNullsData>(value,
-                                                                         static_cast<const ColumnMask*>(nullRows),
+                                                                         static_cast<const ColumnVector<CustomBool>*>(nullRows),
                                                                          fill,
                                                                          result,
                                                                          selectFillNullRowsForChunkType(resultChunkType));
@@ -5653,7 +5651,7 @@ void NLTranslator::translateExistsMark(nl::ExistsMark mark, NLStmtContainer* bod
 void NLTranslator::translateExistsResult(nl::ExistsResult result, NLStmtContainer* body) {
     NLExistsState* state = existsStateFor(result.getState());
 
-    ColumnMask* answer = static_cast<ColumnMask*>(allocColumn(result.getResult()));
+    ColumnVector<CustomBool>* answer = static_cast<ColumnVector<CustomBool>*>(allocColumn(result.getResult()));
 
     NLExistsResultData* data = _program->allocFunctionData<NLExistsResultData>(state, answer);
     body->emplaceStmt(&NLExecutor::runExistsResult, data);
@@ -7386,12 +7384,12 @@ NLCompareFunction NLTranslator::selectCompareForChunkType(mlir::Type chunkType) 
     return NLExecutor::selectCompareFunction(chunkKindFromElementType(elementType));
 }
 
-const ColumnMask* NLTranslator::getMaskColumn(mlir::Value chunkValue) const {
+const ColumnVector<CustomBool>* NLTranslator::getMaskColumn(mlir::Value chunkValue) const {
     if (!chunkValue) {
         return nullptr;
     }
 
-    return static_cast<const ColumnMask*>(getColumn(chunkValue));
+    return static_cast<const ColumnVector<CustomBool>*>(getColumn(chunkValue));
 }
 
 NLKeyAppendFunction NLTranslator::selectMergeKeyAppend(mlir::Type chunkType,

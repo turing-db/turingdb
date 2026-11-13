@@ -890,7 +890,7 @@ std::span<const NLMergePendingEdges::Entry> NLMergePendingEdges::lookup(
     return findIt->second;
 }
 
-NLMergeData::NLMergeData(NLMergePendingEdges* pendingEdges, ColumnMask* created, LocalMemory* memory)
+NLMergeData::NLMergeData(NLMergePendingEdges* pendingEdges, ColumnVector<CustomBool>* created, LocalMemory* memory)
     : _pendingEdges(pendingEdges),
     _created(created),
     _memory(memory),
@@ -956,7 +956,7 @@ void NLMergeMapsData::addOperand(const Operand& operand) {
 }
 
 NLFillNullsData::NLFillNullsData(const Column* value,
-                                 const ColumnMask* nullRows,
+                                 const ColumnVector<CustomBool>* nullRows,
                                  const Column* fill,
                                  Column* result,
                                  NLFillNullRowsFn fillNullRows)
