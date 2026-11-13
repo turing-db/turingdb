@@ -137,9 +137,7 @@ public:
         MakeMemoryPool<ColumnOptVector<ListView>>::type,
         MakeMemoryPool<ColumnConst<ListView>>::type,
         MakeMemoryPool<ColumnVector<CellView>>::type,
-        MakeMemoryPool<ColumnOptVector<CellView>>::type,
         MakeMemoryPool<ColumnConst<CellView>>::type,
-        MakeMemoryPool<ColumnConst<std::optional<CellView>>>::type,
         MakeMemoryPool<ColumnOptVector<ListView>>::type,
         MakeMemoryPool<ColumnConst<std::optional<ListView>>>::type,
 

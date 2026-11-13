@@ -1270,7 +1270,6 @@ private:
     Column* allocOptListColumn();
 
     Column* allocCellColumn();
-    Column* allocOptCellColumn();
     Column* allocConstCellColumn();
 
     Column* getColumn(mlir::Value chunkValue) const;

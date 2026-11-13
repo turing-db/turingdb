@@ -393,40 +393,6 @@ struct OptionalVectorColumnDecoder<SinkMapView<Sink>, Sink> {
 };
 
 template <ProtoDecodeSink Sink>
-struct OptionalVectorColumnDecoder<SinkCellView<Sink>, Sink> {
-    using T = SinkCellView<Sink>;
-
-    static bool decode(DecodeContext* context,
-                       Sink* sink,
-                       SinkColumnOptVector<T, Sink>* typedColumn,
-                       ProtoColumnState* columnState) {
-        // One element per column row, as in the non-optional case, wire-encoded as
-        // [listByteSize] followed by the elements. Which rows hold one is read off the mask,
-        // not off the tag: a row holding a null out of a list carries the very same tag.
-        if (context->_rowIndex == 0) {
-            if (context->_inBuf->readable() < sizeof(WireSize)) {
-                return false;
-            }
-
-            WireSize listByteSize = 0;
-            context->_inBuf->readData(&listByteSize, sizeof(listByteSize));
-
-            sink->beginList(columnState->getNumRows(), listByteSize);
-            context->_rowIndex = 1;
-        }
-
-        const ProtoColumnState::BitMask& mask = columnState->getBitMask();
-        auto onTopLevelElement = [typedColumn, &mask](size_t index, const SinkCellView<Sink>& view) {
-            if (mask.test(index)) {
-                typedColumn->set(index, view);
-            }
-        };
-
-        return drainContainerStack(context, sink, onTopLevelElement);
-    }
-};
-
-template <ProtoDecodeSink Sink>
 struct OptionalVectorColumnDecoder<db::types::String::Primitive, Sink> {
     using T = db::types::String::Primitive;
 
