@@ -132,13 +132,6 @@ struct SearchedValueKindPairs {
         typename SearchPairs<MapView>::Pairs>::Type;
 };
 
-template <typename T>
-struct OptionalKinds {
-    using Types = std::tuple<
-        T,
-        std::optional<T>>;
-};
-
 template <typename... Tuples>
 using GenerateKindList =
     TupleFlatten<typename TupleFlatten<Tuples...>::Type>::Type;
@@ -169,13 +162,6 @@ struct IsTuple<std::tuple<Ts...>> : std::true_type {};
 
 template <typename T>
 concept TupleExact = IsTuple<T>::value;
-
-template <ColumnOperator Function>
-concept NumericConversionFunction = (Function == OP_TO_INTEGER)
-                                 || (Function == OP_TO_FLOAT);
-
-template <ColumnOperator Function>
-concept BooleanConversionFunction = (Function == OP_TO_BOOLEAN);
 
 // Restriction for Binary operators
 template <ColumnOperator Op>
@@ -569,75 +555,6 @@ struct PairRestrictions<Op> {
     >;
 };
 
-// Restriction for Unary operators
-template <ColumnOperator Op>
-struct TypeRestrictions;
-
-template <>
-struct TypeRestrictions<OP_NOT> {
-    using Allowed = GenerateKindList<std::tuple<
-        types::Bool::Primitive,
-        std::optional<types::Bool::Primitive>
-    >>;
-
-    using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>()
-    >;
-};
-
-template <>
-struct TypeRestrictions<OP_FUNC_LABELS> {
-    using Allowed = GenerateKindList<std::tuple<
-        NodeID
-    >>;
-
-    using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnConst>()
-    >;
-};
-
-template <>
-struct TypeRestrictions<OP_FUNC_EDGE_TYPES> {
-    using Allowed = GenerateKindList<std::tuple<
-        EdgeID
-    >>;
-
-    using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnConst>()
-    >;
-};
-
-template <ColumnOperator Func>
-    requires NumericConversionFunction<Func>
-struct TypeRestrictions<Func> {
-    using Allowed = GenerateKindList<std::tuple<
-        std::string,
-        types::String::Primitive,
-        types::Int64::Primitive,
-        types::UInt64::Primitive,
-        types::Double::Primitive
-    >>;
-
-    using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>()
-    >;
-};
-
-template <ColumnOperator Func>
-    requires BooleanConversionFunction<Func>
-struct TypeRestrictions<Func> {
-    using Allowed = GenerateKindList<std::tuple<
-        std::string,
-        types::String::Primitive
-    >>;
-
-    using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>()
-    >;
-};
-
 template <ColumnOperator Op>
 requires (Op == OP_FUNC_COSINE_SIMILARITY) || (Op == OP_FUNC_EUCLIDEAN_DISTANCE)
 struct PairRestrictions<Op> {
@@ -782,40 +699,6 @@ struct WriteProcessorPropertyTypes {
 
 };
 
-struct ConstScanTypes {
-    using Allowed = GenerateKindList<std::tuple<
-        NodeID,
-
-        types::Int64::Primitive,
-        types::UInt64::Primitive,
-        types::Double::Primitive,
-        types::String::Primitive,
-        types::Bool::Primitive,
-        types::Embedding::Primitive
-    >>;
-
-    using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnConst>(),
-        ContainerKind::code<ColumnSet>()
-    >;
-};
-
-/// Types that are used as the Key in indexes
-struct IndexedTypes {
-    using Allowed = GenerateKindList<std::tuple<
-        types::Int64::Primitive,
-        types::UInt64::Primitive,
-        types::Double::Primitive,
-        types::String::Primitive,
-        types::Bool::Primitive,
-        ListView
-    >>;
-    using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnConst>(),
-        ContainerKind::code<ColumnSet>()
-    >;
-};
-
 /// Types that are allowed in lists
 struct ListableTypes {
     using Allowed = GenerateKindList<ListBuffer<>::ListableTypes>;
@@ -833,69 +716,6 @@ struct MappableTypes {
     /// For constructing map literals: all elements should be const
     using LiteralExcluded = ExcludedContainers<
         ContainerKind::code<ColumnVector>(),
-        ContainerKind::code<ColumnSet>()
-    >;
-};
-
-// NOTE: This should be synced with @ref JoinNode::joinableTypes
-struct ValueHashJoinPairs {
-    using Allowed = GenerateKindPairList<
-        // Non-optionals on ID types
-        std::tuple<
-            KindPair<NodeID, NodeID>,
-            KindPair<EdgeID, EdgeID>,
-
-            KindPair<LabelID, LabelID>,
-            KindPair<EdgeTypeID, EdgeTypeID>,
-
-            KindPair<ValueType, ValueType>
-        >,
-
-        /// Property types: all optional variations
-        OptionalKindPairs<types::Int64::Primitive, types::Int64::Primitive>::Pairs,
-        OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
-        OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs,
-        OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs,
-        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
-
-        // Occasionally need owning strings
-        OptionalKindPairs<std::string, std::string>::Pairs,
-        /// Enabled due to transparent string hashing in @ref HashJoinProcessor
-        OptionalKindPairs<std::string, std::string_view>::Pairs,
-        OptionalKindPairs<std::string_view, std::string_view>::Pairs
-    >;
-
-    using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnConst>(),
-        ContainerKind::code<ColumnSet>()
-    >;
-};
-
-/// Totally ordered types, e.g. sorted in ORDER BY
-struct NumericallyAggregatedTypes {
-    using Allowed = GenerateKindList<std::tuple<
-        // All property types and their optional variants
-        types::Int64::Primitive,
-        types::UInt64::Primitive,
-        types::Double::Primitive,
-
-        std::optional<types::Int64::Primitive>,
-        std::optional<types::UInt64::Primitive>,
-        std::optional<types::Double::Primitive>
-    >>;
-
-    using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>()
-    >;
-};
-
-struct GraphSAGEInputs {
-    using Allowed = GenerateKindList<std::tuple<
-        types::List::Primitive,
-        std::optional<types::List::Primitive>
-    >>;
-
-    using Excluded = ExcludedContainers<
         ContainerKind::code<ColumnSet>()
     >;
 };
