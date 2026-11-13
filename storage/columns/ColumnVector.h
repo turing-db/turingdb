@@ -1,8 +1,10 @@
 #pragma once
 
+#include <algorithm>
 #include <vector>
 
 #include "Column.h"
+#include "OptionalTraits.h"
 
 #include "DebugDump.h"
 #include "BioAssert.h"
@@ -18,7 +20,9 @@ public:
     using ConstIterator = std::vector<T>::const_iterator;
     using ReverseIterator = std::vector<T>::reverse_iterator;
     using ConstReverseIterator = std::vector<T>::const_reverse_iterator;
+    using UnwrappedType = OptionalTraits::unwrap_optional_t<T>;
 
+    static constexpr bool IS_NULLABLE = OptionalTraits::is_optional_v<T>;
     static constexpr ContainerKind::Code BaseKind = ContainerKind::code<ColumnVector<T>>();
 
     ColumnVector(const ColumnVector&) = default;
@@ -78,6 +82,37 @@ public:
     void set(size_t i, T&& v) { _data[i] = std::move(v); }
     void set(size_t i, const T& v) { _data[i] = v; }
     T getCopy(size_t i) const { return _data[i]; }
+
+    bool isValid(size_t row) const requires IS_NULLABLE { return _data[row].has_value(); }
+    T get(size_t row) const requires IS_NULLABLE { return _data[row]; }
+
+    const UnwrappedType& getValue(size_t row) const requires IS_NULLABLE {
+        const T& slot = _data[row];
+        if (slot.has_value()) {
+            return *slot;
+        }
+
+        static const UnwrappedType nullValue {};
+        return nullValue;
+    }
+
+    void set(size_t row, const UnwrappedType& value) requires IS_NULLABLE { _data[row] = value; }
+    void set(size_t row, UnwrappedType&& value) requires IS_NULLABLE { _data[row] = std::move(value); }
+    void setNull(size_t row) requires IS_NULLABLE { _data[row].reset(); }
+    void setOptional(size_t row, const T& value) requires IS_NULLABLE { _data[row] = value; }
+    void setOptional(size_t row, T&& value) requires IS_NULLABLE { _data[row] = std::move(value); }
+
+    void push_back(const UnwrappedType& value) requires IS_NULLABLE { _data.emplace_back(value); }
+    void push_back(UnwrappedType&& value) requires IS_NULLABLE { _data.emplace_back(std::move(value)); }
+    void pushNull() requires IS_NULLABLE { _data.emplace_back(std::nullopt); }
+
+    size_t getNullCount() const requires IS_NULLABLE {
+        return std::ranges::count_if(_data, [](const T& slot) { return !slot.has_value(); });
+    }
+
+    bool hasMask() const requires IS_NULLABLE {
+        return std::ranges::any_of(_data, [](const T& slot) { return !slot.has_value(); });
+    }
 
     Iterator begin() { return _data.begin(); }
     ConstIterator begin() const { return _data.begin(); }

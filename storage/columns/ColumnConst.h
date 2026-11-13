@@ -2,6 +2,7 @@
 
 #include "Column.h"
 #include "ColumnKind.h"
+#include "OptionalTraits.h"
 
 #include "metadata/PropertyNull.h"
 
@@ -16,6 +17,9 @@ template <typename T>
 class ColumnConst : public Column {
 public:
     using ValueType = T;
+    using UnwrappedType = OptionalTraits::unwrap_optional_t<T>;
+
+    static constexpr bool IS_NULLABLE = OptionalTraits::is_optional_v<T>;
     static constexpr ContainerKind::Code BaseKind = ContainerKind::code<ColumnConst<T>>();
 
     ColumnConst()
@@ -52,6 +56,21 @@ public:
 
     bool empty() const { return _empty; }
     size_t size() const override { return _empty ? 0 : 1; }
+
+    bool isValid(size_t row) const requires IS_NULLABLE { return _value.has_value(); }
+    T get(size_t row) const requires IS_NULLABLE { return _value; }
+
+    const UnwrappedType& getValue(size_t row) const requires IS_NULLABLE {
+        if (_value.has_value()) {
+            return *_value;
+        }
+
+        static const UnwrappedType nullValue {};
+        return nullValue;
+    }
+
+    size_t getNullCount() const requires IS_NULLABLE { return (_empty || _value.has_value()) ? 0 : 1; }
+
     void clear() override { _empty = true; }
 
     void assign(const Column* other) override {
@@ -76,6 +95,9 @@ public:
 
     void set(const T& value) { _value = value; _empty = false; }
     void set(T&& value) { _value = std::move(value); _empty = false; }
+
+    void setOptional(const T& value) requires IS_NULLABLE { _value = value; _empty = false; }
+    void setOptional(T&& value) requires IS_NULLABLE { _value = std::move(value); _empty = false; }
 
     void dump(std::ostream& out) const override {
         DebugDump::dump(out, _value);

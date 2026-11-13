@@ -140,6 +140,7 @@ add_turing_test(test_storage_dump_propertyloaderpagecount dump/PropertyLoaderPag
 
 add_turing_test(test_storage_columns_dispatcher ColumnDispatcherTest.cpp)
 add_turing_test(test_storage_column_set_element ColumnSetElementTest.cpp)
+add_turing_test(test_storage_column_nullable_accessor ColumnNullableAccessorTest.cpp)
 add_turing_test(test_storage_column_append ColumnAppendTest.cpp)
 add_turing_test(test_storage_objectmap ObjectMapTest.cpp)
 
