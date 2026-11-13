@@ -113,7 +113,8 @@ into its factor as a hash join key, and so can `row.src` after `WITH row ORDER B
 A key read takes a cell column wherever it takes a map column: `holdsAMapPerRow` says so in
 `DBLowering` and in the two nl verifiers, and `NLExecutor::selectMapRead` takes the `MapView`
 out of the tag. An index takes a cell column the same way, and the result is the
-`nullable<any>` every index gives.
+`!storage.any` cell every index of a mixed list gives, Null-tagged where the row has no
+such element.
 
 A map held in a list reads through those same two paths, since `xs[0]` hands back a
 `!storage.any` whose `MapView` tag is the map. An `UNWIND` of a list of maps binds its

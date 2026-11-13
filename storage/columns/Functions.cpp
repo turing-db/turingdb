@@ -539,7 +539,7 @@ TaggedAbsFunction::ResultType TaggedAbsFunction::operator()(const ArgType cell) 
 }
 
 TaggedAbsFunction::ResultType TaggedAbsFunction::operator()(const std::optional<ArgType>& cell) const {
-    return cell.has_value() ? (*this)(*cell) : std::nullopt;
+    return cell.has_value() ? (*this)(*cell) : CellView::nullElement();
 }
 
 TaggedNegateFunction::TaggedNegateFunction(QueryListBuffer* listBuffer)
@@ -551,7 +551,7 @@ TaggedNegateFunction::ResultType TaggedNegateFunction::operator()(const ArgType 
     const CellTag tag = cell.getTag();
 
     if (tag == CellTag::Null) {
-        return std::nullopt;
+        return CellView::nullElement();
     } else if (tag == CellTag::Int) {
         return stageCell(_listBuffer, NegateFunction<types::Int64::Primitive> {}(cell.getAs<types::Int64::Primitive>()));
     } else if (tag == CellTag::UInt) {
@@ -566,7 +566,7 @@ TaggedNegateFunction::ResultType TaggedNegateFunction::operator()(const ArgType 
 }
 
 TaggedNegateFunction::ResultType TaggedNegateFunction::operator()(const std::optional<ArgType>& cell) const {
-    return cell.has_value() ? (*this)(*cell) : std::nullopt;
+    return cell.has_value() ? (*this)(*cell) : CellView::nullElement();
 }
 
 TaggedUnaryPlusFunction::ResultType TaggedUnaryPlusFunction::operator()(const ArgType cell) const {
@@ -578,7 +578,7 @@ TaggedUnaryPlusFunction::ResultType TaggedUnaryPlusFunction::operator()(const Ar
                                 || tag == CellTag::Duration;
 
     if (tag == CellTag::Null) {
-        return std::nullopt;
+        return CellView::nullElement();
     } else if (holdsASignedValue) {
         return cell;
     }
@@ -587,7 +587,7 @@ TaggedUnaryPlusFunction::ResultType TaggedUnaryPlusFunction::operator()(const Ar
 }
 
 TaggedUnaryPlusFunction::ResultType TaggedUnaryPlusFunction::operator()(const std::optional<ArgType>& cell) const {
-    return cell.has_value() ? (*this)(*cell) : std::nullopt;
+    return cell.has_value() ? (*this)(*cell) : CellView::nullElement();
 }
 
 void db::throwSignOperandType(std::string_view operatorName, CellTag held) {
@@ -746,14 +746,14 @@ TaggedReverseFunction::ResultType TaggedReverseFunction::operator()(const ArgTyp
     } else if (tag == CellTag::ListView) {
         return stageCell(_listBuffer, _listBuffer->reverse(cell.getAs<ListView>()));
     } else if (tag == CellTag::Null) {
-        return std::nullopt;
+        return CellView::nullElement();
     }
 
     throwCellTypeError("reverse", "a string or a list", tag);
 }
 
 TaggedReverseFunction::ResultType TaggedReverseFunction::operator()(const std::optional<ArgType>& cell) const {
-    return cell.has_value() ? (*this)(*cell) : std::nullopt;
+    return cell.has_value() ? (*this)(*cell) : CellView::nullElement();
 }
 
 template <typename StringFunctor>

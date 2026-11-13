@@ -669,7 +669,7 @@ private:
         Comparison, // eq/neq/gt/lt/gte/lte: i1, nullable if either is or holds tagged cells
         Double,    // pow: always f64 per openCypher, nullable if either operand is
         Concat,    // concat: string or list (determined at lowering)
-        Index,     // index: a nullable tagged scalar, whatever the list holds
+        Index,     // index: a nullable element of the list's type, or a tagged cell for a mixed list
         Membership, // in: a nullable i1, since a list element can be null
         Position,   // index_of: a nullable i64, null where the list or the value is
     };

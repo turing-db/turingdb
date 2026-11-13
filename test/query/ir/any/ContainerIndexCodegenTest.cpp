@@ -162,7 +162,7 @@ TEST_F(ContainerIndexCodegenTest, lowersAReadOfAListOfNodesToTheNodeColumn) {
 }
 
 TEST_F(ContainerIndexCodegenTest, lowersAReadOfAMixedListAsAListIndexDoes) {
-    expectLoweredResult("WITH [1, 'a'][0] AS i RETURN [1, 'a'][i]", "!nl.chunk<!storage.nullable<!storage.any>>");
+    expectLoweredResult("WITH [1, 'a'][0] AS i RETURN [1, 'a'][i]", "!nl.chunk<!storage.any>");
 }
 
 TEST_F(ContainerIndexCodegenTest, lowersAReadOfAMapOrACellToATaggedCell) {

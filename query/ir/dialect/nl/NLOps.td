@@ -2719,7 +2719,7 @@ def Concat : NLOp<"concat", [Pure, ConstantThroughOperands, RowAlignedThroughOpe
 def ListIndex : NLOp<"list_index", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise read of one element of a list chunk, by position";
   let description = [{
-      %e = nl.list_index %xs, %i : (!nl.chunk<!storage.list<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<!storage.any>>
+      %e = nl.list_index %xs, %i : (!nl.chunk<!storage.list<!storage.any>>, !nl.chunk<i64>) -> !nl.chunk<!storage.any>
 
       A list of nodes or of edges hands its elements back as the entity chunk they were
       gathered from, an invalid ID standing for a position the list does not hold:
