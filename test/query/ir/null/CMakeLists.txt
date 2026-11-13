@@ -80,3 +80,5 @@ target_include_directories(test_query_ir_nullable_column_kind PRIVATE ${IR_TEST_
 
 # The nullable paths of the row movers that no query of the other suites reaches
 add_ir_tests(test_query_ir_nullable_row_mover NullableRowMoverTest.cpp)
+
+add_ir_tests(test_query_ir_nullable_logic NullableLogicTest.cpp)
