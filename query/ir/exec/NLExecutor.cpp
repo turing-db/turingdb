@@ -322,7 +322,7 @@ public:
 
     // Takes the next @param chunkSize integers, or what is left of them, with the row each
     // one came from. @param values is null where nothing reads the integers.
-    void fillChunk(size_t chunkSize, std::vector<std::optional<types::Int64::Primitive>>* values, std::vector<size_t>& rows) {
+    void fillChunk(size_t chunkSize, ColumnOptVector<types::Int64::Primitive>* values, std::vector<size_t>& rows) {
         rows.resize(chunkSize);
 
         size_t filled = 0;
@@ -336,7 +336,7 @@ public:
                 values->resize(filled + count);
 
                 for (size_t index = 0; index < count; index++) {
-                    (*values)[filled + index] = _span.at(_position + index);
+                    values->set(filled + index, _span.at(_position + index));
                 }
             }
 
@@ -2227,32 +2227,32 @@ void readPathElements(const Column* paths,
     const size_t rowCount = paths->size();
 
     if (kind == PathElementsKind::Length) {
-        std::vector<std::optional<uint64_t>>& lengths = static_cast<ColumnOptVector<uint64_t>*>(output)->getRaw();
-        lengths.resize(rowCount);
+        ColumnOptVector<uint64_t>* lengths = static_cast<ColumnOptVector<uint64_t>*>(output);
+        lengths->resize(rowCount);
 
         for (size_t row = 0; row < rowCount; row++) {
             const std::optional<PathView> path = read(paths, row);
             if (!path) {
-                lengths[row] = std::nullopt;
+                lengths->setNull(row);
             } else {
-                lengths[row] = path->getLength();
+                lengths->set(row, path->getLength());
             }
         }
 
         return;
     }
 
-    std::vector<std::optional<ListView>>& lists = static_cast<ColumnOptVector<ListView>*>(output)->getRaw();
-    lists.resize(rowCount);
+    ColumnOptVector<ListView>* lists = static_cast<ColumnOptVector<ListView>*>(output);
+    lists->resize(rowCount);
 
     for (size_t row = 0; row < rowCount; row++) {
         const std::optional<PathView> path = read(paths, row);
         if (!path) {
-            lists[row] = std::nullopt;
+            lists->setNull(row);
         } else if (kind == PathElementsKind::Nodes) {
-            lists[row] = listPathEntities(*path, path->getNodeCount(), &PathView::getNode, CellTag::NodeID, listBuffer);
+            lists->set(row, listPathEntities(*path, path->getNodeCount(), &PathView::getNode, CellTag::NodeID, listBuffer));
         } else {
-            lists[row] = listPathEntities(*path, path->getLength(), &PathView::getEdge, CellTag::EdgeID, listBuffer);
+            lists->set(row, listPathEntities(*path, path->getLength(), &PathView::getEdge, CellTag::EdgeID, listBuffer));
         }
     }
 }
@@ -3396,7 +3396,7 @@ NLJoinKeyFunctions optJoinKeyFunctions() {
 }
 
 template <typename ColumnType>
-concept RowKeyColumn = requires(const ColumnType* column) { operandRow(column, size_t {0}); };
+concept RowKeyColumn = !IS_CONSTANT_COLUMN<ColumnType> && requires(const ColumnType* column) { operandRow(column, size_t {0}); };
 
 // A probe key and a build key of two types, compared by the `=` of the filter the join
 // replaces: an unknown answer matches nothing, as the filter kept only the true rows
@@ -5358,12 +5358,12 @@ bool presentCell(const Column*, size_t) {
 }
 
 bool absentListCell(const Column* source, size_t row) {
-    return !(*static_cast<const ColumnOptVector<ListView>*>(source))[row].has_value();
+    return !static_cast<const ColumnOptVector<ListView>*>(source)->isValid(row);
 }
 
 template <typename Primitive>
 bool absentValueCell(const Column* source, size_t row) {
-    return !(*static_cast<const ColumnOptVector<Primitive>*>(source))[row].has_value();
+    return !static_cast<const ColumnOptVector<Primitive>*>(source)->isValid(row);
 }
 
 // A cell of a type-erased column carries its own tag, so the null is the one that tag
@@ -5378,12 +5378,12 @@ bool absentTaggedCell(const Column* source, size_t row) {
 // the value it holds, or the tagged null Cypher leaves where the row has none.
 template <typename Item, typename Primitive>
 Item valueItem(const Column* input, size_t row, NLStepBuffers*) {
-    const std::optional<Primitive>& cell = (*static_cast<const ColumnOptVector<Primitive>*>(input))[row];
-    if (!cell.has_value()) {
+    const ColumnOptVector<Primitive>* typedInput = static_cast<const ColumnOptVector<Primitive>*>(input);
+    if (!typedInput->isValid(row)) {
         return Item {PropertyNull {}};
     }
 
-    return Item {*cell};
+    return Item {typedInput->getValue(row)};
 }
 
 // Read one cell of a nullable integer column as a bound of a range: the number it holds,
@@ -5393,7 +5393,7 @@ std::optional<ListView> plainListRead(const Column* input, size_t row) {
 }
 
 std::optional<ListView> optListRead(const Column* input, size_t row) {
-    return (*static_cast<const ColumnOptVector<ListView>*>(input))[row];
+    return static_cast<const ColumnOptVector<ListView>*>(input)->get(row);
 }
 
 std::optional<ListView> constListRead(const Column* input, size_t) {
@@ -5401,14 +5401,14 @@ std::optional<ListView> constListRead(const Column* input, size_t) {
 }
 
 std::optional<ListView> optConstListRead(const Column* input, size_t) {
-    return static_cast<const ColumnConst<std::optional<ListView>>*>(input)->getRaw();
+    return constantOperand(static_cast<const ColumnConst<std::optional<ListView>>*>(input));
 }
 
 // The map sibling of the list reads above: one cell of a map column, or nothing where the
 // row holds no map.
 template <typename ColumnT>
 NLKeyedValue mapRead(const Column* input, size_t row) {
-    const std::optional<MapView> map = (*static_cast<const ColumnT*>(input))[row];
+    const std::optional<MapView> map = operandRow(static_cast<const ColumnT*>(input), row);
     if (!map) {
         return std::monostate {};
     }
@@ -5776,7 +5776,7 @@ std::strong_ordering orderOnKeys(std::span<const std::optional<CellView>> lhs,
 
 template <typename ColumnT>
 NLContainer listContainer(const Column* input, size_t row) {
-    const std::optional<ListView> list = (*static_cast<const ColumnT*>(input))[row];
+    const std::optional<ListView> list = operandRow(static_cast<const ColumnT*>(input), row);
     if (!list) {
         return NLContainer {};
     }
@@ -5903,12 +5903,12 @@ Element containerIndexResult(CellView element) {
 
 template <typename Primitive>
 std::optional<types::Int64::Primitive> rangeBound(const Column* input, size_t row) {
-    const std::optional<Primitive>& cell = (*static_cast<const ColumnOptVector<Primitive>*>(input))[row];
-    if (!cell.has_value()) {
+    const ColumnOptVector<Primitive>* typedInput = static_cast<const ColumnOptVector<Primitive>*>(input);
+    if (!typedInput->isValid(row)) {
         return std::nullopt;
     }
 
-    return static_cast<types::Int64::Primitive>(*cell);
+    return static_cast<types::Int64::Primitive>(typedInput->getValue(row));
 }
 
 std::optional<types::Int64::Primitive> cellBound(const CellView cell) {
@@ -5953,12 +5953,12 @@ CellRowRead<Result> selectCellRowRead(const Column* input) {
 
 template <typename Primitive>
 std::optional<types::Double::Primitive> percentileArgument(const Column* input, size_t row) {
-    const std::optional<Primitive>& cell = (*static_cast<const ColumnOptVector<Primitive>*>(input))[row];
-    if (!cell.has_value()) {
+    const ColumnOptVector<Primitive>* typedInput = static_cast<const ColumnOptVector<Primitive>*>(input);
+    if (!typedInput->isValid(row)) {
         return std::nullopt;
     }
 
-    return static_cast<types::Double::Primitive>(*cell);
+    return static_cast<types::Double::Primitive>(typedInput->getValue(row));
 }
 
 std::optional<types::Double::Primitive> cellPercentile(const CellView cell) {
@@ -6061,8 +6061,9 @@ void runPercentileRows(const NLPercentileData* data, std::string_view functionNa
     const size_t rowCount = list->size();
     bioassert(percentile->size() == rowCount, "Percentile column of a {}() is not row-aligned with its lists.", functionName);
 
-    std::vector<Result>& outputRaw = static_cast<ColumnVector<Result>*>(data->getResult())->getRaw();
-    outputRaw.resize(rowCount);
+    using OutputColumn = typename ResultColumnOf<Result, false>::type;
+    OutputColumn* output = static_cast<OutputColumn*>(data->getResult());
+    output->resize(rowCount);
 
     std::vector<CellView> numbers;
 
@@ -6075,7 +6076,7 @@ void runPercentileRows(const NLPercentileData* data, std::string_view functionNa
         }
 
         if (numbers.empty()) {
-            outputRaw[rowIndex] = absentPercentile<Result>();
+            writeRow(output, rowIndex, absentPercentile<Result>());
             continue;
         }
 
@@ -6085,7 +6086,7 @@ void runPercentileRows(const NLPercentileData* data, std::string_view functionNa
         }
 
         throwIfNotAPercentile(*fraction, functionName);
-        outputRaw[rowIndex] = percentileOf(numbers, *fraction);
+        writeRow(output, rowIndex, percentileOf(numbers, *fraction));
     }
 }
 
@@ -6098,12 +6099,12 @@ Item plainItem(const Column* input, size_t row, NLStepBuffers*) {
 
 template <typename Item, typename Element>
 Item optItem(const Column* input, size_t row, NLStepBuffers*) {
-    const std::optional<Element>& cell = (*static_cast<const ColumnOptVector<Element>*>(input))[row];
-    if (!cell.has_value()) {
+    const ColumnOptVector<Element>* typedInput = static_cast<const ColumnOptVector<Element>*>(input);
+    if (!typedInput->isValid(row)) {
         return Item {PropertyNull {}};
     }
 
-    return Item {*cell};
+    return Item {typedInput->getValue(row)};
 }
 
 // The entity sibling of valueItem: an entity an OPTIONAL MATCH did not match is an invalid
@@ -6150,18 +6151,6 @@ void selectCollectIDHandlers(bool distinctValues,
     listEmit = &collectListEmit<IDType>;
 }
 
-template <typename Element>
-void writeFinalizedRow(ColumnVector<Element>* output, size_t row, const std::type_identity_t<Element>& value) {
-    output->getRaw()[row] = value;
-}
-
-template <typename Primitive>
-void writeFinalizedRow(ColumnOptVector<Primitive>* output,
-                       size_t row,
-                       const std::type_identity_t<std::optional<Primitive>>& value) {
-    output->setOptional(row, value);
-}
-
 // Finalize the states of groups [begin, begin + count) into the rows of an output column,
 // one row per group
 template <typename State, typename OutputColumn, typename Finalize>
@@ -6170,7 +6159,8 @@ void finalizeGroupStates(NLGroupStatePlaces places, size_t begin, size_t count, 
     typedOutput->resize(count);
 
     for (size_t index = 0; index < count; index++) {
-        writeFinalizedRow(typedOutput, index, finalize(places.getState<State>(begin + index)));
+        const typename OutputColumn::ValueType value = finalize(places.getState<State>(begin + index));
+        writeRow(typedOutput, index, value);
     }
 }
 
@@ -8096,13 +8086,12 @@ void NLExecutor::runUnwindRangeLoop(NLExecutionContext* context, NLFunctionData*
 
     using ElementColumn = ColumnOptVector<types::Int64::Primitive>;
     ElementColumn* const elements = static_cast<ElementColumn*>(loopData->getElementOutput());
-    std::vector<std::optional<types::Int64::Primitive>>* const values = elements ? &elements->getRaw() : nullptr;
     ColumnVector<size_t>* rows = loopData->getRows();
 
     NLRangeCursor cursor(loopData);
 
     const auto runIteration = [&]() {
-        cursor.fillChunk(chunkSize, values, rows->getRaw());
+        cursor.fillChunk(chunkSize, elements, rows->getRaw());
 
         for (const NLCarriedColumn& carriedColumn : loopData->carriedColumns()) {
             const auto gatherFunc = carriedColumn.getGatherFunc();
@@ -9552,10 +9541,9 @@ void NLExecutor::runListSlice(NLExecutionContext*, NLFunctionData* data) {
 
     const size_t rowCount = list->size();
 
-    std::vector<std::optional<ListView>>& outputRaw =
-        static_cast<ColumnOptVector<ListView>*>(slice->getResult())->getRaw();
-    outputRaw.clear();
-    outputRaw.reserve(rowCount);
+    ColumnOptVector<ListView>* output = static_cast<ColumnOptVector<ListView>*>(slice->getResult());
+    output->clear();
+    output->reserve(rowCount);
 
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
         const std::optional<ListView> elements = listRead(list, rowIndex);
@@ -9568,7 +9556,7 @@ void NLExecutor::runListSlice(NLExecutionContext*, NLFunctionData* data) {
 
         const bool boundsPresent = lower.has_value() && (!to._column || upper.has_value());
         if (!elements || !boundsPresent) {
-            outputRaw.push_back(std::nullopt);
+            output->pushNull();
             continue;
         }
 
@@ -9582,7 +9570,7 @@ void NLExecutor::runListSlice(NLExecutionContext*, NLFunctionData* data) {
 
         const size_t count = end > first ? static_cast<size_t>(end - first) : 0;
 
-        outputRaw.push_back(elements->slice(static_cast<size_t>(first), count));
+        output->push_back(elements->slice(static_cast<size_t>(first), count));
     }
 }
 
@@ -9603,9 +9591,8 @@ void NLExecutor::runSortMulti(NLExecutionContext*, NLFunctionData* data) {
 
     const size_t rowCount = list->size();
 
-    std::vector<std::optional<ListView>>& outputRaw =
-        static_cast<ColumnOptVector<ListView>*>(sortMulti->getResult())->getRaw();
-    outputRaw.resize(rowCount);
+    ColumnOptVector<ListView>* output = static_cast<ColumnOptVector<ListView>*>(sortMulti->getResult());
+    output->resize(rowCount);
 
     std::vector<SortField> sortFields;
     std::span<const CellView> parsedNames;
@@ -9625,7 +9612,7 @@ void NLExecutor::runSortMulti(NLExecutionContext*, NLFunctionData* data) {
 
         const bool readsANull = !elements || !names || !kept || !skipped;
         if (readsANull) {
-            outputRaw[rowIndex] = std::nullopt;
+            output->setNull(rowIndex);
             continue;
         } else if (*skipped < 0) {
             throw IRException("coll.sortMulti cannot skip a negative count");
@@ -9647,7 +9634,7 @@ void NLExecutor::runSortMulti(NLExecutionContext*, NLFunctionData* data) {
         const size_t count = *kept < 0 ? remaining : std::min(remaining, static_cast<size_t>(*kept));
 
         if (fieldCount == 0) {
-            outputRaw[rowIndex] = elements->slice(first, count);
+            output->set(rowIndex, elements->slice(first, count));
             continue;
         }
 
@@ -9687,7 +9674,7 @@ void NLExecutor::runSortMulti(NLExecutionContext*, NLFunctionData* data) {
             sorted[position] = maps[order[first + position]];
         }
 
-        outputRaw[rowIndex] = listBuffer.gather(sorted);
+        output->set(rowIndex, listBuffer.gather(sorted));
     }
 }
 
@@ -9765,8 +9752,9 @@ void NLExecutor::runMergeMaps(NLExecutionContext*, NLFunctionData* data) {
     bioassert(std::ranges::all_of(operands, isRowAligned),
               "Map columns of a merge are not row-aligned.");
 
-    std::vector<Result>& outputRaw = static_cast<ColumnVector<Result>*>(merge->getResult())->getRaw();
-    outputRaw.resize(rowCount);
+    using OutputColumn = typename ResultColumnOf<Result, false>::type;
+    OutputColumn* output = static_cast<OutputColumn*>(merge->getResult());
+    output->resize(rowCount);
 
     std::vector<MapEntryView> entries;
     std::vector<size_t> order;
@@ -9790,7 +9778,7 @@ void NLExecutor::runMergeMaps(NLExecutionContext*, NLFunctionData* data) {
 
         if constexpr (TypeUtils::is_optional_v<Result>) {
             if (!holdsEveryMap) {
-                outputRaw[rowIndex] = std::nullopt;
+                output->setNull(rowIndex);
                 continue;
             }
         } else {
@@ -9823,7 +9811,7 @@ void NLExecutor::runMergeMaps(NLExecutionContext*, NLFunctionData* data) {
             });
         }
 
-        outputRaw[rowIndex] = mapBuffer.insert(merged);
+        output->set(rowIndex, mapBuffer.insert(merged));
     }
 }
 
@@ -9884,8 +9872,9 @@ void NLExecutor::runSplit(NLExecutionContext*, NLFunctionData* data) {
     const size_t rowCount = string._column->size();
     bioassert(delimiters._column->size() == rowCount, "Delimiter column of a split is not row-aligned with its string.");
 
-    std::vector<Result>& outputRaw = static_cast<ColumnVector<Result>*>(split->getResult())->getRaw();
-    outputRaw.resize(rowCount);
+    using OutputColumn = typename ResultColumnOf<Result, false>::type;
+    OutputColumn* output = static_cast<OutputColumn*>(split->getResult());
+    output->resize(rowCount);
 
     NLStepBuffers* const stepBuffers = split->getStepBuffers();
     stepBuffers->clear();
@@ -9901,9 +9890,9 @@ void NLExecutor::runSplit(NLExecutionContext*, NLFunctionData* data) {
 
         const bool readsANull = !text.has_value() || !readsSeparators;
         if (!readsANull) {
-            outputRaw[rowIndex] = function(*text, separators);
+            output->set(rowIndex, function(*text, separators));
         } else if constexpr (TypeUtils::is_optional_v<Result>) {
-            outputRaw[rowIndex] = std::nullopt;
+            output->setNull(rowIndex);
         } else {
             throw IRException("split() typed as never null read a null argument");
         }
@@ -10063,17 +10052,16 @@ void NLExecutor::runRange(NLExecutionContext*, NLFunctionData* data) {
     bioassert(!step._column || step._column->size() == rowCount,
               "Step column of a range is not row-aligned with its bounds.");
 
-    std::vector<std::optional<ListView>>& outputRaw =
-        static_cast<ColumnOptVector<ListView>*>(range->getResult())->getRaw();
-    outputRaw.clear();
-    outputRaw.reserve(rowCount);
+    ColumnOptVector<ListView>* output = static_cast<ColumnOptVector<ListView>*>(range->getResult());
+    output->clear();
+    output->reserve(rowCount);
 
     std::vector<ListBuffer<>::ListItemVariant> elements;
     NLRangeSpan span;
 
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
         if (!span.read(start, end, step, rowIndex)) {
-            outputRaw.push_back(std::nullopt);
+            output->pushNull();
             continue;
         }
 
@@ -10095,7 +10083,7 @@ void NLExecutor::runRange(NLExecutionContext*, NLFunctionData* data) {
             }
         }
 
-        outputRaw.push_back(listBuffer.insert(elements));
+        output->push_back(listBuffer.insert(elements));
     }
 }
 
@@ -10241,18 +10229,17 @@ void NLExecutor::runListComprehension(NLExecutionContext* context, NLFunctionDat
     stagedValues.clear();
     stagedCounts.assign(sourceRows, 0);
 
-    std::vector<std::optional<ListView>>& resultRaw =
-        static_cast<ColumnOptVector<ListView>*>(comprehension->getResult())->getRaw();
-    resultRaw.clear();
-    resultRaw.reserve(sourceRows);
+    ColumnOptVector<ListView>* result = static_cast<ColumnOptVector<ListView>*>(comprehension->getResult());
+    result->clear();
+    result->reserve(sourceRows);
 
     // A row's list is complete as soon as the run past it starts, so the rows behind the
     // cursor are built and dropped at every step rather than the whole source being held
     const auto buildRowsBefore = [&](size_t end) {
         size_t builtElements = 0;
 
-        while (resultRaw.size() < end) {
-            const size_t row = resultRaw.size();
+        while (result->size() < end) {
+            const size_t row = result->size();
             const size_t rowElements = stagedCounts[row];
             const std::span<const ListBuffer<>::ListItemVariant> elements {staged.data() + builtElements,
                                                                           rowElements};
@@ -10261,9 +10248,9 @@ void NLExecutor::runListComprehension(NLExecutionContext* context, NLFunctionDat
             // reads `[x IN null | x]` as - as opposed to the empty list a cell whose
             // elements the predicate all dropped gives
             if (cellAbsent(source, row)) {
-                resultRaw.push_back(std::nullopt);
+                result->pushNull();
             } else {
-                resultRaw.push_back(listBuffer.insert(elements));
+                result->push_back(listBuffer.insert(elements));
             }
 
             builtElements += rowElements;
@@ -10584,9 +10571,10 @@ void NLExecutor::runContainerIndex(NLExecutionContext* context, NLFunctionData* 
 
     const size_t rowCount = pairedRowCount(base, index);
 
-    std::vector<Element>& outputRaw = static_cast<ColumnVector<Element>*>(containerIndex->getResult())->getRaw();
+    using OutputColumn = typename ResultColumnOf<Element, false>::type;
+    OutputColumn* output = static_cast<OutputColumn*>(containerIndex->getResult());
 
-    outputRaw.resize(rowCount);
+    output->resize(rowCount);
 
     for (size_t row = 0; row < rowCount; row++) {
         const CellView element = readContainerElement(readBase(base, row),
@@ -10594,7 +10582,7 @@ void NLExecutor::runContainerIndex(NLExecutionContext* context, NLFunctionData* 
                                                       properties,
                                                       mapBuffer);
 
-        outputRaw[row] = containerIndexResult<Element>(element);
+        writeRow(output, row, containerIndexResult<Element>(element));
     }
 }
 
