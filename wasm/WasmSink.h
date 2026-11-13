@@ -208,4 +208,21 @@ private:
     void countElementWritten();
 };
 
+template <typename T>
+concept WasmOptionalVectorColumn = net::proto::OptionalVectorColumn<WasmSink::ColumnOptVector<T>, T>;
+
+static_assert(WasmOptionalVectorColumn<db::types::UInt64::Primitive>);
+static_assert(WasmOptionalVectorColumn<db::types::Int64::Primitive>);
+static_assert(WasmOptionalVectorColumn<db::types::Double::Primitive>);
+static_assert(WasmOptionalVectorColumn<db::types::Bool::Primitive>);
+static_assert(WasmOptionalVectorColumn<db::types::DateTime::Primitive>);
+static_assert(WasmOptionalVectorColumn<db::types::Duration::Primitive>);
+static_assert(WasmOptionalVectorColumn<db::types::Point::Primitive>);
+static_assert(WasmOptionalVectorColumn<db::NodeID>);
+static_assert(WasmOptionalVectorColumn<db::types::String::Primitive>);
+static_assert(WasmOptionalVectorColumn<db::types::Embedding::Primitive>);
+static_assert(WasmOptionalVectorColumn<WasmSink::ListView>);
+static_assert(WasmOptionalVectorColumn<WasmSink::MapView>);
+static_assert(WasmOptionalVectorColumn<WasmSink::CellView>);
+
 }

@@ -3,7 +3,6 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <chrono>
-#include <optional>
 #include <string>
 #include <string_view>
 
@@ -11,7 +10,7 @@
 #include "QueryStatus.h"
 #include "TuringAsyncClient.h"
 #include "TuringClient.h"
-#include "columns/ColumnVector.h"
+#include "columns/ColumnOptVector.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
 
@@ -33,13 +32,13 @@ struct Total {
 void addRows(const Dataframe* dataframe, Total& total) {
     const Dataframe::NamedColumns& columns = dataframe->cols();
     const NamedColumn* first = columns.front();
-    const ColumnVector<std::optional<int64_t>>* values = first->as<ColumnVector<std::optional<int64_t>>>();
+    const ColumnOptVector<int64_t>* values = first->as<ColumnOptVector<int64_t>>();
     ASSERT_NE(values, nullptr);
 
-    for (const std::optional<int64_t>& value : values->getRaw()) {
-        ASSERT_TRUE(value.has_value());
+    for (size_t row = 0; row < values->size(); row++) {
+        ASSERT_TRUE(values->isValid(row));
         total._rowCount++;
-        total._sum += *value;
+        total._sum += values->getValue(row);
     }
 }
 
