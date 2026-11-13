@@ -1412,11 +1412,11 @@ void collectBooleanSurvivors(const Column* mask, ColumnVector<size_t>* indices) 
 
 void collectOptBooleanSurvivors(const Column* mask, ColumnVector<size_t>* indices) {
     const ColumnOptVector<CustomBool>* typedMask = static_cast<const ColumnOptVector<CustomBool>*>(mask);
-    const std::vector<std::optional<CustomBool>>& maskRaw = typedMask->getRaw();
     std::vector<size_t>& survivingRaw = indices->getRaw();
 
-    for (size_t row = 0; row < maskRaw.size(); row++) {
-        if (maskRaw[row].has_value() && maskRaw[row].value()) {
+    const size_t rowCount = typedMask->size();
+    for (size_t row = 0; row < rowCount; row++) {
+        if (typedMask->isValid(row) && typedMask->getValue(row)) {
             survivingRaw.push_back(row);
         }
     }
@@ -1534,9 +1534,8 @@ void applyNotOnBooleans(Column* result, const Column* operand) {
 }
 
 void applyNotOnOptBooleans(Column* result, const Column* operand) {
-    using OptBool = std::optional<CustomBool>;
-    UnaryPredicateExecutor<Not, OptBool>::apply(static_cast<ColumnOptVector<CustomBool>*>(result),
-                                               static_cast<const ColumnOptVector<CustomBool>*>(operand));
+    UnaryPredicateExecutor<Not>::apply(static_cast<ColumnOptVector<CustomBool>*>(result),
+                                       static_cast<const ColumnOptVector<CustomBool>*>(operand));
 }
 
 std::optional<CustomBool> negatedTruth(const auto& cell) {
@@ -1550,29 +1549,29 @@ std::optional<CustomBool> negatedTruth(const auto& cell) {
 
 void applyNotOnTaggedCells(Column* result, const Column* operand) {
     const std::vector<CellView>& operandRaw = static_cast<const ColumnVector<CellView>*>(operand)->getRaw();
-    std::vector<std::optional<CustomBool>>& resultRaw = static_cast<ColumnOptVector<CustomBool>*>(result)->getRaw();
+    ColumnOptVector<CustomBool>* typedResult = static_cast<ColumnOptVector<CustomBool>*>(result);
 
-    resultRaw.resize(operandRaw.size());
-    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](CellView cell) {
-        return negatedTruth(cell);
-    });
+    typedResult->resize(operandRaw.size());
+    for (size_t row = 0; row < operandRaw.size(); row++) {
+        typedResult->setOptional(row, negatedTruth(operandRaw[row]));
+    }
 }
 
 void applyNotOnConstTaggedCell(Column* result, const Column* operand) {
     const CellView cell = static_cast<const ColumnConst<CellView>*>(operand)->getRaw();
-    static_cast<ColumnConst<std::optional<CustomBool>>*>(result)->set(negatedTruth(cell));
+    static_cast<ColumnConst<std::optional<CustomBool>>*>(result)->setOptional(negatedTruth(cell));
 }
 
 void applyNotOnConst(Column* result, const Column* operand) {
     const ColumnConst<CustomBool>* typedOperand = static_cast<const ColumnConst<CustomBool>*>(operand);
     ColumnConst<CustomBool>* typedResult = static_cast<ColumnConst<CustomBool>*>(result);
-    UnaryPredicateExecutor<Not, CustomBool>::apply(typedResult, typedOperand);
+    UnaryPredicateExecutor<Not>::apply(typedResult, typedOperand);
 }
 
 void applyNotOnOptConst(Column* result, const Column* operand) {
     using OptBool = std::optional<CustomBool>;
-    UnaryPredicateExecutor<Not, OptBool>::apply(static_cast<ColumnConst<OptBool>*>(result),
-                                               static_cast<const ColumnConst<OptBool>*>(operand));
+    UnaryPredicateExecutor<Not>::apply(static_cast<ColumnConst<OptBool>*>(result),
+                                       static_cast<const ColumnConst<OptBool>*>(operand));
 }
 
 // NOT of an unknown truth value is unknown; the ColumnConst<PropertyNull> result already
@@ -2073,7 +2072,9 @@ NLUnaryFn selectToNullableOf(const Column* operand, LocalMemory* memory, Column*
 }
 
 bool caseTestOptBoolean(const Column* condition, size_t row) {
-    return static_cast<const ColumnOptVector<CustomBool>*>(condition)->getRaw()[row].value_or(false);
+    const ColumnOptVector<CustomBool>* typedCondition = static_cast<const ColumnOptVector<CustomBool>*>(condition);
+
+    return typedCondition->isValid(row) && typedCondition->getValue(row);
 }
 
 // A null is not true, so a branch whose condition is the null literal never fires and its
@@ -2083,13 +2084,13 @@ bool caseTestNever(const Column* condition, size_t row) {
 }
 
 void applyIsNotTrueOnOptBooleans(Column* result, const Column* operand) {
-    const std::vector<std::optional<CustomBool>>& operandRaw = static_cast<const ColumnOptVector<CustomBool>*>(operand)->getRaw();
+    const ColumnOptVector<CustomBool>* typedOperand = static_cast<const ColumnOptVector<CustomBool>*>(operand);
     std::vector<CustomBool>& resultRaw = static_cast<ColumnVector<CustomBool>*>(result)->getRaw();
 
-    resultRaw.resize(operandRaw.size());
-    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](std::optional<CustomBool> value) {
-        return CustomBool {!value.value_or(false)};
-    });
+    resultRaw.resize(typedOperand->size());
+    for (size_t row = 0; row < resultRaw.size(); row++) {
+        resultRaw[row] = CustomBool {!(typedOperand->isValid(row) && typedOperand->getValue(row))};
+    }
 }
 
 void applyIsNotTrueOnTaggedCells(Column* result, const Column* operand) {
@@ -2152,12 +2153,12 @@ std::optional<bool> readBooleanTruth(const Column* mask, size_t row) {
 }
 
 std::optional<bool> readOptBooleanTruth(const Column* mask, size_t row) {
-    const std::optional<CustomBool>& value = static_cast<const ColumnOptVector<CustomBool>*>(mask)->getRaw()[row];
-    if (!value.has_value()) {
+    const ColumnOptVector<CustomBool>* typedMask = static_cast<const ColumnOptVector<CustomBool>*>(mask);
+    if (!typedMask->isValid(row)) {
         return std::nullopt;
     }
 
-    return static_cast<bool>(*value);
+    return static_cast<bool>(typedMask->getValue(row));
 }
 
 std::optional<bool> readNullTruth(const Column* mask, size_t row) {
@@ -10198,21 +10199,20 @@ void NLExecutor::runListPredicate(NLExecutionContext* context, NLFunctionData* d
         }
     });
 
-    std::vector<std::optional<CustomBool>>& resultRaw =
-        static_cast<ColumnOptVector<CustomBool>*>(predicate->getResult())->getRaw();
-    resultRaw.resize(sourceRows);
+    ColumnOptVector<CustomBool>* result = static_cast<ColumnOptVector<CustomBool>*>(predicate->getResult());
+    result->resize(sourceRows);
 
     for (size_t row = 0; row < sourceRows; row++) {
         if (cellAbsent(source, row)) {
-            resultRaw[row] = std::nullopt;
+            result->setNull(row);
             continue;
         }
 
         const std::optional<bool> decided = decideListPredicate(kind, trueCounts[row], falseCounts[row], nullCounts[row]);
         if (decided.has_value()) {
-            resultRaw[row] = CustomBool(*decided);
+            result->set(row, CustomBool(*decided));
         } else {
-            resultRaw[row] = std::nullopt;
+            result->setNull(row);
         }
     }
 }
@@ -10333,19 +10333,18 @@ void NLExecutor::runAllReduce(NLExecutionContext* context, NLFunctionData* data)
         }
     });
 
-    std::vector<std::optional<CustomBool>>& resultRaw =
-        static_cast<ColumnOptVector<CustomBool>*>(allReduce->getResult())->getRaw();
-    resultRaw.resize(sourceRows);
+    ColumnOptVector<CustomBool>* result = static_cast<ColumnOptVector<CustomBool>*>(allReduce->getResult());
+    result->resize(sourceRows);
 
     for (size_t row = 0; row < sourceRows; row++) {
         if (cellAbsent(source, row)) {
-            resultRaw[row] = std::nullopt;
+            result->setNull(row);
         } else if (failedRows[row]) {
-            resultRaw[row] = CustomBool(false);
+            result->set(row, CustomBool(false));
         } else if (unknownRows[row]) {
-            resultRaw[row] = std::nullopt;
+            result->setNull(row);
         } else {
-            resultRaw[row] = CustomBool(true);
+            result->set(row, CustomBool(true));
         }
     }
 }
@@ -14214,12 +14213,12 @@ void NLExecutor::runCheckLabelConstraint(NLExecutionContext* context, NLFunction
 
         if constexpr (std::is_same_v<MaskColumn, ColumnOptVector<CustomBool>>) {
             if (!id.isValid()) {
-                (*output)[rowIndex] = std::nullopt;
+                output->setNull(rowIndex);
                 continue;
             }
         }
 
-        (*output)[rowIndex] = checkData->isMatching(id);
+        output->set(rowIndex, CustomBool {checkData->isMatching(id)});
     }
 }
 
@@ -14241,12 +14240,12 @@ void NLExecutor::runCheckEdgeTypeConstraint(NLExecutionContext* context, NLFunct
 
         if constexpr (std::is_same_v<MaskColumn, ColumnOptVector<CustomBool>>) {
             if (!id.isValid()) {
-                (*output)[rowIndex] = std::nullopt;
+                output->setNull(rowIndex);
                 continue;
             }
         }
 
-        (*output)[rowIndex] = checkData->isMatching(id);
+        output->set(rowIndex, CustomBool {checkData->isMatching(id)});
     }
 }
 
