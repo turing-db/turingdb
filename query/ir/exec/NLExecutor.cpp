@@ -648,15 +648,13 @@ void functionConstKernel(NLExecutionContext* context, Column* result, const Colu
     using Arg = typename Functor::ArgType;
     using Res = typename Functor::ResultType;
 
-    auto* output = static_cast<ColumnConst<Res>*>(result);
+    ColumnConst<Res>* output = static_cast<ColumnConst<Res>*>(result);
     Functor functor = makeFunctor<Functor>(context, memory);
 
-    if (const auto* typedInput = dynamic_cast<const ColumnConst<Arg>*>(input)) {
-        output->set(functor(typedInput->getRaw()));
-        return;
-    }
+    bioassert(input->getKind() == ColumnConst<Arg>::staticKind(), "Function operand has an unexpected column type.");
+    const ColumnConst<Arg>* typedInput = static_cast<const ColumnConst<Arg>*>(input);
 
-    bioassert(false, "Function operand has an unexpected column type.");
+    writeConstant(output, functor(typedInput->getRaw()));
 }
 
 // The constant whose single cell can be absent: the functor is handed the optional and
@@ -666,25 +664,24 @@ void functionOptConstKernel(NLExecutionContext* context, Column* result, const C
     using Arg = typename Functor::ArgType;
     using Res = typename Functor::ResultType;
 
-    const auto* typedInput = dynamic_cast<const ColumnConst<std::optional<Arg>>*>(input);
-    bioassert(typedInput, "Function operand has an unexpected column type.");
-    auto* output = static_cast<ColumnConst<Res>*>(result);
+    bioassert(input->getKind() == ColumnConst<std::optional<Arg>>::staticKind(), "Function operand has an unexpected column type.");
+    const ColumnConst<std::optional<Arg>>* typedInput = static_cast<const ColumnConst<std::optional<Arg>>*>(input);
+    ColumnConst<Res>* output = static_cast<ColumnConst<Res>*>(result);
 
     Functor functor = makeFunctor<Functor>(context, memory);
-    output->set(functor(typedInput->getRaw()));
+    output->set(functor(typedInput->get(0)));
 }
 
 template <typename Functor, typename Element>
 void applyFunctionOverNullableConst(Functor& functor,
                                     const ColumnConst<std::optional<Element>>* input,
                                     ColumnConst<std::optional<TypeUtils::unwrap_optional_t<typename Functor::ResultType>>>* output) {
-    const std::optional<Element>& value = input->getRaw();
-    if (!value.has_value()) {
-        output->set(std::nullopt);
+    if (!input->isValid(0)) {
+        output->setOptional(std::nullopt);
         return;
     }
 
-    output->set(functor(*value));
+    output->setOptional(functor(input->getValue(0)));
 }
 
 // The same constant for a function that does not read its own nulls: an absent cell
@@ -694,15 +691,12 @@ void functionNullableConstKernel(NLExecutionContext* context, Column* result, co
     using Arg = typename Functor::ArgType;
     using JustRes = TypeUtils::unwrap_optional_t<typename Functor::ResultType>;
 
-    auto* output = static_cast<ColumnConst<std::optional<JustRes>>*>(result);
+    bioassert(input->getKind() == ColumnConst<std::optional<Arg>>::staticKind(), "Function operand has an unexpected column type.");
+    const ColumnConst<std::optional<Arg>>* typedInput = static_cast<const ColumnConst<std::optional<Arg>>*>(input);
+    ColumnConst<std::optional<JustRes>>* output = static_cast<ColumnConst<std::optional<JustRes>>*>(result);
+
     Functor functor = makeFunctor<Functor>(context, memory);
-
-    if (const auto* typedInput = dynamic_cast<const ColumnConst<std::optional<Arg>>*>(input)) {
-        applyFunctionOverNullableConst(functor, typedInput, output);
-        return;
-    }
-
-    bioassert(false, "Function operand has an unexpected column type.");
+    applyFunctionOverNullableConst(functor, typedInput, output);
 }
 
 template <typename Arg>
@@ -718,15 +712,14 @@ void functionNullKernel(NLExecutionContext*, Column*, const Column*, NLStepBuffe
 template <typename Functor, typename Element>
 void applyFunctionOverVector(Functor& functor,
                              const ColumnVector<Element>* input,
-                             ColumnVector<typename Functor::ResultType>* output) {
+                             ColumnVectorOf<typename Functor::ResultType>* output) {
     const auto& inputRaw = input->getRaw();
     const size_t size = inputRaw.size();
 
     output->resize(size);
-    auto& outputRaw = output->getRaw();
 
     for (size_t row = 0; row < size; row++) {
-        outputRaw[row] = functor(inputRaw[row]);
+        writeRow(output, row, functor(inputRaw[row]));
     }
 }
 
@@ -743,15 +736,13 @@ void functionVectorKernel(NLExecutionContext* context, Column* result, const Col
     using Arg = typename Functor::ArgType;
     using Res = typename Functor::ResultType;
 
-    auto* output = static_cast<ColumnVector<Res>*>(result);
+    ColumnVectorOf<Res>* output = static_cast<ColumnVectorOf<Res>*>(result);
     Functor functor = makeFunctor<Functor>(context, memory);
 
-    if (const auto* typedInput = dynamic_cast<const ColumnVector<Arg>*>(input)) {
-        applyFunctionOverVector(functor, typedInput, output);
-        return;
-    }
+    bioassert(input->getKind() == ColumnVector<Arg>::staticKind(), "Function operand has an unexpected column type.");
+    const ColumnVector<Arg>* typedInput = static_cast<const ColumnVector<Arg>*>(input);
 
-    bioassert(false, "Function operand has an unexpected column type.");
+    applyFunctionOverVector(functor, typedInput, output);
 }
 
 // The nullable-input kernel of a function that reads its own nulls: the absent value goes
@@ -761,19 +752,16 @@ void functionNullReadingKernel(NLExecutionContext* context, Column* result, cons
     using Arg = typename Functor::ArgType;
     using Res = typename Functor::ResultType;
 
-    const auto* typedInput = dynamic_cast<const ColumnOptVector<Arg>*>(input);
-    bioassert(typedInput, "Function operand has an unexpected column type.");
-    auto* output = static_cast<ColumnVector<Res>*>(result);
+    bioassert(input->getKind() == ColumnOptVector<Arg>::staticKind(), "Function operand has an unexpected column type.");
+    const ColumnOptVector<Arg>* typedInput = static_cast<const ColumnOptVector<Arg>*>(input);
+    ColumnVectorOf<Res>* output = static_cast<ColumnVectorOf<Res>*>(result);
 
-    const auto& inputRaw = typedInput->getRaw();
-    const size_t size = inputRaw.size();
-
+    const size_t size = typedInput->size();
     output->resize(size);
-    auto& outputRaw = output->getRaw();
 
     Functor functor = makeFunctor<Functor>(context, memory);
     for (size_t row = 0; row < size; row++) {
-        outputRaw[row] = functor(inputRaw[row]);
+        output->set(row, functor(typedInput->get(row)));
     }
 }
 
@@ -789,7 +777,7 @@ NLUnaryFunctionKernel selectTaggedCellFunction(const Column* input, LocalMemory*
         return &functionConstKernel<Functor>;
     }
 
-    result = memory->alloc<ColumnVector<Res>>();
+    result = memory->alloc<ColumnVectorOf<Res>>();
     return &functionVectorKernel<Functor>;
 }
 
@@ -803,22 +791,21 @@ void functionEntityKernel(NLExecutionContext* context, Column* result, const Col
     using Res = typename Functor::ResultType;
     using JustRes = TypeUtils::unwrap_optional_t<Res>;
 
-    const auto* typedInput = dynamic_cast<const ColumnVector<Arg>*>(input);
-    bioassert(typedInput, "Function operand has an unexpected column type.");
-    auto* output = static_cast<ColumnOptVector<JustRes>*>(result);
+    bioassert(input->getKind() == ColumnVector<Arg>::staticKind(), "Function operand has an unexpected column type.");
+    const ColumnVector<Arg>* typedInput = static_cast<const ColumnVector<Arg>*>(input);
+    ColumnOptVector<JustRes>* output = static_cast<ColumnOptVector<JustRes>*>(result);
 
     const std::vector<Arg>& inputRaw = typedInput->getRaw();
     const size_t size = inputRaw.size();
 
     output->resize(size);
-    auto& outputRaw = output->getRaw();
 
     Functor functor = makeFunctor<Functor>(context, memory);
     for (size_t row = 0; row < size; row++) {
         if (inputRaw[row].isValid()) {
-            outputRaw[row] = functor(inputRaw[row]);
+            output->set(row, functor(inputRaw[row]));
         } else {
-            outputRaw[row] = std::nullopt;
+            output->setNull(row);
         }
     }
 }
@@ -831,9 +818,9 @@ void functionEntityToEntityKernel(NLExecutionContext* context, Column* result, c
     using Arg = typename Functor::ArgType;
     using Res = typename Functor::ResultType;
 
-    const auto* typedInput = dynamic_cast<const ColumnVector<Arg>*>(input);
-    bioassert(typedInput, "Function operand has an unexpected column type.");
-    auto* output = static_cast<ColumnVector<Res>*>(result);
+    bioassert(input->getKind() == ColumnVector<Arg>::staticKind(), "Function operand has an unexpected column type.");
+    const ColumnVector<Arg>* typedInput = static_cast<const ColumnVector<Arg>*>(input);
+    ColumnVector<Res>* output = static_cast<ColumnVector<Res>*>(result);
 
     const std::vector<Arg>& inputRaw = typedInput->getRaw();
     const size_t size = inputRaw.size();
@@ -855,17 +842,14 @@ template <typename Functor, typename Element>
 void applyFunctionOverOptVector(Functor& functor,
                                 const ColumnOptVector<Element>* input,
                                 ColumnOptVector<TypeUtils::unwrap_optional_t<typename Functor::ResultType>>* output) {
-    const auto& inputRaw = input->getRaw();
-    const size_t size = inputRaw.size();
-
+    const size_t size = input->size();
     output->resize(size);
-    auto& outputRaw = output->getRaw();
 
     for (size_t row = 0; row < size; row++) {
-        if (inputRaw[row].has_value()) {
-            outputRaw[row] = functor(inputRaw[row].value());
+        if (input->isValid(row)) {
+            writeRow(output, row, functor(input->getValue(row)));
         } else {
-            outputRaw[row] = std::nullopt;
+            output->setNull(row);
         }
     }
 }
@@ -876,25 +860,28 @@ void functionOptKernel(NLExecutionContext* context, Column* result, const Column
     using Res = typename Functor::ResultType;
     using JustRes = TypeUtils::unwrap_optional_t<Res>;
 
-    auto* output = static_cast<ColumnOptVector<JustRes>*>(result);
+    bioassert(input->getKind() == ColumnOptVector<Arg>::staticKind(), "Function operand has an unexpected column type.");
+    const ColumnOptVector<Arg>* typedInput = static_cast<const ColumnOptVector<Arg>*>(input);
+    ColumnOptVector<JustRes>* output = static_cast<ColumnOptVector<JustRes>*>(result);
+
     Functor functor = makeFunctor<Functor>(context, memory);
-
-    if (const auto* typedInput = dynamic_cast<const ColumnOptVector<Arg>*>(input)) {
-        applyFunctionOverOptVector(functor, typedInput, output);
-        return;
-    }
-
-    bioassert(false, "Function operand has an unexpected column type.");
+    applyFunctionOverOptVector(functor, typedInput, output);
 }
 
 // Whether a column holds this element, in any of the shapes a chunk column takes: a plain
 // vector, a nullable one, or a constant of either.
 template <typename Element>
 bool columnHoldsElement(const Column* column) {
-    return dynamic_cast<const ColumnVector<Element>*>(column)
-           || dynamic_cast<const ColumnVector<std::optional<Element>>*>(column)
-           || dynamic_cast<const ColumnConst<Element>*>(column)
-           || dynamic_cast<const ColumnConst<std::optional<Element>>*>(column);
+    const ColumnKind::Code kind = column->getKind();
+    const bool holdsPlainElement = kind == ColumnVector<Element>::staticKind() || kind == ColumnConst<Element>::staticKind();
+
+    if constexpr (InternalKind::Types::contains<std::optional<Element>>()) {
+        const bool holdsNullableElement = kind == ColumnOptVector<Element>::staticKind()
+                                          || kind == ColumnConst<std::optional<Element>>::staticKind();
+        return holdsPlainElement || holdsNullableElement;
+    } else {
+        return holdsPlainElement;
+    }
 }
 
 template <ColumnOperator Op>
@@ -5578,12 +5565,12 @@ CellView readStaticKey(const NLKeyedValue& keyed,
 // row holds none.
 template <typename ColumnT>
 std::optional<types::String::Primitive> stringRead(const Column* input, size_t row) {
-    return (*static_cast<const ColumnT*>(input))[row];
+    return operandRow(static_cast<const ColumnT*>(input), row);
 }
 
 template <typename ColumnT>
 std::optional<types::String::Primitive> stringValueArgument(const Column* input, size_t row, std::string_view) {
-    return (*static_cast<const ColumnT*>(input))[row];
+    return stringRead<ColumnT>(input, row);
 }
 
 template <typename ColumnT>
@@ -5611,7 +5598,7 @@ bool stringAsStringListArgument(const Column* input,
                                 std::vector<types::String::Primitive>& strings) {
     strings.clear();
 
-    const std::optional<types::String::Primitive> string = (*static_cast<const ColumnT*>(input))[row];
+    const std::optional<types::String::Primitive> string = operandRow(static_cast<const ColumnT*>(input), row);
     if (!string.has_value()) {
         return false;
     }
@@ -5628,7 +5615,7 @@ bool listAsStringListArgument(const Column* input,
                               std::vector<types::String::Primitive>& strings) {
     strings.clear();
 
-    const std::optional<ListView> list = (*static_cast<const ColumnT*>(input))[row];
+    const std::optional<ListView> list = operandRow(static_cast<const ColumnT*>(input), row);
 
     return list.has_value() && listStrings(*list, functionName, strings);
 }
@@ -5656,12 +5643,12 @@ bool cellAsStringListArgument(const Column* input,
 }
 
 std::optional<types::Int64::Primitive> integerValueArgument(const Column* input, size_t row, std::string_view) {
-    return (*static_cast<const ColumnOptVector<types::Int64::Primitive>*>(input))[row];
+    return static_cast<const ColumnOptVector<types::Int64::Primitive>*>(input)->get(row);
 }
 
 std::optional<types::Int64::Primitive> unsignedValueArgument(const Column* input, size_t row, std::string_view functionName) {
-    const std::optional<types::UInt64::Primitive>& cell =
-        (*static_cast<const ColumnOptVector<types::UInt64::Primitive>*>(input))[row];
+    const std::optional<types::UInt64::Primitive> cell =
+        static_cast<const ColumnOptVector<types::UInt64::Primitive>*>(input)->get(row);
     if (!cell.has_value()) {
         return std::nullopt;
     }
@@ -5671,7 +5658,7 @@ std::optional<types::Int64::Primitive> unsignedValueArgument(const Column* input
 
 template <typename ColumnT>
 std::optional<types::Point::Primitive> pointValueArgument(const Column* input, size_t row, std::string_view) {
-    return (*static_cast<const ColumnT*>(input))[row];
+    return operandRow(static_cast<const ColumnT*>(input), row);
 }
 
 template <typename ColumnT>
@@ -6061,7 +6048,7 @@ void runPercentileRows(const NLPercentileData* data, std::string_view functionNa
     const size_t rowCount = list->size();
     bioassert(percentile->size() == rowCount, "Percentile column of a {}() is not row-aligned with its lists.", functionName);
 
-    using OutputColumn = typename ResultColumnOf<Result, false>::type;
+    using OutputColumn = ColumnVectorOf<Result>;
     OutputColumn* output = static_cast<OutputColumn*>(data->getResult());
     output->resize(rowCount);
 
@@ -9752,7 +9739,7 @@ void NLExecutor::runMergeMaps(NLExecutionContext*, NLFunctionData* data) {
     bioassert(std::ranges::all_of(operands, isRowAligned),
               "Map columns of a merge are not row-aligned.");
 
-    using OutputColumn = typename ResultColumnOf<Result, false>::type;
+    using OutputColumn = ColumnVectorOf<Result>;
     OutputColumn* output = static_cast<OutputColumn*>(merge->getResult());
     output->resize(rowCount);
 
@@ -9831,8 +9818,8 @@ void NLExecutor::runSubstring(NLExecutionContext*, NLFunctionData* data) {
     bioassert(!length._column || length._column->size() == rowCount,
               "Length column of a substring is not row-aligned with its string.");
 
-    std::vector<Result>& outputRaw = static_cast<ColumnVector<Result>*>(substring->getResult())->getRaw();
-    outputRaw.resize(rowCount);
+    ColumnVectorOf<Result>* output = static_cast<ColumnVectorOf<Result>*>(substring->getResult());
+    output->resize(rowCount);
 
     const SubstringFunction function {};
     constexpr std::string_view name = SubstringFunction::NAME;
@@ -9847,14 +9834,14 @@ void NLExecutor::runSubstring(NLExecutionContext*, NLFunctionData* data) {
         const bool boundIsNull = !from.has_value() || !count.has_value();
         if (!text.has_value()) {
             if constexpr (TypeUtils::is_optional_v<Result>) {
-                outputRaw[rowIndex] = std::nullopt;
+                output->setNull(rowIndex);
             } else {
                 throw IRException("substring() typed as never null read a null string");
             }
         } else if (boundIsNull) {
             throw IRException("substring() does not take a null start or length");
         } else {
-            outputRaw[rowIndex] = function(*text, *from, *count);
+            output->set(rowIndex, function(*text, *from, *count));
         }
     }
 }
@@ -9872,7 +9859,7 @@ void NLExecutor::runSplit(NLExecutionContext*, NLFunctionData* data) {
     const size_t rowCount = string._column->size();
     bioassert(delimiters._column->size() == rowCount, "Delimiter column of a split is not row-aligned with its string.");
 
-    using OutputColumn = typename ResultColumnOf<Result, false>::type;
+    using OutputColumn = ColumnVectorOf<Result>;
     OutputColumn* output = static_cast<OutputColumn*>(split->getResult());
     output->resize(rowCount);
 
@@ -9912,8 +9899,8 @@ void NLExecutor::runStringEnd(NLExecutionContext*, NLFunctionData* data) {
     const size_t rowCount = string._column->size();
     bioassert(length._column->size() == rowCount, "Length column of a string end is not row-aligned with its string.");
 
-    std::vector<Result>& outputRaw = static_cast<ColumnVector<Result>*>(stringEnd->getResult())->getRaw();
-    outputRaw.resize(rowCount);
+    ColumnVectorOf<Result>* output = static_cast<ColumnVectorOf<Result>*>(stringEnd->getResult());
+    output->resize(rowCount);
 
     const Function function {};
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
@@ -9922,14 +9909,14 @@ void NLExecutor::runStringEnd(NLExecutionContext*, NLFunctionData* data) {
 
         if (!text.has_value()) {
             if constexpr (TypeUtils::is_optional_v<Result>) {
-                outputRaw[rowIndex] = std::nullopt;
+                output->setNull(rowIndex);
             } else {
                 throw IRException(fmt::format("{}() typed as never null read a null string", Function::NAME));
             }
         } else if (!count.has_value()) {
             throw IRException(fmt::format("{}() does not take a null length", Function::NAME));
         } else {
-            outputRaw[rowIndex] = function(*text, *count);
+            output->set(rowIndex, function(*text, *count));
         }
     }
 }
@@ -9951,8 +9938,8 @@ void NLExecutor::runReplace(NLExecutionContext*, NLFunctionData* data) {
     bioassert(search._column->size() == rowCount, "Search column of a replace is not row-aligned with its string.");
     bioassert(replacement._column->size() == rowCount, "Replacement column of a replace is not row-aligned with its string.");
 
-    std::vector<Result>& outputRaw = static_cast<ColumnVector<Result>*>(replace->getResult())->getRaw();
-    outputRaw.resize(rowCount);
+    ColumnVectorOf<Result>* output = static_cast<ColumnVectorOf<Result>*>(replace->getResult());
+    output->resize(rowCount);
 
     NLStepBuffers* const stepBuffers = replace->getStepBuffers();
     stepBuffers->clear();
@@ -9965,9 +9952,9 @@ void NLExecutor::runReplace(NLExecutionContext*, NLFunctionData* data) {
 
         const bool readsANull = !text.has_value() || !searched.has_value() || !replacing.has_value();
         if (!readsANull) {
-            outputRaw[rowIndex] = function(*text, *searched, *replacing);
+            output->set(rowIndex, function(*text, *searched, *replacing));
         } else if constexpr (TypeUtils::is_optional_v<Result>) {
-            outputRaw[rowIndex] = std::nullopt;
+            output->setNull(rowIndex);
         } else {
             throw IRException("replace() typed as never null read a null argument");
         }
@@ -9987,18 +9974,17 @@ void NLExecutor::runPointDistance(NLExecutionContext*, NLFunctionData* data) {
     const size_t rowCount = lhs._column->size();
     bioassert(rhs._column->size() == rowCount, "Columns of a point.distance are not row-aligned.");
 
-    std::vector<std::optional<types::Double::Primitive>>& outputRaw =
-        static_cast<ColumnOptVector<types::Double::Primitive>*>(function->getResult())->getRaw();
-    outputRaw.resize(rowCount);
+    ColumnOptVector<types::Double::Primitive>* output = static_cast<ColumnOptVector<types::Double::Primitive>*>(function->getResult());
+    output->resize(rowCount);
 
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
         const std::optional<Point> from = lhs._read(lhs._column, rowIndex, "point.distance");
         const std::optional<Point> to = rhs._read(rhs._column, rowIndex, "point.distance");
 
         if (from.has_value() && to.has_value()) {
-            outputRaw[rowIndex] = Point::distance(*from, *to);
+            output->setOptional(rowIndex, Point::distance(*from, *to));
         } else {
-            outputRaw[rowIndex] = std::nullopt;
+            output->setNull(rowIndex);
         }
     }
 }
@@ -10015,9 +10001,8 @@ void NLExecutor::runPointWithinBBox(NLExecutionContext*, NLFunctionData* data) {
     bioassert(lowerLeft._column->size() == rowCount, "Columns of a point.withinBBox are not row-aligned.");
     bioassert(upperRight._column->size() == rowCount, "Columns of a point.withinBBox are not row-aligned.");
 
-    std::vector<std::optional<types::Bool::Primitive>>& outputRaw =
-        static_cast<ColumnOptVector<types::Bool::Primitive>*>(function->getResult())->getRaw();
-    outputRaw.resize(rowCount);
+    ColumnOptVector<types::Bool::Primitive>* output = static_cast<ColumnOptVector<types::Bool::Primitive>*>(function->getResult());
+    output->resize(rowCount);
 
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
         const std::optional<Point> value = point._read(point._column, rowIndex, "point.withinBBox");
@@ -10028,9 +10013,9 @@ void NLExecutor::runPointWithinBBox(NLExecutionContext*, NLFunctionData* data) {
         const std::optional<bool> within = readsANull ? std::nullopt : Point::withinBBox(*value, *lower, *upper);
 
         if (within.has_value()) {
-            outputRaw[rowIndex] = types::Bool::Primitive {*within};
+            output->set(rowIndex, types::Bool::Primitive {*within});
         } else {
-            outputRaw[rowIndex] = std::nullopt;
+            output->setNull(rowIndex);
         }
     }
 }
@@ -10571,7 +10556,7 @@ void NLExecutor::runContainerIndex(NLExecutionContext* context, NLFunctionData* 
 
     const size_t rowCount = pairedRowCount(base, index);
 
-    using OutputColumn = typename ResultColumnOf<Element, false>::type;
+    using OutputColumn = ColumnVectorOf<Element>;
     OutputColumn* output = static_cast<OutputColumn*>(containerIndex->getResult());
 
     output->resize(rowCount);
@@ -11168,7 +11153,7 @@ NLUnaryFunctionKernel NLExecutor::selectFunction(const Column* input, bool input
         if constexpr (hasNullableColumn) {
             if (inputNullable) {
                 if constexpr (ReadsItsNulls<Functor>) {
-                    result = memory->alloc<ColumnVector<Res>>();
+                    result = memory->alloc<ColumnVectorOf<Res>>();
                     return &functionNullReadingKernel<Functor>;
                 } else {
                     result = memory->alloc<ColumnOptVector<JustRes>>();
@@ -11184,7 +11169,7 @@ NLUnaryFunctionKernel NLExecutor::selectFunction(const Column* input, bool input
             return &functionEntityKernel<Functor>;
         }
 
-        result = memory->alloc<ColumnVector<Res>>();
+        result = memory->alloc<ColumnVectorOf<Res>>();
         return &functionVectorKernel<Functor>;
     }
 }

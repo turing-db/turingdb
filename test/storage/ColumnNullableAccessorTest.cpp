@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <string>
+#include <type_traits>
 
 #include "columns/ColumnConst.h"
 #include "columns/ColumnOptVector.h"
@@ -224,4 +225,11 @@ TEST(ColumnNullableAccessorTest, constColumnReadAccessors) {
 
     column.clear();
     EXPECT_EQ(column.getNullCount(), 0);
+}
+
+TEST(ColumnNullableAccessorTest, vectorColumnOfAnElementType) {
+    static_assert(std::is_same_v<ColumnVectorOf<int64_t>, ColumnVector<int64_t>>);
+    static_assert(std::is_same_v<ColumnVectorOf<std::optional<int64_t>>, ColumnOptVector<int64_t>>);
+    static_assert(ColumnVectorOf<std::optional<std::string>>::IS_NULLABLE);
+    static_assert(!ColumnVectorOf<std::string>::IS_NULLABLE);
 }

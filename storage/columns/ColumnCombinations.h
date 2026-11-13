@@ -41,12 +41,7 @@ public:
 
 template <typename Result, bool READS_CONSTANTS>
 struct ResultColumnOf {
-    using type = std::conditional_t<READS_CONSTANTS, ColumnConst<Result>, ColumnVector<Result>>;
-};
-
-template <typename Result>
-struct ResultColumnOf<std::optional<Result>, false> {
-    using type = ColumnOptVector<Result>;
+    using type = std::conditional_t<READS_CONSTANTS, ColumnConst<Result>, ColumnVectorOf<Result>>;
 };
 
 template <typename Op, typename T, typename U, bool READS_CONSTANTS>

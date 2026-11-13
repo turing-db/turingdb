@@ -29,9 +29,6 @@ struct TypeUtils {
     template <typename T>
     using unwrap_optional_t = OptionalTraits::unwrap_optional_t<T>;
 
-    template <typename ColT>
-    using unwrap_inner_t = unwrap_optional_t<typename InnerTypeHelper<ColT>::type>;
-
     template <typename T>
     using wrap_optional_t = std::conditional_t<is_optional_v<T>, T, std::optional<T>>;
 
