@@ -84,3 +84,9 @@ add_ir_tests(test_query_ir_nullable_row_mover NullableRowMoverTest.cpp)
 add_ir_tests(test_query_ir_nullable_logic NullableLogicTest.cpp)
 
 add_ir_tests(test_query_ir_nullable_container_function NullableContainerFunctionTest.cpp)
+
+add_ir_tests(test_query_ir_nullable_constant_function_argument NullableConstantFunctionArgumentTest.cpp)
+
+add_turing_test(test_query_ir_nullable_similarity_function NullableSimilarityFunctionTest.cpp)
+target_sources(test_query_ir_nullable_similarity_function PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_nullable_similarity_function PRIVATE ${IR_TEST_DIR})
