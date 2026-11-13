@@ -28,7 +28,6 @@
 #include "LocalMemory.h"
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnConst.h"
-#include "columns/ColumnMask.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "dataframe/Dataframe.h"
@@ -572,7 +571,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsMaskColumns) {
     db::DataframeManager dfMan;
     db::Dataframe source;
 
-    auto* isPerson = localMem.alloc<db::ColumnMask>();
+    auto* isPerson = localMem.alloc<db::ColumnVector<db::CustomBool>>();
     isPerson->push_back(true);
     isPerson->push_back(false);
     isPerson->push_back(false);

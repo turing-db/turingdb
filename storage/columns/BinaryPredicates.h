@@ -16,8 +16,8 @@
 #include "NumberOrder.h"
 #include "QueryTypeName.h"
 #include "TypeUtils.h"
-#include "ColumnMask.h"
-#include "ColumnOptMask.h"
+#include "ColumnVector.h"
+#include "ColumnOptVector.h"
 #include "ColumnConst.h"
 #include "CellOrder.h"
 #include "metadata/PropertyType.h"
@@ -347,7 +347,7 @@ inline std::optional<CustomBool> optionalPredicate(T&& a, U&& b) {
  */
 template <typename Op, typename T, typename U>
 struct BinaryPredicateExecutor {
-    static void apply(ColumnMask* res,
+    static void apply(ColumnVector<CustomBool>* res,
                       const ColumnVector<T>* lhs,
                       const ColumnVector<U>* rhs) {
         bioassert(lhs->size() == rhs->size(), "Misshapen ColumnVectors.");
@@ -364,7 +364,7 @@ struct BinaryPredicateExecutor {
         }
     }
 
-    static void apply(ColumnOptMask* res,
+    static void apply(ColumnOptVector<CustomBool>* res,
                       const ColumnVector<T>* lhs,
                       const ColumnVector<U>* rhs) {
         bioassert(lhs->size() == rhs->size(), "Misshapen ColumnVectors.");
@@ -381,7 +381,7 @@ struct BinaryPredicateExecutor {
         }
     }
 
-    static void apply(ColumnMask* res,
+    static void apply(ColumnVector<CustomBool>* res,
                       const ColumnVector<T>* lhs,
                       const ColumnConst<U>* rhs) {
        const size_t size = lhs->size();
@@ -397,7 +397,7 @@ struct BinaryPredicateExecutor {
        }
     }
 
-    static void apply(ColumnOptMask* res,
+    static void apply(ColumnOptVector<CustomBool>* res,
                       const ColumnVector<T>* lhs,
                       const ColumnConst<U>* rhs) {
         const size_t size = lhs->size();
@@ -413,7 +413,7 @@ struct BinaryPredicateExecutor {
         }
     }
 
-    static void apply(ColumnMask* res,
+    static void apply(ColumnVector<CustomBool>* res,
                       const ColumnConst<T>* lhs,
                       const ColumnVector<U>* rhs) {
         const size_t size = rhs->size();
@@ -429,7 +429,7 @@ struct BinaryPredicateExecutor {
         }
     }
 
-    static void apply(ColumnOptMask* res,
+    static void apply(ColumnOptVector<CustomBool>* res,
                       const ColumnConst<T>* lhs,
                       const ColumnVector<U>* rhs) {
         const size_t size = rhs->size();
@@ -463,7 +463,7 @@ struct BinaryPredicateExecutor {
         res->set(result);
     }
 
-    static void apply(ColumnMask* res,
+    static void apply(ColumnVector<CustomBool>* res,
                       const ColumnConst<T>* lhs,
                       const ColumnConst<U>* rhs) {
         res->resize(1);
@@ -472,7 +472,7 @@ struct BinaryPredicateExecutor {
         res->front() = result;
     }
 
-    static void apply(ColumnOptMask* res,
+    static void apply(ColumnOptVector<CustomBool>* res,
                       const ColumnConst<T>* lhs,
                       const ColumnConst<U>* rhs) {
         res->resize(1);

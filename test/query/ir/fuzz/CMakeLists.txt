@@ -1,6 +1,6 @@
 add_turing_test(test_query_ir_fuzz_misshapen_column_vectors FuzzMisshapenColumnVectorsTest.cpp)
 
-add_turing_test(test_query_ir_fuzz_misshapen_column_masks FuzzMisshapenColumnMasksTest.cpp)
+add_turing_test(test_query_ir_fuzz_misshapen_bool_vectors FuzzMisshapenBoolVectorsTest.cpp)
 
 add_turing_test(test_query_ir_fuzz_property_null_binary_operation FuzzPropertyNullBinaryOperationTest.cpp)
 

@@ -23,7 +23,7 @@ using namespace db;
 using namespace turing::test;
 
 // AFL inputs that tripped the 'Misshapen ColumnMasks' assertion of BinaryPredicates.h.
-class FuzzMisshapenColumnMasksTest : public TuringTest {
+class FuzzMisshapenBoolVectorsTest : public TuringTest {
 protected:
     void initialize() override {
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
@@ -66,30 +66,30 @@ protected:
     std::string _graphName {"simpledb"};
 };
 
-TEST_F(FuzzMisshapenColumnMasksTest, Where000057) {
+TEST_F(FuzzMisshapenBoolVectorsTest, Where000057) {
     expectNodesZeroAndOne("MATCH (n) WHERE n = 0 OR n = 1 OR n.nama = 'Remy' = 0 OR n = 1 OR n.name = 'Remy'RETURN n");
 }
 
-TEST_F(FuzzMisshapenColumnMasksTest, Where000058) {
+TEST_F(FuzzMisshapenBoolVectorsTest, Where000058) {
     expectNodesZeroAndOne("MATCH (n) WHERE n = 0 OR n = 1 OR n.ntme = 'Remy' = 03OR n = 1 OR n.namU = 'RGmy'RETURN n");
 }
 
-TEST_F(FuzzMisshapenColumnMasksTest, Where000059) {
+TEST_F(FuzzMisshapenBoolVectorsTest, Where000059) {
     expectNodesZeroAndOne("MATCH (n) WHERE n = 0 OR n = 1 OR n.nami = 'Remy' = 0 OR n = 1 OR n.name = 'Remy'RETURN n");
 }
 
-TEST_F(FuzzMisshapenColumnMasksTest, Where000060) {
+TEST_F(FuzzMisshapenBoolVectorsTest, Where000060) {
     expectNodesZeroAndOne("MATCH (n) WHERE n = 0 OR n = 1 OR n.game = 'Remy' = 0 OR n = 1 OR n.name = 'Remy'RETURN n");
 }
 
-TEST_F(FuzzMisshapenColumnMasksTest, Where000061) {
+TEST_F(FuzzMisshapenBoolVectorsTest, Where000061) {
     expectNodesZeroAndOne("MATCH (n) WHERE n = 0 OR n = 1 OR n.name0= 'Remy' = 0 OR n = 1 OR n.name = 'Remy'RETURN n");
 }
 
-TEST_F(FuzzMisshapenColumnMasksTest, Where000062) {
+TEST_F(FuzzMisshapenBoolVectorsTest, Where000062) {
     expectNodesZeroAndOne("MATCH (n) WHERE n = 0 OR n = 1 OR n.Pame = 'Remy' = 0 OR n = 1 OR n.name = '[x IN Remy'RETURN n");
 }
 
-TEST_F(FuzzMisshapenColumnMasksTest, Where000063) {
+TEST_F(FuzzMisshapenBoolVectorsTest, Where000063) {
     expectNodesZeroAndOne("MATCH (n) WHERE n = 0 OR n = 1 OR n.namV = 'Remy' = 0 OR n = 1 OR n.name = 'Remy'RETURN n");
 }

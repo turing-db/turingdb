@@ -33,7 +33,7 @@ struct BinaryOperators {
 /// Binary predicates, returning a Bool-like
 struct BinaryPredicates {
     template <typename Op, typename ColT, typename ColU>
-    static void exec(ColumnMask* res, const ColT* lhs, const ColU* rhs) {
+    static void exec(ColumnVector<CustomBool>* res, const ColT* lhs, const ColU* rhs) {
         using DecayColT = TypeUtils::decay_col_t<ColT>;
         using DecayColU = TypeUtils::decay_col_t<ColU>;
 
@@ -44,7 +44,7 @@ struct BinaryPredicates {
     }
 
     template <typename Op, typename ColT, typename ColU>
-    static void exec(ColumnOptMask* res, const ColT* lhs, const ColU* rhs) {
+    static void exec(ColumnOptVector<CustomBool>* res, const ColT* lhs, const ColU* rhs) {
         using DecayColT = TypeUtils::decay_col_t<ColT>;
         using DecayColU = TypeUtils::decay_col_t<ColU>;
 

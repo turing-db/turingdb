@@ -16,8 +16,7 @@
 #include "JobSystem.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnIDs.h"
-#include "columns/ColumnMask.h"
-#include "columns/ColumnOptMask.h"
+#include "columns/ColumnVector.h"
 #include "columns/ColumnOptVector.h"
 #include "iterators/ChunkConfig.h"
 #include "CellView.h"
@@ -354,10 +353,10 @@ private:
     bool _bool {false};
 };
 
-// Collects a single boolean mask column - the result of a comparison. The chunk
-// may be a per-row ColumnMask or a scalar ColumnConst<CustomBool> when both
+// Collects a single boolean column - the result of a comparison. The chunk
+// may be a per-row ColumnVector<CustomBool> or a scalar ColumnConst<CustomBool> when both
 // operands of the predicate were constants.
-class CollectingMaskSink : public NLOutputSink {
+class CollectingBoolSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
@@ -370,7 +369,7 @@ public:
                 _values.push_back(static_cast<bool>((*constMask)[rowIndex]));
             }
         } else {
-            const auto* mask = dynamic_cast<const ColumnMask*>(col);
+            const auto* mask = dynamic_cast<const ColumnVector<CustomBool>*>(col);
             ASSERT_NE(mask, nullptr);
             for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
                 _values.push_back((*mask)[rowIndex]);
@@ -385,7 +384,7 @@ private:
 };
 
 // Collects (node ID, nullable bool) rows: a node ID chunk paired with a
-// ColumnOptMask (ColumnOptVector<CustomBool>), the nullable result of a comparison.
+// ColumnOptVector<CustomBool>, the nullable result of a comparison.
 // A null (a comparison against a null operand) comes back as an empty optional.
 class CollectingNodeBoolSink : public NLOutputSink {
 public:
@@ -393,7 +392,7 @@ public:
         ASSERT_EQ(chunks.size(), 2u);
 
         const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(chunks[0]);
-        const auto* values = dynamic_cast<const ColumnOptMask*>(chunks[1]);
+        const auto* values = dynamic_cast<const ColumnOptVector<CustomBool>*>(chunks[1]);
         ASSERT_NE(nodeIDs, nullptr);
         ASSERT_NE(values, nullptr);
         ASSERT_EQ(nodeIDs->size(), values->size());
@@ -1666,7 +1665,7 @@ TEST_F(NLExecutorTest, eqConstantsFalse) {
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
-    CollectingMaskSink sink;
+    CollectingBoolSink sink;
     runProgram(eqConstantsFalseProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
 
     const std::vector<bool> expected {false};
@@ -1678,7 +1677,7 @@ TEST_F(NLExecutorTest, eqConstantsTrue) {
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
-    CollectingMaskSink sink;
+    CollectingBoolSink sink;
     runProgram(eqConstantsTrueProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
 
     const std::vector<bool> expected {true};
@@ -1724,7 +1723,7 @@ TEST_F(NLExecutorTest, andConstantsFalse) {
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
-    CollectingMaskSink sink;
+    CollectingBoolSink sink;
     runProgram(andConstantsFalseProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
 
     const std::vector<bool> expected {false};
@@ -1736,7 +1735,7 @@ TEST_F(NLExecutorTest, andConstantsTrue) {
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
-    CollectingMaskSink sink;
+    CollectingBoolSink sink;
     runProgram(andConstantsTrueProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
 
     const std::vector<bool> expected {true};
@@ -1783,7 +1782,7 @@ TEST_F(NLExecutorTest, orConstantsTrue) {
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
-    CollectingMaskSink sink;
+    CollectingBoolSink sink;
     runProgram(orConstantsTrueProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
 
     const std::vector<bool> expected {true};
@@ -1795,7 +1794,7 @@ TEST_F(NLExecutorTest, orConstantsFalse) {
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
-    CollectingMaskSink sink;
+    CollectingBoolSink sink;
     runProgram(orConstantsFalseProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
 
     const std::vector<bool> expected {false};

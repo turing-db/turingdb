@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "CellTag.h"
-#include "columns/ColumnMask.h"
 #include "map/MapView.h"
 #include "metadata/PropertyType.h"
 #include "versioning/CommitWriteBuffer.h"
@@ -17,6 +16,10 @@
 namespace db {
 
 class Column;
+
+template <typename T>
+class ColumnVector;
+
 class GraphView;
 class MetadataBuilder;
 
@@ -30,7 +33,7 @@ std::optional<PropertyType> findWrittenPropertyType(const GraphView* view,
                                                     PropertyTypeID id);
 
 // A write with no rows mask touches every row
-bool writeTouchesRow(const ColumnMask* rows, size_t row);
+bool writeTouchesRow(const ColumnVector<CustomBool>* rows, size_t row);
 
 // The values one property column holds, as the write buffer takes them: one entry per
 // row, owning whatever the column only borrows. What a create, a set and a merge all
@@ -46,7 +49,7 @@ void extractColumnProperties(const Column* column,
 // every row: a row it does not reach is neither checked nor staged.
 void extractCellProperties(const Column* column,
                            size_t rowCount,
-                           const ColumnMask* written,
+                           const ColumnVector<CustomBool>* written,
                            PropertyTypeID propID,
                            ValueType valueType,
                            CommitWriteBuffer::UntypedProperties& buf);
@@ -117,7 +120,7 @@ void stageRemovals(std::span<const PropertyTypeID> held,
 // value no property holds.
 ValueType cellPropertyType(const Column* column,
                            size_t rowCount,
-                           const ColumnMask* written,
+                           const ColumnVector<CustomBool>* written,
                            std::string_view propertyName);
 
 // The disengaged value of one property, repeated over every row. A write of a null has no

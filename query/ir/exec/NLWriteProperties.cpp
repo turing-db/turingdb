@@ -11,7 +11,6 @@
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnKind.h"
-#include "columns/ColumnMask.h"
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
@@ -523,7 +522,7 @@ void readWrittenConstMap(const Column* column, size_t rowCount, std::vector<Writ
 // The cell of each row @param written holds, or of every row for a null mask. A constant
 // column holds its one cell on each of the @param rowCount rows.
 template <typename Visit>
-void visitWrittenCells(const Column* column, size_t rowCount, const ColumnMask* written, Visit visit) {
+void visitWrittenCells(const Column* column, size_t rowCount, const ColumnVector<CustomBool>* written, Visit visit) {
     const ColumnKind::Code kind = column->getKind();
 
     const auto visitRows = [&](const auto& cellAt) {
@@ -610,7 +609,7 @@ const std::optional<PropertyType>& resolveMapKeyType(const GraphView* view,
 
 }
 
-bool db::writeTouchesRow(const ColumnMask* rows, size_t row) {
+bool db::writeTouchesRow(const ColumnVector<CustomBool>* rows, size_t row) {
     return !rows || (*rows)[row];
 }
 
@@ -824,7 +823,7 @@ void db::extractColumnProperties(const Column* column,
 
 ValueType db::cellPropertyType(const Column* column,
                                size_t rowCount,
-                               const ColumnMask* written,
+                               const ColumnVector<CustomBool>* written,
                                std::string_view propertyName) {
     ValueType widest {ValueType::Invalid};
 
@@ -837,7 +836,7 @@ ValueType db::cellPropertyType(const Column* column,
 
 void db::extractCellProperties(const Column* column,
                                size_t rowCount,
-                               const ColumnMask* written,
+                               const ColumnVector<CustomBool>* written,
                                PropertyTypeID propID,
                                ValueType valueType,
                                CommitWriteBuffer::UntypedProperties& buf) {

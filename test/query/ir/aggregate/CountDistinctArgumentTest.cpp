@@ -34,12 +34,12 @@
 #include "SimpleGraph.h"
 #include "SystemAccessor.h"
 #include "SystemManager.h"
-#include "columns/ColumnMask.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
 #include "CellView.h"
 #include "list/ListView.h"
+#include "metadata/PropertyType.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
@@ -198,7 +198,7 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
 
-        const auto* mask = dynamic_cast<const ColumnMask*>(chunks[0]);
+        const auto* mask = dynamic_cast<const ColumnVector<CustomBool>*>(chunks[0]);
         ASSERT_NE(mask, nullptr);
 
         const std::vector<CustomBool>& raw = mask->getRaw();
