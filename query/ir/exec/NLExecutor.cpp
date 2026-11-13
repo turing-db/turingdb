@@ -2150,10 +2150,7 @@ void appendColumn(const Column* input, Column* buffer) {
     const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
     ColumnVector<ElementType>* typedBuffer = static_cast<ColumnVector<ElementType>*>(buffer);
 
-    const auto& inputRaw = typedInput->getRaw();
-    auto& bufferRaw = typedBuffer->getRaw();
-
-    bufferRaw.insert(bufferRaw.end(), inputRaw.begin(), inputRaw.end());
+    typedBuffer->appendRows(*typedInput, 0, typedInput->size());
 }
 
 template <typename Element>
