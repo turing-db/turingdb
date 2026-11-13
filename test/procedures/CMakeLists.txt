@@ -11,3 +11,5 @@ add_turing_test(test_procedures_gnn_neighbourhood_sample_chunk GnnNeighbourhoodS
 add_turing_test(test_procedures_describe_commit_chunk DescribeCommitChunkTest.cpp)
 
 add_turing_test(test_procedures_graphsage GraphSAGEProcedureTest.cpp)
+
+add_turing_test(test_procedures_describe_commit_nullable_hash DescribeCommitNullableHashTest.cpp)
