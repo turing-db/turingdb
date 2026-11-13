@@ -1255,12 +1255,9 @@ struct EntityListIndex {
 
 template <typename IDType, typename ResCol, typename LhsCol, typename RhsCol>
 void applyEntityListIndex(Column* result, const Column* lhs, const Column* rhs, NLStepBuffers*) {
-    using Lists = typename InnerTypeHelper<LhsCol>::type;
-    using Indices = typename InnerTypeHelper<RhsCol>::type;
-
-    BinaryOpExecutor<EntityListIndex<IDType>, IDType, Lists, Indices>::apply(static_cast<ResCol*>(result),
-                                                                            static_cast<const LhsCol*>(lhs),
-                                                                            static_cast<const RhsCol*>(rhs));
+    BinaryOpExecutor<EntityListIndex<IDType>>::apply(static_cast<ResCol*>(result),
+                                                     static_cast<const LhsCol*>(lhs),
+                                                     static_cast<const RhsCol*>(rhs));
 }
 
 template <typename IDType>
