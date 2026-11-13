@@ -2594,23 +2594,6 @@ void resetTaggedCells(Column* result, size_t rowCount) {
     results.assign(rowCount, CellView::nullElement());
 }
 
-template <typename Primitive>
-void caseResetColumn(Column* result, size_t rowCount) {
-    ColumnOptVector<Primitive>* results = static_cast<ColumnOptVector<Primitive>*>(result);
-
-    results->clear();
-    results->resize(rowCount);
-}
-
-// A default-constructed ID is the invalid one and a default-constructed path the one with
-// no node, which is how those columns spell an absent row: the reset leaves every row null,
-// as the optional one above does
-template <typename Element>
-void caseResetOwnNullColumn(Column* result, size_t rowCount) {
-    std::vector<Element>& results = static_cast<ColumnVector<Element>*>(result)->getRaw();
-    results.assign(rowCount, Element {});
-}
-
 // 3-way compare two rows of a type-erased column of tagged scalars. Cells need not share
 // a type, so a pair of different types compares by the order those types sort in; nulls
 // tie and sort after every value, as they do in a nullable value column.
@@ -7971,7 +7954,7 @@ void NLExecutor::searchVectorIndex(NLExecutionContext* context, NLVectorSearchLo
                    neighbourIDs.begin(),
                    [](int64_t id) { return NodeID {static_cast<uint64_t>(id)}; });
 
-    std::vector<std::optional<types::Double::Primitive>>& neighbourScores = loopData->neighbourScores();
+    std::vector<types::Double::Primitive>& neighbourScores = loopData->neighbourScores();
     neighbourScores.resize(distances.size());
     std::copy(distances.begin(), distances.end(), neighbourScores.begin());
 
@@ -7998,7 +7981,7 @@ void NLExecutor::runVectorSearchLoop(NLExecutionContext* context, NLFunctionData
     }
 
     const std::span<const NodeID> ids = loopData->neighbourIDs();
-    const std::span<const std::optional<types::Double::Primitive>> scores = loopData->neighbourScores();
+    const std::span<const types::Double::Primitive> scores = loopData->neighbourScores();
 
     using ScoreColumn = ColumnOptVector<types::Double::Primitive>;
 
@@ -8024,7 +8007,7 @@ void NLExecutor::runVectorSearchLoop(NLExecutionContext* context, NLFunctionData
 
         scoreColumn->resize(rows);
         for (size_t row = 0; row < rows; row++) {
-            scoreColumn->setOptional(row, scores[cursor + row]);
+            scoreColumn->set(row, scores[cursor + row]);
         }
 
         cursor += rows;
@@ -10823,7 +10806,7 @@ NLCellAbsentFunction NLExecutor::selectValueCellAbsent(NLChunkKind kind) {
 
 NLCaseResetFn NLExecutor::selectCaseReset(NLChunkKind kind) {
     NLCaseResetFn reset = nullptr;
-    dispatchOptChunkKind(kind, [&]<typename Element>() { reset = &caseResetColumn<Element>; });
+    dispatchOptChunkKind(kind, [&]<typename Element>() { reset = &fillNullOptColumn<Element>; });
 
     return reset;
 }
@@ -10907,11 +10890,11 @@ NLUnaryFn NLExecutor::selectIsNotTrue(NLTruthColumnKind kind, LocalMemory* memor
 
 NLCaseResetFn NLExecutor::selectOwnNullCaseReset(NLChunkKind kind) {
     if (kind == NLChunkKind::NodeID) {
-        return &caseResetOwnNullColumn<NodeID>;
+        return &fillNullColumn<NodeID>;
     } else if (kind == NLChunkKind::EdgeID) {
-        return &caseResetOwnNullColumn<EdgeID>;
+        return &fillNullColumn<EdgeID>;
     } else if (kind == NLChunkKind::Path) {
-        return &caseResetOwnNullColumn<GraphPath>;
+        return &fillNullColumn<GraphPath>;
     }
 
     throw IRException("Only a node, an edge or a path column holds its own null");

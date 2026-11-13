@@ -708,7 +708,7 @@ public:
     void markSearched() { _searched = true; }
 
     std::vector<NodeID>& neighbourIDs() { return _neighbourIDs; }
-    std::vector<std::optional<types::Double::Primitive>>& neighbourScores() { return _neighbourScores; }
+    std::vector<types::Double::Primitive>& neighbourScores() { return _neighbourScores; }
 
 private:
     ColumnNodeIDs* _ids {nullptr};
@@ -718,7 +718,7 @@ private:
     std::span<const float> _queryVector;
     NLLimitState* _limit {nullptr};
     std::vector<NodeID> _neighbourIDs;
-    std::vector<std::optional<types::Double::Primitive>> _neighbourScores;
+    std::vector<types::Double::Primitive> _neighbourScores;
     bool _searched {false};
     NLStmtContainer _stmts;
 };
