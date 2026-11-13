@@ -233,16 +233,12 @@ public:
         } else if constexpr (db::IsListView<T>) {
             // A row with no list still carries the [count][listByteSize] header, empty, so
             // every row is the same shape on the wire and the mask alone says which is null.
-            for (const auto& val : *col) {
+            for (const auto& val : values) {
                 _nestedWriter.writeListView(val.has_value() ? *val : db::ListView {});
             }
         } else if constexpr (db::IsMap<T>) {
             for (const auto& val : values) {
                 _nestedWriter.writeMapView(val.has_value() ? *val : db::MapView {});
-            }
-        } else if constexpr (db::IsListView<T>) {
-            for (const auto& val : *col) {
-                _nestedWriter.writeListView(val.has_value() ? *val : db::ListView {});
             }
         } else if constexpr (db::IsCell<T>) {
             _nestedWriter.writeOptionalCells(values);
@@ -321,8 +317,6 @@ public:
             _nestedWriter.writeListView(*opt);
         } else if constexpr (db::IsMap<T>) {
             _nestedWriter.writeMapView(*opt);
-        } else if constexpr (db::IsListView<T>) {
-            _nestedWriter.writeListView(*opt);
         } else if constexpr (db::IsCell<T>) {
             const db::CellView element = *opt;
             _nestedWriter.writeCells(std::span<const db::CellView>(&element, 1));

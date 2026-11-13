@@ -656,7 +656,6 @@ struct OutputtedTypes {
         types::Duration::Primitive,
         types::Point::Primitive,
         std::optional<types::Int64::Primitive>,
-        std::optional<types::Int64::Primitive>,
         std::optional<types::UInt64::Primitive>,
         std::optional<types::Double::Primitive>,
         std::optional<types::String::Primitive>,
@@ -695,7 +694,6 @@ struct OutputtedTypes {
         std::optional<ListView>,
         CellView,
         std::optional<CellView>,
-        std::optional<ListView>,
 
         MapView,
         std::optional<MapView>
