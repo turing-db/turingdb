@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ColumnOptMask.h"
+#include "ColumnOptVector.h"
 #include "ColumnVector.h"
 #include "ColumnConst.h"
 
@@ -41,7 +41,7 @@ inline std::optional<CustomBool> optionalUnaryPredicate(T&& a) {
  */
 template <typename Op, typename T>
 struct UnaryPredicateExecutor {
-    static void apply(ColumnOptMask* res, const ColumnVector<T>* arg)
+    static void apply(ColumnOptVector<CustomBool>* res, const ColumnVector<T>* arg)
         requires TypeUtils::is_optional_v<T>
     {
         const size_t size = arg->size();

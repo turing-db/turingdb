@@ -17,8 +17,6 @@
 #include "JobSystem.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnIDs.h"
-#include "columns/ColumnMask.h"
-#include "columns/ColumnOptMask.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "CellView.h"
@@ -528,7 +526,7 @@ public:
                 _values.push_back(static_cast<bool>((*constMask)[rowIndex]));
             }
         } else {
-            const auto* mask = dynamic_cast<const ColumnMask*>(col);
+            const auto* mask = dynamic_cast<const ColumnVector<CustomBool>*>(col);
             ASSERT_NE(mask, nullptr);
             for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
                 _values.push_back((*mask)[rowIndex]);
@@ -545,7 +543,7 @@ private:
 // Collects a nullable boolean column: what a comparison over an operand that can be null
 // emits, an entity column included - the invalid ID an OPTIONAL MATCH leaves is a null,
 // and a comparison against a null is one.
-class CollectingOptMaskSink : public NLOutputSink {
+class CollectingOptBoolSink : public NLOutputSink {
 public:
     using OptBoolValues = std::vector<std::optional<bool>>;
 
@@ -575,7 +573,7 @@ public:
         ASSERT_EQ(chunks.size(), 2u);
 
         const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(chunks[0]);
-        const auto* values = dynamic_cast<const ColumnOptMask*>(chunks[1]);
+        const auto* values = dynamic_cast<const ColumnOptVector<CustomBool>*>(chunks[1]);
         ASSERT_NE(nodeIDs, nullptr);
         ASSERT_NE(values, nullptr);
         ASSERT_EQ(nodeIDs->size(), values->size());
@@ -3148,12 +3146,12 @@ TEST_F(DBLoweringTest, eqNodeToItselfIsAllTrue) {
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
-    CollectingOptMaskSink sink;
+    CollectingOptBoolSink sink;
     runLoweredProgram(eqSelfProgram, reader.getView(), sink);
 
     // The diamond has four nodes, and every node equals itself. The column is nullable
     // because an entity column can carry one; none of these four rows does.
-    const CollectingOptMaskSink::OptBoolValues expected {true, true, true, true};
+    const CollectingOptBoolSink::OptBoolValues expected {true, true, true, true};
     EXPECT_EQ(sink.getValues(), expected);
 }
 

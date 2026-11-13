@@ -154,7 +154,7 @@ void appendPendingKey(NLWrittenValues& written,
 // and nothing to hang what it would write off
 void throwIfBoundNodeIsNull(const NLMergeData::Node& node, size_t rowCount) {
     const ColumnNodeIDs* bound = node._boundColumn;
-    const ColumnMask* pending = node._boundPending;
+    const ColumnVector<CustomBool>* pending = node._boundPending;
 
     for (size_t row = 0; row < rowCount; row++) {
         const bool isPending = pending && (*pending)[row];
