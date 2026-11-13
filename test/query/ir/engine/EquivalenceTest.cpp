@@ -42,6 +42,7 @@
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnOperatorDispatcher.h"
+#include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "dataframe/NamedColumn.h"
 #include "CellView.h"
@@ -181,15 +182,6 @@ std::string valueToString(const CellView element);
 std::string valueToString(ListView view);
 std::string valueToString(MapView view);
 
-template <typename T>
-std::string valueToString(const std::optional<T>& value) {
-    if (!value.has_value()) {
-        return "null";
-    }
-
-    return valueToString(*value);
-}
-
 std::string valueToString(const CellView element) {
     const auto writeTyped = []<typename T>(const CellView element) -> std::string {
         return valueToString(element.getAs<T>());
@@ -247,6 +239,15 @@ std::string valueToString(const MapView view) {
     return result;
 }
 
+template <typename NullableColumn>
+std::string nullableValueToString(const NullableColumn* column, size_t row) {
+    if (!column->isValid(row)) {
+        return "null";
+    }
+
+    return valueToString(column->getValue(row));
+}
+
 struct Stringify {
     std::string& _string;
     size_t _row {0};
@@ -257,8 +258,18 @@ struct Stringify {
     }
 
     template <typename T>
+    void operator()(const ColumnOptVector<T>* typed) {
+        _string = nullableValueToString(typed, _row);
+    }
+
+    template <typename T>
     void operator()(const ColumnConst<T>* typed) {
         _string = valueToString(typed->at(_row));
+    }
+
+    template <typename T>
+    void operator()(const ColumnConst<std::optional<T>>* typed) {
+        _string = nullableValueToString(typed, _row);
     }
 };
 

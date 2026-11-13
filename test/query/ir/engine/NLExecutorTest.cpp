@@ -37,6 +37,7 @@
 #include "NLOutputSink.h"
 #include "StorageDialect.h"
 
+#include "IRTestColumns.h"
 #include "TuringTest.h"
 
 using namespace db;
@@ -99,15 +100,14 @@ public:
         ASSERT_EQ(chunks.size(), 2u);
 
         const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(chunks[0]);
-        const auto* values = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[1]);
+        const auto* values = columnAs<ColumnOptVector<int64_t>>(chunks[1]);
         ASSERT_NE(nodeIDs, nullptr);
         ASSERT_NE(values, nullptr);
         ASSERT_EQ(nodeIDs->size(), values->size());
 
         const auto& idRaw = nodeIDs->getRaw();
-        const auto& valueRaw = values->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _rows.push_back({idRaw[rowIndex].getValue(), valueRaw[rowIndex]});
+            _rows.push_back({idRaw[rowIndex].getValue(), values->get(rowIndex)});
         }
     }
 
@@ -151,12 +151,11 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
 
-        const auto* values = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[0]);
+        const auto* values = columnAs<ColumnOptVector<int64_t>>(chunks[0]);
         ASSERT_NE(values, nullptr);
 
-        const auto& raw = values->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _values.push_back(raw[rowIndex]);
+            _values.push_back(values->get(rowIndex));
         }
     }
 
@@ -173,12 +172,11 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
 
-        const auto* values = dynamic_cast<const ColumnOptVector<double>*>(chunks[0]);
+        const auto* values = columnAs<ColumnOptVector<double>>(chunks[0]);
         ASSERT_NE(values, nullptr);
 
-        const auto& raw = values->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _values.push_back(raw[rowIndex]);
+            _values.push_back(values->get(rowIndex));
         }
     }
 
@@ -392,17 +390,16 @@ public:
         ASSERT_EQ(chunks.size(), 2u);
 
         const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(chunks[0]);
-        const auto* values = dynamic_cast<const ColumnOptVector<CustomBool>*>(chunks[1]);
+        const auto* values = columnAs<ColumnOptVector<CustomBool>>(chunks[1]);
         ASSERT_NE(nodeIDs, nullptr);
         ASSERT_NE(values, nullptr);
         ASSERT_EQ(nodeIDs->size(), values->size());
 
         const auto& idRaw = nodeIDs->getRaw();
-        const auto& valueRaw = values->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
             std::optional<bool> value;
-            if (valueRaw[rowIndex].has_value()) {
-                value = static_cast<bool>(*valueRaw[rowIndex]);
+            if (values->isValid(rowIndex)) {
+                value = static_cast<bool>(values->getValue(rowIndex));
             }
             _rows.push_back({idRaw[rowIndex].getValue(), value});
         }

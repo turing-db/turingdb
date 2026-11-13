@@ -43,6 +43,7 @@
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
+#include "IRTestColumns.h"
 #include "TuringException.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
@@ -160,19 +161,16 @@ std::string renderCell(const Column* column, size_t row) {
     }
 
     // A list comprehension yields a nullable list: a row whose source list was null has none
-    if (const auto* optLists = dynamic_cast<const ColumnOptVector<ListView>*>(column)) {
-        const std::optional<ListView>& list = (*optLists)[row];
-        return list.has_value() ? renderList(*list) : "null";
+    if (const auto* optLists = columnAs<ColumnOptVector<ListView>>(column)) {
+        return optLists->isValid(row) ? renderList(optLists->getValue(row)) : "null";
     }
 
-    if (const auto* optList = dynamic_cast<const ColumnConst<std::optional<ListView>>*>(column)) {
-        const std::optional<ListView>& list = optList->getRaw();
-        return list.has_value() ? renderList(*list) : "null";
+    if (const auto* optList = columnAs<ColumnConst<std::optional<ListView>>>(column)) {
+        return optList->isValid(0) ? renderList(optList->getValue(0)) : "null";
     }
 
-    if (const auto* optMaps = dynamic_cast<const ColumnOptVector<MapView>*>(column)) {
-        const std::optional<MapView>& map = (*optMaps)[row];
-        return map.has_value() ? renderMap(*map) : "null";
+    if (const auto* optMaps = columnAs<ColumnOptVector<MapView>>(column)) {
+        return optMaps->isValid(row) ? renderMap(optMaps->getValue(row)) : "null";
     }
 
     throw TuringException("ListOfMapsTest: unsupported output column type");

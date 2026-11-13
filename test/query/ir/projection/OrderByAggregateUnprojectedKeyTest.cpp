@@ -39,6 +39,7 @@
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
+#include "IRTestColumns.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
@@ -119,16 +120,15 @@ public:
         const auto* sources = dynamic_cast<const ColumnNodeIDs*>(chunks[0]);
         ASSERT_NE(sources, nullptr);
 
-        const auto* ages = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[1]);
+        const auto* ages = columnAs<ColumnOptVector<int64_t>>(chunks[1]);
         ASSERT_NE(ages, nullptr);
 
         const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[2]);
         ASSERT_NE(counts, nullptr);
 
-        const auto& ageRaw = ages->getRaw();
         const auto& countRaw = counts->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _rows.emplace_back((*sources)[rowIndex].getValue(), ageRaw[rowIndex], countRaw[rowIndex]);
+            _rows.emplace_back((*sources)[rowIndex].getValue(), ages->get(rowIndex), countRaw[rowIndex]);
         }
     }
 
@@ -144,16 +144,15 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
-        const auto* durations = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[0]);
+        const auto* durations = columnAs<ColumnOptVector<int64_t>>(chunks[0]);
         ASSERT_NE(durations, nullptr);
 
         const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[1]);
         ASSERT_NE(counts, nullptr);
 
-        const auto& durationRaw = durations->getRaw();
         const auto& countRaw = counts->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _rows.emplace_back(durationRaw[rowIndex], countRaw[rowIndex]);
+            _rows.emplace_back(durations->get(rowIndex), countRaw[rowIndex]);
         }
     }
 

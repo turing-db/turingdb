@@ -42,6 +42,7 @@
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
+#include "IRTestColumns.h"
 #include "TuringException.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
@@ -122,18 +123,16 @@ std::string renderCell(const Column* column, size_t row) {
         return std::to_string((*nodeIDs)[row].getValue());
     }
 
-    if (const auto* names = dynamic_cast<const ColumnOptVector<std::string_view>*>(column)) {
-        const std::optional<std::string_view>& name = (*names)[row];
-        return name ? std::string(*name) : "null";
+    if (const auto* names = columnAs<ColumnOptVector<std::string_view>>(column)) {
+        return names->isValid(row) ? std::string(names->getValue(row)) : "null";
     }
 
     if (const auto* constants = dynamic_cast<const ColumnConst<int64_t>*>(column)) {
         return std::to_string((*constants)[row]);
     }
 
-    if (const auto* integers = dynamic_cast<const ColumnOptVector<int64_t>*>(column)) {
-        const std::optional<int64_t>& integer = (*integers)[row];
-        return integer ? std::to_string(*integer) : "null";
+    if (const auto* integers = columnAs<ColumnOptVector<int64_t>>(column)) {
+        return integers->isValid(row) ? std::to_string(integers->getValue(row)) : "null";
     }
 
     if (const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(column)) {
