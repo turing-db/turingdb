@@ -99,21 +99,6 @@ nb::object repeatValueAsNdarray(const T& v, size_t n) {
     return wrapVectorAsNdarray(std::move(buf));
 }
 
-// Like wrapVectorAsNdarray but the source can't be moved directly — we apply
-// a per-element conversion into a fresh std::vector<Out>. Used for ID and
-// enum columns (NodeID, EdgeID, ValueType, …) where numpy can't store the C++
-// type directly and we need to extract the underlying integer with
-// `.getValue()` or a static_cast before writing it into the buffer.
-template <typename Out, typename In, typename Conv>
-nb::object transformVectorAsNdarray(const std::vector<In>& src, Conv conv) {
-    std::vector<Out> buf;
-    buf.reserve(src.size());
-    for (const auto& v : src) {
-        buf.push_back(conv(v));
-    }
-    return wrapVectorAsNdarray(std::move(buf));
-}
-
 // Allocates a destination column for every column in incomingDf and registers
 // them with bufferedDf. ColumnConst sources have their value copied here once,
 // since constants don't get appended to row-by-row.

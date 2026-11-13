@@ -2,7 +2,6 @@
 
 #include <stdint.h>
 #include <limits>
-#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -124,15 +123,6 @@ void appendChunkColumns(std::span<const db::Column* const> chunks,
 template <typename T>
 int64_t temporalMicroseconds(T value) {
     return value.getMicroseconds();
-}
-
-template <typename T>
-int64_t temporalMicroseconds(const std::optional<T>& value) {
-    if (!value.has_value()) {
-        return std::numeric_limits<int64_t>::min();
-    }
-
-    return value->getMicroseconds();
 }
 
 nb::object embeddingToNdarray(std::span<const float> s) {
@@ -273,7 +263,6 @@ nb::object toPyObject(const T& value, const ValueToPyObject& nested) {
 }
 
 // A row's element in a numpy array, or its Python object where its type has no array form.
-// A null datetime or duration is numpy's NaT, so a nullable one keeps an array.
 template <typename Row>
 auto toPyElement(const Row& row, const ValueToPyObject& nested) {
     if constexpr (std::is_arithmetic_v<Row>) {
@@ -286,14 +275,30 @@ auto toPyElement(const Row& row, const ValueToPyObject& nested) {
         return static_cast<uint64_t>(row.getValue());
     } else if constexpr (db::Hash<Row>) {
         return row.get();
-    } else if constexpr (db::Optional<Row>) {
-        if (!row) {
+    } else {
+        return toPyObject(row, nested);
+    }
+}
+
+// A null datetime or duration is numpy's NaT, so a nullable one keeps an array.
+template <typename Column>
+auto toPyRowElement(const Column* column, size_t row, const ValueToPyObject& nested) {
+    using Value = typename Column::UnwrappedType;
+
+    if constexpr (!Column::IS_NULLABLE) {
+        return toPyElement((*column)[row], nested);
+    } else if constexpr (db::IsDateTime<Value> || db::IsDuration<Value>) {
+        if (!column->isValid(row)) {
+            return std::numeric_limits<int64_t>::min();
+        }
+
+        return temporalMicroseconds(column->getValue(row));
+    } else {
+        if (!column->isValid(row)) {
             return nb::object(nb::none());
         }
 
-        return toPyObject(*row, nested);
-    } else {
-        return toPyObject(row, nested);
+        return toPyObject(column->getValue(row), nested);
     }
 }
 
@@ -345,24 +350,26 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
         const auto convert = [col, rowCount, &listVisitor, &value, &dtypeName](const auto* column) {
             using Column = std::decay_t<decltype(*column)>;
             using Row = typename Column::ValueType;
-            using Element = decltype(toPyElement(std::declval<const Row&>(), listVisitor));
+            using Element = decltype(toPyRowElement(column, 0, listVisitor));
 
             db::ColumnTypeGenerator {dtypeName}(column);
 
             if constexpr (std::is_same_v<Column, db::ColumnConst<Row>>) {
-                value = repeatElement(toPyElement(column->getRaw(), listVisitor), rowCount);
+                value = repeatElement(toPyRowElement(column, 0, listVisitor), rowCount);
             } else if constexpr (std::is_arithmetic_v<Row>) {
                 value = wrapVectorAsNdarray(std::move(static_cast<Column*>(col)->getRaw()));
             } else if constexpr (std::is_same_v<Element, nb::object>) {
                 nb::list rows;
-                for (const Row& row : column->getRaw()) {
-                    rows.append(toPyElement(row, listVisitor));
+                for (size_t row = 0; row < column->size(); row++) {
+                    rows.append(toPyRowElement(column, row, listVisitor));
                 }
                 value = rows;
             } else {
-                value = transformVectorAsNdarray<Element>(column->getRaw(), [&listVisitor](const Row& row) {
-                    return toPyElement(row, listVisitor);
-                });
+                std::vector<Element> elements(column->size());
+                for (size_t row = 0; row < elements.size(); row++) {
+                    elements[row] = toPyRowElement(column, row, listVisitor);
+                }
+                value = wrapVectorAsNdarray(std::move(elements));
             }
 
             value = withTemporalUnit<Row>(value);
