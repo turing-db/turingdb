@@ -1074,9 +1074,6 @@ private:
     template <ColumnOperator Op, typename OpType>
     void translateBinaryOp(OpType op, NLStmtContainer* body);
 
-    // A list is searched for a boolean held in a value column, never in a mask
-    const Column* searchedValueColumn(const Column* column, mlir::Type chunkType, NLStmtContainer* body);
-
     // Binds the index kernel an nl.list_index runs, chosen by what its result holds: a
     // value of the type its list names, or the tagged cell a mixed list holds
     void translateListIndex(mlir::nl::ListIndex index, NLStmtContainer* body);
@@ -1244,15 +1241,11 @@ private:
     Column* allocOptColumnForValueType(ValueType valueType);
     Column* allocOptColumn(ValueType valueType, size_t reserveSize);
 
+    static bool isEntityIDElement(mlir::Type elementType);
+
     // A count result is a ui64 tally, the pipeline's one non-nullable value chunk, so
     // it is neither an ID chunk nor a !storage.nullable<...> one and takes a plain
     // ColumnVector<uint64_t>.
-    static bool isMaskElementType(mlir::Type elementType);
-
-    Column* allocMaskColumn();
-
-    static bool isEntityIDElement(mlir::Type elementType);
-
     ColumnVector<uint64_t>* allocCountColumn();
 
     // Allocate a type-erased column of tagged scalars - the shape a heterogeneous

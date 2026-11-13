@@ -5,13 +5,13 @@
 #include <string>
 #include <string_view>
 
+#include "columns/ColumnMask.h"
 #include "metadata/PropertyType.h"
 #include "versioning/CommitWriteBuffer.h"
 
 namespace db {
 
 class Column;
-class ColumnMask;
 class MetadataBuilder;
 
 // A property a write reaches by name and types as the program runs. It has the type the

@@ -81,6 +81,8 @@ ValueType db::elementTypeToValueType(mlir::Type elementType) {
         return ValueType::Point;
     } else if (mlir::isa<mlir::storage::MapType>(elementType)) {
         return ValueType::Map;
+    } else if (mlir::isa<mlir::storage::BoolType>(elementType)) {
+        return ValueType::Bool;
     } else if (mlir::isa<mlir::Float64Type>(elementType)) {
         return ValueType::Double;
     }

@@ -29,7 +29,6 @@ using LabelSet = TemplateLabelSet<uint64_t, 4>;
 template <typename T>
 class ColumnVector;
 
-class ColumnMask;
 class NodeView;
 class CommitBuilder;
 class Change;
@@ -65,7 +64,6 @@ public:
         CommitHash,
         ChangeID,
         ColumnVector<EntityID>,
-        ColumnMask,
         PropertyType,
         PropertyNull,
         bool,

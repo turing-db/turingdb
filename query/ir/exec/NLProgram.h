@@ -98,11 +98,10 @@ enum class NLChunkKind {
     PathRef,
 };
 
-// The column a chunk read as a truth value is held in, as its element type names it: a
-// mask (!storage.bool), plain booleans (i1), nullable booleans (!storage.nullable<i1>),
-// tagged cells (!storage.any) or nullable ones, or the null literal
+// The column a chunk read as a truth value is held in, as its element type names it:
+// booleans (!storage.bool or i1), nullable booleans (!storage.nullable<i1>), tagged cells
+// (!storage.any) or nullable ones, or the null literal
 enum class NLTruthColumnKind {
-    Mask,
     Booleans,
     NullableBooleans,
     TaggedCells,

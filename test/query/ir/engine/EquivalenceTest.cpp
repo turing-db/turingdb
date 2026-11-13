@@ -41,7 +41,6 @@
 #include "TuringDB.h"
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnConst.h"
-#include "columns/ColumnMask.h"
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/ColumnVector.h"
 #include "dataframe/NamedColumn.h"
@@ -259,10 +258,6 @@ struct Stringify {
 
     template <typename T>
     void operator()(const ColumnConst<T>* typed) {
-        _string = valueToString(typed->at(_row));
-    }
-
-    void operator()(const ColumnMask* typed) {
         _string = valueToString(typed->at(_row));
     }
 };

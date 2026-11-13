@@ -4,7 +4,6 @@
 #include "ColumnVector.h"
 #include "ColumnConst.h"
 #include "ColumnSet.h"
-#include "ColumnMask.h"
 #include "PairColumnKind.h"
 
 #include "FatalException.h"
@@ -53,7 +52,6 @@ public:
             CASE_SINGLE_DISPATCH(ColumnVector<Dummy>)
             CASE_SINGLE_DISPATCH(ColumnConst<Dummy>)
             CASE_SINGLE_DISPATCH(ColumnSet<Dummy>)
-            CASE_SINGLE_DISPATCH(ColumnMask)
 
             default: {
                 throw FatalException("Unknown container kind");
@@ -78,14 +76,10 @@ private:
     static void dispatchInternal(const Column* operand, Functor& fn) {
         using Container = OuterTypeHelper<OperandRaw>::type;
 
-        if constexpr (std::is_same_v<Container, std::false_type>) {
-            fn(static_cast<const OperandRaw*>(operand));
-        } else {
-            const auto i = ColumnKind::extractInternalKind(operand->getKind());
+        const auto i = ColumnKind::extractInternalKind(operand->getKind());
 
-            static constexpr auto table = makeTable<Container::template type>(UnwrappedTypes<AllowedInternalTypes>{});
-            table[i](operand, fn);
-        }
+        static constexpr auto table = makeTable<Container::template type>(UnwrappedTypes<AllowedInternalTypes>{});
+        table[i](operand, fn);
     }
 
     static constexpr std::size_t N = InternalKind::Types::count();
@@ -117,7 +111,7 @@ private:
     }
 };
 
-template <KindPairListExact AllowedPairs, class AllowedMixed, class Functor, class ExcludedContainers = ExcludedContainers<>>
+template <KindPairListExact AllowedPairs, class Functor, class ExcludedContainers = ExcludedContainers<>>
 class ColumnDoubleDispatcher {
     using Fn = void (*)(const Column*, const Column*, Functor&);
 
@@ -140,25 +134,16 @@ public:
             CASE_DOUBLE_DISPATCH(ColumnVector<Dummy>, ColumnVector<Dummy>)
             CASE_DOUBLE_DISPATCH(ColumnVector<Dummy>, ColumnConst<Dummy>)
             CASE_DOUBLE_DISPATCH(ColumnVector<Dummy>, ColumnSet<Dummy>)
-            CASE_DOUBLE_DISPATCH(ColumnVector<Dummy>, ColumnMask)
 
             // Const vs X
             CASE_DOUBLE_DISPATCH(ColumnConst<Dummy>, ColumnVector<Dummy>)
             CASE_DOUBLE_DISPATCH(ColumnConst<Dummy>, ColumnConst<Dummy>)
             CASE_DOUBLE_DISPATCH(ColumnConst<Dummy>, ColumnSet<Dummy>)
-            CASE_DOUBLE_DISPATCH(ColumnConst<Dummy>, ColumnMask)
 
             // Set vs X
             CASE_DOUBLE_DISPATCH(ColumnSet<Dummy>, ColumnVector<Dummy>)
             CASE_DOUBLE_DISPATCH(ColumnSet<Dummy>, ColumnConst<Dummy>)
             CASE_DOUBLE_DISPATCH(ColumnSet<Dummy>, ColumnSet<Dummy>)
-            CASE_DOUBLE_DISPATCH(ColumnSet<Dummy>, ColumnMask)
-
-            // Mask vs X
-            CASE_DOUBLE_DISPATCH(ColumnMask, ColumnVector<Dummy>)
-            CASE_DOUBLE_DISPATCH(ColumnMask, ColumnConst<Dummy>)
-            CASE_DOUBLE_DISPATCH(ColumnMask, ColumnSet<Dummy>)
-            CASE_DOUBLE_DISPATCH(ColumnMask, ColumnMask)
 
             default: {
                 throw FatalException("Unknown pair column kind");
@@ -172,53 +157,11 @@ private:
         using LhsContainer = OuterTypeHelper<LhsRaw>::type;
         using RhsContainer = OuterTypeHelper<RhsRaw>::type;
 
-        if constexpr (std::is_same_v<LhsContainer, std::false_type>
-                      && std::is_same_v<RhsContainer, std::false_type>) {
-            fn(static_cast<const LhsRaw*>(lhs), static_cast<const RhsRaw*>(rhs));
-        } else if constexpr (std::is_same_v<LhsContainer, std::false_type>) {
-            dispatchInternalR<LhsRaw, RhsContainer::template type>(lhs, rhs, fn);
-        } else if constexpr (std::is_same_v<RhsContainer, std::false_type>) {
-            dispatchInternalL<LhsContainer::template type, RhsRaw>(lhs, rhs, fn);
-        } else {
-            dispatchInternalLR<LhsContainer::template type, RhsContainer::template type>(lhs, rhs, fn);
-        }
-    }
-
-    template <class LhsContainer, template <typename> class RhsContainer>
-    static void dispatchInternalR(const Column* lhs, const Column* rhs, Functor& fn) {
-        const auto ri = ColumnKind::extractInternalKind(rhs->getKind());
-        static constexpr auto table = makeTableR<RhsContainer>();
-        table[ri](lhs, rhs, fn);
-    }
-
-    template <template <typename> class LhsContainer, class RhsContainer>
-    static void dispatchInternalL(const Column* lhs, const Column* rhs, Functor& fn) {
-        const auto li = ColumnKind::extractInternalKind(lhs->getKind());
-        static constexpr auto table = makeTableL<LhsContainer>();
-        table[li](lhs, rhs, fn);
-    }
-
-    template <template <typename> class LhsContainer, template <typename> class RhsContainer>
-    static void dispatchInternalLR(const Column* lhs, const Column* rhs, Functor& fn) {
         const auto li = ColumnKind::extractInternalKind(lhs->getKind());
         const auto ri = ColumnKind::extractInternalKind(rhs->getKind());
 
-        static constexpr auto table = makeTableLR<LhsContainer, RhsContainer>(AllowedPairs {});
+        static constexpr auto table = makeTableLR<LhsContainer::template type, RhsContainer::template type>(AllowedPairs {});
         table[li][ri](lhs, rhs, fn);
-    }
-
-    template <template <typename> class LhsContainer, typename RhsRaw, typename LK>
-    static void invokeL(const Column* lhs, const Column* rhs, Functor& fn) {
-        auto* l = static_cast<const LhsContainer<LK>*>(lhs);
-        auto* r = static_cast<const RhsRaw*>(rhs);
-        fn(l, r);
-    }
-
-    template <typename LhsRaw, template <typename> class RhsContainer, typename RK>
-    static void invokeR(const Column* lhs, const Column* rhs, Functor& fn) {
-        auto* l = static_cast<const LhsRaw*>(lhs);
-        auto* r = static_cast<const RhsContainer<RK>*>(rhs);
-        fn(l, r);
     }
 
     static constexpr std::size_t N = InternalKind::Types::count();
@@ -228,26 +171,6 @@ private:
         auto* l = static_cast<const LhsContainer<LK>*>(lhs);
         auto* r = static_cast<const RhsContainer<RK>*>(rhs);
         fn(l, r);
-    }
-
-    template <template <typename> class LhsContainer, typename Mixed>
-    static consteval void installMixedL(std::array<Fn, N + 1>& t) {
-        using K = typename Mixed::Kind;
-        constexpr auto ki = InternalKind::code<K>();
-
-        if constexpr (ColumnSupportsInternal<LhsContainer, K>) {
-            t[ki] = &invokeL<LhsContainer, typename Mixed::NonTemplatedType, K>;
-        }
-    }
-
-    template <template <typename> class RhsContainer, typename Mixed>
-    static consteval void installMixedR(std::array<Fn, N + 1>& t) {
-        using K = typename Mixed::Kind;
-        constexpr auto ki = InternalKind::code<K>();
-
-        if constexpr (ColumnSupportsInternal<RhsContainer, K>) {
-            t[ki] = &invokeR<typename Mixed::NonTemplatedType, RhsContainer, K>;
-        }
     }
 
     template <template <typename> class LhsContainer, template <typename> class RhsContainer, typename LK, typename RK>
@@ -262,40 +185,6 @@ private:
         if constexpr (ColumnSupportsInternal<LhsContainer, RK> && ColumnSupportsInternal<RhsContainer, LK>) {
             t[ri][li] = &invokeLR<LhsContainer, RhsContainer, RK, LK>;
         }
-    }
-
-    template <template <typename> class LhsContainer>
-    static consteval auto makeTableL() {
-        return makeTableLImpl<LhsContainer>(AllowedMixed {});
-    }
-
-    template <template <typename> class LhsContainer, typename... Mixed>
-    static consteval auto makeTableLImpl(AllowedMixedList<Mixed...>) {
-        std::array<Fn, N + 1> t {};
-
-        for (std::size_t i = 0; i <= N; ++i) {
-            t[i] = &unsupported;
-        }
-
-        (installMixedL<LhsContainer, Mixed>(t), ...);
-        return t;
-    }
-
-    template <template <typename> class RhsContainer>
-    static consteval auto makeTableR() {
-        return makeTableRImpl<RhsContainer>(AllowedMixed {});
-    }
-
-    template <template <typename> class RhsContainer, typename... Mixed>
-    static consteval auto makeTableRImpl(AllowedMixedList<Mixed...>) {
-        std::array<Fn, N + 1> t {};
-
-        for (std::size_t i = 0; i <= N; ++i) {
-            t[i] = &unsupported;
-        }
-
-        (installMixedR<RhsContainer, Mixed>(t), ...);
-        return t;
     }
 
     template <template <typename> class LhsContainer, template <typename> class RhsContainer, typename... Pairs>

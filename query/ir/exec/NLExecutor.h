@@ -584,21 +584,6 @@ public:
     template <FloatFunctionKind Kind>
     static NLUnaryFunctionKernel selectFloatFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
-    // The mask members of the handler families, for a !storage.bool chunk: a ColumnMask -
-    // what a label test, an edge type test and a merge produce - where an i1 value chunk
-    // is a ColumnVector<CustomBool>.
-    static NLGatherFunction selectMaskGather();
-    static NLAppendFunction selectMaskAppend();
-    static NLCopyFunction selectMaskCopy();
-    static NLGroupKeyGatherFunction selectMaskGroupKeyGather();
-    static NLCompareFunction selectMaskCompare();
-    static NLKeyAppendFunction selectMaskKeyAppend();
-    static NLBroadcastFunction selectMaskBlockRepeat();
-    static NLBroadcastFunction selectMaskTile();
-    static NLKeyAppendFunction selectMaskMergeKeyAppend(ValueType keyType);
-    static NLUnaryFn selectMaskToNullable(LocalMemory* memory, Column*& result);
-    static NLGroupAggregateFoldFunction selectMaskGroupCountDistinctFold();
-
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);
 
     // The null fill for a chunk of this kind: an invalid ID for an ID chunk, which is how
@@ -606,9 +591,8 @@ public:
     static NLFillNullFunction selectFillNullFunction(NLChunkKind kind);
 
     // The null pad of every other chunk shape, the siblings of the gather selectors: an
-    // absent value in a nullable column, a cleared mask
+    // absent value in a nullable column
     static NLFillNullFunction selectOptFillNullFunction(NLChunkKind kind);
-    static NLFillNullFunction selectMaskFillNull();
     static NLFillNullFunction selectOptListFillNull();
     static NLFillNullFunction selectOptCellFillNull();
     static NLFillNullFunction selectCellFillNull();
@@ -684,12 +668,11 @@ public:
     static NLBroadcastConstantFunction selectConstantBroadcast(NLChunkKind kind, const Column* value);
 
     // Reads the single row a computation over constants wrote as a constant column
-    // (nl.row_constant), for a plain chunk of this kind, a nullable one, a chunk of tagged
-    // cells and a mask
+    // (nl.row_constant), for a plain chunk of this kind, a nullable one and a chunk of
+    // tagged cells
     static NLUnaryFn selectRowConstant(NLChunkKind kind, const Column* row, LocalMemory* memory, Column*& result);
     static NLUnaryFn selectOptRowConstant(NLChunkKind kind, const Column* row, LocalMemory* memory, Column*& result);
     static NLUnaryFn selectCellRowConstant(bool nullable, const Column* row, LocalMemory* memory, Column*& result);
-    static NLUnaryFn selectMaskRowConstant(const Column* row, LocalMemory* memory, Column*& result);
 
     // The broadcast of the null literal, whose rows are the absent value rather than
     // copies of a value the constant holds
@@ -700,11 +683,8 @@ public:
     static NLBroadcastConstantFunction selectConstantMapBroadcast();
     static NLBroadcastConstantFunction selectConstantCellBroadcast();
 
-    // The node, edge, path and walk siblings, which ride the plain chunk their kind names
+    // The boolean, node, edge, path and walk siblings, which ride the plain chunk their kind names
     static NLBroadcastConstantFunction selectConstantPlainBroadcast(NLChunkKind kind, const Column* value);
-
-    // The mask sibling, which lays the boolean of a constant out as flags
-    static NLBroadcastConstantFunction selectConstantMaskBroadcast(const Column* value);
 
     // The tagged-cell sibling: a cell that may be absent carries its own type, so there is
     // no value type to dispatch on
@@ -785,14 +765,13 @@ public:
     static NLKeyAppendFunction selectOptKeyAppendFunction(NLChunkKind kind);
 
     // The packing of a grouping key's values into a fixed-width key: a chunk or a nullable
-    // chunk of this kind, a mask. A chunk whose values have no fixed width - a string, a
+    // chunk of this kind. A chunk whose values have no fixed width - a string, a
     // list - packs with no handle.
     static NLKeyPacking selectKeyPacking(NLChunkKind kind);
     static NLKeyPacking selectOptKeyPacking(NLChunkKind kind);
-    static NLKeyPacking selectMaskKeyPacking();
 
     // Hash, equality and match test for a join key: a chunk or a nullable chunk of this
-    // kind, a type-erased cell, a mask.
+    // kind, a type-erased cell.
     // Used by nl.hash_join_collect to chain a build row under its hash and by
     // nl.hash_join_probe to find and confirm the build rows a probe row matches. Two values
     // `=` holds equal hash alike whatever chunk holds them, so a probe key of another type
@@ -801,7 +780,6 @@ public:
     static NLJoinKeyFunctions selectOptJoinKeyFunctions(NLChunkKind kind);
     static NLJoinKeyFunctions selectCellJoinKeyFunctions();
     static NLJoinKeyFunctions selectOptCellJoinKeyFunctions();
-    static NLJoinKeyFunctions selectMaskJoinKeyFunctions();
     static NLKeyEqualFunction selectCrossTypeKeyEqualFunction(const Column* probe, const Column* build);
 
     // Non-null row count for a COUNT. An ID chunk has no null rows, so countAllRows

@@ -4,7 +4,6 @@
 
 #include "BinaryOperators.h"
 #include "BinaryPredicates.h"
-#include "MaskOperators.h"
 #include "UnaryPredicates.h"
 
 #include "ColumnCombinations.h"
@@ -81,72 +80,6 @@ struct BinaryPredicates {
         using InternalU = InnerTypeHelper<DecayColU>::type;
 
         BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(res, lhs, rhs);
-    }
-};
-
-/// Unary predicates, returning a Bool-like
-struct UnaryPredicates {
-    template <typename Op, typename ColT>
-    static void exec(ColumnMask* res, const ColT* arg) {
-        using DecayColT = TypeUtils::decay_col_t<ColT>;
-        using InternalT = InnerTypeHelper<DecayColT>::type;
-
-        UnaryPredicateExecutor<Op, InternalT>::apply(res, arg);
-    }
-
-    // Below specialisation is needed for expressions like NOT TRUE, NOT FALSE
-    // Both Bool and opt<Bool> are needed as there is no way to limit to
-    // ColumnConst<{Bool}> whilst also having ColumnVector<{Bool, optional<Bool>}>
-    template <typename Op, typename T>
-        requires(std::is_same_v<T, types::Bool::Primitive>)
-             || (std::is_same_v<T, std::optional<types::Bool::Primitive>>)
-    static void exec(ColumnConst<T>* res, const ColumnConst<T>* arg) {
-        UnaryPredicateExecutor<Op, T>::apply(res, arg);
-    }
-
-    // Below specialisation needed for type checker, but is never used, see above for why.
-    // The optional<Bool> case is handled by @ref exec(ColumnOptMask*, ...) because
-    // ColOptMask is a weak alias for ColumnVector<opt<Bool>>
-    template <typename Op, typename T>
-        requires(std::is_same_v<T, types::Bool::Primitive>)
-    static void exec(ColumnVector<T>* res, const ColumnVector<T>* arg) {
-        UnaryPredicateExecutor<Op, T>::apply(res, arg);
-    }
-
-    template <typename Op, typename ColT>
-    static void exec(ColumnOptMask* res, const ColT* arg) {
-        using DecayColT = TypeUtils::decay_col_t<ColT>;
-
-        using InternalT = InnerTypeHelper<DecayColT>::type;
-
-        UnaryPredicateExecutor<Op, InternalT>::apply(res, arg);
-    }
-};
-
-struct MaskOperators {
-    /// Binary operation on masks
-    template <typename Op>
-    static void exec(ColumnMask* res, const ColumnMask* lhs, const ColumnMask* rhs) {
-        MaskOpExecutor<Op>::apply(res, lhs, rhs);
-    }
-
-    /// Unary operation on masks
-    template <typename Op>
-    static void exec(ColumnMask* res, const ColumnMask* arg) {
-        MaskOpExecutor<Op>::apply(res, arg);
-    }
-
-    /// Applying masks to vectors
-    template <typename Op, typename T>
-        requires std::is_same_v<Op, Apply>
-    static void exec(ColumnVector<T>* res, const ColumnVector<T>* src, const ColumnMask* mask) {
-        MaskApplicator::apply(res, src, mask);
-    }
-
-    template <typename Op, typename T>
-        requires std::is_same_v<Op, Apply>
-    static void exec(ColumnVector<T>* res, const ColumnMask* mask, const ColumnVector<T>* src) {
-        MaskApplicator::apply(res, src, mask);
     }
 };
 

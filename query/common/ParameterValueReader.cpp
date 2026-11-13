@@ -18,7 +18,6 @@
 #include "CellView.h"
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnConst.h"
-#include "columns/ColumnMask.h"
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/ColumnVector.h"
 #include "ID.h"
@@ -136,11 +135,6 @@ public:
 
     template <typename T>
     void operator()(const ColumnConst<T>* column) {
-        CellReader reader(_value, _worklist);
-        reader.read(column->at(_row));
-    }
-
-    void operator()(const ColumnMask* column) {
         CellReader reader(_value, _worklist);
         reader.read(column->at(_row));
     }
