@@ -96,6 +96,9 @@ public:
     void set(const T& value) { _value = value; _empty = false; }
     void set(T&& value) { _value = std::move(value); _empty = false; }
 
+    void set(const UnwrappedType& value) requires IS_NULLABLE { _value = value; _empty = false; }
+    void set(UnwrappedType&& value) requires IS_NULLABLE { _value = std::move(value); _empty = false; }
+
     void setOptional(const T& value) requires IS_NULLABLE { _value = value; _empty = false; }
     void setOptional(T&& value) requires IS_NULLABLE { _value = std::move(value); _empty = false; }
 

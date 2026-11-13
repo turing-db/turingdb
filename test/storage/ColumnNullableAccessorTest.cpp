@@ -227,6 +227,26 @@ TEST(ColumnNullableAccessorTest, constColumnReadAccessors) {
     EXPECT_EQ(column.getNullCount(), 0);
 }
 
+TEST(ColumnNullableAccessorTest, constColumnSetsAValue) {
+    ColumnConst<std::optional<std::string>> column;
+
+    const std::string first = "a";
+    column.set(first);
+    EXPECT_EQ(column.size(), 1);
+    EXPECT_TRUE(column.isValid(0));
+    EXPECT_EQ(column.getValue(0), "a");
+
+    column.setOptional(std::nullopt);
+    column.set(std::string {"b"});
+    EXPECT_EQ(column.get(0), std::optional<std::string> {"b"});
+    EXPECT_EQ(column.getNullCount(), 0);
+
+    column.clear();
+    column.set(first);
+    EXPECT_EQ(column.size(), 1);
+    EXPECT_EQ(column.getValue(0), "a");
+}
+
 TEST(ColumnNullableAccessorTest, vectorColumnOfAnElementType) {
     static_assert(std::is_same_v<ColumnVectorOf<int64_t>, ColumnVector<int64_t>>);
     static_assert(std::is_same_v<ColumnVectorOf<std::optional<int64_t>>, ColumnOptVector<int64_t>>);

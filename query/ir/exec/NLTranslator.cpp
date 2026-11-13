@@ -1020,19 +1020,21 @@ NLTruthColumnKind truthColumnKindOf(mlir::Type chunkType, const Column* column) 
     return kind;
 }
 
-template <size_t... Indices>
-consteval std::array<bool, InternalKind::Count + 1> collectNullHoldingInternalKinds(std::index_sequence<Indices...>) {
-    return {false,
-            (TypeUtils::is_optional_v<InternalKind::Types::TypeAt<Indices>>
-             || std::is_same_v<InternalKind::Types::TypeAt<Indices>, PropertyNull>)...};
+template <template <typename> typename Container, size_t... Indices>
+bool isNullHoldingColumn(ColumnKind::Code kind, std::index_sequence<Indices...>) {
+    return ((Container<InternalKind::Types::TypeAt<Indices>>::IS_NULLABLE
+             && kind == Container<InternalKind::Types::TypeAt<Indices>>::staticKind())
+            || ...);
 }
 
-constexpr std::array<bool, InternalKind::Count + 1> NULL_HOLDING_INTERNAL_KINDS =
-    collectNullHoldingInternalKinds(std::make_index_sequence<InternalKind::Count>());
-
 bool columnHoldsNulls(const Column* column) {
-    const InternalKind::Code internalKind = ColumnKind::extractInternalKind(column->getKind());
-    return NULL_HOLDING_INTERNAL_KINDS[internalKind];
+    const ColumnKind::Code kind = column->getKind();
+    const std::make_index_sequence<InternalKind::Count> internalKinds;
+
+    return isNullHoldingColumn<ColumnVector>(kind, internalKinds)
+        || isNullHoldingColumn<ColumnConst>(kind, internalKinds)
+        || kind == ColumnVector<PropertyNull>::staticKind()
+        || kind == ColumnConst<PropertyNull>::staticKind();
 }
 
 template <typename Part, typename Owner>

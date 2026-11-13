@@ -19,6 +19,7 @@
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnOperatorDispatcher.h"
+#include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "ID.h"
 #include "PathView.h"
@@ -134,9 +135,21 @@ public:
     }
 
     template <typename T>
+    void operator()(const ColumnOptVector<T>* column) {
+        CellReader reader(_value, _worklist);
+        reader.read(column->get(_row));
+    }
+
+    template <typename T>
     void operator()(const ColumnConst<T>* column) {
         CellReader reader(_value, _worklist);
         reader.read(column->at(_row));
+    }
+
+    template <typename T>
+    void operator()(const ColumnConst<std::optional<T>>* column) {
+        CellReader reader(_value, _worklist);
+        reader.read(column->get(_row));
     }
 
 private:
