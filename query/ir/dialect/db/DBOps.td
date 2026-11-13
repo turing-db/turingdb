@@ -3011,7 +3011,7 @@ def Conditional : TuringOp<"conditional", []> {
 /**
 * Count
 */
-def Count : TuringOp<"count", [Pure]> {
+def Count : TuringOp<"count", [Pure, AggregateOpInterface]> {
   let summary = "Count the non-null rows of a column as a single-row result";
   let description = [{
     The declarative counterpart of a Cypher RETURN count(x). Consumes the whole
@@ -3059,7 +3059,7 @@ def Count : TuringOp<"count", [Pure]> {
 /**
 * CountScanRows
 */
-def CountScanRows : TuringOp<"count_scan_rows", [Pure]> {
+def CountScanRows : TuringOp<"count_scan_rows", [Pure, AggregateOpInterface]> {
   let summary = "Count the rows of whole node scans from the graph's node counts";
 
   let description = [{
@@ -3152,7 +3152,7 @@ def CountScanRows : TuringOp<"count_scan_rows", [Pure]> {
 //
 // db.min and db.max share the flag but the frontend never sets it: dropping repeated
 // values cannot move an extremum, so min(DISTINCT x) generates a plain db.min.
-class AggregateOp<string mnemonic> : TuringOp<mnemonic, [Pure]> {
+class AggregateOp<string mnemonic> : TuringOp<mnemonic, [Pure, AggregateOpInterface]> {
   let summary = "Reduce a column of property values to a single-row result";
 
   let arguments = (ins Column:$input, UnitAttr:$distinct);
@@ -4464,7 +4464,7 @@ def DeleteEdge : TuringOp<"delete_edge"> {
 /**
 * GroupAggregate
 */
-def GroupAggregate : TuringOp<"group_aggregate", [Pure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet"]>]> {
+def GroupAggregate : TuringOp<"group_aggregate", [Pure, DeclareOpInterfaceMethods<AggregateOpInterface, ["getGroupingKeys"]>, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet"]>]> {
   let summary = "Group rows by a key tuple and reduce each group to one row";
   let description = [{
     The declarative counterpart of a Cypher aggregating RETURN / WITH with
@@ -4533,7 +4533,7 @@ def GroupAggregate : TuringOp<"group_aggregate", [Pure, DeclareOpInterfaceMethod
 /**
 * Collect
 */
-def Collect : TuringOp<"collect", [Pure, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet"]>]> {
+def Collect : TuringOp<"collect", [Pure, DeclareOpInterfaceMethods<AggregateOpInterface, ["getGroupingKeys"]>, DeclareOpInterfaceMethods<ColumnCarrierOpInterface, ["getCarrySet"]>]> {
   let summary = "Group rows by a key tuple and collect one column per group into a list";
   let description = [{
     Cypher `WITH k..., collect(x) AS xs`. Emits one row per distinct grouping-key

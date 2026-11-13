@@ -2,65 +2,15 @@
 
 #include <string_view>
 
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/OwningOpRef.h"
 
-#include "DBOps.h"
 #include "HashJoinQueryTest.h"
+#include "ProductPlacement.h"
 
 using namespace turing::test;
 
 namespace {
-
-bool readsEdges(mlir::Operation* op) {
-    return mlir::isa<mlir::db::GetOutEdges,
-                     mlir::db::GetInEdges,
-                     mlir::db::GetEdges,
-                     mlir::db::GetOutEdgesByType,
-                     mlir::db::GetInEdgesByType,
-                     mlir::db::GetOutEdgesByLabel,
-                     mlir::db::GetInEdgesByLabel,
-                     mlir::db::GetOutEdgesByTypeAndLabel,
-                     mlir::db::GetInEdgesByTypeAndLabel,
-                     mlir::db::ExplorePaths,
-                     mlir::db::ScanEdges,
-                     mlir::db::ScanEdgesByType,
-                     mlir::db::ScanOutEdgesByLabelSrc,
-                     mlir::db::ScanInEdgesByLabelTgt,
-                     mlir::db::ScanOutEdgesByLabelTgt,
-                     mlir::db::ScanInEdgesByLabelSrc,
-                     mlir::db::ScanOutEdgesByLabelSrcTgt,
-                     mlir::db::ScanInEdgesByLabelSrcTgt>(op);
-}
-
-bool joinsRows(mlir::Operation* op) {
-    return mlir::isa<mlir::db::CrossProduct,
-                     mlir::db::HashJoin,
-                     mlir::db::Unwind,
-                     mlir::db::UnwindRange,
-                     mlir::db::UnwindComputed>(op);
-}
-
-// Hops, walks and edge scans that run before the pattern's rows meet the others: ahead of
-// the product, join or unwind bringing those in, or inside one of its factors
-size_t countEdgeReadsBeforeTheJoin(mlir::ModuleOp module) {
-    mlir::func::FuncOp function = module.lookupSymbol<mlir::func::FuncOp>("main");
-
-    size_t count = 0;
-    bool joined = false;
-    for (mlir::Operation& op : function.getBody().front()) {
-        if (!joined || joinsRows(&op)) {
-            op.walk([&count](mlir::Operation* nested) {
-                count += readsEdges(nested) ? 1 : 0;
-            });
-        }
-
-        joined = joined || joinsRows(&op);
-    }
-
-    return count;
-}
 
 // Remy and Adam are the two people aged 32
 const Rows interestsOfThe32YearOlds {

@@ -1,5 +1,6 @@
 #include "ProductPlacement.h"
 
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
@@ -66,6 +67,35 @@ bool carriesAProductColumn(mlir::OperandRange carriedColumns) {
     });
 }
 
+bool readsEdges(mlir::Operation* op) {
+    return mlir::isa<mlir::db::GetOutEdges,
+                     mlir::db::GetInEdges,
+                     mlir::db::GetEdges,
+                     mlir::db::GetOutEdgesByType,
+                     mlir::db::GetInEdgesByType,
+                     mlir::db::GetOutEdgesByLabel,
+                     mlir::db::GetInEdgesByLabel,
+                     mlir::db::GetOutEdgesByTypeAndLabel,
+                     mlir::db::GetInEdgesByTypeAndLabel,
+                     mlir::db::ExplorePaths,
+                     mlir::db::ScanEdges,
+                     mlir::db::ScanEdgesByType,
+                     mlir::db::ScanOutEdgesByLabelSrc,
+                     mlir::db::ScanInEdgesByLabelTgt,
+                     mlir::db::ScanOutEdgesByLabelTgt,
+                     mlir::db::ScanInEdgesByLabelSrc,
+                     mlir::db::ScanOutEdgesByLabelSrcTgt,
+                     mlir::db::ScanInEdgesByLabelSrcTgt>(op);
+}
+
+bool joinsRows(mlir::Operation* op) {
+    return mlir::isa<mlir::db::CrossProduct,
+                     mlir::db::HashJoin,
+                     mlir::db::Unwind,
+                     mlir::db::UnwindRange,
+                     mlir::db::UnwindComputed>(op);
+}
+
 }
 
 size_t turing::test::countFiltersOverOneFactor(mlir::ModuleOp module) {
@@ -96,6 +126,24 @@ size_t turing::test::countUnwindsOverAProduct(mlir::ModuleOp module) {
     module.walk([&count](mlir::db::UnwindComputed unwindComputed) {
         count += carriesAProductColumn(unwindComputed.getColumnsToFilter()) ? 1 : 0;
     });
+
+    return count;
+}
+
+size_t turing::test::countEdgeReadsBeforeTheJoin(mlir::ModuleOp module) {
+    mlir::func::FuncOp function = module.lookupSymbol<mlir::func::FuncOp>("main");
+
+    size_t count = 0;
+    bool joined = false;
+    for (mlir::Operation& op : function.getBody().front()) {
+        if (!joined || joinsRows(&op)) {
+            op.walk([&count](mlir::Operation* nested) {
+                count += readsEdges(nested) ? 1 : 0;
+            });
+        }
+
+        joined = joined || joinsRows(&op);
+    }
 
     return count;
 }

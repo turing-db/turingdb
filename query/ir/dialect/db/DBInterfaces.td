@@ -64,6 +64,24 @@ def ColumnCarrierOpInterface : OpInterface<"ColumnCarrierOpInterface"> {
   ];
 }
 
+def AggregateOpInterface : OpInterface<"AggregateOpInterface"> {
+  let cppNamespace = "::mlir::db";
+
+  let description = [{
+    An op reducing the rows it reads to one row per group, the rows holding one value of its
+    grouping keys. With no grouping key it makes one row, however many rows it reads, none
+    included.
+  }];
+
+  let methods = [
+    InterfaceMethod<
+      "The columns the op groups the rows it reads by; none where it reduces them all to one row",
+      "::mlir::OperandRange", "getGroupingKeys",
+      (ins), [{}],
+      [{ return $_op->getOperands().take_front(0); }]>
+  ];
+}
+
 def RowCostOpInterface : OpInterface<"RowCostOpInterface"> {
   let cppNamespace = "::mlir::db";
 
