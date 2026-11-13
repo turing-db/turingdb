@@ -1,10 +1,8 @@
 #pragma once
 
-#include <optional>
 #include <stddef.h>
 #include <stdint.h>
 #include <array>
-#include <span>
 #include <type_traits>
 #include <concepts>
 #include <vector>
@@ -46,22 +44,6 @@ public:
     explicit DynamicLargeBitMask(size_t bitCount)
         : _bitCount(bitCount),
         _v((bitCount + bitsPerWord - 1) / bitsPerWord, 0) {
-    }
-
-    template <size_t N>
-    static void create(DynamicLargeBitMask& out, const std::array<bool, N>& flags) {
-        out.resize(N);
-        for (size_t i = 0; i < N; ++i) {
-            out.set(i, flags[i]);
-        }
-    }
-
-    template <typename T>
-    static void create(DynamicLargeBitMask& out, std::span<const std::optional<T>> optionalValues) {
-        out.resize(optionalValues.size());
-        for (size_t i = 0; i < optionalValues.size(); ++i) {
-            out.set(i, optionalValues[i].has_value());
-        }
     }
 
     [[nodiscard]] size_t size() const {
