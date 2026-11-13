@@ -1,11 +1,11 @@
 #include "DescribeCommitProcedure.h"
 
 #include "ProcedureContext.h"
-#include "FatalException.h"
 #include "ProcedureData.h"
 #include "ProcedureState.h"
 #include "Procedure.h"
 #include "ProcedureNamespace.h"
+#include "ProcUtils.h"
 #include "TypedProcedure.h"
 #include "Graph.h"
 #include "columns/ColumnVector.h"
@@ -60,33 +60,6 @@ void getCommitStats(CommitStats* stats,
     }
 }
 
-template <typename T>
-void extractString(std::string& result, const T& val) {
-    if constexpr (requires { val.has_value(); }) {
-        result = val.value_or("");
-    } else {
-        result = val;
-    }
-}
-
-template <template <typename> class ColType, typename F>
-void dispatchStringInternal(const Column* col, const F& fn) {
-    switch (col->getKind()) {
-        case ColType<std::string_view>::staticKind():
-            fn(static_cast<const ColType<std::string_view>*>(col));
-        break;
-
-        case ColType<std::optional<std::string_view>>::staticKind():
-            fn(static_cast<const ColType<std::optional<std::string_view>>*>(col));
-        break;
-
-        default:
-            throw FatalException(fmt::format(
-                "Unexpected column kind: {}", col->getKind()));
-        break;
-    }
-}
-
 }
 
 void DescribeCommitProcedure::registerProcedure(ProcedureNamespace* ns) {
@@ -120,18 +93,6 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
                 data._headCommit = tx->get<PendingCommitWriteTx>().commitBuilder()->commit();
             }
             bioassert(data._headCommit, "headCommitHash not found");
-
-            const auto containerKind =
-                ColumnKind::extractContainerKind(rawCommitCol->getKind());
-            const auto internalKind =
-                ColumnKind::extractInternalKind(rawCommitCol->getKind());
-
-            bioassert(containerKind == ContainerKind::code<ColumnVector<void>>()
-                       || containerKind == ContainerKind::code<ColumnConst<void>>(),
-                      "db.describeCommit: commit hash must be a vector or const column");
-            bioassert(internalKind == InternalKind::code<std::string_view>()
-                       || internalKind == InternalKind::code<std::optional<std::string_view>>(),
-                      "db.describeCommit: commit hash must be a string");
         }
         break;
 
@@ -175,42 +136,23 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
                 }
             };
 
-            const auto treatVector = [&]<typename T>(const ColumnVector<T>* col) {
-                const auto& colVec = *col;
-                const size_t remaining =
-                    std::min(colVec.size() - data._i, ctxt->getChunkSize());
+            const bool constantHash = ColumnKind::extractContainerKind(rawCommitCol->getKind())
+                                   == ContainerKind::code<ColumnConst<void>>();
+            const size_t rowCount = constantHash ? 1 : rawCommitCol->size();
+            const size_t stepEnd = std::min(rowCount, data._i + ctxt->getChunkSize());
 
-                std::string input;
-                CommitStats stats;
-                for (size_t i = data._i; i < remaining + data._i; ++i) {
-                    extractString(input, colVec[i]);
-                    getCommitStats(&stats, input, data._headCommit);
-                    pushStats(&stats, i);
-                }
+            CommitStats stats;
+            for (size_t row = data._i; row < stepEnd; row++) {
+                const std::optional<std::string_view> hash =
+                    ProcUtils::rowArgument<std::string_view>(rawCommitCol, row, "db.describeCommit: commit hash must be a string");
+                getCommitStats(&stats, hash.value_or(""), data._headCommit);
+                pushStats(&stats, row);
+            }
 
-                data._i += remaining;
+            data._i = stepEnd;
 
-                if (data._i >= colVec.size()) {
-                    proc->finish();
-                }
-            };
-
-            const auto treatConst = [&]<typename T>(const ColumnConst<T>* col) {
-                std::string input;
-                CommitStats stats;
-                extractString(input, col->getRaw());
-                getCommitStats(&stats, input, data._headCommit);
-                pushStats(&stats, 0);
+            if (data._i >= rowCount) {
                 proc->finish();
-            };
-
-            const auto containerKind =
-                ColumnKind::extractContainerKind(rawCommitCol->getKind());
-
-            if (containerKind == ContainerKind::code<ColumnVector<void>>()) {
-                dispatchStringInternal<ColumnVector>(rawCommitCol, treatVector);
-            } else {
-                dispatchStringInternal<ColumnConst>(rawCommitCol, treatConst);
             }
         }
         break;

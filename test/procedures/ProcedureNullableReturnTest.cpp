@@ -7,8 +7,16 @@
 #include "ProcedureException.h"
 #include "ProcedureNamespace.h"
 #include "ProcedureTypeVector.h"
+#include "TypedProcedure.h"
+#include "columns/ColumnOptVector.h"
+#include "columns/ColumnVector.h"
 
 using namespace db;
+
+static_assert(ProcedureReturnKind<ColumnOptVector<int64_t>>::nullable);
+static_assert(ProcedureReturnKind<ColumnOptVector<int64_t>>::type == ProcedureType::INT64);
+static_assert(!ProcedureReturnKind<ColumnVector<int64_t>>::nullable);
+static_assert(ProcedureReturnKind<ColumnVector<int64_t>>::type == ProcedureType::INT64);
 
 // A return value declared nullable, which is what makes the engine give the procedure a
 // ColumnOptVector to write through rather than a ColumnVector.
