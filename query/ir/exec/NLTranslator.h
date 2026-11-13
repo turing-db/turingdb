@@ -1261,7 +1261,7 @@ private:
     Column* getColumn(mlir::Value chunkValue) const;
 
     // The mask an optional boolean chunk operand resolves to, or null for an absent one
-    const ColumnMask* getMaskColumn(mlir::Value chunkValue) const;
+    const ColumnVector<CustomBool>* getMaskColumn(mlir::Value chunkValue) const;
     static NLChunkKind getChunkKind(mlir::Type chunkType);
     static NLChunkKind chunkKindFromElementType(mlir::Type elementType);
 

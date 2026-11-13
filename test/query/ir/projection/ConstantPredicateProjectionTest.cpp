@@ -15,7 +15,7 @@
 #include "SystemAccessor.h"
 #include "SystemManager.h"
 #include "columns/ColumnConst.h"
-#include "columns/ColumnMask.h"
+#include "columns/ColumnVector.h"
 #include "metadata/PropertyType.h"
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
@@ -37,7 +37,7 @@ using BoolRows = std::vector<BoolRow>;
 bool readBool(const Column* column, size_t row) {
     if (const auto* constants = dynamic_cast<const ColumnConst<CustomBool>*>(column)) {
         return static_cast<bool>((*constants)[row]);
-    } else if (const auto* mask = dynamic_cast<const ColumnMask*>(column)) {
+    } else if (const auto* mask = dynamic_cast<const ColumnVector<CustomBool>*>(column)) {
         return (*mask)[row];
     }
 

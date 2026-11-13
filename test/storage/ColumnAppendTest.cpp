@@ -5,19 +5,18 @@
 #include <vector>
 
 #include "columns/ColumnAppend.h"
-#include "columns/ColumnMask.h"
 #include "columns/ColumnVector.h"
 #include "metadata/PropertyType.h"
 
 using namespace db;
 
-// A predicate over values that hold no null returns a mask: MATCH (n:T) RETURN n.i IS NULL.
-// The embedded client buffers a result window by window.
-TEST(ColumnAppendTest, appendsAWindowOfAMask) {
-    const ColumnMask first {true, false, true, false};
-    const ColumnMask second {false, true};
+// A null test returns plain booleans: MATCH (n:T) RETURN n.i IS NULL. The embedded client
+// buffers a result window by window.
+TEST(ColumnAppendTest, appendsWindowsOfTwoBooleanChunks) {
+    const ColumnVector<CustomBool> first {true, false, true, false};
+    const ColumnVector<CustomBool> second {false, true};
 
-    ColumnMask buffered;
+    ColumnVector<CustomBool> buffered;
     appendColumnRows(&first, &buffered, 1, 2);
     appendColumnRows(&second, &buffered, 0, 2);
 
@@ -26,10 +25,10 @@ TEST(ColumnAppendTest, appendsAWindowOfAMask) {
     EXPECT_EQ(values, expected);
 }
 
-TEST(ColumnAppendTest, appendsNoRowOfAMask) {
-    const ColumnMask chunk {true, false};
+TEST(ColumnAppendTest, appendsNoRowOfABooleanChunk) {
+    const ColumnVector<CustomBool> chunk {true, false};
 
-    ColumnMask buffered {true};
+    ColumnVector<CustomBool> buffered {true};
     appendColumnRows(&chunk, &buffered, 2, 0);
 
     const std::vector<bool> values(buffered.begin(), buffered.end());

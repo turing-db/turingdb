@@ -5,13 +5,16 @@
 #include <string>
 #include <string_view>
 
-#include "columns/ColumnMask.h"
 #include "metadata/PropertyType.h"
 #include "versioning/CommitWriteBuffer.h"
 
 namespace db {
 
 class Column;
+
+template <typename T>
+class ColumnVector;
+
 class MetadataBuilder;
 
 // A property a write reaches by name and types as the program runs. It has the type the
@@ -31,12 +34,12 @@ public:
 
     // False where the property has no type and the rows @param written holds - every row
     // for a null mask - are none or hold only nulls, which leaves it none
-    bool resolve(MetadataBuilder* metadata, const Column* cells, size_t rowCount, const ColumnMask* written);
+    bool resolve(MetadataBuilder* metadata, const Column* cells, size_t rowCount, const ColumnVector<CustomBool>* written);
 
     bool stage(MetadataBuilder* metadata,
                const Column* cells,
                size_t rowCount,
-               const ColumnMask* written,
+               const ColumnVector<CustomBool>* written,
                CommitWriteBuffer::UntypedProperties& buffer);
 
     bool stageNulls(MetadataBuilder* metadata, size_t rowCount, CommitWriteBuffer::UntypedProperties& buffer);

@@ -17,7 +17,8 @@
 #include "SystemAccessor.h"
 #include "SystemManager.h"
 #include "columns/Column.h"
-#include "columns/ColumnOptMask.h"
+#include "columns/ColumnOptVector.h"
+#include "metadata/PropertyType.h"
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 
@@ -47,7 +48,7 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
 
-        const auto* mask = dynamic_cast<const ColumnOptMask*>(chunks[0]);
+        const auto* mask = dynamic_cast<const ColumnOptVector<CustomBool>*>(chunks[0]);
         if (!mask) {
             _otherKinds.emplace_back(chunks[0]->getTypeName());
             return;

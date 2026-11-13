@@ -49,7 +49,7 @@
 #include "iterators/ScanNodesIterator.h"
 #include "iterators/ScanNodesByLabelIterator.h"
 #include "columns/ColumnOptVector.h"
-#include "columns/ColumnMask.h"
+#include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnCombinations.h"
 #include "columns/ColumnOperator.h"
@@ -1422,7 +1422,7 @@ void fillNullColumn(Column* output, size_t rowCount) {
 }
 
 void collectBooleanSurvivors(const Column* mask, ColumnVector<size_t>* indices) {
-    const std::vector<CustomBool>& maskRaw = static_cast<const ColumnMask*>(mask)->getRaw();
+    const std::vector<CustomBool>& maskRaw = static_cast<const ColumnVector<CustomBool>*>(mask)->getRaw();
     std::vector<size_t>& survivingRaw = indices->getRaw();
 
     for (size_t row = 0; row < maskRaw.size(); row++) {
@@ -1432,8 +1432,8 @@ void collectBooleanSurvivors(const Column* mask, ColumnVector<size_t>* indices) 
     }
 }
 
-void collectOptMaskSurvivors(const Column* mask, ColumnVector<size_t>* indices) {
-    const ColumnOptMask* typedMask = static_cast<const ColumnOptMask*>(mask);
+void collectOptBooleanSurvivors(const Column* mask, ColumnVector<size_t>* indices) {
+    const ColumnOptVector<CustomBool>* typedMask = static_cast<const ColumnOptVector<CustomBool>*>(mask);
     const std::vector<std::optional<CustomBool>>& maskRaw = typedMask->getRaw();
     std::vector<size_t>& survivingRaw = indices->getRaw();
 
@@ -1558,8 +1558,8 @@ bool isMaskConstant(const Column* mask) {
 }
 
 void applyNotOnBooleans(Column* result, const Column* operand) {
-    const std::vector<CustomBool>& operandRaw = static_cast<const ColumnMask*>(operand)->getRaw();
-    std::vector<CustomBool>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
+    const std::vector<CustomBool>& operandRaw = static_cast<const ColumnVector<CustomBool>*>(operand)->getRaw();
+    std::vector<CustomBool>& resultRaw = static_cast<ColumnVector<CustomBool>*>(result)->getRaw();
 
     resultRaw.resize(operandRaw.size());
     std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](CustomBool value) {
@@ -1567,10 +1567,10 @@ void applyNotOnBooleans(Column* result, const Column* operand) {
     });
 }
 
-void applyNotOnOptMask(Column* result, const Column* operand) {
+void applyNotOnOptBooleans(Column* result, const Column* operand) {
     using OptBool = std::optional<CustomBool>;
-    UnaryPredicateExecutor<Not, OptBool>::apply(static_cast<ColumnOptMask*>(result),
-                                               static_cast<const ColumnOptMask*>(operand));
+    UnaryPredicateExecutor<Not, OptBool>::apply(static_cast<ColumnOptVector<CustomBool>*>(result),
+                                               static_cast<const ColumnOptVector<CustomBool>*>(operand));
 }
 
 std::optional<CustomBool> negatedTruth(const auto& cell) {
@@ -1584,7 +1584,7 @@ std::optional<CustomBool> negatedTruth(const auto& cell) {
 
 void applyNotOnTaggedCells(Column* result, const Column* operand) {
     const std::vector<CellView>& operandRaw = static_cast<const ColumnVector<CellView>*>(operand)->getRaw();
-    std::vector<std::optional<CustomBool>>& resultRaw = static_cast<ColumnOptMask*>(result)->getRaw();
+    std::vector<std::optional<CustomBool>>& resultRaw = static_cast<ColumnOptVector<CustomBool>*>(result)->getRaw();
 
     resultRaw.resize(operandRaw.size());
     std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](CellView cell) {
@@ -1595,7 +1595,7 @@ void applyNotOnTaggedCells(Column* result, const Column* operand) {
 void applyNotOnOptTaggedCells(Column* result, const Column* operand) {
     const std::vector<std::optional<CellView>>& operandRaw =
         static_cast<const ColumnOptVector<CellView>*>(operand)->getRaw();
-    std::vector<std::optional<CustomBool>>& resultRaw = static_cast<ColumnOptMask*>(result)->getRaw();
+    std::vector<std::optional<CustomBool>>& resultRaw = static_cast<ColumnOptVector<CustomBool>*>(result)->getRaw();
 
     resultRaw.resize(operandRaw.size());
     std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](const std::optional<CellView>& cell) {
@@ -2004,8 +2004,8 @@ NLUnaryFn selectToNullableOf(const Column* operand, LocalMemory* memory, Column*
     return &toNullableColumn<Primitive>;
 }
 
-bool caseTestOptMask(const Column* condition, size_t row) {
-    return static_cast<const ColumnOptMask*>(condition)->getRaw()[row].value_or(false);
+bool caseTestOptBoolean(const Column* condition, size_t row) {
+    return static_cast<const ColumnOptVector<CustomBool>*>(condition)->getRaw()[row].value_or(false);
 }
 
 // A null is not true, so a branch whose condition is the null literal never fires and its
@@ -2014,9 +2014,9 @@ bool caseTestNever(const Column* condition, size_t row) {
     return false;
 }
 
-void applyIsNotTrueOnOptMask(Column* result, const Column* operand) {
-    const std::vector<std::optional<CustomBool>>& operandRaw = static_cast<const ColumnOptMask*>(operand)->getRaw();
-    std::vector<CustomBool>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
+void applyIsNotTrueOnOptBooleans(Column* result, const Column* operand) {
+    const std::vector<std::optional<CustomBool>>& operandRaw = static_cast<const ColumnOptVector<CustomBool>*>(operand)->getRaw();
+    std::vector<CustomBool>& resultRaw = static_cast<ColumnVector<CustomBool>*>(result)->getRaw();
 
     resultRaw.resize(operandRaw.size());
     std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](std::optional<CustomBool> value) {
@@ -2026,7 +2026,7 @@ void applyIsNotTrueOnOptMask(Column* result, const Column* operand) {
 
 void applyIsNotTrueOnTaggedCells(Column* result, const Column* operand) {
     const std::vector<CellView>& operandRaw = static_cast<const ColumnVector<CellView>*>(operand)->getRaw();
-    std::vector<CustomBool>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
+    std::vector<CustomBool>& resultRaw = static_cast<ColumnVector<CustomBool>*>(result)->getRaw();
 
     resultRaw.resize(operandRaw.size());
     std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](CellView cell) {
@@ -2037,7 +2037,7 @@ void applyIsNotTrueOnTaggedCells(Column* result, const Column* operand) {
 void applyIsNotTrueOnOptTaggedCells(Column* result, const Column* operand) {
     const std::vector<std::optional<CellView>>& operandRaw =
         static_cast<const ColumnOptVector<CellView>*>(operand)->getRaw();
-    std::vector<CustomBool>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
+    std::vector<CustomBool>& resultRaw = static_cast<ColumnVector<CustomBool>*>(result)->getRaw();
 
     resultRaw.resize(operandRaw.size());
     std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](std::optional<CellView> cell) {
@@ -2046,13 +2046,13 @@ void applyIsNotTrueOnOptTaggedCells(Column* result, const Column* operand) {
 }
 
 void applyIsNotTrueOnNull(Column* result, const Column* operand) {
-    static_cast<ColumnMask*>(result)->getRaw().assign(operand->size(), CustomBool {true});
+    static_cast<ColumnVector<CustomBool>*>(result)->getRaw().assign(operand->size(), CustomBool {true});
 }
 
 template <typename ElementType, bool TESTS_NULL>
 void applyNullTestOnVector(Column* result, const Column* operand) {
     const std::vector<ElementType>& operandRaw = static_cast<const ColumnVector<ElementType>*>(operand)->getRaw();
-    std::vector<CustomBool>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
+    std::vector<CustomBool>& resultRaw = static_cast<ColumnVector<CustomBool>*>(result)->getRaw();
 
     resultRaw.resize(operandRaw.size());
     std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](const ElementType& value) {
@@ -2074,7 +2074,7 @@ struct NullTestSelector {
 
     template <typename ElementType>
     void operator()(const ColumnVector<ElementType>* operand) {
-        _result = _memory->alloc<ColumnMask>();
+        _result = _memory->alloc<ColumnVector<CustomBool>>();
         _fn = &applyNullTestOnVector<ElementType, TESTS_NULL>;
     }
 
@@ -2091,11 +2091,11 @@ struct NullTestSelector {
 };
 
 std::optional<bool> readBooleanTruth(const Column* mask, size_t row) {
-    return static_cast<bool>(static_cast<const ColumnMask*>(mask)->getRaw()[row]);
+    return static_cast<bool>(static_cast<const ColumnVector<CustomBool>*>(mask)->getRaw()[row]);
 }
 
-std::optional<bool> readOptMaskTruth(const Column* mask, size_t row) {
-    const std::optional<CustomBool>& value = static_cast<const ColumnOptMask*>(mask)->getRaw()[row];
+std::optional<bool> readOptBooleanTruth(const Column* mask, size_t row) {
+    const std::optional<CustomBool>& value = static_cast<const ColumnOptVector<CustomBool>*>(mask)->getRaw()[row];
     if (!value.has_value()) {
         return std::nullopt;
     }
@@ -2120,7 +2120,7 @@ std::optional<bool> readOptTaggedCellTruth(const Column* cells, size_t row) {
     return cellTruth(*cell);
 }
 
-bool caseTestBoolColumn(const Column* condition, size_t row) {
+bool caseTestBoolean(const Column* condition, size_t row) {
     return readBooleanTruth(condition, row).value_or(false);
 }
 
@@ -2384,7 +2384,7 @@ void writeCell(Column* result,
 }
 
 template <typename Element>
-void fillNullRows(Column* result, const Column* value, const ColumnMask* nullRows, const Column* fill) {
+void fillNullRows(Column* result, const Column* value, const ColumnVector<CustomBool>* nullRows, const Column* fill) {
     const std::vector<Element>& values = static_cast<const ColumnVector<Element>*>(value)->getRaw();
     const std::vector<CustomBool>& nulls = nullRows->getRaw();
     const std::vector<Element>& fills = static_cast<const ColumnVector<Element>*>(fill)->getRaw();
@@ -6722,7 +6722,7 @@ void runEdgeLoopSteps(NLExecutionContext* context,
 
 // A column a merge produced mixes the two ID spaces, so its mask answers row by row;
 // one with no mask is pending in every row or in none.
-bool isPendingRow(const ColumnMask* pending, bool isPendingColumn, size_t row) {
+bool isPendingRow(const ColumnVector<CustomBool>* pending, bool isPendingColumn, size_t row) {
     if (pending) {
         return (*pending)[row];
     }
@@ -6736,7 +6736,7 @@ bool isPendingRow(const ColumnMask* pending, bool isPendingColumn, size_t row) {
 // change's own start where the graph's end.
 class PendingRows {
 public:
-    PendingRows(const ColumnMask* pending, bool isPendingColumn, size_t committedCount, size_t pendingCount)
+    PendingRows(const ColumnVector<CustomBool>* pending, bool isPendingColumn, size_t committedCount, size_t pendingCount)
         : _pending(pending),
         _isPendingColumn(isPendingColumn),
         _committedCount(committedCount),
@@ -6756,7 +6756,7 @@ public:
     }
 
 private:
-    const ColumnMask* _pending {nullptr};
+    const ColumnVector<CustomBool>* _pending {nullptr};
     bool _isPendingColumn {false};
     size_t _committedCount {0};
     size_t _pendingCount {0};
@@ -6792,12 +6792,12 @@ void setPendingProperty(CommitWriteBuffer::UntypedProperties& properties,
 }
 
 template <TypedInternalID IDT>
-bool setWritesRow(const ColumnMask* rows, IDT entity, size_t row) {
+bool setWritesRow(const ColumnVector<CustomBool>* rows, IDT entity, size_t row) {
     return writeTouchesRow(rows, row) && entity.isValid();
 }
 
 template <typename IDColumn>
-void markWrittenRows(const IDColumn* entities, const ColumnMask* rows, ColumnMask& written) {
+void markWrittenRows(const IDColumn* entities, const ColumnVector<CustomBool>* rows, ColumnVector<CustomBool>& written) {
     const auto& raw = entities->getRaw();
     written.resize(raw.size());
 
@@ -6825,7 +6825,7 @@ PropertyTypeID stageSetProperty(MetadataBuilder* metadataBuilder,
         return staged ? runtimeProperty->getType()._id : PropertyTypeID {};
     }
 
-    ColumnMask* written = setData->getWrittenRows();
+    ColumnVector<CustomBool>* written = setData->getWrittenRows();
     markWrittenRows(setData->getInput(), setData->getRows(), *written);
 
     const bool staged = runtimeProperty->stage(metadataBuilder, values, rowCount, written, buffer);
@@ -6865,7 +6865,7 @@ bool isSameMap(const WrittenMap& lhs, const WrittenMap& rhs) {
 
 template <typename IDs, typename Visit>
 void visitWrittenMapRows(const std::vector<WrittenMap>& maps,
-                         const ColumnMask* rows,
+                         const ColumnVector<CustomBool>* rows,
                          const IDs& raw,
                          size_t rowCount,
                          Visit visit) {
@@ -6903,7 +6903,7 @@ void runSetProperties(NLExecutionContext* context, NLFunctionData* data) {
 
     const GraphView* view = context->getView();
     MetadataBuilder* metadataBuilder = context->getMetadataBuilder();
-    const ColumnMask* rows = setData->getRows();
+    const ColumnVector<CustomBool>* rows = setData->getRows();
     const bool replaces = setData->getReplaces();
     const auto& raw = entities->getRaw();
 
@@ -7536,8 +7536,8 @@ void NLExecutor::runCreateEdge(NLExecutionContext* context, NLFunctionData* data
     const size_t rowCount = src->size();
     const EdgeTypeID edgeTypeID = createData->getEdgeTypeID();
 
-    const ColumnMask* srcPending = createData->getSrcPendingMask();
-    const ColumnMask* tgtPending = createData->getTgtPendingMask();
+    const ColumnVector<CustomBool>* srcPending = createData->getSrcPendingMask();
+    const ColumnVector<CustomBool>* tgtPending = createData->getTgtPendingMask();
 
     throwIfAnyNodeIsNull(src, srcIsPending, "Cannot create an edge from a null node");
     throwIfAnyNodeIsNull(tgt, tgtIsPending, "Cannot create an edge to a null node");
@@ -7601,9 +7601,9 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
         return;
     }
 
-    const ColumnMask* pending = setData->getPending();
+    const ColumnVector<CustomBool>* pending = setData->getPending();
     const bool allPending = setData->isAllPending();
-    const ColumnMask* rows = setData->getRows();
+    const ColumnVector<CustomBool>* rows = setData->getRows();
 
     const size_t firstPendingNodeID = committedNodeCount(context->getView());
     const PendingRows pendingRows(pending, allPending, firstPendingNodeID, writeBuffer->numPendingNodes());
@@ -7643,9 +7643,9 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
         return;
     }
 
-    const ColumnMask* pending = setData->getPending();
+    const ColumnVector<CustomBool>* pending = setData->getPending();
     const bool allPending = setData->isAllPending();
-    const ColumnMask* rows = setData->getRows();
+    const ColumnVector<CustomBool>* rows = setData->getRows();
 
     const size_t firstPendingEdgeID = committedEdgeCount(context->getView());
     const PendingRows pendingRows(pending, allPending, firstPendingEdgeID, writeBuffer->numPendingEdges());
@@ -7681,7 +7681,7 @@ void NLExecutor::runDeleteNode(NLExecutionContext* context, NLFunctionData* data
 
     const ColumnNodeIDs* nodes = deleteData->getInput();
     const GraphView* view = context->getView();
-    const ColumnMask* pending = deleteData->getPending();
+    const ColumnVector<CustomBool>* pending = deleteData->getPending();
     const bool allPending = deleteData->isAllPending();
     const bool detaching = deleteData->isDetaching();
 
@@ -7737,7 +7737,7 @@ void NLExecutor::runDeleteEdge(NLExecutionContext* context, NLFunctionData* data
     bioassert(writeBuffer, "nl.delete_edge requires an active write transaction");
 
     const ColumnEdgeIDs* edges = deleteData->getInput();
-    const ColumnMask* pending = deleteData->getPending();
+    const ColumnVector<CustomBool>* pending = deleteData->getPending();
     const bool allPending = deleteData->isAllPending();
 
     ColumnEdgeIDs* committed = deleteData->getCommitted();
@@ -10308,7 +10308,7 @@ void NLExecutor::runListPredicate(NLExecutionContext* context, NLFunctionData* d
     });
 
     std::vector<std::optional<CustomBool>>& resultRaw =
-        static_cast<ColumnOptMask*>(predicate->getResult())->getRaw();
+        static_cast<ColumnOptVector<CustomBool>*>(predicate->getResult())->getRaw();
     resultRaw.resize(sourceRows);
 
     for (size_t row = 0; row < sourceRows; row++) {
@@ -10443,7 +10443,7 @@ void NLExecutor::runAllReduce(NLExecutionContext* context, NLFunctionData* data)
     });
 
     std::vector<std::optional<CustomBool>>& resultRaw =
-        static_cast<ColumnOptMask*>(allReduce->getResult())->getRaw();
+        static_cast<ColumnOptVector<CustomBool>*>(allReduce->getResult())->getRaw();
     resultRaw.resize(sourceRows);
 
     for (size_t row = 0; row < sourceRows; row++) {
@@ -10979,7 +10979,7 @@ NLTruthReadFunction NLExecutor::selectTruthRead(NLTruthColumnKind kind) {
         break;
 
         case NLTruthColumnKind::NullableBooleans:
-            return &readOptMaskTruth;
+            return &readOptBooleanTruth;
         break;
 
         case NLTruthColumnKind::TaggedCells:
@@ -11001,11 +11001,11 @@ NLTruthReadFunction NLExecutor::selectTruthRead(NLTruthColumnKind kind) {
 NLCaseTestFn NLExecutor::selectCaseTest(NLTruthColumnKind kind) {
     switch (kind) {
         case NLTruthColumnKind::Booleans:
-            return &caseTestBoolColumn;
+            return &caseTestBoolean;
         break;
 
         case NLTruthColumnKind::NullableBooleans:
-            return &caseTestOptMask;
+            return &caseTestOptBoolean;
         break;
 
         case NLTruthColumnKind::TaggedCells:
@@ -11034,7 +11034,7 @@ NLUnaryFn NLExecutor::selectNullTest(const Column* operand, LocalMemory* memory,
 }
 
 NLUnaryFn NLExecutor::selectIsNotTrue(NLTruthColumnKind kind, LocalMemory* memory, Column*& result) {
-    result = memory->alloc<ColumnMask>();
+    result = memory->alloc<ColumnVector<CustomBool>>();
 
     switch (kind) {
         case NLTruthColumnKind::Booleans:
@@ -11042,7 +11042,7 @@ NLUnaryFn NLExecutor::selectIsNotTrue(NLTruthColumnKind kind, LocalMemory* memor
         break;
 
         case NLTruthColumnKind::NullableBooleans:
-            return &applyIsNotTrueOnOptMask;
+            return &applyIsNotTrueOnOptBooleans;
         break;
 
         case NLTruthColumnKind::TaggedCells:
@@ -11129,22 +11129,22 @@ NLCaseWriteFn NLExecutor::selectCaseWrite(NLChunkKind kind,
 NLUnaryFn NLExecutor::selectNot(NLTruthColumnKind kind, LocalMemory* memory, Column*& result) {
     switch (kind) {
         case NLTruthColumnKind::Booleans:
-            result = memory->alloc<ColumnMask>();
+            result = memory->alloc<ColumnVector<CustomBool>>();
             return &applyNotOnBooleans;
         break;
 
         case NLTruthColumnKind::NullableBooleans:
-            result = memory->alloc<ColumnOptMask>();
-            return &applyNotOnOptMask;
+            result = memory->alloc<ColumnOptVector<CustomBool>>();
+            return &applyNotOnOptBooleans;
         break;
 
         case NLTruthColumnKind::TaggedCells:
-            result = memory->alloc<ColumnOptMask>();
+            result = memory->alloc<ColumnOptVector<CustomBool>>();
             return &applyNotOnTaggedCells;
         break;
 
         case NLTruthColumnKind::NullableTaggedCells:
-            result = memory->alloc<ColumnOptMask>();
+            result = memory->alloc<ColumnOptVector<CustomBool>>();
             return &applyNotOnOptTaggedCells;
         break;
 
@@ -12754,7 +12754,7 @@ NLMaskSurvivorFunction NLExecutor::selectMaskSurvivorFunction(NLTruthColumnKind 
         break;
 
         case NLTruthColumnKind::NullableBooleans:
-            return &collectOptMaskSurvivors;
+            return &collectOptBooleanSurvivors;
         break;
 
         case NLTruthColumnKind::TaggedCells:
@@ -14318,7 +14318,7 @@ void NLExecutor::runPropertyFetch(NLExecutionContext* context, NLFunctionData* d
     // The fetch above read the graph, which holds this change's writes nowhere: a row
     // whose entity the change wrote names it by the ID it will commit as, which the graph
     // holds nothing under, and a row it merely updated still reads the value from before.
-    const ColumnMask* pending = fetchData->getPending();
+    const ColumnVector<CustomBool>* pending = fetchData->getPending();
     const bool allPending = fetchData->isAllPending();
     CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
 
@@ -14468,7 +14468,7 @@ void NLExecutor::runCheckLabelConstraint(NLExecutionContext* context, NLFunction
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
         const LabelSetID id = (*input)[rowIndex];
 
-        if constexpr (std::is_same_v<MaskColumn, ColumnOptMask>) {
+        if constexpr (std::is_same_v<MaskColumn, ColumnOptVector<CustomBool>>) {
             if (!id.isValid()) {
                 (*output)[rowIndex] = std::nullopt;
                 continue;
@@ -14479,8 +14479,8 @@ void NLExecutor::runCheckLabelConstraint(NLExecutionContext* context, NLFunction
     }
 }
 
-template void NLExecutor::runCheckLabelConstraint<ColumnMask>(NLExecutionContext*, NLFunctionData*);
-template void NLExecutor::runCheckLabelConstraint<ColumnOptMask>(NLExecutionContext*, NLFunctionData*);
+template void NLExecutor::runCheckLabelConstraint<ColumnVector<CustomBool>>(NLExecutionContext*, NLFunctionData*);
+template void NLExecutor::runCheckLabelConstraint<ColumnOptVector<CustomBool>>(NLExecutionContext*, NLFunctionData*);
 
 template <typename MaskColumn>
 void NLExecutor::runCheckEdgeTypeConstraint(NLExecutionContext* context, NLFunctionData* data) {
@@ -14495,7 +14495,7 @@ void NLExecutor::runCheckEdgeTypeConstraint(NLExecutionContext* context, NLFunct
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
         const EdgeTypeID id = (*input)[rowIndex];
 
-        if constexpr (std::is_same_v<MaskColumn, ColumnOptMask>) {
+        if constexpr (std::is_same_v<MaskColumn, ColumnOptVector<CustomBool>>) {
             if (!id.isValid()) {
                 (*output)[rowIndex] = std::nullopt;
                 continue;
@@ -14506,8 +14506,8 @@ void NLExecutor::runCheckEdgeTypeConstraint(NLExecutionContext* context, NLFunct
     }
 }
 
-template void NLExecutor::runCheckEdgeTypeConstraint<ColumnMask>(NLExecutionContext*, NLFunctionData*);
-template void NLExecutor::runCheckEdgeTypeConstraint<ColumnOptMask>(NLExecutionContext*, NLFunctionData*);
+template void NLExecutor::runCheckEdgeTypeConstraint<ColumnVector<CustomBool>>(NLExecutionContext*, NLFunctionData*);
+template void NLExecutor::runCheckEdgeTypeConstraint<ColumnOptVector<CustomBool>>(NLExecutionContext*, NLFunctionData*);
 
 template NLUnaryFn NLExecutor::selectNullTest<true>(const Column* operand, LocalMemory* memory, Column*& result);
 template NLUnaryFn NLExecutor::selectNullTest<false>(const Column* operand, LocalMemory* memory, Column*& result);

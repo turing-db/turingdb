@@ -17,7 +17,7 @@ NLRuntimeProperty::~NLRuntimeProperty() {
 bool NLRuntimeProperty::resolve(MetadataBuilder* metadata,
                                 const Column* cells,
                                 size_t rowCount,
-                                const ColumnMask* written) {
+                                const ColumnVector<CustomBool>* written) {
     if (findType(metadata)) {
         return true;
     }
@@ -35,7 +35,7 @@ bool NLRuntimeProperty::resolve(MetadataBuilder* metadata,
 bool NLRuntimeProperty::stage(MetadataBuilder* metadata,
                               const Column* cells,
                               size_t rowCount,
-                              const ColumnMask* written,
+                              const ColumnVector<CustomBool>* written,
                               CommitWriteBuffer::UntypedProperties& buffer) {
     if (!resolve(metadata, cells, rowCount, written)) {
         buffer.clear();

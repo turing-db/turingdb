@@ -11,7 +11,7 @@
 - `types::String::Primitive` = `std::string_view` (non-owning)
 - `ColumnOptVector<T>` = `ColumnVector<std::optional<T>>`
 - To register a new column type in LocalMemory: add to `ContainerKind::Types` (ContainerKind.h), add `MakeMemoryPool` entry (LocalMemory.h), implement `staticKind()` and `_staticKind` members
-- Non-template column types (like ColumnMask, ColumnStringTable) must be added to ContainerKind::Types directly
+- Non-template column types (like ColumnStringTable) must be added to ContainerKind::Types directly
 - `allocSame()` uses `ColumnAllocator` which calls the memory pool's `alloc()` with no args -- new instance is always empty/default
 - String data in columns: use `ColumnVector<std::string>` for owned strings, NOT `ColumnVector<std::string_view>` (views dangle)
 - Non-POD column types need a .cpp file even if just for the destructor (e.g. `~ColumnStringTable() = default;`)
