@@ -78,8 +78,6 @@ public:
     void copyFromLine(const Dataframe* other, size_t startRow, size_t rowCount);
     void copyFrom(const Dataframe* other);
 
-    void append(const Dataframe* other);
-
     // Returns true if the dataframes have the same number of columns
     // and each pair of columns has the same kind
     bool hasSameShape(const Dataframe* other) const;

@@ -4,9 +4,8 @@
 #include <sstream>
 
 #include "NamedColumn.h"
-#include "columns/AllowedKinds.h"
 #include "columns/Column.h"
-#include "columns/ColumnOperatorDispatcher.h"
+#include "columns/ColumnConst.h"
 #include "columns/ColumnVector.h"
 
 #include "FatalException.h"
@@ -131,51 +130,6 @@ void Dataframe::copyFromLine(const Dataframe* other, size_t startRow, size_t row
         Column* otherColumn = otherColumns[i]->getColumn();
         Column* column = _cols[i]->getColumn();
         column->assignFromLine(otherColumn, startRow, rowCount);
-    }
-}
-
-void Dataframe::append(const Dataframe* other) {
-    bioassert(this->size() == other->size(),
-              "Attempted to append a Dataframe of size {} to a Dataframe of size {}.",
-              other->size(), this->size());
-
-    const size_t oldRows = this->getLogicalRowCount();
-    const size_t addRows = other->getLogicalRowCount();
-    const size_t newRows = oldRows + addRows;
-
-    if (_declaredRowCount.has_value()) {
-        _declaredRowCount = newRows;
-    }
-
-    const NamedColumns& otherCols = other->cols();
-
-    for (size_t i = 0; i < _cols.size(); i++) {
-        Column* dst = _cols[i]->getColumn();
-        const Column* src = otherCols[i]->getColumn();
-
-        const auto appendCol = [dst, oldRows, newRows]
-                         <template <typename> class Container, typename T>
-                         (const Container<T>* srcCol) {
-            auto* dstVec = dynamic_cast<ColumnVector<T>*>(dst);
-            bioassert(dstVec, "Invalid destination vector to append.");
-
-            dstVec->resize(newRows);
-            auto& dstRaw = dstVec->getRaw();
-
-            if constexpr (std::is_same_v<Container<T>, ColumnConst<T>>) {
-                auto start = begin(dstRaw) + oldRows;
-                const T& value = srcCol->getRaw();
-                std::fill(start, end(dstRaw), value);
-            } else {
-                const std::vector<T>& srcRaw = srcCol->getRaw();
-                auto fromIt = begin(dstRaw) + oldRows;
-                std::ranges::copy(srcRaw, fromIt);
-            }
-        };
-
-        using Types = CartesianProductKinds;
-        using Dispatcher = ColumnSingleDispatcher<Types::Allowed, decltype(appendCol), Types::Excluded>;
-        Dispatcher::dispatch(src, appendCol);
     }
 }
 

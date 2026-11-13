@@ -871,54 +871,6 @@ struct ValueHashJoinPairs {
     >;
 };
 
-// Column types allowed as an input to @ref CartesianProductProcessor
-struct CartesianProductKinds {
-    using Allowed = GenerateKindList<std::tuple<
-        // All property types and their optional variants
-        types::Int64::Primitive,
-        types::UInt64::Primitive,
-        types::Double::Primitive,
-        types::String::Primitive,
-        types::Bool::Primitive,
-
-        std::optional<types::Int64::Primitive>,
-        std::optional<types::UInt64::Primitive>,
-        std::optional<types::Double::Primitive>,
-        std::optional<types::String::Primitive>,
-        std::optional<types::Bool::Primitive>,
-
-        types::DateTime::Primitive,
-        std::optional<types::DateTime::Primitive>,
-
-        types::Duration::Primitive,
-        std::optional<types::Duration::Primitive>,
-
-        types::Point::Primitive,
-        std::optional<types::Point::Primitive>,
-
-        // Entities and metadata
-        NodeID,
-        EdgeID,
-        EdgeTypeID,
-        PropertyTypeID,
-        LabelID,
-        LabelSetID,
-        ValueType,
-
-        // Lists
-        ListView,
-        CellView,
-        GraphPath,
-
-        // Owning strings occasionally needed for procedures; tests
-        std::string
-    >>;
-
-    using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>()
-    >;
-};
-
 /// Totally ordered types, e.g. sorted in ORDER BY
 struct NumericallyAggregatedTypes {
     using Allowed = GenerateKindList<std::tuple<

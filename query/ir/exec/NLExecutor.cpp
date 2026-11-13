@@ -1817,11 +1817,8 @@ void copyRangeOptColumn(const Column* input, size_t inputOffset, size_t rowCount
     const ColumnOptVector<Element>* typedInput = static_cast<const ColumnOptVector<Element>*>(input);
     ColumnOptVector<Element>* typedOutput = static_cast<ColumnOptVector<Element>*>(output);
 
-    typedOutput->resize(rowCount);
-
-    for (size_t row = 0; row < rowCount; row++) {
-        typedOutput->setOptional(row, typedInput->get(inputOffset + row));
-    }
+    typedOutput->clear();
+    typedOutput->appendRows(*typedInput, inputOffset, rowCount);
 }
 
 void copyRangeConstColumn(const Column* input, size_t inputOffset, size_t rowCount, Column* output) {
@@ -1841,10 +1838,7 @@ void appendColumn(const Column* input, Column* buffer) {
     const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
     ColumnVector<ElementType>* typedBuffer = static_cast<ColumnVector<ElementType>*>(buffer);
 
-    const auto& inputRaw = typedInput->getRaw();
-    auto& bufferRaw = typedBuffer->getRaw();
-
-    bufferRaw.insert(bufferRaw.end(), inputRaw.begin(), inputRaw.end());
+    typedBuffer->appendRows(*typedInput, 0, typedInput->size());
 }
 
 template <typename Element>
@@ -1852,13 +1846,7 @@ void appendOptColumn(const Column* input, Column* buffer) {
     const ColumnOptVector<Element>* typedInput = static_cast<const ColumnOptVector<Element>*>(input);
     ColumnOptVector<Element>* typedBuffer = static_cast<ColumnOptVector<Element>*>(buffer);
 
-    const size_t inputSize = typedInput->size();
-    const size_t firstRow = typedBuffer->size();
-    typedBuffer->resize(firstRow + inputSize);
-
-    for (size_t row = 0; row < inputSize; row++) {
-        typedBuffer->setOptional(firstRow + row, typedInput->get(row));
-    }
+    typedBuffer->appendRows(*typedInput, 0, typedInput->size());
 }
 
 // The append of a column of views, for a buffer that outlives the loop filling it: the

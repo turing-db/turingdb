@@ -151,6 +151,15 @@ public:
     void push_back(T&& v) { _data.push_back(std::move(v)); }
     void reserve(size_t capacity) { _data.reserve(capacity); }
 
+    void appendRows(const ColumnVector& source, size_t startLine, size_t rowCount) {
+        bioassert(&source != this, "ColumnVector::appendRows: the source is the destination");
+        bioassert(startLine + rowCount <= source.size(),
+                  "ColumnVector::appendRows: the range is past the end of the source");
+
+        const ConstIterator sourceStart = source._data.cbegin() + startLine;
+        _data.insert(_data.end(), sourceStart, sourceStart + rowCount);
+    }
+
     size_t capacity() const { return _data.capacity(); }
 
     template <typename... Args>
