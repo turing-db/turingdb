@@ -32,7 +32,12 @@ concept ConstColumn = requires(Column column, const T& constValue, T value) {
 };
 
 template <typename Column, typename T>
-concept OptionalVectorColumn = VectorColumn<Column, std::optional<T>>;
+concept OptionalVectorColumn = requires(Column column, const Column constColumn, size_t count, const T& constValue, T value) {
+    { column.resize(count) };
+    { constColumn.isValid(count) } -> std::convertible_to<bool>;
+    { column.set(count, constValue) };
+    { column.set(count, std::move(value)) };
+};
 
 template <typename Column, typename T>
 concept OptionalConstColumn = ConstColumn<Column, std::optional<T>>;

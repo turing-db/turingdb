@@ -290,9 +290,9 @@ struct OptionalVectorColumnDecoder {
                 return false;
             }
 
-            auto& entry = (*typedColumn)[context->_rowIndex + i];
+            const size_t row = context->_rowIndex + i;
 
-            const bool hasValue = columnState->getBitMask().test(context->_rowIndex + i);
+            const bool hasValue = columnState->getBitMask().test(row);
             if (!hasValue) {
                 context->_inBuf->increaseReadOffset(sizeof(T));
                 continue;
@@ -300,7 +300,7 @@ struct OptionalVectorColumnDecoder {
 
             T value {};
             context->_inBuf->readData(&value, sizeof(T));
-            entry = value;
+            typedColumn->set(row, value);
         }
         return true;
     }
@@ -318,9 +318,7 @@ struct OptionalVectorColumnDecoder<SinkListView<Sink>, Sink> {
         const ProtoColumnState::BitMask& mask = columnState->getBitMask();
 
         while (context->_rowIndex < numRows) {
-            auto& entry = (*typedColumn)[context->_rowIndex];
-
-            const bool listStarted = entry.has_value();
+            const bool listStarted = typedColumn->isValid(context->_rowIndex);
             if (!listStarted) {
                 if (context->_inBuf->readable() < 2 * sizeof(WireSize)) {
                     return false;
@@ -336,7 +334,7 @@ struct OptionalVectorColumnDecoder<SinkListView<Sink>, Sink> {
                     continue;
                 }
 
-                entry.emplace(sink->beginList(elementCount, listByteSize));
+                typedColumn->set(context->_rowIndex, sink->beginList(elementCount, listByteSize));
             }
 
             auto onTopLevelElement = [](size_t, const SinkCellView<Sink>&) {};
@@ -363,9 +361,7 @@ struct OptionalVectorColumnDecoder<SinkMapView<Sink>, Sink> {
         const ProtoColumnState::BitMask& mask = columnState->getBitMask();
 
         while (context->_rowIndex < numRows) {
-            auto& entry = (*typedColumn)[context->_rowIndex];
-
-            const bool mapStarted = entry.has_value();
+            const bool mapStarted = typedColumn->isValid(context->_rowIndex);
             if (!mapStarted) {
                 if (context->_inBuf->readable() < 2 * sizeof(WireSize)) {
                     return false;
@@ -381,7 +377,7 @@ struct OptionalVectorColumnDecoder<SinkMapView<Sink>, Sink> {
                     continue;
                 }
 
-                entry.emplace(sink->beginMap(entryCount, mapByteSize));
+                typedColumn->set(context->_rowIndex, sink->beginMap(entryCount, mapByteSize));
             }
 
             auto onTopLevelElement = [](size_t, const SinkCellView<Sink>&) {};
@@ -422,7 +418,7 @@ struct OptionalVectorColumnDecoder<SinkCellView<Sink>, Sink> {
         const ProtoColumnState::BitMask& mask = columnState->getBitMask();
         auto onTopLevelElement = [typedColumn, &mask](size_t index, const SinkCellView<Sink>& view) {
             if (mask.test(index)) {
-                typedColumn->data()[index] = view;
+                typedColumn->set(index, view);
             }
         };
 
@@ -444,9 +440,9 @@ struct OptionalVectorColumnDecoder<db::types::String::Primitive, Sink> {
                 return false;
             }
 
-            auto& entry = (*typedColumn)[context->_rowIndex + i];
+            const size_t row = context->_rowIndex + i;
 
-            const bool hasValue = columnState->getBitMask().test(context->_rowIndex + i);
+            const bool hasValue = columnState->getBitMask().test(row);
             if (!hasValue) {
                 context->_inBuf->increaseReadOffset(sizeof(WireSize));
                 continue;
@@ -458,7 +454,7 @@ struct OptionalVectorColumnDecoder<db::types::String::Primitive, Sink> {
             char* data = sink->allocString(stringSize);
             const T view = sink->getStringView(data, stringSize);
 
-            entry.emplace(view);
+            typedColumn->set(row, view);
             if (!readVarLenPayload(context, data, stringSize)) {
                 context->_rowIndex += i + 1;
                 return false;
@@ -482,9 +478,9 @@ struct OptionalVectorColumnDecoder<db::types::Embedding::Primitive, Sink> {
                 return false;
             }
 
-            auto& entry = (*typedColumn)[context->_rowIndex + i];
+            const size_t row = context->_rowIndex + i;
 
-            const bool hasValue = columnState->getBitMask().test(context->_rowIndex + i);
+            const bool hasValue = columnState->getBitMask().test(row);
             if (!hasValue) {
                 context->_inBuf->increaseReadOffset(sizeof(WireSize));
                 continue;
@@ -497,7 +493,7 @@ struct OptionalVectorColumnDecoder<db::types::Embedding::Primitive, Sink> {
             auto* data = sink->allocEmbedding(numFloats);
             const std::span<const float> span = sink->getEmbeddingView(data, numFloats);
 
-            entry.emplace(span);
+            typedColumn->set(row, span);
             if (!readVarLenPayload(context, reinterpret_cast<char*>(data), embeddingSize)) {
                 context->_rowIndex += i + 1;
                 return false;
