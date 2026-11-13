@@ -59,6 +59,10 @@ template <typename ConcreteType>
 class KeepsRowsByPosition : public TraitBase<ConcreteType, KeepsRowsByPosition> {
 };
 
+template <typename ConcreteType>
+class InferColumnType : public TraitBase<ConcreteType, InferColumnType> {
+};
+
 }
 
 #include "DBInterfaces.h.inc"

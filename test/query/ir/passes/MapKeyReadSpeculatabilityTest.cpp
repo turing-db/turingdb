@@ -116,8 +116,8 @@ TEST_F(MapKeyReadSpeculatabilityTest, readsAProjectionOfANode) {
     db.case_yield %held : !bools
   }, {
   ^bb0(%n: !nodes):
-    %properties = db.properties(%n) : (!nodes) -> !unresolved
-    %merged = db.merge_maps(%properties, %map) : (!unresolved, !maps) -> !unresolved
+    %properties = db.properties(%n) : (!nodes) -> !db.column<!storage.nullable<!storage.map>>
+    %merged = db.merge_maps(%properties, %map) : (!db.column<!storage.nullable<!storage.map>>, !maps) -> !unresolved
     db.case_yield %merged : !unresolved
   } : (!nodes) -> !unresolved
   %r = db.static_map_key %projection key "a" : (!unresolved) -> !cells

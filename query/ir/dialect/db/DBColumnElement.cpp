@@ -6,15 +6,18 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Operation.h"
+#include "mlir/IR/TypeRange.h"
 #include "mlir/IR/Value.h"
 #include "mlir/IR/ValueRange.h"
-#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 
 #include "DBTypes.h"
 #include "NullLiteralType.h"
 #include "StorageTypes.h"
+
+#include "BioAssert.h"
 
 using namespace db;
 
@@ -244,10 +247,8 @@ const std::unordered_map<std::string_view, ElementRule> elementRules = {
     {"db.is_normalized", &booleanElement},
 };
 
-ElementRule lookupElementRule(mlir::Operation* function) {
-    const mlir::OperationName operationName = function->getName();
-    const llvm::StringRef name = operationName.getStringRef();
-    const auto it = elementRules.find(std::string_view(name.data(), name.size()));
+ElementRule lookupElementRule(llvm::StringRef opName) {
+    const auto it = elementRules.find(std::string_view(opName.data(), opName.size()));
 
     return it == elementRules.end() ? nullptr : it->second;
 }
@@ -296,23 +297,50 @@ const std::unordered_map<std::string_view, OperatorElementRule> operatorElementR
     {"db.concat", &concatenationElement},
 };
 
-OperatorElementRule lookupOperatorElementRule(mlir::Operation* op) {
-    const mlir::OperationName operationName = op->getName();
-    const llvm::StringRef name = operationName.getStringRef();
-    const auto it = operatorElementRules.find(std::string_view(name.data(), name.size()));
+OperatorElementRule lookupOperatorElementRule(llvm::StringRef opName) {
+    const auto it = operatorElementRules.find(std::string_view(opName.data(), opName.size()));
 
     return it == operatorElementRules.end() ? nullptr : it->second;
 }
 
-// The leading operands whose elements a rule answers @param op's element over, none without a rule
-size_t ruledOperandCount(mlir::Operation* op) {
-    if (lookupElementRule(op)) {
-        return 1;
-    } else if (lookupOperatorElementRule(op)) {
-        return 2;
+// The element the rule of the op named @param opName answers over the elements @param operands
+// declare: a null type where one declares none or the rule reads no value of the elements they do
+mlir::Type ruledElement(mlir::MLIRContext* context, llvm::StringRef opName, mlir::ValueRange operands) {
+    const ElementRule rule = lookupElementRule(opName);
+    const OperatorElementRule operatorRule = lookupOperatorElementRule(opName);
+    bioassert(rule || operatorRule, "{} has no element rule", opName.str());
+
+    const size_t ruledOperands = rule ? 1 : 2;
+
+    llvm::SmallVector<mlir::Type, 2> elements;
+    for (const mlir::Value operand : operands.take_front(ruledOperands)) {
+        elements.push_back(declaredColumnElement(operand));
     }
 
-    return 0;
+    const bool readsAnUnknownElement = llvm::any_of(elements, [](mlir::Type element) {
+        return mlir::isa<mlir::NoneType>(element);
+    });
+
+    if (readsAnUnknownElement) {
+        return mlir::Type {};
+    } else if (rule) {
+        return rule(context, elements[0]);
+    }
+
+    return operatorRule(context, elements[0], elements[1]);
+}
+
+// The db level does not track which rows a function leaves null, so an inferred column allows
+// one. A pass that knows no row is null may declare the column without it.
+bool refinesInferredColumn(mlir::Type inferred, mlir::Type declared) {
+    if (declared == inferred) {
+        return true;
+    }
+
+    const mlir::db::ColumnType inferredColumn = mlir::cast<mlir::db::ColumnType>(inferred);
+    const auto nullable = mlir::dyn_cast<storage::NullableType>(inferredColumn.getType());
+
+    return nullable && declared == mlir::db::ColumnType::get(inferred.getContext(), nullable.getValueType());
 }
 
 }
@@ -359,7 +387,8 @@ mlir::Type db::selectedColumnElement(mlir::MLIRContext* context, mlir::ValueRang
 }
 
 mlir::Type db::unaryFunctionElement(mlir::Operation* function, mlir::Type inputElement) {
-    const ElementRule rule = lookupElementRule(function);
+    const mlir::OperationName operationName = function->getName();
+    const ElementRule rule = lookupElementRule(operationName.getStringRef());
     if (!rule) {
         return mlir::Type {};
     }
@@ -367,63 +396,25 @@ mlir::Type db::unaryFunctionElement(mlir::Operation* function, mlir::Type inputE
     return rule(function->getContext(), inputElement);
 }
 
-mlir::Type db::inferredColumnElement(mlir::Value column) {
-    mlir::MLIRContext* const context = column.getContext();
-    const mlir::Type unknown = mlir::NoneType::get(context);
-
-    llvm::SmallDenseMap<mlir::Value, mlir::Type, 8> inferred;
-    llvm::SmallVector<mlir::Value> worklist {column};
-    llvm::SmallVector<mlir::Type, 2> operandElements;
-
-    while (!worklist.empty()) {
-        const mlir::Value value = worklist.back();
-        if (inferred.contains(value)) {
-            worklist.pop_back();
-            continue;
-        }
-
-        const mlir::Type declared = declaredColumnElement(value);
-        mlir::Operation* const definingOp = value.getDefiningOp();
-        const size_t ruledOperands = definingOp ? ruledOperandCount(definingOp) : 0;
-
-        if (!mlir::isa<mlir::NoneType>(declared) || ruledOperands == 0) {
-            inferred[value] = declared;
-            worklist.pop_back();
-            continue;
-        }
-
-        operandElements.clear();
-        bool operandsInferred = true;
-        for (const mlir::Value operand : definingOp->getOperands().take_front(ruledOperands)) {
-            const auto inferredIt = inferred.find(operand);
-            if (inferredIt == inferred.end()) {
-                worklist.push_back(operand);
-                operandsInferred = false;
-            } else {
-                operandElements.push_back(inferredIt->second);
-            }
-        }
-
-        if (!operandsInferred) {
-            continue;
-        }
-
-        const bool readsAnUnknownElement = llvm::any_of(operandElements, [](mlir::Type element) {
-            return mlir::isa<mlir::NoneType>(element);
-        });
-
-        mlir::Type element;
-        if (!readsAnUnknownElement && ruledOperands == 1) {
-            element = unaryFunctionElement(definingOp, operandElements.front());
-        } else if (!readsAnUnknownElement) {
-            element = lookupOperatorElementRule(definingOp)(context, operandElements[0], operandElements[1]);
-        }
-
-        inferred[value] = element ? element : unknown;
-        worklist.pop_back();
+mlir::Type db::inferColumnType(mlir::MLIRContext* context, llvm::StringRef opName, mlir::ValueRange operands) {
+    const mlir::Type element = ruledElement(context, opName, operands);
+    if (!element) {
+        return mlir::db::ColumnType::get(context, mlir::NoneType::get(context));
+    } else if (mlir::holdsItsOwnNull(element)) {
+        return mlir::db::ColumnType::get(context, element);
     }
 
-    return inferred.lookup(column);
+    return mlir::db::ColumnType::get(context, storage::NullableType::get(context, element));
+}
+
+bool db::areCompatibleColumnTypes(mlir::TypeRange inferred, mlir::TypeRange declared) {
+    if (inferred.size() != declared.size()) {
+        return false;
+    }
+
+    return llvm::all_of(llvm::zip_equal(inferred, declared), [](const auto& types) {
+        return refinesInferredColumn(std::get<0>(types), std::get<1>(types));
+    });
 }
 
 mlir::Type db::promotedNumberElement(mlir::MLIRContext* context, mlir::Type lhs, mlir::Type rhs) {

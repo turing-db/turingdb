@@ -118,10 +118,10 @@ private:
 constexpr const char* constantKeyAloneProgram = R"mlir(
 func.func @main() {
   %five = db.constant(5 : i64)
-  %key = db.to_float(%five) : (!db.column<i64>) -> !db.column<none>
+  %key = db.to_float(%five) : (!db.column<i64>) -> !db.column<!storage.nullable<f64>>
   %one = db.constant(1 : i64)
-  %gkey, %n = db.group_aggregate(%key, %one) keys 1 aggregates [count_rows] : (!db.column<none>, !db.column<i64>) -> (!db.column<none>, !db.column<ui64>)
-  db.output(%gkey, %n) : !db.column<none>, !db.column<ui64>
+  %gkey, %n = db.group_aggregate(%key, %one) keys 1 aggregates [count_rows] : (!db.column<!storage.nullable<f64>>, !db.column<i64>) -> (!db.column<!storage.nullable<f64>>, !db.column<ui64>)
+  db.output(%gkey, %n) : !db.column<!storage.nullable<f64>>, !db.column<ui64>
   return
 }
 )mlir";
@@ -132,9 +132,9 @@ constexpr const char* constantKeyOverScanProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %ten = db.constant(10 : i64)
-  %key = db.to_float(%ten) : (!db.column<i64>) -> !db.column<none>
-  %gkey, %n = db.group_aggregate(%key, %a) keys 1 aggregates [count_rows] : (!db.column<none>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<ui64>)
-  db.output(%gkey, %n) : !db.column<none>, !db.column<ui64>
+  %key = db.to_float(%ten) : (!db.column<i64>) -> !db.column<!storage.nullable<f64>>
+  %gkey, %n = db.group_aggregate(%key, %a) keys 1 aggregates [count_rows] : (!db.column<!storage.nullable<f64>>, !db.column<!storage.node_id>) -> (!db.column<!storage.nullable<f64>>, !db.column<ui64>)
+  db.output(%gkey, %n) : !db.column<!storage.nullable<f64>>, !db.column<ui64>
   return
 }
 )mlir";
@@ -144,10 +144,10 @@ constexpr const char* constantKeyCollectProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %ten = db.constant(10 : i64)
-  %key = db.to_float(%ten) : (!db.column<i64>) -> !db.column<none>
+  %key = db.to_float(%ten) : (!db.column<i64>) -> !db.column<!storage.nullable<f64>>
   %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
-  %gkey, %scores = db.collect(%key, %score) keys 1 : (!db.column<none>, !db.column<!storage.nullable<i64>>) -> (!db.column<none>, !db.column<!storage.list<!storage.nullable<i64>>>)
-  db.output(%gkey, %scores) : !db.column<none>, !db.column<!storage.list<!storage.nullable<i64>>>
+  %gkey, %scores = db.collect(%key, %score) keys 1 : (!db.column<!storage.nullable<f64>>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.nullable<f64>>, !db.column<!storage.list<!storage.nullable<i64>>>)
+  db.output(%gkey, %scores) : !db.column<!storage.nullable<f64>>, !db.column<!storage.list<!storage.nullable<i64>>>
   return
 }
 )mlir";

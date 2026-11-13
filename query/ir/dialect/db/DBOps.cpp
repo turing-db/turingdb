@@ -45,7 +45,7 @@ constexpr double CONTAINER_BUILD_ROW_COST = 15.0;
 constexpr double VECTOR_FUNCTION_ROW_COST = 40.0;
 
 Type columnElement(Value column) {
-    return ::db::inferredColumnElement(column);
+    return ::db::declaredColumnElement(column);
 }
 
 // A selection whose result names an element holds the one its values select into. A result

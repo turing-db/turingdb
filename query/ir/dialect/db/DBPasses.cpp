@@ -806,7 +806,7 @@ bool matchBoundID(Value value, Value scanColumn, EntityIDList& entityIDs) {
         return false;
     }
 
-    const Type element = ::db::inferredColumnElement(value);
+    const Type element = ::db::declaredColumnElement(value);
     const Type scanned = entityElementOf(scanColumn);
     if (!element.isSignlessInteger(64) && element != scanned) {
         return false;
@@ -822,7 +822,7 @@ bool matchBoundIDList(Value list, bool comparesTheID, EntityIDList& entityIDs) {
         return false;
     }
 
-    const storage::ListType listType = dyn_cast<storage::ListType>(::db::inferredColumnElement(list));
+    const storage::ListType listType = dyn_cast<storage::ListType>(::db::declaredColumnElement(list));
     if (!listType || (!comparesTheID && mayHoldADouble(listType.getElementType()))) {
         return false;
     }
@@ -991,7 +991,7 @@ bool matchIDComparison(EqOp equality, IDComparison& comparison) {
         }
 
         const Value value = equality->getOperand(1 - operand);
-        if (!storage::isEntityIDOfInputType(::db::inferredColumnElement(value))) {
+        if (!storage::isEntityIDOfInputType(::db::declaredColumnElement(value))) {
             return false;
         }
 
@@ -1075,7 +1075,7 @@ bool matchPropertyEquality(EqOp equality, PropertyEquality& match) {
     const bool scansTheLiteral = literal && storage::isPropertyScanLiteral(literal);
     const bool scansTheBoundValue = !constant
                                  && ::db::isRunInvariant(constantSide)
-                                 && storage::isPropertyScanType(::db::inferredColumnElement(constantSide));
+                                 && storage::isPropertyScanType(::db::declaredColumnElement(constantSide));
 
     if (!scansTheLiteral && !scansTheBoundValue) {
         return false;
@@ -1189,7 +1189,7 @@ EntityIDOf findEntityIDOfElements(Value unwoundColumn) {
 // compared to. A node or an edge equals an integer by the ID it carries, so a projection
 // reads the elements back through id() of an entity column, never through the entity.
 bool comparesAnEntity(Value comparedColumn) {
-    return isa<storage::NodeIDType, storage::EdgeIDType>(::db::inferredColumnElement(comparedColumn));
+    return isa<storage::NodeIDType, storage::EdgeIDType>(::db::declaredColumnElement(comparedColumn));
 }
 
 bool unwindsIntegers(UnwindConst unwind) {
@@ -1204,10 +1204,10 @@ bool unwindsFloats(UnwindConst unwind) {
     return isa<mlir::Float64Type>(column.getType());
 }
 
-// Whether a column holds integers. A column typed none that no function produces is resolved
-// only in lowering, and can turn out to hold floats or tagged cells.
+// Whether a column holds integers. A column typed none is resolved only in lowering, and can
+// turn out to hold floats or tagged cells.
 bool holdsIntegers(Value column) {
-    return ::db::inferredColumnElement(column).isInteger(64);
+    return ::db::declaredColumnElement(column).isInteger(64);
 }
 
 // Whether every value of the column equal to an element is that element. A number can equal
@@ -10253,7 +10253,7 @@ private:
 double estimateListedEntities(size_t literalCount, mlir::OperandRange boundIDs) {
     double listed = static_cast<double>(literalCount);
     for (const Value bound : boundIDs) {
-        const bool listsIDs = isa<storage::ListType>(::db::inferredColumnElement(bound));
+        const bool listsIDs = isa<storage::ListType>(::db::declaredColumnElement(bound));
         listed += listsIDs ? static_cast<double>(uncountableRows) : 1.0;
     }
 
@@ -11769,7 +11769,7 @@ bool readsTheJunctionRowWise(const PatternJunction& junction, FilterOp filter) {
 
 // The values db.fetch_edges reads an edge out of: an edge, an integer, or a type-erased cell
 bool namesEdgesByID(Value ids) {
-    const Type element = ::db::inferredColumnElement(ids);
+    const Type element = ::db::declaredColumnElement(ids);
 
     return element.isSignlessInteger(64) || isa<storage::EdgeIDType, storage::AnyType>(element);
 }

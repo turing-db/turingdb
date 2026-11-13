@@ -3177,8 +3177,32 @@ def Avg : AggregateOp<"avg">;
 def StDev : AggregateOp<"stdev">;
 def StDevP : AggregateOp<"stdevp">;
 
+// The column a function or an operator computes holds what its element rule answers over the
+// columns its operands declare (DBColumnElement), inferred when the op is built
+def InferColumnType : TraitList<[
+    DeclareOpInterfaceMethods<InferTypeOpInterface>,
+    NativeOpTrait<"InferColumnType", [], [{
+      static bool isCompatibleReturnTypes(::mlir::TypeRange inferred, ::mlir::TypeRange declared);
+    }], [{
+      ::llvm::LogicalResult $cppClass::inferReturnTypes(::mlir::MLIRContext* context,
+                                                        ::std::optional<::mlir::Location> location,
+                                                        ::mlir::ValueRange operands,
+                                                        ::mlir::DictionaryAttr attributes,
+                                                        ::mlir::PropertyRef properties,
+                                                        ::mlir::RegionRange regions,
+                                                        ::llvm::SmallVectorImpl<::mlir::Type>& inferredReturnTypes) {
+        inferredReturnTypes.push_back(::db::inferColumnType(context, getOperationName(), operands));
+        return ::mlir::success();
+      }
+
+      bool $cppClass::isCompatibleReturnTypes(::mlir::TypeRange inferred, ::mlir::TypeRange declared) {
+        return ::db::areCompatibleColumnTypes(inferred, declared);
+      }
+    }]>
+]>;
+
 class UnaryFunctionOp<string mnemonic, list<Trait> traits>
-    : TuringOp<mnemonic, !listconcat(traits, [ConstantThroughOperands])> {
+    : TuringOp<mnemonic, !listconcat(traits, [ConstantThroughOperands, InferColumnType])> {
   let summary = "Apply a unary function row-wise to a value column";
 
   let arguments = (ins Column:$input);
@@ -3754,7 +3778,7 @@ def IsNotNullOp : TuringOp<"is_not_null", [Pure, ConstantThroughOperands]> {
 // An arithmetic operator may raise on a type-erased cell holding a value it does not compute
 // over, on a zero divisor, or on an overflow: each op says which operands rule them out
 class ArithmeticOp<string mnemonic>
-    : BinaryOp<mnemonic, [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+    : BinaryOp<mnemonic, [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>, InferColumnType]> {
   let arguments = (ins Column:$lhs, Column:$rhs);
   let results   = (outs Column:$result);
 
@@ -3765,7 +3789,7 @@ def AddOp : ArithmeticOp<"add"> {
   let summary = "Row-wise addition of two value columns";
 }
 
-def ConcatOp : BinaryOp<"concat", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def ConcatOp : BinaryOp<"concat", [MayRaise, DeclareOpInterfaceMethods<ConditionallySpeculatable>, InferColumnType]> {
   let summary = "Row-wise concatenation of two string or two list columns";
 
   let arguments = (ins Column:$lhs, Column:$rhs);

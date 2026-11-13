@@ -87,25 +87,25 @@ TEST_F(RaiseEffectTest, keepsALogicalOperatorOverCells) {
 TEST_F(RaiseEffectTest, keepsArithmeticThatMayRaise) {
     EXPECT_FALSE(isDead("%r = db.add %cell, %integer : (!cells, !integers) -> !any"));
     EXPECT_FALSE(isDead("%r = db.mul %integer, %cell : (!integers, !cells) -> !any"));
-    EXPECT_FALSE(isDead("%r = db.div %integer, %integer : (!integers, !integers) -> !any"));
-    EXPECT_FALSE(isDead("%r = db.mod %integer, %zero : (!integers, !i64s) -> !any"));
+    EXPECT_FALSE(isDead("%r = db.div %integer, %integer : (!integers, !integers) -> !integers"));
+    EXPECT_FALSE(isDead("%r = db.mod %integer, %zero : (!integers, !i64s) -> !integers"));
     EXPECT_FALSE(isDead("%r = db.concat %cell, %string : (!cells, !strings) -> !any"));
 
-    EXPECT_TRUE(isDead("%r = db.add %integer, %integer : (!integers, !integers) -> !any"));
-    EXPECT_TRUE(isDead("%r = db.sub %integer, %real : (!integers, !reals) -> !any"));
-    EXPECT_TRUE(isDead("%r = db.div %integer, %three : (!integers, !i64s) -> !any"));
+    EXPECT_TRUE(isDead("%r = db.add %integer, %integer : (!integers, !integers) -> !integers"));
+    EXPECT_TRUE(isDead("%r = db.sub %integer, %real : (!integers, !reals) -> !db.column<!storage.nullable<f64>>"));
+    EXPECT_TRUE(isDead("%r = db.div %integer, %three : (!integers, !i64s) -> !integers"));
 }
 
 TEST_F(RaiseEffectTest, keepsAFunctionThatMayRaise) {
-    EXPECT_FALSE(isDead("%r = db.abs(%cell) : (!cells) -> !any"));
-    EXPECT_FALSE(isDead("%r = db.to_integer(%cell) : (!cells) -> !any"));
+    EXPECT_FALSE(isDead("%r = db.abs(%cell) : (!cells) -> !cells"));
+    EXPECT_FALSE(isDead("%r = db.to_integer(%cell) : (!cells) -> !integers"));
     EXPECT_FALSE(isDead("%r = db.substring(%string, %negative) : (!strings, !i64s) -> !strings"));
     EXPECT_FALSE(isDead("%r = db.left(%cell, %three) : (!cells, !i64s) -> !texts"));
 
-    EXPECT_TRUE(isDead("%r = db.abs(%integer) : (!integers) -> !any"));
-    EXPECT_TRUE(isDead("%r = db.to_integer(%string) : (!strings) -> !any"));
+    EXPECT_TRUE(isDead("%r = db.abs(%integer) : (!integers) -> !integers"));
+    EXPECT_TRUE(isDead("%r = db.to_integer(%string) : (!strings) -> !integers"));
     EXPECT_TRUE(isDead("%r = db.substring(%string, %zero, %three) : (!strings, !i64s, !i64s) -> !strings"));
-    EXPECT_TRUE(isDead("%r = db.to_integer_or_null(%cell) : (!cells) -> !any"));
+    EXPECT_TRUE(isDead("%r = db.to_integer_or_null(%cell) : (!cells) -> !integers"));
 }
 
 TEST_F(RaiseEffectTest, keepsAListOpThatMayRaise) {

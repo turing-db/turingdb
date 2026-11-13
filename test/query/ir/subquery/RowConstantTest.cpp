@@ -190,10 +190,10 @@ func.func @main() {
     %x = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
     %key = db.constant(true)
     %c:2 = db.collect(%key, %pc) keys 1 : (!db.column<i1>, !db.column<!storage.node_id>) -> (!db.column<i1>, !db.column<!storage.list<!storage.node_id>>)
-    %size = db.size(%c#1) : (!db.column<!storage.list<!storage.node_id>>) -> !db.column<none>
-    db.subquery_yield {%size} : {!db.column<none>}
-  } : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<none>)
-  db.output(%r#1) : !db.column<none>
+    %size = db.size(%c#1) : (!db.column<!storage.list<!storage.node_id>>) -> !db.column<!storage.nullable<i64>>
+    db.subquery_yield {%size} : {!db.column<!storage.nullable<i64>>}
+  } : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>)
+  db.output(%r#1) : !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -206,13 +206,13 @@ func.func @main() {
   %c:4 = db.call_subquery(%r) {
   ^bb0(%rIn: !db.column<!storage.edge_id>):
     %rc = db.row_constant %rIn : !db.column<!storage.edge_id>
-    %type = db.edge_type(%rc) : (!db.column<!storage.edge_id>) -> !db.column<none>
+    %type = db.edge_type(%rc) : (!db.column<!storage.edge_id>) -> !db.column<!storage.nullable<!storage.string>>
     %x = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
     %xname = db.get_node_properties(%x, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
-    db.subquery_yield {%type, %rc, %xname} : {!db.column<none>, !db.column<!storage.edge_id>, !db.column<!storage.nullable<!storage.string>>}
-  } : (!db.column<!storage.edge_id>) -> (!db.column<!storage.edge_id>, !db.column<none>, !db.column<!storage.edge_id>, !db.column<!storage.nullable<!storage.string>>)
-  %source = db.start_node(%c#2) : (!db.column<!storage.edge_id>) -> !db.column<none>
-  db.output(%c#1, %source, %c#3) : !db.column<none>, !db.column<none>, !db.column<!storage.nullable<!storage.string>>
+    db.subquery_yield {%type, %rc, %xname} : {!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.edge_id>, !db.column<!storage.nullable<!storage.string>>}
+  } : (!db.column<!storage.edge_id>) -> (!db.column<!storage.edge_id>, !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.edge_id>, !db.column<!storage.nullable<!storage.string>>)
+  %source = db.start_node(%c#2) : (!db.column<!storage.edge_id>) -> !db.column<!storage.node_id>
+  db.output(%c#1, %source, %c#3) : !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.node_id>, !db.column<!storage.nullable<!storage.string>>
   return
 }
 )mlir";
@@ -286,11 +286,11 @@ func.func @main() {
     %s, %e, %et, %i = db.get_out_edges_by_type(%pc, ["INTERESTED_IN"], {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
     %pname = db.get_node_properties(%pc, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
     %slash = db.constant("/" : !storage.string)
-    %prefix = db.concat %pname, %slash : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.string>) -> !db.column<none>
+    %prefix = db.concat %pname, %slash : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.string>) -> !db.column<!storage.nullable<!storage.string>>
     %iname = db.get_node_properties(%i, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
-    %pair = db.concat %prefix, %iname : (!db.column<none>, !db.column<!storage.nullable<!storage.string>>) -> !db.column<none>
-    %sorted:2 = db.sort(%pair, %iname) keys [1] ascending [true] : (!db.column<none>, !db.column<!storage.nullable<!storage.string>>) -> (!db.column<none>, !db.column<!storage.nullable<!storage.string>>)
-    db.collect_subquery_yield %sorted#0, {%sorted#0} : !db.column<none>, {!db.column<none>}
+    %pair = db.concat %prefix, %iname : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<!storage.string>>) -> !db.column<!storage.nullable<!storage.string>>
+    %sorted:2 = db.sort(%pair, %iname) keys [1] ascending [true] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<!storage.string>>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<!storage.string>>)
+    db.collect_subquery_yield %sorted#0, {%sorted#0} : !db.column<!storage.nullable<!storage.string>>, {!db.column<!storage.nullable<!storage.string>>}
   } : (!db.column<!storage.node_id>) -> !db.column<none>
   db.output(%list) : !db.column<none>
   return

@@ -57,8 +57,8 @@ func.func @main() {
   %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %again = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %one = db.constant(1 : i64)
-  %sum = db.add %again, %one : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<none>
-  db.output(%age, %sum) : !db.column<!storage.nullable<i64>>, !db.column<none>
+  %sum = db.add %again, %one : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.nullable<i64>>
+  db.output(%age, %sum) : !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";

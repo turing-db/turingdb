@@ -81,3 +81,5 @@ add_ir_tests(test_query_ir_db_pass_pipeline_reuse DBPassPipelineReuseTest.cpp)
 
 add_ir_tests(test_query_ir_insertion_ordered_map InsertionOrderedMapTest.cpp)
 add_ir_tests(test_query_ir_vector_index_dimension_verifier VectorIndexDimensionVerifierTest.cpp)
+
+add_ir_tests(test_query_ir_computed_column_type_verifier ComputedColumnTypeVerifierTest.cpp)

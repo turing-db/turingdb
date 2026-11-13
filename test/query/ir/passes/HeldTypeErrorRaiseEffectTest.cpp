@@ -94,6 +94,6 @@ TEST_F(HeldTypeErrorRaiseEffectTest, keepsArithmeticOverACell) {
 TEST_F(HeldTypeErrorRaiseEffectTest, erasesArithmeticOverNumbers) {
     expectErased("%r = db.pow %integer, %real : (!integers, !reals) -> !reals");
     expectErased("%r = db.pow %real, %real : (!reals, !reals) -> !reals");
-    expectErased("%r = db.sub %integer, %real : (!integers, !reals) -> !any");
-    expectErased("%r = db.mul %real, %integer : (!reals, !integers) -> !any");
+    expectErased("%r = db.sub %integer, %real : (!integers, !reals) -> !db.column<!storage.nullable<f64>>");
+    expectErased("%r = db.mul %real, %integer : (!reals, !integers) -> !db.column<!storage.nullable<f64>>");
 }

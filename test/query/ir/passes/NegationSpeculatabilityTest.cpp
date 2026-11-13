@@ -67,22 +67,22 @@ func.func @main(%integer: !i64s, %count: !u64s, %real: !reals, %duration: !durat
 };
 
 TEST_F(NegationSpeculatabilityTest, mayRaiseOverAnIntegerOrADuration) {
-    EXPECT_EQ(speculatabilityOf("%r = db.negate(%integer) : (!i64s) -> !unresolved"), NotSpeculatable);
-    EXPECT_EQ(speculatabilityOf("%r = db.negate(%count) : (!u64s) -> !unresolved"), NotSpeculatable);
-    EXPECT_EQ(speculatabilityOf("%r = db.negate(%duration) : (!durations) -> !unresolved"), NotSpeculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.negate(%integer) : (!i64s) -> !db.column<!storage.nullable<i64>>"), NotSpeculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.negate(%count) : (!u64s) -> !db.column<!storage.nullable<i64>>"), NotSpeculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.negate(%duration) : (!durations) -> !db.column<!storage.nullable<!storage.duration>>"), NotSpeculatable);
 }
 
 TEST_F(NegationSpeculatabilityTest, isNotComputedOnceOverTheLowestInteger) {
-    mlir::Operation* const negation = lastOp("%r = db.negate(%lowest) : (!i64s) -> !unresolved");
+    mlir::Operation* const negation = lastOp("%r = db.negate(%lowest) : (!i64s) -> !db.column<!storage.nullable<i64>>");
     ASSERT_TRUE(negation);
     EXPECT_FALSE(db::runsWithoutRaising(negation));
 }
 
 TEST_F(NegationSpeculatabilityTest, isSpeculatableOverADouble) {
-    EXPECT_EQ(speculatabilityOf("%r = db.negate(%real) : (!reals) -> !unresolved"), Speculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.negate(%real) : (!reals) -> !db.column<!storage.nullable<f64>>"), Speculatable);
 }
 
 TEST_F(NegationSpeculatabilityTest, plusNeverRaisesOverANumberOrADuration) {
-    EXPECT_EQ(speculatabilityOf("%r = db.unary_plus(%integer) : (!i64s) -> !unresolved"), Speculatable);
-    EXPECT_EQ(speculatabilityOf("%r = db.unary_plus(%duration) : (!durations) -> !unresolved"), Speculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.unary_plus(%integer) : (!i64s) -> !db.column<!storage.nullable<i64>>"), Speculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.unary_plus(%duration) : (!durations) -> !db.column<!storage.nullable<!storage.duration>>"), Speculatable);
 }

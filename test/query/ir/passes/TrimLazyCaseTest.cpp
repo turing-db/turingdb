@@ -73,8 +73,8 @@ func.func @main() {
     db.case_yield %zero : !db.column<i64>
   }, {
   ^bb0(%nIn: !db.column<!storage.node_id>, %ageIn: !db.column<!storage.nullable<i64>>, %nameIn: !db.column<!storage.nullable<!storage.string>>):
-    %q = db.div %ten, %ageIn : (!db.column<i64>, !db.column<!storage.nullable<i64>>) -> !db.column<none>
-    db.case_yield %q : !db.column<none>
+    %q = db.div %ten, %ageIn : (!db.column<i64>, !db.column<!storage.nullable<i64>>) -> !db.column<!storage.nullable<i64>>
+    db.case_yield %q : !db.column<!storage.nullable<i64>>
   } : (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<!storage.string>>) -> !db.column<none>
   db.output(%name, %r) : !db.column<!storage.nullable<!storage.string>>, !db.column<none>
   return
@@ -114,8 +114,8 @@ func.func @main() {
     db.case_yield %zero : !db.column<i64>
   }, {
   ^bb0(%tIn: !db.column<i64>, %subject: !db.column<i64>):
-    %q = db.div %ten, %tIn : (!db.column<i64>, !db.column<i64>) -> !db.column<none>
-    db.case_yield %q : !db.column<none>
+    %q = db.div %ten, %tIn : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.nullable<i64>>
+    db.case_yield %q : !db.column<!storage.nullable<i64>>
   } : (!db.column<i64>, !db.column<i64>) -> !db.column<none>
   db.output(%r) : !db.column<none>
   return
@@ -207,8 +207,8 @@ func.func @main() {
       db.case_yield %one : !db.column<i64>
     }, {
     ^bb0(%nInner: !db.column<!storage.node_id>, %ageInner: !db.column<!storage.nullable<i64>>):
-      %q = db.div %ten, %ageInner : (!db.column<i64>, !db.column<!storage.nullable<i64>>) -> !db.column<none>
-      db.case_yield %q : !db.column<none>
+      %q = db.div %ten, %ageInner : (!db.column<i64>, !db.column<!storage.nullable<i64>>) -> !db.column<!storage.nullable<i64>>
+      db.case_yield %q : !db.column<!storage.nullable<i64>>
     } : (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> !db.column<none>
     db.case_yield %inner : !db.column<none>
   } : (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> !db.column<none>

@@ -92,57 +92,57 @@ TEST_F(RaisingOpSpeculatabilityTest, takesAnEndOfAStringAtALiteralLengthInRange)
 }
 
 TEST_F(RaisingOpSpeculatabilityTest, readsTextOutOfAStringColumnAlone) {
-    EXPECT_EQ(speculatabilityOf("%r = db.to_upper(%string) : (!strings) -> !any"), Speculatable);
-    EXPECT_EQ(speculatabilityOf("%r = db.trim(%string) : (!strings) -> !any"), Speculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.to_upper(%string) : (!strings) -> !strings"), Speculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.trim(%string) : (!strings) -> !strings"), Speculatable);
 
-    EXPECT_EQ(speculatabilityOf("%r = db.to_lower(%cell) : (!cells) -> !any"), NotSpeculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.to_lower(%cell) : (!cells) -> !strings"), NotSpeculatable);
     EXPECT_EQ(speculatabilityOf("%r = db.rtrim(%unresolved) : (!unresolved) -> !any"), NotSpeculatable);
 }
 
 TEST_F(RaisingOpSpeculatabilityTest, readsAStringOrAListOutOfAColumnOfEither) {
-    EXPECT_EQ(speculatabilityOf("%r = db.reverse(%string) : (!strings) -> !any"), Speculatable);
-    EXPECT_EQ(speculatabilityOf("%r = db.reverse(%list) : (!lists) -> !any"), Speculatable);
-    EXPECT_EQ(speculatabilityOf("%r = db.size(%string) : (!strings) -> !any"), Speculatable);
-    EXPECT_EQ(speculatabilityOf("%r = db.size(%list) : (!lists) -> !any"), Speculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.reverse(%string) : (!strings) -> !strings"), Speculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.reverse(%list) : (!lists) -> !db.column<!storage.nullable<!storage.list<i64>>>"), Speculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.size(%string) : (!strings) -> !integers"), Speculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.size(%list) : (!lists) -> !integers"), Speculatable);
 
-    EXPECT_EQ(speculatabilityOf("%r = db.reverse(%cell) : (!cells) -> !any"), NotSpeculatable);
-    EXPECT_EQ(speculatabilityOf("%r = db.size(%cell) : (!cells) -> !any"), NotSpeculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.reverse(%cell) : (!cells) -> !cells"), NotSpeculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.size(%cell) : (!cells) -> !integers"), NotSpeculatable);
 }
 
 TEST_F(RaisingOpSpeculatabilityTest, readsAListOutOfAListColumnAlone) {
-    EXPECT_EQ(speculatabilityOf("%r = db.head(%list) : (!lists) -> !any"), Speculatable);
-    EXPECT_EQ(speculatabilityOf("%r = db.tail(%list) : (!lists) -> !any"), Speculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.head(%list) : (!lists) -> !cells"), Speculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.tail(%list) : (!lists) -> !db.column<!storage.nullable<!storage.list<i64>>>"), Speculatable);
 
-    EXPECT_EQ(speculatabilityOf("%r = db.last(%cell) : (!cells) -> !any"), NotSpeculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.last(%cell) : (!cells) -> !cells"), NotSpeculatable);
     EXPECT_EQ(speculatabilityOf("%r = db.head(%string) : (!strings) -> !any"), NotSpeculatable);
 }
 
 TEST_F(RaisingOpSpeculatabilityTest, readsAnEntityOrAMapOutOfAColumnOfOne) {
-    EXPECT_EQ(speculatabilityOf("%r = db.element_id(%node) : (!nodes) -> !any"), Speculatable);
-    EXPECT_EQ(speculatabilityOf("%r = db.element_id(%edge) : (!edges) -> !any"), Speculatable);
-    EXPECT_EQ(speculatabilityOf("%r = db.keys(%node) : (!nodes) -> !any"), Speculatable);
-    EXPECT_EQ(speculatabilityOf("%r = db.keys(%map) : (!maps) -> !any"), Speculatable);
-    EXPECT_EQ(speculatabilityOf("%r = db.properties(%edge) : (!edges) -> !any"), Speculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.element_id(%node) : (!nodes) -> !integers"), Speculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.element_id(%edge) : (!edges) -> !integers"), Speculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.keys(%node) : (!nodes) -> !db.column<!storage.nullable<!storage.list<!storage.string>>>"), Speculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.keys(%map) : (!maps) -> !db.column<!storage.nullable<!storage.list<!storage.string>>>"), Speculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.properties(%edge) : (!edges) -> !db.column<!storage.nullable<!storage.map>>"), Speculatable);
     EXPECT_EQ(speculatabilityOf("%r = db.start_node(%edge) : (!edges) -> !nodes"), Speculatable);
 
-    EXPECT_EQ(speculatabilityOf("%r = db.element_id(%cell) : (!cells) -> !any"), NotSpeculatable);
-    EXPECT_EQ(speculatabilityOf("%r = db.keys(%cell) : (!cells) -> !any"), NotSpeculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.element_id(%cell) : (!cells) -> !integers"), NotSpeculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.keys(%cell) : (!cells) -> !db.column<!storage.nullable<!storage.list<!storage.string>>>"), NotSpeculatable);
     EXPECT_EQ(speculatabilityOf("%r = db.properties(%unresolved) : (!unresolved) -> !any"), NotSpeculatable);
     EXPECT_EQ(speculatabilityOf("%r = db.end_node(%cell) : (!cells) -> !nodes"), NotSpeculatable);
 }
 
 TEST_F(RaisingOpSpeculatabilityTest, readsANumberOutOfANumberColumnAlone) {
-    EXPECT_EQ(speculatabilityOf("%r = db.abs(%integer) : (!integers) -> !any"), Speculatable);
-    EXPECT_EQ(speculatabilityOf("%r = db.sign(%real) : (!reals) -> !any"), Speculatable);
-    EXPECT_EQ(speculatabilityOf("%r = db.sqrt(%integer) : (!integers) -> !any"), Speculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.abs(%integer) : (!integers) -> !integers"), Speculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.sign(%real) : (!reals) -> !integers"), Speculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.sqrt(%integer) : (!integers) -> !db.column<!storage.nullable<f64>>"), Speculatable);
 
-    EXPECT_EQ(speculatabilityOf("%r = db.abs(%cell) : (!cells) -> !any"), NotSpeculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.abs(%cell) : (!cells) -> !cells"), NotSpeculatable);
     EXPECT_EQ(speculatabilityOf("%r = db.haversin(%unresolved) : (!unresolved) -> !any"), NotSpeculatable);
 }
 
 TEST_F(RaisingOpSpeculatabilityTest, keepsTheFunctionsNoRowRaisesOnSpeculatable) {
-    EXPECT_EQ(speculatabilityOf("%r = db.labels(%node) : (!nodes) -> !any"), Speculatable);
-    EXPECT_EQ(speculatabilityOf("%r = db.to_integer(%string) : (!strings) -> !any"), Speculatable);
-    EXPECT_EQ(speculatabilityOf("%r = db.to_integer_or_null(%cell) : (!cells) -> !any"), Speculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.labels(%node) : (!nodes) -> !db.column<!storage.nullable<!storage.list<!storage.string>>>"), Speculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.to_integer(%string) : (!strings) -> !integers"), Speculatable);
+    EXPECT_EQ(speculatabilityOf("%r = db.to_integer_or_null(%cell) : (!cells) -> !integers"), Speculatable);
     EXPECT_EQ(speculatabilityOf("%r = db.to_string_or_null(%unresolved) : (!unresolved) -> !any"), Speculatable);
 }

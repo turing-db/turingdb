@@ -214,7 +214,7 @@ private:
             return true;
         }
 
-        const mlir::Type element = inferredColumnElement(value);
+        const mlir::Type element = declaredColumnElement(value);
         const bool typed = !mlir::isa<mlir::NoneType, storage::AnyType>(element);
         if (typed && path == NO_READ) {
             return holds(elementTag(element));

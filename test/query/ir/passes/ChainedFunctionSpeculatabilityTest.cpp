@@ -18,8 +18,8 @@
 using mlir::Speculation::NotSpeculatable;
 using mlir::Speculation::Speculatable;
 
-// A db function names no element on its result column, so a function reading another one's
-// result reads the element the chain below it answers. abs(abs(9)) reads an integer.
+// A db function names the element it answers on its result column, so a function reading
+// another one's result reads that element. abs(abs(9)) reads an integer.
 class ChainedFunctionSpeculatabilityTest : public ::testing::Test {
 protected:
     ChainedFunctionSpeculatabilityTest() {
@@ -36,6 +36,9 @@ protected:
 !texts = !db.column<!storage.string>
 !cells = !db.column<!storage.any>
 !unresolved = !db.column<none>
+!integers = !db.column<!storage.nullable<i64>>
+!reals = !db.column<!storage.nullable<f64>>
+!strings = !db.column<!storage.nullable<!storage.string>>
 
 func.func @main(%cell: !cells, %unresolved: !unresolved) {
   %nine = db.constant(9 : i64)
@@ -74,35 +77,35 @@ func.func @main(%cell: !cells, %unresolved: !unresolved) {
 };
 
 TEST_F(ChainedFunctionSpeculatabilityTest, readsTheIntegerAnInnerFunctionAnswers) {
-    EXPECT_EQ(speculatabilityOf("%a = db.abs(%nine) : (!i64s) -> !unresolved\n"
-                                "  %r = db.abs(%a) : (!unresolved) -> !unresolved"),
+    EXPECT_EQ(speculatabilityOf("%a = db.abs(%nine) : (!i64s) -> !integers\n"
+                                "  %r = db.abs(%a) : (!integers) -> !integers"),
               Speculatable);
-    EXPECT_EQ(speculatabilityOf("%a = db.unary_plus(%nine) : (!i64s) -> !unresolved\n"
-                                "  %r = db.unary_plus(%a) : (!unresolved) -> !unresolved"),
+    EXPECT_EQ(speculatabilityOf("%a = db.unary_plus(%nine) : (!i64s) -> !integers\n"
+                                "  %r = db.unary_plus(%a) : (!integers) -> !integers"),
               Speculatable);
-    EXPECT_EQ(speculatabilityOf("%a = db.sqrt(%nine) : (!i64s) -> !unresolved\n"
-                                "  %b = db.negate(%a) : (!unresolved) -> !unresolved\n"
-                                "  %r = db.negate(%b) : (!unresolved) -> !unresolved"),
+    EXPECT_EQ(speculatabilityOf("%a = db.sqrt(%nine) : (!i64s) -> !reals\n"
+                                "  %b = db.negate(%a) : (!reals) -> !reals\n"
+                                "  %r = db.negate(%b) : (!reals) -> !reals"),
               Speculatable);
 }
 
 TEST_F(ChainedFunctionSpeculatabilityTest, readsTheElementAnInnerFunctionMapsTo) {
-    EXPECT_EQ(speculatabilityOf("%a = db.sqrt(%nine) : (!i64s) -> !unresolved\n"
-                                "  %r = db.abs(%a) : (!unresolved) -> !unresolved"),
+    EXPECT_EQ(speculatabilityOf("%a = db.sqrt(%nine) : (!i64s) -> !reals\n"
+                                "  %r = db.abs(%a) : (!reals) -> !reals"),
               Speculatable);
-    EXPECT_EQ(speculatabilityOf("%a = db.size(%text) : (!texts) -> !unresolved\n"
-                                "  %r = db.abs(%a) : (!unresolved) -> !unresolved"),
+    EXPECT_EQ(speculatabilityOf("%a = db.size(%text) : (!texts) -> !integers\n"
+                                "  %r = db.abs(%a) : (!integers) -> !integers"),
               Speculatable);
 }
 
-// A string is no number, and a chain starting at a cell or at an unresolved column still
-// names no element: the function may meet a value it raises on
+// A string is no number, a chain starting at a cell holds cells, and one starting at an
+// unresolved column names no element: the function may meet a value it raises on
 TEST_F(ChainedFunctionSpeculatabilityTest, keepsAChainOverAnotherTypeNotSpeculatable) {
-    EXPECT_EQ(speculatabilityOf("%a = db.to_upper(%text) : (!texts) -> !unresolved\n"
-                                "  %r = db.abs(%a) : (!unresolved) -> !unresolved"),
+    EXPECT_EQ(speculatabilityOf("%a = db.to_upper(%text) : (!texts) -> !strings\n"
+                                "  %r = db.abs(%a) : (!strings) -> !strings"),
               NotSpeculatable);
-    EXPECT_EQ(speculatabilityOf("%a = db.abs(%cell) : (!cells) -> !unresolved\n"
-                                "  %r = db.abs(%a) : (!unresolved) -> !unresolved"),
+    EXPECT_EQ(speculatabilityOf("%a = db.abs(%cell) : (!cells) -> !cells\n"
+                                "  %r = db.abs(%a) : (!cells) -> !cells"),
               NotSpeculatable);
     EXPECT_EQ(speculatabilityOf("%a = db.abs(%unresolved) : (!unresolved) -> !unresolved\n"
                                 "  %r = db.abs(%a) : (!unresolved) -> !unresolved"),
@@ -110,8 +113,8 @@ TEST_F(ChainedFunctionSpeculatabilityTest, keepsAChainOverAnotherTypeNotSpeculat
 }
 
 TEST_F(ChainedFunctionSpeculatabilityTest, computesAChainOverAConstantOnce) {
-    EXPECT_TRUE(yieldsConstant("%a = db.unary_plus(%nine) : (!i64s) -> !unresolved\n"
-                               "  %r = db.unary_plus(%a) : (!unresolved) -> !unresolved"));
-    EXPECT_TRUE(yieldsConstant("%a = db.abs(%nine) : (!i64s) -> !unresolved\n"
-                               "  %r = db.abs(%a) : (!unresolved) -> !unresolved"));
+    EXPECT_TRUE(yieldsConstant("%a = db.unary_plus(%nine) : (!i64s) -> !integers\n"
+                               "  %r = db.unary_plus(%a) : (!integers) -> !integers"));
+    EXPECT_TRUE(yieldsConstant("%a = db.abs(%nine) : (!i64s) -> !integers\n"
+                               "  %r = db.abs(%a) : (!integers) -> !integers"));
 }

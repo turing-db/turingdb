@@ -1434,7 +1434,7 @@ private:
     void translateStringEnd(const Expr* expr, const ExprChain* args);
 
     template <typename NormalFormOp>
-    void translateNormalFormFunction(const Expr* expr, const ExprChain* args, mlir::Type resultElement);
+    void translateNormalFormFunction(const Expr* expr, const ExprChain* args);
 
     mlir::Value translateArg(const Expr* argExpr);
     mlir::Value translateLiteralExpr(const Literal* literal);

@@ -252,8 +252,8 @@ const char* const boundCutProgram = R"mlir(
 func.func @main(%n: !db.column<i64>) {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %one = db.constant(1 : i64)
-  %skipped = db.add %n, %one : (!db.column<i64>, !db.column<i64>) -> !db.column<none>
-  %sa = db.skip(%a) count %skipped : !db.column<none> : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  %skipped = db.add %n, %one : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.nullable<i64>>
+  %sa = db.skip(%a) count %skipped : !db.column<!storage.nullable<i64>> : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   %la = db.limit(%sa) count %n : !db.column<i64> : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%la) : !db.column<!storage.node_id>
   return

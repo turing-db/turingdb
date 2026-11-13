@@ -45,7 +45,7 @@ func.func @main(%integer: !integers) {
 
         program += lastArgument;
         program += R"mlir(
-    db.case_yield %last : !any
+    db.case_yield %last : !integers
   } : (!integers) -> !any
   return
 }
@@ -66,7 +66,7 @@ func.func @main(%integer: !integers) {
 };
 
 TEST_F(CoalesceRaiseEffectTest, keepsAnUnreadCoalesceWhoseArgumentMayRaise) {
-    mlir::Operation* const coalesce = parseUnreadCoalesce("%last = db.div %three, %in : (!db.column<i64>, !integers) -> !any");
+    mlir::Operation* const coalesce = parseUnreadCoalesce("%last = db.div %three, %in : (!db.column<i64>, !integers) -> !integers");
     ASSERT_TRUE(coalesce);
 
     EXPECT_FALSE(mlir::isOpTriviallyDead(coalesce));
@@ -76,7 +76,7 @@ TEST_F(CoalesceRaiseEffectTest, keepsAnUnreadCoalesceWhoseArgumentMayRaise) {
 }
 
 TEST_F(CoalesceRaiseEffectTest, dropsAnUnreadCoalesceNoArgumentRaisesOn) {
-    mlir::Operation* const coalesce = parseUnreadCoalesce("%last = db.div %in, %three : (!integers, !db.column<i64>) -> !any");
+    mlir::Operation* const coalesce = parseUnreadCoalesce("%last = db.div %in, %three : (!integers, !db.column<i64>) -> !integers");
     ASSERT_TRUE(coalesce);
 
     EXPECT_TRUE(mlir::isOpTriviallyDead(coalesce));

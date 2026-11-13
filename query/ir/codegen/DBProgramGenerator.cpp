@@ -483,17 +483,11 @@ bool statementCarriesRows(const Stmt* stmt) {
     return false;
 }
 
-using UnaryFunctionEmitter = mlir::Value (*)(mlir::OpBuilder& builder,
-                                             mlir::Location loc,
-                                             mlir::db::ColumnType resultType,
-                                             mlir::Value input);
+using UnaryFunctionEmitter = mlir::Value (*)(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value input);
 
 template <typename Op>
-mlir::Value emitUnaryFunction(mlir::OpBuilder& builder,
-                              mlir::Location loc,
-                              mlir::db::ColumnType resultType,
-                              mlir::Value input) {
-    return builder.create<Op>(loc, resultType, input).getResult();
+mlir::Value emitUnaryFunction(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value input) {
+    return builder.create<Op>(loc, input).getResult();
 }
 
 const std::unordered_map<std::string_view, UnaryFunctionEmitter> unaryFunctionEmitters = {
@@ -5772,9 +5766,7 @@ mlir::Value DBProgramGenerator::assignedColumn(const Expr* value, ValueType prop
         return column;
     }
 
-    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
-
-    return _opBuilder.create<mlir::db::ToFloat>(_opBuilder.getUnknownLoc(), noneType, column).getResult();
+    return _opBuilder.create<mlir::db::ToFloat>(_opBuilder.getUnknownLoc(), column).getResult();
 }
 
 void DBProgramGenerator::generateRemoveProperties(const RemoveStmt* removeStmt) {
@@ -8473,8 +8465,7 @@ void DBProgramGenerator::translateUnaryExpr(const Expr* expr, const UnaryExpr* u
                 break;
             }
 
-            const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
-            _part._exprMap[expr] = _opBuilder.create<mlir::db::Negate>(loc, noneType, operandVal).getResult();
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::Negate>(loc, operandVal).getResult();
         }
         break;
 
@@ -8488,8 +8479,7 @@ void DBProgramGenerator::translateUnaryExpr(const Expr* expr, const UnaryExpr* u
                 break;
             }
 
-            const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
-            _part._exprMap[expr] = _opBuilder.create<mlir::db::UnaryPlus>(loc, noneType, operandVal).getResult();
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::UnaryPlus>(loc, operandVal).getResult();
         }
         break;
 
@@ -8663,7 +8653,7 @@ mlir::Value DBProgramGenerator::projectedMap(const MapProjectionExpr* projection
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
     const mlir::Value base = getOrTranslateExprColumn(projection->getBase());
 
-    const mlir::Value properties = _opBuilder.create<mlir::db::PropertyMap>(loc, noneType, base).getResult();
+    const mlir::Value properties = _opBuilder.create<mlir::db::PropertyMap>(loc, base).getResult();
     if (entries.empty()) {
         return properties;
     }
@@ -9010,7 +9000,6 @@ void DBProgramGenerator::translateExistsExpr(const Expr* expr, const ExistsExpr*
 void DBProgramGenerator::translateCountSubqueryExpr(const Expr* expr, const CountSubqueryExpr* countExpr) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType countType = allocColumnType(_opBuilder.getIntegerType(64, /*isSigned=*/false));
-    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
     llvm::SmallVector<const RegularQuery*> branches;
     collectUnionAllBranches(countExpr->getBody(), branches);
@@ -9023,7 +9012,7 @@ void DBProgramGenerator::translateCountSubqueryExpr(const Expr* expr, const Coun
                                                                                               countTagName);
 
         if (count) {
-            count = _opBuilder.create<mlir::db::AddOp>(loc, noneType, count, branchCount).getResult();
+            count = _opBuilder.create<mlir::db::AddOp>(loc, count, branchCount).getResult();
         } else {
             count = branchCount;
         }
@@ -9049,7 +9038,7 @@ void DBProgramGenerator::translateCollectSubqueryExpr(const Expr* expr, const Co
                                                                                                   collectTagName);
 
         if (lists) {
-            lists = _opBuilder.create<mlir::db::ConcatOp>(loc, noneType, lists, branchLists).getResult();
+            lists = _opBuilder.create<mlir::db::ConcatOp>(loc, lists, branchLists).getResult();
         } else {
             lists = branchLists;
         }
@@ -9580,7 +9569,6 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
     const mlir::Value rhs = _part._exprMap.at(rhsExpr);
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
-    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
     const BinaryOperator op = binExpr->getOperator();
 
@@ -9640,23 +9628,23 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
                 const mlir::Value lhsColumn = lhsJoinsAList ? joinedListOperand(lhs) : lhs;
                 const mlir::Value rhsColumn = rhsJoinsAList ? joinedListOperand(rhs) : rhs;
 
-                _part._exprMap[expr] = _opBuilder.create<mlir::db::ConcatOp>(loc, noneType, lhsColumn, rhsColumn).getResult();
+                _part._exprMap[expr] = _opBuilder.create<mlir::db::ConcatOp>(loc, lhsColumn, rhsColumn).getResult();
             } else {
-                _part._exprMap[expr] = _opBuilder.create<mlir::db::AddOp>(loc, noneType, lhs, rhs).getResult();
+                _part._exprMap[expr] = _opBuilder.create<mlir::db::AddOp>(loc, lhs, rhs).getResult();
             }
         }
         break;
         case BinaryOperator::Concat:
-            _part._exprMap[expr] = _opBuilder.create<mlir::db::ConcatOp>(loc, noneType, lhs, rhs).getResult();
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::ConcatOp>(loc, lhs, rhs).getResult();
         break;
         case BinaryOperator::Sub:
-            _part._exprMap[expr] = _opBuilder.create<mlir::db::SubOp>(loc, noneType, lhs, rhs).getResult();
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::SubOp>(loc, lhs, rhs).getResult();
         break;
         case BinaryOperator::Mult:
-            _part._exprMap[expr] = _opBuilder.create<mlir::db::MulOp>(loc, noneType, lhs, rhs).getResult();
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::MulOp>(loc, lhs, rhs).getResult();
         break;
         case BinaryOperator::Div:
-            _part._exprMap[expr] = _opBuilder.create<mlir::db::DivOp>(loc, noneType, lhs, rhs).getResult();
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::DivOp>(loc, lhs, rhs).getResult();
         break;
         case BinaryOperator::GreaterThan:
             _part._exprMap[expr] = _opBuilder.create<mlir::db::GtOp>(loc, boolType, lhs, rhs).getResult();
@@ -9678,10 +9666,10 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
             }
         break;
         case BinaryOperator::Mod:
-            _part._exprMap[expr] = _opBuilder.create<mlir::db::ModOp>(loc, noneType, lhs, rhs).getResult();
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::ModOp>(loc, lhs, rhs).getResult();
         break;
         case BinaryOperator::Pow:
-            _part._exprMap[expr] = _opBuilder.create<mlir::db::PowOp>(loc, noneType, lhs, rhs).getResult();
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::PowOp>(loc, lhs, rhs).getResult();
         break;
         case BinaryOperator::In:
             _part._exprMap[expr] = _opBuilder.create<mlir::db::InOp>(loc, boolType, lhs, rhs).getResult();
@@ -10063,39 +10051,38 @@ mlir::Value DBProgramGenerator::emitComponent(const ValueComponent& component, m
 
 mlir::Value DBProgramGenerator::emitComponent(DateTimePart part, mlir::Value instant) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
-    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
     switch (part) {
         case DateTimePart::Year:
-            return _opBuilder.create<mlir::db::DateTimeYear>(loc, noneType, instant).getResult();
+            return _opBuilder.create<mlir::db::DateTimeYear>(loc, instant).getResult();
         break;
 
         case DateTimePart::Month:
-            return _opBuilder.create<mlir::db::DateTimeMonth>(loc, noneType, instant).getResult();
+            return _opBuilder.create<mlir::db::DateTimeMonth>(loc, instant).getResult();
         break;
 
         case DateTimePart::Day:
-            return _opBuilder.create<mlir::db::DateTimeDay>(loc, noneType, instant).getResult();
+            return _opBuilder.create<mlir::db::DateTimeDay>(loc, instant).getResult();
         break;
 
         case DateTimePart::Hour:
-            return _opBuilder.create<mlir::db::DateTimeHour>(loc, noneType, instant).getResult();
+            return _opBuilder.create<mlir::db::DateTimeHour>(loc, instant).getResult();
         break;
 
         case DateTimePart::Minute:
-            return _opBuilder.create<mlir::db::DateTimeMinute>(loc, noneType, instant).getResult();
+            return _opBuilder.create<mlir::db::DateTimeMinute>(loc, instant).getResult();
         break;
 
         case DateTimePart::Second:
-            return _opBuilder.create<mlir::db::DateTimeSecond>(loc, noneType, instant).getResult();
+            return _opBuilder.create<mlir::db::DateTimeSecond>(loc, instant).getResult();
         break;
 
         case DateTimePart::Millisecond:
-            return _opBuilder.create<mlir::db::DateTimeMillisecond>(loc, noneType, instant).getResult();
+            return _opBuilder.create<mlir::db::DateTimeMillisecond>(loc, instant).getResult();
         break;
 
         case DateTimePart::Microsecond:
-            return _opBuilder.create<mlir::db::DateTimeMicrosecond>(loc, noneType, instant).getResult();
+            return _opBuilder.create<mlir::db::DateTimeMicrosecond>(loc, instant).getResult();
         break;
     }
 
@@ -10104,39 +10091,38 @@ mlir::Value DBProgramGenerator::emitComponent(DateTimePart part, mlir::Value ins
 
 mlir::Value DBProgramGenerator::emitComponent(PointPart part, mlir::Value point) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
-    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
     switch (part) {
         case PointPart::X:
-            return _opBuilder.create<mlir::db::PointX>(loc, noneType, point).getResult();
+            return _opBuilder.create<mlir::db::PointX>(loc, point).getResult();
         break;
 
         case PointPart::Y:
-            return _opBuilder.create<mlir::db::PointY>(loc, noneType, point).getResult();
+            return _opBuilder.create<mlir::db::PointY>(loc, point).getResult();
         break;
 
         case PointPart::Z:
-            return _opBuilder.create<mlir::db::PointZ>(loc, noneType, point).getResult();
+            return _opBuilder.create<mlir::db::PointZ>(loc, point).getResult();
         break;
 
         case PointPart::Longitude:
-            return _opBuilder.create<mlir::db::PointLongitude>(loc, noneType, point).getResult();
+            return _opBuilder.create<mlir::db::PointLongitude>(loc, point).getResult();
         break;
 
         case PointPart::Latitude:
-            return _opBuilder.create<mlir::db::PointLatitude>(loc, noneType, point).getResult();
+            return _opBuilder.create<mlir::db::PointLatitude>(loc, point).getResult();
         break;
 
         case PointPart::Height:
-            return _opBuilder.create<mlir::db::PointHeight>(loc, noneType, point).getResult();
+            return _opBuilder.create<mlir::db::PointHeight>(loc, point).getResult();
         break;
 
         case PointPart::CRS:
-            return _opBuilder.create<mlir::db::PointCRSName>(loc, noneType, point).getResult();
+            return _opBuilder.create<mlir::db::PointCRSName>(loc, point).getResult();
         break;
 
         case PointPart::SRID:
-            return _opBuilder.create<mlir::db::PointSRID>(loc, noneType, point).getResult();
+            return _opBuilder.create<mlir::db::PointSRID>(loc, point).getResult();
         break;
     }
 
@@ -10145,79 +10131,78 @@ mlir::Value DBProgramGenerator::emitComponent(PointPart part, mlir::Value point)
 
 mlir::Value DBProgramGenerator::emitComponent(DurationPart part, mlir::Value duration) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
-    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
     switch (part) {
         case DurationPart::Years:
-            return _opBuilder.create<mlir::db::DurationYears>(loc, noneType, duration).getResult();
+            return _opBuilder.create<mlir::db::DurationYears>(loc, duration).getResult();
         break;
 
         case DurationPart::Quarters:
-            return _opBuilder.create<mlir::db::DurationQuarters>(loc, noneType, duration).getResult();
+            return _opBuilder.create<mlir::db::DurationQuarters>(loc, duration).getResult();
         break;
 
         case DurationPart::Months:
-            return _opBuilder.create<mlir::db::DurationMonths>(loc, noneType, duration).getResult();
+            return _opBuilder.create<mlir::db::DurationMonths>(loc, duration).getResult();
         break;
 
         case DurationPart::Weeks:
-            return _opBuilder.create<mlir::db::DurationWeeks>(loc, noneType, duration).getResult();
+            return _opBuilder.create<mlir::db::DurationWeeks>(loc, duration).getResult();
         break;
 
         case DurationPart::Days:
-            return _opBuilder.create<mlir::db::DurationDays>(loc, noneType, duration).getResult();
+            return _opBuilder.create<mlir::db::DurationDays>(loc, duration).getResult();
         break;
 
         case DurationPart::Hours:
-            return _opBuilder.create<mlir::db::DurationHours>(loc, noneType, duration).getResult();
+            return _opBuilder.create<mlir::db::DurationHours>(loc, duration).getResult();
         break;
 
         case DurationPart::Minutes:
-            return _opBuilder.create<mlir::db::DurationMinutes>(loc, noneType, duration).getResult();
+            return _opBuilder.create<mlir::db::DurationMinutes>(loc, duration).getResult();
         break;
 
         case DurationPart::Seconds:
-            return _opBuilder.create<mlir::db::DurationSeconds>(loc, noneType, duration).getResult();
+            return _opBuilder.create<mlir::db::DurationSeconds>(loc, duration).getResult();
         break;
 
         case DurationPart::Milliseconds:
-            return _opBuilder.create<mlir::db::DurationMilliseconds>(loc, noneType, duration).getResult();
+            return _opBuilder.create<mlir::db::DurationMilliseconds>(loc, duration).getResult();
         break;
 
         case DurationPart::Microseconds:
-            return _opBuilder.create<mlir::db::DurationMicroseconds>(loc, noneType, duration).getResult();
+            return _opBuilder.create<mlir::db::DurationMicroseconds>(loc, duration).getResult();
         break;
 
         case DurationPart::QuartersOfYear:
-            return _opBuilder.create<mlir::db::DurationQuartersOfYear>(loc, noneType, duration).getResult();
+            return _opBuilder.create<mlir::db::DurationQuartersOfYear>(loc, duration).getResult();
         break;
 
         case DurationPart::MonthsOfYear:
-            return _opBuilder.create<mlir::db::DurationMonthsOfYear>(loc, noneType, duration).getResult();
+            return _opBuilder.create<mlir::db::DurationMonthsOfYear>(loc, duration).getResult();
         break;
 
         case DurationPart::MonthsOfQuarter:
-            return _opBuilder.create<mlir::db::DurationMonthsOfQuarter>(loc, noneType, duration).getResult();
+            return _opBuilder.create<mlir::db::DurationMonthsOfQuarter>(loc, duration).getResult();
         break;
 
         case DurationPart::DaysOfWeek:
-            return _opBuilder.create<mlir::db::DurationDaysOfWeek>(loc, noneType, duration).getResult();
+            return _opBuilder.create<mlir::db::DurationDaysOfWeek>(loc, duration).getResult();
         break;
 
         case DurationPart::MinutesOfHour:
-            return _opBuilder.create<mlir::db::DurationMinutesOfHour>(loc, noneType, duration).getResult();
+            return _opBuilder.create<mlir::db::DurationMinutesOfHour>(loc, duration).getResult();
         break;
 
         case DurationPart::SecondsOfMinute:
-            return _opBuilder.create<mlir::db::DurationSecondsOfMinute>(loc, noneType, duration).getResult();
+            return _opBuilder.create<mlir::db::DurationSecondsOfMinute>(loc, duration).getResult();
         break;
 
         case DurationPart::MillisecondsOfSecond:
-            return _opBuilder.create<mlir::db::DurationMillisecondsOfSecond>(loc, noneType, duration).getResult();
+            return _opBuilder.create<mlir::db::DurationMillisecondsOfSecond>(loc, duration).getResult();
         break;
 
         case DurationPart::MicrosecondsOfSecond:
-            return _opBuilder.create<mlir::db::DurationMicrosecondsOfSecond>(loc, noneType, duration).getResult();
+            return _opBuilder.create<mlir::db::DurationMicrosecondsOfSecond>(loc, duration).getResult();
         break;
     }
 
@@ -10584,10 +10569,10 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
         translatePointWithinBBox(expr, args);
         return;
     } else if (funcName == "normalize") {
-        translateNormalFormFunction<mlir::db::Normalize>(expr, args, mlir::storage::StringType::get(_mlirCtxt));
+        translateNormalFormFunction<mlir::db::Normalize>(expr, args);
         return;
     } else if (funcName == "is_normalized") {
-        translateNormalFormFunction<mlir::db::IsNormalized>(expr, args, mlir::storage::BoolType::get(_mlirCtxt));
+        translateNormalFormFunction<mlir::db::IsNormalized>(expr, args);
         return;
     }
 
@@ -10627,7 +10612,7 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
         }
 
         const mlir::Value input = translateArg(args->front());
-        _part._exprMap[expr] = _opBuilder.create<mlir::db::ElementID>(loc, noneType, input).getResult();
+        _part._exprMap[expr] = _opBuilder.create<mlir::db::ElementID>(loc, input).getResult();
         return;
     }
 
@@ -10656,7 +10641,7 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
         }
 
         const mlir::Value input = translateArg(args->front());
-        _part._exprMap[expr] = unaryIt->second(_opBuilder, loc, noneType, input);
+        _part._exprMap[expr] = unaryIt->second(_opBuilder, loc, input);
         return;
     }
 
@@ -10837,7 +10822,7 @@ void DBProgramGenerator::translateReplace(const Expr* expr, const ExprChain* arg
 }
 
 template <typename NormalFormOp>
-void DBProgramGenerator::translateNormalFormFunction(const Expr* expr, const ExprChain* args, mlir::Type resultElement) {
+void DBProgramGenerator::translateNormalFormFunction(const Expr* expr, const ExprChain* args) {
     bioassert(args && args->size() == 2, "A normal form function takes a string and a normal form.");
 
     const ExprChain::ExprVector& argExprs = args->getExprs();
@@ -10850,10 +10835,7 @@ void DBProgramGenerator::translateNormalFormFunction(const Expr* expr, const Exp
     const NormalFormLiteral* formLiteral = static_cast<const NormalFormLiteral*>(formExpr->getLiteral());
     const mlir::storage::UnicodeNormalForm form = toStorageNormalForm(formLiteral->getForm());
 
-    NormalFormOp normalFormOp = _opBuilder.create<NormalFormOp>(_opBuilder.getUnknownLoc(),
-                                                                allocColumnType(resultElement),
-                                                                string,
-                                                                form);
+    NormalFormOp normalFormOp = _opBuilder.create<NormalFormOp>(_opBuilder.getUnknownLoc(), string, form);
 
     _part._exprMap[expr] = normalFormOp.getResult();
 }

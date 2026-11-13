@@ -239,8 +239,8 @@ func.func @main() {
   }, {
   ^bb0(%nIn: !nodes):
     %age = db.get_node_properties(%nIn, "age") : (!nodes) -> !ages
-    %q = db.div %ten, %age : (!db.column<i64>, !ages) -> !db.column<none>
-    db.case_yield %q : !db.column<none>
+    %q = db.div %ten, %age : (!db.column<i64>, !ages) -> !ages
+    db.case_yield %q : !ages
   } : (!nodes) -> !db.column<none>
   db.output(%r) : !db.column<none>
   return
@@ -305,12 +305,12 @@ func.func @main() {
       db.case_yield %null : !null
     }, {
     ^bb0(%tInner: !integers):
-      %q = db.div %ten, %tInner : (!integers, !integers) -> !db.column<none>
-      db.case_yield %q : !db.column<none>
-    } : (!integers) -> !db.column<none>
-    db.case_yield %inner : !db.column<none>
-  } : (!integers) -> !db.column<none>
-  db.output(%r) : !db.column<none>
+      %q = db.div %ten, %tInner : (!integers, !integers) -> !db.column<!storage.nullable<i64>>
+      db.case_yield %q : !db.column<!storage.nullable<i64>>
+    } : (!integers) -> !db.column<!storage.nullable<i64>>
+    db.case_yield %inner : !db.column<!storage.nullable<i64>>
+  } : (!integers) -> !db.column<!storage.nullable<i64>>
+  db.output(%r) : !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";

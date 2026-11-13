@@ -816,8 +816,8 @@ func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k = db.constant(10 : i64)
-  %sum = db.add %score, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<none>
-  db.output(%a, %sum) : !db.column<!storage.node_id>, !db.column<none>
+  %sum = db.add %score, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.nullable<i64>>
+  db.output(%a, %sum) : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -828,8 +828,8 @@ func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %score2 = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
-  %sum = db.add %score, %score2 : (!db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>) -> !db.column<none>
-  db.output(%a, %sum) : !db.column<!storage.node_id>, !db.column<none>
+  %sum = db.add %score, %score2 : (!db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>) -> !db.column<!storage.nullable<i64>>
+  db.output(%a, %sum) : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -862,8 +862,8 @@ func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k = db.constant(10 : i64)
-  %diff = db.sub %score, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<none>
-  db.output(%a, %diff) : !db.column<!storage.node_id>, !db.column<none>
+  %diff = db.sub %score, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.nullable<i64>>
+  db.output(%a, %diff) : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -874,8 +874,8 @@ func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %score2 = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
-  %diff = db.sub %score, %score2 : (!db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>) -> !db.column<none>
-  db.output(%a, %diff) : !db.column<!storage.node_id>, !db.column<none>
+  %diff = db.sub %score, %score2 : (!db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>) -> !db.column<!storage.nullable<i64>>
+  db.output(%a, %diff) : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -908,8 +908,8 @@ func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k = db.constant(10 : i64)
-  %prod = db.mul %score, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<none>
-  db.output(%a, %prod) : !db.column<!storage.node_id>, !db.column<none>
+  %prod = db.mul %score, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.nullable<i64>>
+  db.output(%a, %prod) : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -920,8 +920,8 @@ func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %score2 = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
-  %prod = db.mul %score, %score2 : (!db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>) -> !db.column<none>
-  db.output(%a, %prod) : !db.column<!storage.node_id>, !db.column<none>
+  %prod = db.mul %score, %score2 : (!db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>) -> !db.column<!storage.nullable<i64>>
+  db.output(%a, %prod) : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";

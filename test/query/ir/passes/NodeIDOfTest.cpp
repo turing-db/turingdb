@@ -92,11 +92,11 @@ func.func @main(%d: !nl.chunk<f64>) {
 const char* const foldableNodeIDOf = R"mlir(
 func.func @main(%r: !db.column<!storage.edge_id>, %x: !db.column<f64>) {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %id = db.element_id(%n) : (!db.column<!storage.node_id>) -> !db.column<none>
-  %edgeID = db.element_id(%r) : (!db.column<!storage.edge_id>) -> !db.column<none>
+  %id = db.element_id(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %edgeID = db.element_id(%r) : (!db.column<!storage.edge_id>) -> !db.column<!storage.nullable<i64>>
   %a = db.entity_id_of(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
-  %b = db.entity_id_of(%id) : (!db.column<none>) -> !db.column<!storage.node_id>
-  %c = db.entity_id_of(%edgeID) : (!db.column<none>) -> !db.column<!storage.node_id>
+  %b = db.entity_id_of(%id) : (!db.column<!storage.nullable<i64>>) -> !db.column<!storage.node_id>
+  %c = db.entity_id_of(%edgeID) : (!db.column<!storage.nullable<i64>>) -> !db.column<!storage.node_id>
   %d = db.entity_id_of(%x) : (!db.column<f64>) -> !db.column<!storage.node_id>
   db.output(%a, %b, %c, %d) : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
@@ -107,8 +107,8 @@ func.func @main(%r: !db.column<!storage.edge_id>, %x: !db.column<f64>) {
 const char* const filteredIDEquality = R"mlir(
 func.func @main(%x: !db.column<f64>) {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %id = db.element_id(%n) : (!db.column<!storage.node_id>) -> !db.column<none>
-  %eq = db.eq %x, %id : (!db.column<f64>, !db.column<none>) -> !db.column<!storage.bool>
+  %id = db.element_id(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %eq = db.eq %x, %id : (!db.column<f64>, !db.column<!storage.nullable<i64>>) -> !db.column<!storage.bool>
   %kept = db.filter(%eq, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%kept) : !db.column<!storage.node_id>
   return
@@ -119,8 +119,8 @@ func.func @main(%x: !db.column<f64>) {
 const char* const disjoinedIDEquality = R"mlir(
 func.func @main(%x: !db.column<!storage.any>) {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %id = db.element_id(%n) : (!db.column<!storage.node_id>) -> !db.column<none>
-  %eq = db.eq %id, %x : (!db.column<none>, !db.column<!storage.any>) -> !db.column<!storage.bool>
+  %id = db.element_id(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %eq = db.eq %id, %x : (!db.column<!storage.nullable<i64>>, !db.column<!storage.any>) -> !db.column<!storage.bool>
   %k = db.constant(5 : i64)
   %five = db.eq %n, %k : (!db.column<!storage.node_id>, !db.column<i64>) -> !db.column<!storage.bool>
   %or = db.or %eq, %five : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
@@ -134,8 +134,8 @@ func.func @main(%x: !db.column<!storage.any>) {
 const char* const projectedIDEquality = R"mlir(
 func.func @main(%x: !db.column<f64>) {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %id = db.element_id(%n) : (!db.column<!storage.node_id>) -> !db.column<none>
-  %eq = db.eq %id, %x : (!db.column<none>, !db.column<f64>) -> !db.column<!storage.bool>
+  %id = db.element_id(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %eq = db.eq %id, %x : (!db.column<!storage.nullable<i64>>, !db.column<f64>) -> !db.column<!storage.bool>
   db.output(%eq) : !db.column<!storage.bool>
   return
 }
@@ -145,8 +145,8 @@ func.func @main(%x: !db.column<f64>) {
 const char* const negatedIDEquality = R"mlir(
 func.func @main(%x: !db.column<f64>) {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %id = db.element_id(%n) : (!db.column<!storage.node_id>) -> !db.column<none>
-  %eq = db.eq %id, %x : (!db.column<none>, !db.column<f64>) -> !db.column<!storage.bool>
+  %id = db.element_id(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %eq = db.eq %id, %x : (!db.column<!storage.nullable<i64>>, !db.column<f64>) -> !db.column<!storage.bool>
   %not = db.not %eq : (!db.column<!storage.bool>) -> !db.column<!storage.bool>
   %kept = db.filter(%not, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%kept) : !db.column<!storage.node_id>
@@ -158,11 +158,11 @@ func.func @main(%x: !db.column<f64>) {
 const char* const literalIDEqualities = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %id = db.element_id(%n) : (!db.column<!storage.node_id>) -> !db.column<none>
+  %id = db.element_id(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %three = db.constant(3.000000e+00 : f64)
-  %e1 = db.eq %id, %three : (!db.column<none>, !db.column<f64>) -> !db.column<!storage.bool>
+  %e1 = db.eq %id, %three : (!db.column<!storage.nullable<i64>>, !db.column<f64>) -> !db.column<!storage.bool>
   %fraction = db.constant(2.500000e+00 : f64)
-  %e2 = db.eq %id, %fraction : (!db.column<none>, !db.column<f64>) -> !db.column<!storage.bool>
+  %e2 = db.eq %id, %fraction : (!db.column<!storage.nullable<i64>>, !db.column<f64>) -> !db.column<!storage.bool>
   %or = db.or %e1, %e2 : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
   %kept = db.filter(%or, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%kept) : !db.column<!storage.node_id>
@@ -174,9 +174,9 @@ func.func @main() {
 const char* const twoIDsEquality = R"mlir(
 func.func @main(%m: !db.column<!storage.node_id>) {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %nID = db.element_id(%n) : (!db.column<!storage.node_id>) -> !db.column<none>
-  %mID = db.element_id(%m) : (!db.column<!storage.node_id>) -> !db.column<none>
-  %eq = db.eq %nID, %mID : (!db.column<none>, !db.column<none>) -> !db.column<!storage.bool>
+  %nID = db.element_id(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %mID = db.element_id(%m) : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %eq = db.eq %nID, %mID : (!db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>) -> !db.column<!storage.bool>
   %kept = db.filter(%eq, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%kept) : !db.column<!storage.node_id>
   return
@@ -187,8 +187,8 @@ func.func @main(%m: !db.column<!storage.node_id>) {
 const char* const idEqualToAnEdge = R"mlir(
 func.func @main(%r: !db.column<!storage.edge_id>) {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %id = db.element_id(%n) : (!db.column<!storage.node_id>) -> !db.column<none>
-  %eq = db.eq %id, %r : (!db.column<none>, !db.column<!storage.edge_id>) -> !db.column<!storage.bool>
+  %id = db.element_id(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %eq = db.eq %id, %r : (!db.column<!storage.nullable<i64>>, !db.column<!storage.edge_id>) -> !db.column<!storage.bool>
   %kept = db.filter(%eq, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%kept) : !db.column<!storage.node_id>
   return
