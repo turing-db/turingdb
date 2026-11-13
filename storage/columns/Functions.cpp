@@ -193,12 +193,6 @@ std::optional<EdgeID> taggedEdge(const CellView cell) {
 
 }
 
-// A row holding no cell at all - an index past the end of a stored list, or a list the row
-// does not carry - answers what the cell holding a null answers.
-TaggedSizeFunction::ResultType TaggedSizeFunction::operator()(const std::optional<ArgType>& cell) const {
-    return cell.has_value() ? (*this)(*cell) : std::nullopt;
-}
-
 TaggedSizeFunction::ResultType TaggedSizeFunction::operator()(const ArgType cell) const {
     const CellTag tag = cell.getTag();
 
@@ -217,10 +211,6 @@ TaggedSizeFunction::ResultType TaggedSizeFunction::operator()(const ArgType cell
 
 StringSizeFunction::ResultType StringSizeFunction::operator()(const ArgType string) const {
     return characterCount(string);
-}
-
-TaggedIsEmptyFunction::ResultType TaggedIsEmptyFunction::operator()(const std::optional<ArgType>& cell) const {
-    return cell.has_value() ? (*this)(*cell) : std::nullopt;
 }
 
 TaggedIsEmptyFunction::ResultType TaggedIsEmptyFunction::operator()(const ArgType cell) const {
@@ -251,10 +241,6 @@ MapIsEmptyFunction::ResultType MapIsEmptyFunction::operator()(const ArgType map)
     return map.empty();
 }
 
-TaggedCharLengthFunction::ResultType TaggedCharLengthFunction::operator()(const std::optional<ArgType>& cell) const {
-    return cell.has_value() ? (*this)(*cell) : std::nullopt;
-}
-
 TaggedCharLengthFunction::ResultType TaggedCharLengthFunction::operator()(const ArgType cell) const {
     const CellTag tag = cell.getTag();
 
@@ -271,10 +257,6 @@ CharLengthFunction::ResultType CharLengthFunction::operator()(const ArgType stri
     return characterCount(string);
 }
 
-TaggedListHeadFunction::ResultType TaggedListHeadFunction::operator()(const std::optional<ArgType>& cell) const {
-    return cell.has_value() ? (*this)(*cell) : CellView::nullElement();
-}
-
 TaggedListHeadFunction::ResultType TaggedListHeadFunction::operator()(const ArgType cell) const {
     const std::optional<ListView> list = taggedList(cell);
     if (!list || list->empty()) {
@@ -284,10 +266,6 @@ TaggedListHeadFunction::ResultType TaggedListHeadFunction::operator()(const ArgT
     return list->front();
 }
 
-TaggedListLastFunction::ResultType TaggedListLastFunction::operator()(const std::optional<ArgType>& cell) const {
-    return cell.has_value() ? (*this)(*cell) : CellView::nullElement();
-}
-
 TaggedListLastFunction::ResultType TaggedListLastFunction::operator()(const ArgType cell) const {
     const std::optional<ListView> list = taggedList(cell);
     if (!list || list->empty()) {
@@ -295,10 +273,6 @@ TaggedListLastFunction::ResultType TaggedListLastFunction::operator()(const ArgT
     }
 
     return list->back();
-}
-
-TaggedListTailFunction::ResultType TaggedListTailFunction::operator()(const std::optional<ArgType>& cell) const {
-    return cell.has_value() ? (*this)(*cell) : std::nullopt;
 }
 
 TaggedListTailFunction::ResultType TaggedListTailFunction::operator()(const ArgType cell) const {
@@ -558,10 +532,6 @@ TaggedAbsFunction::ResultType TaggedAbsFunction::operator()(const ArgType cell) 
     });
 }
 
-TaggedAbsFunction::ResultType TaggedAbsFunction::operator()(const std::optional<ArgType>& cell) const {
-    return cell.has_value() ? (*this)(*cell) : CellView::nullElement();
-}
-
 TaggedNegateFunction::TaggedNegateFunction(QueryListBuffer* listBuffer)
     : _listBuffer(listBuffer)
 {
@@ -585,10 +555,6 @@ TaggedNegateFunction::ResultType TaggedNegateFunction::operator()(const ArgType 
     throwSignOperandType("minus", tag);
 }
 
-TaggedNegateFunction::ResultType TaggedNegateFunction::operator()(const std::optional<ArgType>& cell) const {
-    return cell.has_value() ? (*this)(*cell) : CellView::nullElement();
-}
-
 TaggedUnaryPlusFunction::ResultType TaggedUnaryPlusFunction::operator()(const ArgType cell) const {
     const CellTag tag = cell.getTag();
 
@@ -606,10 +572,6 @@ TaggedUnaryPlusFunction::ResultType TaggedUnaryPlusFunction::operator()(const Ar
     throwSignOperandType("plus", tag);
 }
 
-TaggedUnaryPlusFunction::ResultType TaggedUnaryPlusFunction::operator()(const std::optional<ArgType>& cell) const {
-    return cell.has_value() ? (*this)(*cell) : CellView::nullElement();
-}
-
 void db::throwSignOperandType(std::string_view operatorName, CellTag held) {
     throw TuringException(fmt::format("The operand of a unary {} must be an integer, a double or a duration, not '{}'",
                                       operatorName,
@@ -624,10 +586,6 @@ TaggedSignFunction::ResultType TaggedSignFunction::operator()(const ArgType cell
     return visitNumberCell<ResultType>(cell, "sign", []<typename Number>(const Number number) -> ResultType {
         return SignFunction<Number> {}(number);
     });
-}
-
-TaggedSignFunction::ResultType TaggedSignFunction::operator()(const std::optional<ArgType>& cell) const {
-    return cell.has_value() ? (*this)(*cell) : std::nullopt;
 }
 
 ToUpperFunction::ToUpperFunction(StringBuffer* stringBuffer)
@@ -772,10 +730,6 @@ TaggedReverseFunction::ResultType TaggedReverseFunction::operator()(const ArgTyp
     throwCellTypeError("reverse", "a string or a list", tag);
 }
 
-TaggedReverseFunction::ResultType TaggedReverseFunction::operator()(const std::optional<ArgType>& cell) const {
-    return cell.has_value() ? (*this)(*cell) : CellView::nullElement();
-}
-
 template <typename StringFunctor>
 ListConversionFunction<StringFunctor>::ListConversionFunction(QueryListBuffer* listBuffer, StringBuffer* stringBuffer)
     : _listBuffer(listBuffer),
@@ -817,11 +771,6 @@ typename TaggedListConversionFunction<StringFunctor>::ResultType TaggedListConve
     }
 
     throwCellTypeError(StringFunctor::LIST_NAME, "a list", tag);
-}
-
-template <typename StringFunctor>
-typename TaggedListConversionFunction<StringFunctor>::ResultType TaggedListConversionFunction<StringFunctor>::operator()(const std::optional<ArgType>& cell) {
-    return cell.has_value() ? (*this)(*cell) : std::nullopt;
 }
 
 template class db::ListConversionFunction<ToIntegerFunction>;
@@ -1126,10 +1075,6 @@ NodeID EdgeEndsFunction::getEndNode(EdgeID edge) const {
     return end;
 }
 
-TaggedStartNodeFunction::ResultType TaggedStartNodeFunction::operator()(const std::optional<ArgType>& cell) const {
-    return cell.has_value() ? (*this)(*cell) : NodeID {};
-}
-
 TaggedStartNodeFunction::ResultType TaggedStartNodeFunction::operator()(const ArgType cell) const {
     const std::optional<EdgeID> edge = taggedEdge(cell);
     if (!edge) {
@@ -1137,10 +1082,6 @@ TaggedStartNodeFunction::ResultType TaggedStartNodeFunction::operator()(const Ar
     }
 
     return getStartNode(*edge);
-}
-
-TaggedEndNodeFunction::ResultType TaggedEndNodeFunction::operator()(const std::optional<ArgType>& cell) const {
-    return cell.has_value() ? (*this)(*cell) : NodeID {};
 }
 
 TaggedEndNodeFunction::ResultType TaggedEndNodeFunction::operator()(const ArgType cell) const {
@@ -1208,15 +1149,6 @@ IDType TaggedEntityIDOfFunction<IDType>::operator()(const ArgType cell) const {
             return IDType {};
         break;
     }
-}
-
-template <TypedInternalID IDType>
-IDType TaggedEntityIDOfFunction<IDType>::operator()(const std::optional<ArgType>& cell) const {
-    if (!cell.has_value()) {
-        return IDType {};
-    }
-
-    return (*this)(*cell);
 }
 
 template class db::TaggedEntityIDOfFunction<NodeID>;

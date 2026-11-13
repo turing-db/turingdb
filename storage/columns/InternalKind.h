@@ -102,7 +102,6 @@ public:
         ListView,
         std::optional<ListView>,
         CellView,
-        std::optional<CellView>,
         MapView,
         std::optional<MapView>
     >;

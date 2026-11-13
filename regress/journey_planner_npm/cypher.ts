@@ -348,7 +348,7 @@ export const VALUE_CASES: Case[] = [
         query: "RETURN toInteger('x'), toFloat('x'), toBoolean('x'), toString(toInteger('x')), " +
             "datetime(toString(toInteger('x'))), duration(toInteger('x')), [[1], [2]][5], [1, 'two'][5]",
         types: ["INT64", "DOUBLE", "BOOL", "STRING", "DATE_TIME", "DURATION", "LIST_VIEW", "CELL_VIEW"],
-        encodings: Array(8).fill("OPTIONAL_CONSTANT"),
+        encodings: [...Array(7).fill("OPTIONAL_CONSTANT"), "CONSTANT"],
         rows: [[null, null, null, null, null, null, null, null]],
     },
     // 2^21 characters, over the 1 MiB a packet holds, in a column and inside a list

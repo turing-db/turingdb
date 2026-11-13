@@ -1,55 +1,24 @@
 #include <gtest/gtest.h>
 
-#include <optional>
-#include <span>
 #include <string_view>
 
 #include "CallV3Test.h"
 #include "IRTestRows.h"
-#include "CellView.h"
-#include "columns/ColumnConst.h"
-#include "columns/ColumnOptVector.h"
 
 using namespace db;
 using namespace turing::test;
-
-namespace {
-
-class CellColumnRowSink : public RowSink {
-public:
-    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
-        for (const Column* chunk : chunks) {
-            const ColumnKind::Code kind = chunk->getKind();
-            const bool optionalCells = kind == ColumnOptVector<CellView>::staticKind()
-                                    || kind == ColumnConst<std::optional<CellView>>::staticKind();
-            if (optionalCells) {
-                _optionalCellChunks++;
-            }
-        }
-
-        RowSink::appendChunks(chunks, offset, rowCount);
-    }
-
-    size_t getOptionalCellChunks() const { return _optionalCellChunks; }
-
-private:
-    size_t _optionalCellChunks {0};
-};
-
-}
 
 // A null any-typed value is a Null-tagged cell, the only null a column of tagged cells holds
 class AnyNullCellTest : public CallV3Test {
 protected:
     void expectRows(std::string_view query, const Rows& expected) {
-        CellColumnRowSink sink;
+        RowSink sink;
         runQuery(query, sink);
 
         Rows rows;
         sink.sortedRows(rows);
 
         EXPECT_EQ(rows, expected) << query;
-        EXPECT_EQ(sink.getOptionalCellChunks(), 0) << query;
     }
 };
 
@@ -88,12 +57,11 @@ TEST_F(AnyNullCellTest, keepsOneDistinctNull) {
 }
 
 TEST_F(AnyNullCellTest, ordersANullElementLast) {
-    CellColumnRowSink sink;
+    RowSink sink;
     runQuery("UNWIND [2, null, 1] AS x RETURN x ORDER BY x", sink);
 
     const Rows expected {{"1"}, {"2"}, {"null"}};
     EXPECT_EQ(sink.rows(), expected);
-    EXPECT_EQ(sink.getOptionalCellChunks(), 0);
 }
 
 TEST_F(AnyNullCellTest, collectsWithoutANullElement) {

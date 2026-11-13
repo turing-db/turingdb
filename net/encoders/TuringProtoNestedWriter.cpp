@@ -49,24 +49,6 @@ void NestedContainerWriter::writeCells(std::span<const db::CellView> elements) {
     writeCellValues(elements);
 }
 
-void NestedContainerWriter::writeOptionalCells(const db::ColumnOptVector<db::CellView>* column,
-                                               size_t offset,
-                                               size_t rowCount) {
-    const WireSize listByteSize = computeOptionalListByteSize(column, offset, rowCount);
-
-    _outBuf->copyFixedLenData(&listByteSize, sizeof(listByteSize));
-
-    const size_t endRow = offset + rowCount;
-    for (size_t row = offset; row < endRow; row++) {
-        if (!column->isValid(row)) {
-            writeNullCell();
-            continue;
-        }
-
-        writeCellValues(std::span<const db::CellView>(&column->getValue(row), 1));
-    }
-}
-
 void NestedContainerWriter::writeMapEntries(std::span<const db::MapEntryView> entries) {
     const WireSize mapByteSize = computeMapByteSize(entries);
 
@@ -116,14 +98,4 @@ void NestedContainerWriter::writeMapKey(std::string_view key) {
 
     _outBuf->copyFixedLenData(&keyLen, sizeof(keyLen));
     _outBuf->copyVarLenData(key.data(), keyLen);
-}
-
-void NestedContainerWriter::writeNullCell() {
-    constexpr size_t tagSize = sizeof(db::CellTag);
-    constexpr db::CellTag tag = db::TypeToCellTag<db::PropertyNull>::Tag;
-    const db::PropertyNull value {};
-
-    _outBuf->checkRemainingAndFlush(tagSize + sizeof(value));
-    _outBuf->copyFixedLenData(&tag, tagSize);
-    _outBuf->copyFixedLenData(&value, sizeof(value));
 }

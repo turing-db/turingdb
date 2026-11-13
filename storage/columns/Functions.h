@@ -130,7 +130,6 @@ public:
     using ArgType = CellView;
 
     ResultType operator()(ArgType cell) const;
-    ResultType operator()(const std::optional<ArgType>& cell) const;
 };
 
 class TaggedEndNodeFunction : public EdgeEndsFunction {
@@ -139,7 +138,6 @@ public:
     using ArgType = CellView;
 
     ResultType operator()(ArgType cell) const;
-    ResultType operator()(const std::optional<ArgType>& cell) const;
 };
 
 class StartNodeFunction : public EdgeEndsFunction {
@@ -199,7 +197,6 @@ public:
     static constexpr bool ReadsNullsItself = true;
 
     ResultType operator()(const ArgType cell) const;
-    ResultType operator()(const std::optional<ArgType>& cell) const;
 };
 
 template <TypedInternalID IDType, TypedInternalID EntityType>
@@ -501,10 +498,6 @@ public:
 
         throw TuringException(fmt::format("a datetime component reads an instant, not '{}'", queryTypeName(tag)));
     }
-
-    ResultType operator()(const std::optional<ArgType>& cell) const {
-        return cell.has_value() ? (*this)(*cell) : std::nullopt;
-    }
 };
 
 template <DateTimePart part>
@@ -536,10 +529,6 @@ public:
 
         // We throw here as we only know the type of the list element at runtime.
         throw TuringException(fmt::format("a duration component reads a duration, not '{}'", queryTypeName(tag)));
-    }
-
-    ResultType operator()(const std::optional<ArgType>& cell) const {
-        return cell.has_value() ? (*this)(*cell) : std::nullopt;
     }
 };
 
@@ -583,10 +572,6 @@ public:
         }
 
         throw TuringException(fmt::format("a point component reads a point, not '{}'", queryTypeName(tag)));
-    }
-
-    ResultType operator()(const std::optional<ArgType>& cell) const {
-        return cell.has_value() ? (*this)(*cell) : std::nullopt;
     }
 };
 
@@ -888,10 +873,6 @@ public:
         }
     }
 
-    ResultType operator()(const std::optional<ArgType>& cell) {
-        return cell.has_value() ? (*this)(*cell) : std::nullopt;
-    }
-
 private:
     template <typename Element>
     using Rule = typename ConversionFunctorFor<Conversion, Element>::Type;
@@ -964,7 +945,6 @@ public:
     TaggedListConversionFunction(QueryListBuffer* listBuffer, StringBuffer* stringBuffer);
 
     ResultType operator()(const ArgType cell);
-    ResultType operator()(const std::optional<ArgType>& cell);
 
 private:
     ListConversionFunction<StringFunctor> _convertList;
@@ -984,7 +964,6 @@ public:
     explicit TaggedAbsFunction(QueryListBuffer* listBuffer);
 
     ResultType operator()(const ArgType cell) const;
-    ResultType operator()(const std::optional<ArgType>& cell) const;
 
 private:
     QueryListBuffer* _listBuffer {nullptr};
@@ -1020,7 +999,6 @@ public:
     explicit TaggedNegateFunction(QueryListBuffer* listBuffer);
 
     ResultType operator()(const ArgType cell) const;
-    ResultType operator()(const std::optional<ArgType>& cell) const;
 
 private:
     QueryListBuffer* _listBuffer {nullptr};
@@ -1037,7 +1015,6 @@ public:
     using ResultType = CellView;
 
     ResultType operator()(const ArgType cell) const;
-    ResultType operator()(const std::optional<ArgType>& cell) const;
 };
 
 template <typename Value>
@@ -1098,7 +1075,6 @@ public:
     using ResultType = std::optional<types::Int64::Primitive>;
 
     ResultType operator()(const ArgType cell) const;
-    ResultType operator()(const std::optional<ArgType>& cell) const;
 };
 
 template <typename Number>
@@ -1200,10 +1176,6 @@ public:
             return FloatFunction<Kind, Number> {}(number);
         });
     }
-
-    ResultType operator()(const std::optional<ArgType>& cell) const {
-        return cell.has_value() ? (*this)(*cell) : std::nullopt;
-    }
 };
 
 template <typename TextFunctor>
@@ -1227,10 +1199,6 @@ public:
         const std::optional<types::String::Primitive> text = cellString(cell, TextFunctor::NAME);
 
         return text.has_value() ? ResultType {_functor(*text)} : std::nullopt;
-    }
-
-    ResultType operator()(const std::optional<ArgType>& cell) {
-        return cell.has_value() ? (*this)(*cell) : std::nullopt;
     }
 
 private:
@@ -1334,10 +1302,6 @@ public:
         }
 
         return _functor(cell.getAs<types::String::Primitive>());
-    }
-
-    ResultType operator()(const std::optional<ArgType>& cell) {
-        return cell.has_value() ? (*this)(*cell) : std::nullopt;
     }
 
 private:
@@ -1480,7 +1444,6 @@ public:
     TaggedReverseFunction(QueryListBuffer* listBuffer, StringBuffer* stringBuffer);
 
     ResultType operator()(const ArgType cell) const;
-    ResultType operator()(const std::optional<ArgType>& cell) const;
 
 private:
     QueryListBuffer* _listBuffer {nullptr};
@@ -1499,7 +1462,6 @@ public:
     using ResultType = std::optional<types::Int64::Primitive>;
 
     ResultType operator()(ArgType cell) const;
-    ResultType operator()(const std::optional<ArgType>& cell) const;
 };
 
 class TaggedListHeadFunction {
@@ -1508,7 +1470,6 @@ public:
     using ResultType = CellView;
 
     ResultType operator()(ArgType cell) const;
-    ResultType operator()(const std::optional<ArgType>& cell) const;
 };
 
 class TaggedListLastFunction {
@@ -1517,7 +1478,6 @@ public:
     using ResultType = CellView;
 
     ResultType operator()(ArgType cell) const;
-    ResultType operator()(const std::optional<ArgType>& cell) const;
 };
 
 class TaggedListTailFunction {
@@ -1526,7 +1486,6 @@ public:
     using ResultType = std::optional<types::List::Primitive>;
 
     ResultType operator()(ArgType cell) const;
-    ResultType operator()(const std::optional<ArgType>& cell) const;
 };
 
 class ListSizeFunction {
@@ -1559,7 +1518,6 @@ public:
     using ResultType = std::optional<types::Bool::Primitive>;
 
     ResultType operator()(ArgType cell) const;
-    ResultType operator()(const std::optional<ArgType>& cell) const;
 };
 
 class ListIsEmptyFunction {
@@ -1594,7 +1552,6 @@ public:
     using ResultType = std::optional<types::Int64::Primitive>;
 
     ResultType operator()(ArgType cell) const;
-    ResultType operator()(const std::optional<ArgType>& cell) const;
 };
 
 // char_length() counts the characters of a string alone, where size() reads a list too

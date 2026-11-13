@@ -142,7 +142,7 @@ TEST(TuringProtoNullableWindowTest, EncodesTheWindowOfNullableStringAndEmbedding
     expectWindowsEncodeLikeTheirRows<Embedding>({Embedding {first}, std::nullopt, Embedding {}, std::nullopt, Embedding {last}});
 }
 
-TEST(TuringProtoNullableWindowTest, EncodesTheWindowOfNullableListMapAndCellColumns) {
+TEST(TuringProtoNullableWindowTest, EncodesTheWindowOfNullableListAndMapColumns) {
     using MapEntry = MapBuffer<>::MapKeyValuePair;
     using namespace std::string_view_literals;
 
@@ -169,13 +169,6 @@ TEST(TuringProtoNullableWindowTest, EncodesTheWindowOfNullableListMapAndCellColu
     const MapView lastMap = localMemory.mapBuffer().insert(lastEntries);
 
     expectWindowsEncodeLikeTheirRows<MapView>({std::nullopt, firstMap, std::nullopt, lastMap, firstMap});
-
-    std::vector<CellView> cells;
-    for (const CellView cell : firstList) {
-        cells.push_back(cell);
-    }
-
-    expectWindowsEncodeLikeTheirRows<CellView>({cells[0], std::nullopt, cells[1], std::nullopt, cells[0]});
 }
 
 TEST(TuringProtoNullableWindowTest, RejectsAnEmptyNullableConstant) {
