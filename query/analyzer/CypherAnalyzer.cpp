@@ -1186,8 +1186,13 @@ void CypherAnalyzer::publishUnionBranchReturn(Projection* branchProjection, cons
         const ListShape columnShape = ListShape::selected(columnType, decl->getListShape());
         const ListShape itemListShape = ListShape::selected(itemType->_type, itemType->_shape);
 
+        EvaluatedTypeSet columnHeldTypes;
+        columnHeldTypes.addBranch(decl->getHeldTypes());
+        columnHeldTypes.addBranch(itemType->getHeldTypes());
+
         column._shape = selected == EvaluatedType::List ? ListShape::unified(columnShape, itemListShape) : ListShape();
         column._commonType = commonType(decl->getCommonType(), itemCommonType);
+        column._heldTypes = columnHeldTypes;
         decl->setExprType(column);
 
         branchProjection->addPublishedDecl(decl);

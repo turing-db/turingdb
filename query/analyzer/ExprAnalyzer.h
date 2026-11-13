@@ -189,6 +189,9 @@ private:
     // Rejects a CASE subject that is not a value
     void requireCaseSubject(const Expr* subject) const;
 
+    // Rejects a @param value none of whose held types reads as a list
+    void requireAList(const Expr* value, std::string_view reading, const Expr* at) const;
+
     // One WHEN value of @param branch, read as a predicate when the CASE has no subject
     // and as something to compare that subject against when it has one
     void analyzeCaseTest(const CaseExpr::Branch& branch, const Expr* subject, CaseExpr::Test& test);

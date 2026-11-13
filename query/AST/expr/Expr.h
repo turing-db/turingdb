@@ -65,6 +65,8 @@ public:
     // takes: the type itself, or for Any the one a selection's branches share, Any if none
     EvaluatedType getCommonType() const { return getType() == EvaluatedType::Any ? _exprType._commonType : getType(); }
 
+    EvaluatedTypeSet getHeldTypes() const { return _exprType.getHeldTypes(); }
+
     const VarDecl* getExprVarDecl() const { return _exprVarDecl; }
 
     std::string_view getName() const {
@@ -78,6 +80,8 @@ public:
     void setExprType(const ExprType& type) { _exprType = type; }
 
     void setCommonType(EvaluatedType type) { _exprType._commonType = type; }
+
+    void setHeldTypes(const EvaluatedTypeSet& types) { _exprType._heldTypes = types; }
 
     void setExprVarDecl(const VarDecl* decl) { _exprVarDecl = decl; }
 

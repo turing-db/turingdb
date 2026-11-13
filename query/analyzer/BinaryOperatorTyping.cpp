@@ -9,6 +9,8 @@
 
 #include <spdlog/fmt/fmt.h>
 
+#include "decl/EvaluatedTypeSet.h"
+
 using namespace db;
 
 namespace {
@@ -417,9 +419,41 @@ RuleResult ruleType(BinaryOperator op, const ExprType& lhs, const ExprType& rhs)
     return result;
 }
 
+// Valid where the operator takes some pair of the types the operands hold: the rule reads
+// an Any as any type, though CASE WHEN b THEN 1 ELSE 2.0 END is never a list
+TypingReason heldTypesReason(BinaryOperator op, const ExprType& lhs, const ExprType& rhs) {
+    const EvaluatedTypeSet lhsTypes = lhs.getHeldTypes();
+    const EvaluatedTypeSet rhsTypes = rhs.getHeldTypes();
+
+    TypingReason firstReason = TypingReason::Valid;
+
+    const bool takesAPair = lhsTypes.holdsATypeThat([op, &lhs, &rhs, &rhsTypes, &firstReason](EvaluatedType a) {
+        const ExprType left = a == lhs._type ? lhs : ExprType {a};
+
+        return rhsTypes.holdsATypeThat([op, &left, &rhs, &firstReason](EvaluatedType b) {
+            const ExprType right = b == rhs._type ? rhs : ExprType {b};
+            const RuleResult result = ruleType(op, left, right);
+
+            if (firstReason == TypingReason::Valid) {
+                firstReason = result._reason;
+            }
+
+            return result._type != EvaluatedType::Invalid;
+        });
+    });
+
+    return takesAPair ? TypingReason::Valid : firstReason;
+}
+
 void writeError(TypingReason reason, const ExprType& lhs, const ExprType& rhs, BinaryTyping& out) {
-    const std::string_view left = EvaluatedTypeName::value(lhs._type);
-    const std::string_view right = EvaluatedTypeName::value(rhs._type);
+    const EvaluatedTypeSet lhsTypes = lhs.getHeldTypes();
+    const EvaluatedTypeSet rhsTypes = rhs.getHeldTypes();
+
+    std::string left;
+    lhsTypes.writeName(left);
+
+    std::string right;
+    rhsTypes.writeName(right);
 
     switch (reason) {
         case TypingReason::Valid:
@@ -481,9 +515,10 @@ void writeListShape(const ExprType& lhs, const ExprType& rhs, BinaryTyping& out)
 
 void BinaryOperatorTyping::type(BinaryOperator op, const ExprType& lhs, const ExprType& rhs, BinaryTyping& out) {
     const RuleResult rule = ruleType(op, lhs, rhs);
+    const TypingReason reason = rule._type == EvaluatedType::Invalid ? rule._reason : heldTypesReason(op, lhs, rhs);
 
-    if (rule._type == EvaluatedType::Invalid) {
-        writeError(rule._reason, lhs, rhs, out);
+    if (reason != TypingReason::Valid) {
+        writeError(reason, lhs, rhs, out);
         return;
     }
 

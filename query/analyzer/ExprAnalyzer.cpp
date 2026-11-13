@@ -36,6 +36,7 @@
 #include "stmt/ReturnStmt.h"
 #include "decl/DeclContext.h"
 #include "decl/EvaluatedType.h"
+#include "decl/EvaluatedTypeSet.h"
 #include "decl/ParameterDecl.h"
 #include "decl/VarDecl.h"
 
@@ -134,6 +135,14 @@ EvaluatedType accumulatedType(EvaluatedType accumulator, EvaluatedType value) {
 
 ListShape selectedListShape(const Expr* value) {
     return ListShape::selected(value->getType(), value->getListShape());
+}
+
+// A tagged cell names no type until a row is in hand, and a null iterates into a null
+// rather than into a type error - as an UNWIND of one emits no row
+bool readsAsAList(EvaluatedType type) {
+    return type == EvaluatedType::List
+        || type == EvaluatedType::Any
+        || type == EvaluatedType::Null;
 }
 
 // The shape of the list these elements make, joined from the one-element list each makes:
@@ -1468,11 +1477,14 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, const Func
 
         if (unifiesArguments) {
             EvaluatedType argumentsCommonType = EvaluatedType::Null;
+            EvaluatedTypeSet argumentsHeldTypes;
             for (const Expr* arg : providedArgs) {
                 argumentsCommonType = commonType(argumentsCommonType, arg->getCommonType());
+                argumentsHeldTypes.addBranch(arg->getHeldTypes());
             }
 
             expr->setCommonType(argumentsCommonType);
+            expr->setHeldTypes(argumentsHeldTypes);
         }
 
         if (signature->isAggregate()) {
@@ -1660,6 +1672,7 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
 
     EvaluatedType result = EvaluatedType::Null;
     EvaluatedType resultCommonType = EvaluatedType::Null;
+    EvaluatedTypeSet resultHeldTypes;
     ListShape resultShape;
 
     for (CaseExpr::Branch& branch : expr->getBranches()) {
@@ -1675,6 +1688,7 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
 
         result = unifyCaseBranch(result, branch._then);
         resultCommonType = commonType(resultCommonType, branch._then->getCommonType());
+        resultHeldTypes.addBranch(branch._then->getHeldTypes());
         resultShape = ListShape::unified(resultShape, selectedListShape(branch._then));
 
         contaminate(branch._then);
@@ -1685,12 +1699,14 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
         analyzeExpr(elseExpr);
         result = unifyCaseBranch(result, elseExpr);
         resultCommonType = commonType(resultCommonType, elseExpr->getCommonType());
+        resultHeldTypes.addBranch(elseExpr->getHeldTypes());
         resultShape = ListShape::unified(resultShape, selectedListShape(elseExpr));
         contaminate(elseExpr);
     }
 
     expr->setType(result);
     expr->setCommonType(resultCommonType);
+    expr->setHeldTypes(resultHeldTypes);
 
     if (result == EvaluatedType::List) {
         expr->setListShape(resultShape);
@@ -1788,21 +1804,26 @@ void ExprAnalyzer::requireCaseSubject(const Expr* subject) const {
                subject);
 }
 
+void ExprAnalyzer::requireAList(const Expr* value, std::string_view reading, const Expr* at) const {
+    const EvaluatedTypeSet valueTypes = value->getHeldTypes();
+
+    if (valueTypes.holdsATypeThat(readsAsAList)) {
+        return;
+    }
+
+    std::string valueTypesName;
+    valueTypes.writeName(valueTypesName);
+
+    throwError(fmt::format("{} a list, not '{}'", reading, valueTypesName), at);
+}
+
 void ExprAnalyzer::analyzeListSliceExpr(ListSliceExpr* expr) {
     Expr* const base = expr->getBase();
     analyzeExpr(base);
 
     const EvaluatedType baseType = base->getType();
 
-    // A tagged cell names no type until a row is in hand, and a null slices into a null
-    const bool slicesAList = baseType == EvaluatedType::List
-                          || baseType == EvaluatedType::Any
-                          || baseType == EvaluatedType::Null;
-
-    if (!slicesAList) {
-        throwError(fmt::format("A slice reads a list, not '{}'", EvaluatedTypeName::value(baseType)),
-                   expr);
-    }
+    requireAList(base, "A slice reads", expr);
 
     bool dynamic = base->isDynamic();
     bool aggregate = base->isAggregate();
@@ -1858,17 +1879,7 @@ void ExprAnalyzer::analyzeListComprehensionExpr(ListComprehensionExpr* expr) {
 
     const EvaluatedType sourceType = source->getType();
 
-    // A tagged cell names no type until a row is in hand, and a null iterates into a null
-    // rather than into a type error - as an UNWIND of one emits no row
-    const bool iteratesAList = sourceType == EvaluatedType::List
-                            || sourceType == EvaluatedType::Any
-                            || sourceType == EvaluatedType::Null;
-
-    if (!iteratesAList) {
-        throwError(fmt::format("A list comprehension iterates a list, not '{}'",
-                               EvaluatedTypeName::value(sourceType)),
-                   expr);
-    }
+    requireAList(source, "A list comprehension iterates", expr);
 
     const std::string_view itemName = expr->getSymbol()->getName();
 
@@ -1972,14 +1983,7 @@ void ExprAnalyzer::openFoldScope(FoldExpr* expr, std::string_view foldName) {
 
     const EvaluatedType sourceType = source->getType();
 
-    const bool iteratesAList = sourceType == EvaluatedType::List
-                            || sourceType == EvaluatedType::Any
-                            || sourceType == EvaluatedType::Null;
-
-    if (!iteratesAList) {
-        throwError(fmt::format("{} iterates a list, not '{}'", foldName, EvaluatedTypeName::value(sourceType)),
-                   expr);
-    }
+    requireAList(source, fmt::format("{} iterates", foldName), expr);
 
     const std::string_view accumulatorName = expr->getAccumulatorSymbol()->getName();
     const std::string_view itemName = expr->getItemSymbol()->getName();
@@ -2018,15 +2022,22 @@ void ExprAnalyzer::openFoldScope(FoldExpr* expr, std::string_view foldName) {
 
         const ExprType& accumulator = accumulatorDecl->getExprType();
         const EvaluatedType accumulatorCommonType = accumulatorDecl->getCommonType();
+        const EvaluatedTypeSet accumulatorHeldTypes = accumulator.getHeldTypes();
         const ListShape& accumulatorShape = accumulatorDecl->getListShape();
+
+        EvaluatedTypeSet widenedHeldTypes;
+        widenedHeldTypes.addBranch(accumulatorHeldTypes);
+        widenedHeldTypes.addBranch(expression->getHeldTypes());
 
         ExprType widened;
         widened._type = accumulatedType(accumulator._type, expression->getType());
         widened._commonType = commonType(accumulatorCommonType, expression->getCommonType());
+        widened._heldTypes = widenedHeldTypes;
         widened._shape = ListShape::unified(accumulatorShape, expression->getListShape());
 
         const bool settled = widened._type == accumulator._type
                           && widened._commonType == accumulatorCommonType
+                          && widened.getHeldTypes() == accumulatorHeldTypes
                           && widened._shape.getLeafType() == accumulatorShape.getLeafType()
                           && widened._shape.getDepth() == accumulatorShape.getDepth();
 
