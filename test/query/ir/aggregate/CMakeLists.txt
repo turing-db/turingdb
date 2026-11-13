@@ -125,6 +125,8 @@ target_include_directories(test_query_ir_min_max_over_lists PRIVATE ${IR_TEST_DI
 add_turing_test(test_query_ir_null_aggregate NullAggregateTest.cpp)
 target_include_directories(test_query_ir_null_aggregate PRIVATE ${IR_TEST_DIR})
 
+add_ir_tests(test_query_ir_grouped_distinct_container_count GroupedDistinctContainerCountTest.cpp)
+
 # A node or an edge indexed out of a collected list, run end to end against simpledb.
 add_turing_test(test_query_ir_collected_entity_index CollectedEntityIndexTest.cpp)
 target_sources(test_query_ir_collected_entity_index PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
