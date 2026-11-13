@@ -7,6 +7,7 @@
 #include <type_traits>
 #include <variant>
 
+#include "OptionalTraits.h"
 #include "metadata/PropertyType.h"
 
 namespace db {
@@ -22,26 +23,10 @@ concept Stringy = (std::same_as<T, std::string_view> && std::same_as<std::string
 
 struct TypeUtils {
     template <typename T>
-    struct is_optional : std::false_type {};
-
-    template <typename U>
-    struct is_optional<std::optional<U>> : std::true_type {};
+    static constexpr bool is_optional_v = OptionalTraits::is_optional_v<T>;
 
     template <typename T>
-    static constexpr bool is_optional_v = is_optional<std::remove_cvref_t<T>>::value;
-
-    template <typename T>
-    struct unwrap_optional {
-        using underlying_type = T;
-    };
-
-    template <typename U>
-    struct unwrap_optional<std::optional<U>> {
-        using underlying_type = U;
-    };
-
-    template <typename T>
-    using unwrap_optional_t = typename unwrap_optional<std::remove_cvref_t<T>>::underlying_type;
+    using unwrap_optional_t = OptionalTraits::unwrap_optional_t<T>;
 
     template <typename T>
     using wrap_optional_t = std::conditional_t<is_optional_v<T>, T, std::optional<T>>;
