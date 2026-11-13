@@ -6,6 +6,7 @@
 
 #include "columns/ColumnAppend.h"
 #include "columns/ColumnVector.h"
+#include "columns/ColumnOptVector.h"
 #include "metadata/PropertyType.h"
 
 using namespace db;
@@ -47,13 +48,14 @@ TEST(ColumnAppendTest, appendsAWindowOfPlainBooleans) {
 }
 
 TEST(ColumnAppendTest, appendsAWindowOfNullableBooleans) {
-    const ColumnVector<std::optional<CustomBool>> chunk {std::nullopt, CustomBool {true}, CustomBool {false}};
+    const ColumnOptVector<CustomBool> chunk {std::nullopt, CustomBool {true}, CustomBool {false}};
 
-    ColumnVector<std::optional<CustomBool>> buffered;
+    ColumnOptVector<CustomBool> buffered;
     appendColumnRows(&chunk, &buffered, 0, 2);
 
-    const std::vector<std::optional<CustomBool>> expected {std::nullopt, CustomBool {true}};
-    EXPECT_EQ(buffered.getRaw(), expected);
+    ASSERT_EQ(buffered.size(), 2);
+    EXPECT_FALSE(buffered.isValid(0));
+    EXPECT_EQ(buffered.get(1), std::optional<CustomBool> {CustomBool {true}});
 }
 
 TEST(ColumnAppendTest, appendsAWindowOfStrings) {

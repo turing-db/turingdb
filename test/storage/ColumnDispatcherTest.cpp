@@ -59,9 +59,8 @@ TEST(ColumnDispatcherTest, copyOneFromOther) {
     }
 
     dispatchColumnVector(colB.get(), [&](auto* col) {
-        auto* castedA = dynamic_cast<decltype(col)>(colA.get());
-        auto& rawB = col->getRaw();
-        rawB.insert(col->begin(), castedA->begin(), castedA->end());
+        auto* castedA = static_cast<decltype(col)>(colA.get());
+        col->appendRows(*castedA, 0, castedA->size());
     });
 
     ASSERT_EQ(colA->size(), colB->size());
