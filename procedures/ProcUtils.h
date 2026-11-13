@@ -66,13 +66,13 @@ public:
                 return static_cast<const ColumnConst<T>*>(argument)->getRaw();
             break;
             case ColumnConst<std::optional<T>>::staticKind():
-                return static_cast<const ColumnConst<std::optional<T>>*>(argument)->getRaw();
+                return static_cast<const ColumnConst<std::optional<T>>*>(argument)->get(0);
             break;
             case ColumnVector<T>::staticKind():
                 return static_cast<const ColumnVector<T>*>(argument)->getRaw()[row];
             break;
             case ColumnOptVector<T>::staticKind():
-                return static_cast<const ColumnOptVector<T>*>(argument)->getRaw()[row];
+                return static_cast<const ColumnOptVector<T>*>(argument)->get(row);
             break;
             case ColumnConst<PropertyNull>::staticKind():
                 return std::nullopt;

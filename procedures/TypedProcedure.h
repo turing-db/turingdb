@@ -1,7 +1,6 @@
 #pragma once
 
 #include <stddef.h>
-#include <optional>
 #include <string_view>
 #include <tuple>
 #include <type_traits>
@@ -11,6 +10,7 @@
 #include "Procedure.h"
 #include "ProcedureData.h"
 #include "ProcedureTypeVector.h"
+#include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 
 namespace db {
@@ -25,7 +25,7 @@ struct ProcedureReturnKind<ColumnVector<T>> {
 };
 
 template <typename T>
-struct ProcedureReturnKind<ColumnVector<std::optional<T>>> {
+struct ProcedureReturnKind<ColumnOptVector<T>> {
     static_assert(!TypedInternalID<T>, "A node or edge column holds its own null as an invalid ID");
 
     static constexpr ProcedureType type = ProcedureTypeOf<T>::value;
