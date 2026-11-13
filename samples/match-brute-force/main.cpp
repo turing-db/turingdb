@@ -1,7 +1,6 @@
 #include <stdlib.h>
 #include <algorithm>
 #include <map>
-#include <optional>
 #include <ranges>
 #include <span>
 #include <string>
@@ -144,15 +143,6 @@ void valueText(std::string& text, double value) {
     text = fmt::format("{}", value);
 }
 
-template <typename T>
-void valueText(std::string& text, const std::optional<T>& value) {
-    if (value) {
-        valueText(text, *value);
-    } else {
-        text = "null";
-    }
-}
-
 class TextRowSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override;
@@ -164,6 +154,8 @@ private:
 
     template <typename T>
     static bool readCell(std::string& text, const Column* chunk, size_t rowIndex);
+    template <typename T>
+    static bool readNullableCell(std::string& text, const Column* chunk, size_t rowIndex);
     static void cellText(std::string& text, const Column* chunk, size_t rowIndex);
 };
 
@@ -187,18 +179,34 @@ bool TextRowSink::readCell(std::string& text, const Column* chunk, size_t rowInd
     return true;
 }
 
+template <typename T>
+bool TextRowSink::readNullableCell(std::string& text, const Column* chunk, size_t rowIndex) {
+    if (chunk->getKind() != ColumnOptVector<T>::staticKind()) {
+        return false;
+    }
+
+    const ColumnOptVector<T>* column = static_cast<const ColumnOptVector<T>*>(chunk);
+    if (column->isValid(rowIndex)) {
+        valueText(text, column->getValue(rowIndex));
+    } else {
+        text = "null";
+    }
+
+    return true;
+}
+
 void TextRowSink::cellText(std::string& text, const Column* chunk, size_t rowIndex) {
     const bool read = readCell<NodeID>(text, chunk, rowIndex)
                    || readCell<std::string_view>(text, chunk, rowIndex)
-                   || readCell<std::optional<std::string_view>>(text, chunk, rowIndex)
+                   || readNullableCell<std::string_view>(text, chunk, rowIndex)
                    || readCell<int64_t>(text, chunk, rowIndex)
-                   || readCell<std::optional<int64_t>>(text, chunk, rowIndex)
+                   || readNullableCell<int64_t>(text, chunk, rowIndex)
                    || readCell<CustomBool>(text, chunk, rowIndex)
-                   || readCell<std::optional<CustomBool>>(text, chunk, rowIndex)
+                   || readNullableCell<CustomBool>(text, chunk, rowIndex)
                    || readCell<double>(text, chunk, rowIndex)
-                   || readCell<std::optional<double>>(text, chunk, rowIndex)
+                   || readNullableCell<double>(text, chunk, rowIndex)
                    || readCell<uint64_t>(text, chunk, rowIndex)
-                   || readCell<std::optional<uint64_t>>(text, chunk, rowIndex);
+                   || readNullableCell<uint64_t>(text, chunk, rowIndex);
 
     if (!read) {
         throw TuringException("The sample cannot read a column of type " + std::string(chunk->getTypeName()));
