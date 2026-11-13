@@ -122,10 +122,7 @@ Stop the loop at 4 hits, or at the deadline.
   That string in a query error is an internal logic error, not a user-facing rejection,
   and always a hit.
 - **A result the client cannot print.** The rows are right and the user still never sees
-  them. `MATCH (n) RETURN n:Person` returns 18 rows and the shell answers
-  `EXEC_ERROR: Unsupported unary operation on column of type db::ColumnMask` with no rows,
-  because `writeColumnCell` in `tools/turingdb/TuringShell.cpp` excludes ColumnMask. Worth
-  hunting and worth reporting, but a finding rather than a hit — see above.
+  them. Worth hunting and worth reporting, but a finding rather than a hit — see above.
 
 ### Known limitations — not bugs
 

@@ -4,7 +4,6 @@
 #include "columns/ColumnSet.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
-#include "columns/ColumnMask.h"
 
 using namespace db;
 

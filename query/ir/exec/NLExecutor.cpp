@@ -784,24 +784,6 @@ void functionVectorKernel(NLExecutionContext* context, Column* result, const Col
     bioassert(false, "Function operand has an unexpected column type.");
 }
 
-// A boolean chunk with no null is a mask, whose rows are the booleans the functor reads
-template <typename Functor>
-void functionMaskKernel(NLExecutionContext* context, Column* result, const Column* input, NLStepBuffers* memory) {
-    using Res = typename Functor::ResultType;
-
-    const std::vector<ColumnMask::Bool_t>& inputRaw = static_cast<const ColumnMask*>(input)->getRaw();
-    const size_t size = inputRaw.size();
-
-    ColumnVector<Res>* output = static_cast<ColumnVector<Res>*>(result);
-    output->resize(size);
-    auto& outputRaw = output->getRaw();
-
-    Functor functor = makeFunctor<Functor>(context, memory);
-    for (size_t row = 0; row < size; row++) {
-        outputRaw[row] = functor(types::Bool::Primitive {static_cast<bool>(inputRaw[row])});
-    }
-}
-
 // The nullable-input kernel of a function that reads its own nulls: the absent value goes
 // to the functor as it is, so the result rides the plain column its answers always fill.
 template <typename Functor>
@@ -955,18 +937,6 @@ bool columnHoldsElement(const Column* column) {
            || dynamic_cast<const ColumnVector<std::optional<Element>>*>(column)
            || dynamic_cast<const ColumnConst<Element>*>(column)
            || dynamic_cast<const ColumnConst<std::optional<Element>>*>(column);
-}
-
-// A conversion of a boolean reads a mask too, the chunk a boolean with no null is
-template <typename Element>
-bool columnHoldsConvertible(const Column* column) {
-    if constexpr (std::is_same_v<Element, types::Bool::Primitive>) {
-        if (column->getContainerKind() == ContainerKind::code<ColumnMask>()) {
-            return true;
-        }
-    }
-
-    return columnHoldsElement<Element>(column);
 }
 
 template <ColumnOperator Op>
@@ -1364,7 +1334,6 @@ NLBinaryFn selectEntityListIndexOf(const Column* lhs, const Column* rhs, LocalMe
 
     EntityListIndexSelector<IDType> selector {._memory = memory};
     ColumnDoubleDispatcher<typename Pairs::Allowed,
-                           typename Pairs::AllowedMixed,
                            EntityListIndexSelector<IDType>,
                            typename Pairs::Excluded>::dispatch(lhs, rhs, selector);
 
@@ -1425,12 +1394,12 @@ void resolveCSVFieldIndices(const NLLoadCSVLoopData& loopData,
 }
 
 // Gather rows of a carried column by applying indices
-template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
+template <typename ElementType>
 void gatherColumn(const Column* input,
                   const ColumnVector<size_t>* indices,
                   Column* output) {
-    const ColumnType* typedInput = static_cast<const ColumnType*>(input);
-    ColumnType* typedOutput = static_cast<ColumnType*>(output);
+    const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
+    ColumnVector<ElementType>* typedOutput = static_cast<ColumnVector<ElementType>*>(output);
 
     typedOutput->resize(indices->size());
     const auto& indicesRaw = indices->getRaw();
@@ -1445,16 +1414,15 @@ void gatherColumn(const Column* input,
 // Fill a chunk with a run of null rows. Every element type reads its own
 // default-constructed value as null: an ID defaults to the invalid ID that ID::isValid
 // rejects, which is how an entity an OPTIONAL MATCH did not match is spelled.
-template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
+template <typename ElementType>
 void fillNullColumn(Column* output, size_t rowCount) {
-    ColumnType* typedOutput = static_cast<ColumnType*>(output);
+    ColumnVector<ElementType>* typedOutput = static_cast<ColumnVector<ElementType>*>(output);
 
     typedOutput->getRaw().assign(rowCount, ElementType {});
 }
 
-template <typename BooleanColumn>
 void collectBooleanSurvivors(const Column* mask, ColumnVector<size_t>* indices) {
-    const std::vector<typename BooleanColumn::ValueType>& maskRaw = static_cast<const BooleanColumn*>(mask)->getRaw();
+    const std::vector<CustomBool>& maskRaw = static_cast<const ColumnMask*>(mask)->getRaw();
     std::vector<size_t>& survivingRaw = indices->getRaw();
 
     for (size_t row = 0; row < maskRaw.size(); row++) {
@@ -1589,16 +1557,13 @@ bool isMaskConstant(const Column* mask) {
     return mask->getKind() == ColumnConst<CustomBool>::staticKind();
 }
 
-template <typename BooleanColumn>
 void applyNotOnBooleans(Column* result, const Column* operand) {
-    using Boolean = typename BooleanColumn::ValueType;
-
-    const std::vector<Boolean>& operandRaw = static_cast<const BooleanColumn*>(operand)->getRaw();
-    std::vector<ColumnMask::Bool_t>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
+    const std::vector<CustomBool>& operandRaw = static_cast<const ColumnMask*>(operand)->getRaw();
+    std::vector<CustomBool>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
 
     resultRaw.resize(operandRaw.size());
-    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](Boolean value) {
-        return ColumnMask::Bool_t {!value};
+    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](CustomBool value) {
+        return CustomBool {!value};
     });
 }
 
@@ -1669,10 +1634,10 @@ void applyNotOnNullConst(Column*, const Column*) {
 // with the whole inner chunk, so pair p takes input row p/factor. Fills the
 // `rowCount` pairs from `position` on, which may start partway into one input
 // row's block and end partway into another's.
-template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
+template <typename ElementType>
 void blockRepeatColumn(const Column* input, size_t factor, size_t position, size_t rowCount, Column* output) {
-    const ColumnType* typedInput = static_cast<const ColumnType*>(input);
-    ColumnType* typedOutput = static_cast<ColumnType*>(output);
+    const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
+    ColumnVector<ElementType>* typedOutput = static_cast<ColumnVector<ElementType>*>(output);
 
     const auto& inputRaw = typedInput->getRaw();
     auto& outputRaw = typedOutput->getRaw();
@@ -1703,10 +1668,10 @@ void blockRepeatConstColumn(const Column* input, size_t factor, size_t position,
 // `position` on, which may start partway into one tile and end partway into
 // another. M is the tile's own length, which is what the enclosing product passes
 // as the factor.
-template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
+template <typename ElementType>
 void tileColumn(const Column* input, size_t factor, size_t position, size_t rowCount, Column* output) {
-    const ColumnType* typedInput = static_cast<const ColumnType*>(input);
-    ColumnType* typedOutput = static_cast<ColumnType*>(output);
+    const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
+    ColumnVector<ElementType>* typedOutput = static_cast<ColumnVector<ElementType>*>(output);
 
     const auto& inputRaw = typedInput->getRaw();
     auto& outputRaw = typedOutput->getRaw();
@@ -1795,26 +1760,6 @@ void broadcastConstantPlainColumn(const Column* value, size_t rowCount, Column* 
     std::fill_n(outputRaw.begin(), rowCount, typedValue->getRaw());
 }
 
-// The mask sibling of broadcastConstantPlainColumn: a mask holds its rows as flags, and
-// its constant as the boolean every row carries
-void broadcastConstantMaskColumn(const Column* value, size_t rowCount, Column* output) {
-    const auto* typedValue = static_cast<const ColumnConst<types::Bool::Primitive>*>(value);
-    ColumnMask* typedOutput = static_cast<ColumnMask*>(output);
-
-    auto& outputRaw = typedOutput->getRaw();
-    outputRaw.resize(rowCount);
-
-    std::fill_n(outputRaw.begin(), rowCount, ColumnMask::Bool_t(typedValue->getRaw()._boolean));
-}
-
-// The one row of a mask, held as the boolean constant it stands for
-void readSingleMaskRowAsConstant(Column* result, const Column* row) {
-    const std::vector<ColumnMask::Bool_t>& rowRaw = static_cast<const ColumnMask*>(row)->getRaw();
-    bioassert(rowRaw.size() == 1, "A computation over constants did not write a single row.");
-
-    static_cast<ColumnConst<types::Bool::Primitive>*>(result)->set(types::Bool::Primitive(rowRaw.front()));
-}
-
 // The one row a computation over constants wrote, held as the constant it stands for
 template <typename Element>
 void readSingleRowAsConstant(Column* result, const Column* row) {
@@ -1838,10 +1783,10 @@ NLUnaryFn selectRowConstantOf(const Column* row, LocalMemory* memory, Column*& r
 // output indices [0, rowCount). This lifts a skip's surviving suffix to the front
 // of a fresh chunk - nl.skip_truncate passes inputOffset = skipThisStep and
 // rowCount = emitThisStep. std::copy of a contiguous range is lowered to memcpy.
-template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
+template <typename ElementType>
 void copyRangeColumn(const Column* input, size_t inputOffset, size_t rowCount, Column* output) {
-    const ColumnType* typedInput = static_cast<const ColumnType*>(input);
-    ColumnType* typedOutput = static_cast<ColumnType*>(output);
+    const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
+    ColumnVector<ElementType>* typedOutput = static_cast<ColumnVector<ElementType>*>(output);
 
     const auto& inputRaw = typedInput->getRaw();
     auto& outputRaw = typedOutput->getRaw();
@@ -1863,10 +1808,10 @@ void gatherConstColumn(const Column* input, const ColumnVector<size_t>* indices,
 // same element type. nl.sort_collect calls this once per producing-loop step, so
 // the buffer accumulates every row across all chunks, row-aligned with the other
 // buffers of the same accumulator.
-template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
+template <typename ElementType>
 void appendColumn(const Column* input, Column* buffer) {
-    const ColumnType* typedInput = static_cast<const ColumnType*>(input);
-    ColumnType* typedBuffer = static_cast<ColumnType*>(buffer);
+    const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
+    ColumnVector<ElementType>* typedBuffer = static_cast<ColumnVector<ElementType>*>(buffer);
 
     const auto& inputRaw = typedInput->getRaw();
     auto& bufferRaw = typedBuffer->getRaw();
@@ -1918,9 +1863,9 @@ bool sortsBefore(double lhs, double rhs) {
 // 3-way compare two rows of a non-null orderable column (an ID column, or a plain scalar
 // a procedure yielded): negative if row a sorts before row b, positive if after, zero if
 // they are equal.
-template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
+template <typename ElementType>
 int compareColumn(const Column* column, size_t a, size_t b) {
-    const auto& raw = static_cast<const ColumnType*>(column)->getRaw();
+    const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
     const ElementType& valueA = raw[a];
     const ElementType& valueB = raw[b];
 
@@ -1963,9 +1908,9 @@ int compareOptColumn(const Column* column, size_t a, size_t b) {
 
 // Copy a plain value column into a nullable one with every row present (nl.to_nullable),
 // so a kernel reading a nullable value column takes a column a procedure yielded.
-template <typename Primitive, typename ColumnType = ColumnVector<Primitive>>
+template <typename Primitive>
 void toNullableColumn(Column* result, const Column* operand) {
-    const auto& values = static_cast<const ColumnType*>(operand)->getRaw();
+    const auto& values = static_cast<const ColumnVector<Primitive>*>(operand)->getRaw();
     auto& nullables = static_cast<ColumnOptVector<Primitive>*>(result)->getRaw();
 
     nullables.resize(values.size());
@@ -2059,16 +2004,8 @@ NLUnaryFn selectToNullableOf(const Column* operand, LocalMemory* memory, Column*
     return &toNullableColumn<Primitive>;
 }
 
-bool caseTestMask(const Column* condition, size_t row) {
-    return static_cast<const ColumnMask*>(condition)->getRaw()[row];
-}
-
 bool caseTestOptMask(const Column* condition, size_t row) {
     return static_cast<const ColumnOptMask*>(condition)->getRaw()[row].value_or(false);
-}
-
-bool caseTestBoolColumn(const Column* condition, size_t row) {
-    return static_cast<const ColumnVector<types::Bool::Primitive>*>(condition)->getRaw()[row];
 }
 
 // A null is not true, so a branch whose condition is the null literal never fires and its
@@ -2077,70 +2014,49 @@ bool caseTestNever(const Column* condition, size_t row) {
     return false;
 }
 
-void applyIsNotTrueOnMask(Column* result, const Column* operand) {
-    const std::vector<ColumnMask::Bool_t>& operandRaw = static_cast<const ColumnMask*>(operand)->getRaw();
-    std::vector<ColumnMask::Bool_t>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
-
-    resultRaw.resize(operandRaw.size());
-    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](ColumnMask::Bool_t value) {
-        return ColumnMask::Bool_t {!value};
-    });
-}
-
 void applyIsNotTrueOnOptMask(Column* result, const Column* operand) {
     const std::vector<std::optional<CustomBool>>& operandRaw = static_cast<const ColumnOptMask*>(operand)->getRaw();
-    std::vector<ColumnMask::Bool_t>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
+    std::vector<CustomBool>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
 
     resultRaw.resize(operandRaw.size());
     std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](std::optional<CustomBool> value) {
-        return ColumnMask::Bool_t {!value.value_or(false)};
-    });
-}
-
-void applyIsNotTrueOnBoolColumn(Column* result, const Column* operand) {
-    const std::vector<types::Bool::Primitive>& operandRaw =
-        static_cast<const ColumnVector<types::Bool::Primitive>*>(operand)->getRaw();
-    std::vector<ColumnMask::Bool_t>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
-
-    resultRaw.resize(operandRaw.size());
-    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](types::Bool::Primitive value) {
-        return ColumnMask::Bool_t {!value};
+        return CustomBool {!value.value_or(false)};
     });
 }
 
 void applyIsNotTrueOnTaggedCells(Column* result, const Column* operand) {
     const std::vector<CellView>& operandRaw = static_cast<const ColumnVector<CellView>*>(operand)->getRaw();
-    std::vector<ColumnMask::Bool_t>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
+    std::vector<CustomBool>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
 
     resultRaw.resize(operandRaw.size());
     std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](CellView cell) {
-        return ColumnMask::Bool_t {!cellTruth(cell).value_or(false)};
+        return CustomBool {!cellTruth(cell).value_or(false)};
     });
 }
 
 void applyIsNotTrueOnOptTaggedCells(Column* result, const Column* operand) {
     const std::vector<std::optional<CellView>>& operandRaw =
         static_cast<const ColumnOptVector<CellView>*>(operand)->getRaw();
-    std::vector<ColumnMask::Bool_t>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
+    std::vector<CustomBool>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
 
     resultRaw.resize(operandRaw.size());
     std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](std::optional<CellView> cell) {
-        return ColumnMask::Bool_t {!(cell.has_value() && cellTruth(*cell).value_or(false))};
+        return CustomBool {!(cell.has_value() && cellTruth(*cell).value_or(false))};
     });
 }
 
 void applyIsNotTrueOnNull(Column* result, const Column* operand) {
-    static_cast<ColumnMask*>(result)->getRaw().assign(operand->size(), ColumnMask::Bool_t {true});
+    static_cast<ColumnMask*>(result)->getRaw().assign(operand->size(), CustomBool {true});
 }
 
 template <typename ElementType, bool TESTS_NULL>
 void applyNullTestOnVector(Column* result, const Column* operand) {
     const std::vector<ElementType>& operandRaw = static_cast<const ColumnVector<ElementType>*>(operand)->getRaw();
-    std::vector<ColumnMask::Bool_t>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
+    std::vector<CustomBool>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
 
     resultRaw.resize(operandRaw.size());
     std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](const ElementType& value) {
-        return ColumnMask::Bool_t {holdsAValue(value) != TESTS_NULL};
+        return CustomBool {holdsAValue(value) != TESTS_NULL};
     });
 }
 
@@ -2150,22 +2066,11 @@ void applyNullTestOnConst(Column* result, const Column* operand) {
     static_cast<ColumnConst<CustomBool>*>(result)->set(CustomBool {holdsAValue(value) != TESTS_NULL});
 }
 
-// A mask holds a truth value on every row
-template <bool TESTS_NULL>
-void applyNullTestOnMask(Column* result, const Column* operand) {
-    static_cast<ColumnMask*>(result)->getRaw().assign(operand->size(), ColumnMask::Bool_t {!TESTS_NULL});
-}
-
 template <bool TESTS_NULL>
 struct NullTestSelector {
     LocalMemory* _memory {nullptr};
     NLUnaryFn _fn {nullptr};
     Column* _result {nullptr};
-
-    void operator()(const ColumnMask* operand) {
-        _result = _memory->alloc<ColumnMask>();
-        _fn = &applyNullTestOnMask<TESTS_NULL>;
-    }
 
     template <typename ElementType>
     void operator()(const ColumnVector<ElementType>* operand) {
@@ -2185,9 +2090,8 @@ struct NullTestSelector {
     }
 };
 
-template <typename BooleanColumn>
 std::optional<bool> readBooleanTruth(const Column* mask, size_t row) {
-    return static_cast<bool>(static_cast<const BooleanColumn*>(mask)->getRaw()[row]);
+    return static_cast<bool>(static_cast<const ColumnMask*>(mask)->getRaw()[row]);
 }
 
 std::optional<bool> readOptMaskTruth(const Column* mask, size_t row) {
@@ -2214,6 +2118,10 @@ std::optional<bool> readOptTaggedCellTruth(const Column* cells, size_t row) {
     }
 
     return cellTruth(*cell);
+}
+
+bool caseTestBoolColumn(const Column* condition, size_t row) {
+    return readBooleanTruth(condition, row).value_or(false);
 }
 
 bool caseTestTaggedCell(const Column* condition, size_t row) {
@@ -2439,11 +2347,6 @@ void caseWritePlainCell(Column* result, size_t resultRow, const Column* value, s
     results[resultRow] = static_cast<const ColumnVector<Primitive>*>(value)->getRaw()[valueRow];
 }
 
-void caseWriteMaskCell(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
-    std::vector<std::optional<CustomBool>>& results = static_cast<ColumnOptMask*>(result)->getRaw();
-    results[resultRow] = CustomBool {static_cast<const ColumnMask*>(value)->getRaw()[valueRow]};
-}
-
 template <typename Primitive>
 void caseWriteNull(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
     static_cast<ColumnOptVector<Primitive>*>(result)->getRaw()[resultRow] = std::nullopt;
@@ -2483,7 +2386,7 @@ void writeCell(Column* result,
 template <typename Element>
 void fillNullRows(Column* result, const Column* value, const ColumnMask* nullRows, const Column* fill) {
     const std::vector<Element>& values = static_cast<const ColumnVector<Element>*>(value)->getRaw();
-    const std::vector<ColumnMask::Bool_t>& nulls = nullRows->getRaw();
+    const std::vector<CustomBool>& nulls = nullRows->getRaw();
     const std::vector<Element>& fills = static_cast<const ColumnVector<Element>*>(fill)->getRaw();
     std::vector<Element>& results = static_cast<ColumnVector<Element>*>(result)->getRaw();
 
@@ -2491,7 +2394,7 @@ void fillNullRows(Column* result, const Column* value, const ColumnMask* nullRow
 
     results.resize(values.size());
 
-    const auto isNull = [](ColumnMask::Bool_t row) {
+    const auto isNull = [](CustomBool row) {
         return static_cast<bool>(row);
     };
 
@@ -2817,9 +2720,9 @@ void distinctKeyAppendColumn(const Column* column, size_t row, NLSerializedKey& 
 // yielded, a tally, an expression over one - into the row key. The ID sibling reads
 // through the ID's integer; here the element is the value, and no row of such a chunk is
 // null, so the key carries no tag byte to tell a null from a value.
-template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
+template <typename ElementType>
 void distinctKeyAppendPlainColumn(const Column* column, size_t row, NLSerializedKey& key) {
-    const auto& raw = static_cast<const ColumnType*>(column)->getRaw();
+    const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
     distinctAppendValueBytes(key, raw[row]);
 }
 
@@ -2880,10 +2783,6 @@ uint8_t packedKeyValue(types::Bool::Primitive value) {
     return value._boolean;
 }
 
-uint8_t packedKeyValue(ColumnMask::Bool_t value) {
-    return value._value;
-}
-
 uint8_t packedKeyValue(ValueType value) {
     return static_cast<uint8_t>(value);
 }
@@ -2900,9 +2799,9 @@ types::Point::Primitive packedKeyValue(types::Point::Primitive value) {
     return value;
 }
 
-template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
+template <typename ElementType>
 void packKeyColumn(const Column* column, size_t beginRow, size_t endRow, const NLKeyPackTarget& target) {
-    const auto& raw = static_cast<const ColumnType*>(column)->getRaw();
+    const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
     std::byte* value = target._values;
 
     for (size_t row = beginRow; row < endRow; row++) {
@@ -2936,11 +2835,11 @@ void packOptKeyColumn(const Column* column, size_t beginRow, size_t endRow, cons
     }
 }
 
-template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
+template <typename ElementType>
 NLKeyPacking keyPacking() {
     using Packed = decltype(packedKeyValue(std::declval<ElementType>()));
 
-    return {&packKeyColumn<ElementType, ColumnType>, sizeof(Packed)};
+    return {&packKeyColumn<ElementType>, sizeof(Packed)};
 }
 
 template <typename Primitive>
@@ -3162,12 +3061,6 @@ void distinctAppendElementBytes(NLSerializedKey& key, const CellView element) {
     }
 
     bioassert(false, "Unknown CellTag");
-}
-
-// A chunk of this kind holds neither a null nor a NaN - an ID column, a mask - so every
-// row of it carries a key a join can match on.
-bool everyRowMatchable(const Column* column, size_t row) {
-    return true;
 }
 
 template <typename ElementType>
@@ -3464,15 +3357,6 @@ void hashOptKeyColumn(const Column* column, std::vector<uint64_t>& hashes) {
     });
 }
 
-void hashMaskKeyColumn(const Column* column, std::vector<uint64_t>& hashes) {
-    const auto& raw = static_cast<const ColumnMask*>(column)->getRaw();
-    hashes.resize(raw.size());
-
-    std::transform(raw.begin(), raw.end(), hashes.begin(), [](ColumnMask::Bool_t value) {
-        return hashKeyValue(static_cast<bool>(value));
-    });
-}
-
 template <typename ElementType>
 bool keyEqualColumn(const Column* probe, size_t probeRow, const Column* build, size_t buildRow) {
     const auto& probeRaw = static_cast<const ColumnVector<ElementType>*>(probe)->getRaw();
@@ -3499,13 +3383,6 @@ NLJoinKeyFunctions optJoinKeyFunctions() {
     return {&hashOptKeyColumn<Primitive>, &keyEqualOptColumn<Primitive>, &optColumnRowMatchable<Primitive>};
 }
 
-bool keyEqualMaskColumn(const Column* probe, size_t probeRow, const Column* build, size_t buildRow) {
-    const auto& probeRaw = static_cast<const ColumnMask*>(probe)->getRaw();
-    const auto& buildRaw = static_cast<const ColumnMask*>(build)->getRaw();
-
-    return static_cast<bool>(probeRaw[probeRow]) == static_cast<bool>(buildRaw[buildRow]);
-}
-
 // A probe key and a build key of two types, compared by the `=` of the filter the join
 // replaces: an unknown answer matches nothing, as the filter kept only the true rows
 template <typename ProbeColumn, typename BuildColumn>
@@ -3521,18 +3398,16 @@ bool keyEqualAcrossTypes(const Column* probe, size_t probeRow, const Column* bui
     }
 }
 
-template <typename KeyColumn>
-concept RowKeyColumn = std::same_as<KeyColumn, ColumnMask>
-                    || std::same_as<KeyColumn, ColumnVector<typename KeyColumn::ValueType>>;
-
 struct CrossTypeKeyEqualSelector {
     NLKeyEqualFunction _equal {nullptr};
 
+    template <typename ProbeElement, typename BuildElement>
+    void operator()(const ColumnVector<ProbeElement>*, const ColumnVector<BuildElement>*) {
+        _equal = &keyEqualAcrossTypes<ColumnVector<ProbeElement>, ColumnVector<BuildElement>>;
+    }
+
     template <typename ProbeColumn, typename BuildColumn>
     void operator()(const ProbeColumn*, const BuildColumn*) {
-        if constexpr (RowKeyColumn<ProbeColumn> && RowKeyColumn<BuildColumn>) {
-            _equal = &keyEqualAcrossTypes<ProbeColumn, BuildColumn>;
-        }
     }
 };
 
@@ -3988,13 +3863,13 @@ private:
 // buffer of the same element type. nl.group_aggregate_update passes the rows that
 // created a new group this step, so the buffer grows one key value per group in
 // creation order.
-template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
+template <typename ElementType>
 void groupGatherAppendColumn(const Column* input,
                              const std::vector<size_t>& rows,
                              Column* buffer,
                              NLValueStore& values) {
-    const auto& inputRaw = static_cast<const ColumnType*>(input)->getRaw();
-    auto& bufferRaw = static_cast<ColumnType*>(buffer)->getRaw();
+    const auto& inputRaw = static_cast<const ColumnVector<ElementType>*>(input)->getRaw();
+    auto& bufferRaw = static_cast<ColumnVector<ElementType>*>(buffer)->getRaw();
 
     for (const size_t row : rows) {
         bufferRaw.push_back(values.ownElement(inputRaw[row]));
@@ -4804,7 +4679,7 @@ bool presentChunkRow(const GraphPath& path) {
 // Tally each group's distinct present values of a chunk. The tally keys a row the way a
 // whole-row DISTINCT keys it, so two rows count once exactly when DISTINCT would fold
 // them together.
-template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
+template <typename ElementType>
 void groupFoldCountDistinctChunk(NLGroupStatePlaces places,
                                  const Column* input,
                                  const std::vector<size_t>& groups,
@@ -4812,7 +4687,7 @@ void groupFoldCountDistinctChunk(NLGroupStatePlaces places,
                                  size_t endRow,
                                  const NLGroupDistinctTally* distinct,
                                  NLValueStore& values) {
-    const std::vector<ElementType>& inputRaw = static_cast<const ColumnType*>(input)->getRaw();
+    const std::vector<ElementType>& inputRaw = static_cast<const ColumnVector<ElementType>*>(input)->getRaw();
 
     for (size_t row = beginRow; row < endRow; row++) {
         if (!presentChunkRow(inputRaw[row])) {
@@ -7213,9 +7088,9 @@ void throwIfNodesHaveEdges(const GraphView& view, const ColumnNodeIDs* nodes) {
 // A merge keys the value a row asks for against the value the graph holds, and those
 // arrive in a plain and a nullable column respectively: the two have to serialize alike,
 // which is why a plain row keys its value as a nullable column keys a present one.
-template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
+template <typename ElementType>
 void mergeKeyAppendPlainColumn(const Column* column, size_t row, NLSerializedKey& key) {
-    const auto& raw = static_cast<const ColumnType*>(column)->getRaw();
+    const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
 
     distinctAppendPresentValue(key, raw[row]);
 }
@@ -11099,12 +10974,8 @@ NLCaseResetFn NLExecutor::selectCaseReset(NLChunkKind kind) {
 
 NLTruthReadFunction NLExecutor::selectTruthRead(NLTruthColumnKind kind) {
     switch (kind) {
-        case NLTruthColumnKind::Mask:
-            return &readBooleanTruth<ColumnMask>;
-        break;
-
         case NLTruthColumnKind::Booleans:
-            return &readBooleanTruth<ColumnVector<types::Bool::Primitive>>;
+            return &readBooleanTruth;
         break;
 
         case NLTruthColumnKind::NullableBooleans:
@@ -11129,10 +11000,6 @@ NLTruthReadFunction NLExecutor::selectTruthRead(NLTruthColumnKind kind) {
 
 NLCaseTestFn NLExecutor::selectCaseTest(NLTruthColumnKind kind) {
     switch (kind) {
-        case NLTruthColumnKind::Mask:
-            return &caseTestMask;
-        break;
-
         case NLTruthColumnKind::Booleans:
             return &caseTestBoolColumn;
         break;
@@ -11170,12 +11037,8 @@ NLUnaryFn NLExecutor::selectIsNotTrue(NLTruthColumnKind kind, LocalMemory* memor
     result = memory->alloc<ColumnMask>();
 
     switch (kind) {
-        case NLTruthColumnKind::Mask:
-            return &applyIsNotTrueOnMask;
-        break;
-
         case NLTruthColumnKind::Booleans:
-            return &applyIsNotTrueOnBoolColumn;
+            return &applyNotOnBooleans;
         break;
 
         case NLTruthColumnKind::NullableBooleans:
@@ -11249,10 +11112,6 @@ NLCaseWriteFn NLExecutor::selectCaseWrite(NLChunkKind kind,
                                           const Column* value,
                                           bool nullable,
                                           bool untypedNull) {
-    if (value->getContainerKind() == ContainerKind::code<ColumnMask>()) {
-        return &caseWriteMaskCell;
-    }
-
     NLCaseWriteFn write = nullptr;
     dispatchOptChunkKind(kind, [&]<typename Element>() {
         if (untypedNull) {
@@ -11269,14 +11128,9 @@ NLCaseWriteFn NLExecutor::selectCaseWrite(NLChunkKind kind,
 
 NLUnaryFn NLExecutor::selectNot(NLTruthColumnKind kind, LocalMemory* memory, Column*& result) {
     switch (kind) {
-        case NLTruthColumnKind::Mask:
-            result = memory->alloc<ColumnMask>();
-            return &applyNotOnBooleans<ColumnMask>;
-        break;
-
         case NLTruthColumnKind::Booleans:
             result = memory->alloc<ColumnMask>();
-            return &applyNotOnBooleans<ColumnVector<types::Bool::Primitive>>;
+            return &applyNotOnBooleans;
         break;
 
         case NLTruthColumnKind::NullableBooleans:
@@ -11304,7 +11158,6 @@ NLUnaryFn NLExecutor::selectNot(NLTruthColumnKind kind, LocalMemory* memory, Col
 
 NLUnaryFn NLExecutor::selectConstantNot(NLTruthColumnKind kind, LocalMemory* memory, Column*& result) {
     switch (kind) {
-        case NLTruthColumnKind::Mask:
         case NLTruthColumnKind::Booleans:
             result = memory->alloc<ColumnConst<CustomBool>>();
             return &applyNotOnConst;
@@ -11377,7 +11230,6 @@ NLBinaryFn NLExecutor::selectBinary(const Column* lhs,
 
     BinaryOpSelector<Op> selector {._memory = memory};
     ColumnDoubleDispatcher<typename Pairs::Allowed,
-                           typename Pairs::AllowedMixed,
                            BinaryOpSelector<Op>,
                            typename Pairs::Excluded>::dispatch(lhs, rhs, selector);
 
@@ -11420,7 +11272,6 @@ NLBinaryFn NLExecutor::selectValueListIndex(NLChunkKind kind,
 
         Selector selector {._memory = memory};
         ColumnDoubleDispatcher<typename Pairs::Allowed,
-                               typename Pairs::AllowedMixed,
                                Selector,
                                typename Pairs::Excluded>::dispatch(lhs, rhs, selector);
 
@@ -11477,13 +11328,6 @@ NLUnaryFunctionKernel NLExecutor::selectFunction(const Column* input, bool input
         }
     }
 
-    if constexpr (std::is_same_v<Arg, types::Bool::Primitive>) {
-        if (input->getContainerKind() == ContainerKind::code<ColumnMask>()) {
-            result = memory->alloc<ColumnVector<Res>>();
-            return &functionMaskKernel<Functor>;
-        }
-    }
-
     if (input->getContainerKind() == ContainerKind::code<ColumnConst>()) {
         result = memory->alloc<ColumnConst<Res>>();
         return &functionConstKernel<Functor>;
@@ -11526,7 +11370,7 @@ NLUnaryFunctionKernel NLExecutor::selectConversion(const Column* input, bool inp
         using Functor = ConversionFunctorFor<Conversion, Element>::Type;
 
         if constexpr (!std::is_same_v<Functor, Conversion>) {
-            if (!kernel && columnHoldsConvertible<Element>(input)) {
+            if (!kernel && columnHoldsElement<Element>(input)) {
                 kernel = selectFunction<Functor>(input, inputNullable, memory, result);
             }
         }
@@ -12043,7 +11887,7 @@ void NLExecutor::runExistsResult(NLExecutionContext* context, NLFunctionData* da
 
     const std::vector<bool>& matched = state->matched();
 
-    std::vector<ColumnMask::Bool_t>& answer = result->getResult()->getRaw();
+    std::vector<CustomBool>& answer = result->getResult()->getRaw();
     answer.resize(matched.size());
 
     std::copy(matched.begin(), matched.end(), answer.begin());
@@ -12880,10 +12724,6 @@ NLFillNullFunction NLExecutor::selectOptFillNullFunction(NLChunkKind kind) {
     return fill;
 }
 
-NLFillNullFunction NLExecutor::selectMaskFillNull() {
-    return &fillNullColumn<ColumnMask::Bool_t, ColumnMask>;
-}
-
 NLFillNullFunction NLExecutor::selectOptListFillNull() {
     return &fillNullColumn<std::optional<ListView>>;
 }
@@ -12909,12 +12749,8 @@ NLGatherFunction NLExecutor::selectCountGatherFunction() {
 
 NLMaskSurvivorFunction NLExecutor::selectMaskSurvivorFunction(NLTruthColumnKind kind) {
     switch (kind) {
-        case NLTruthColumnKind::Mask:
-            return &collectBooleanSurvivors<ColumnMask>;
-        break;
-
         case NLTruthColumnKind::Booleans:
-            return &collectBooleanSurvivors<ColumnVector<types::Bool::Primitive>>;
+            return &collectBooleanSurvivors;
         break;
 
         case NLTruthColumnKind::NullableBooleans:
@@ -13001,19 +12837,12 @@ NLBroadcastConstantFunction NLExecutor::selectConstantCellBroadcast() {
 
 NLBroadcastConstantFunction NLExecutor::selectConstantPlainBroadcast(NLChunkKind kind, const Column* value) {
     bioassert(value->getContainerKind() == ContainerKind::code<ColumnConst>(),
-              "A node, an edge, a path or a walk laid out over rows is read as the constant nl.row_constant made of it");
+              "A boolean, a node, an edge, a path or a walk laid out over rows is read as the constant nl.row_constant made of it");
 
     NLBroadcastConstantFunction fill = nullptr;
     dispatchChunkKind(kind, [&]<typename Element>() { fill = &broadcastConstantPlainColumn<Element>; });
 
     return fill;
-}
-
-NLBroadcastConstantFunction NLExecutor::selectConstantMaskBroadcast(const Column* value) {
-    bioassert(value->getKind() == ColumnConst<types::Bool::Primitive>::staticKind(),
-              "A mask laid out over rows is read as the boolean nl.row_constant made of it");
-
-    return &broadcastConstantMaskColumn;
 }
 
 NLBroadcastConstantFunction NLExecutor::selectOptCellBroadcast(const Column* value) {
@@ -13067,13 +12896,6 @@ NLUnaryFn NLExecutor::selectOptRowConstant(NLChunkKind kind, const Column* row, 
 NLUnaryFn NLExecutor::selectCellRowConstant(bool nullable, const Column* row, LocalMemory* memory, Column*& result) {
     return nullable ? selectRowConstantOf<std::optional<CellView>>(row, memory, result)
                     : selectRowConstantOf<CellView>(row, memory, result);
-}
-
-NLUnaryFn NLExecutor::selectMaskRowConstant(const Column* row, LocalMemory* memory, Column*& result) {
-    bioassert(row->getKind() == ColumnMask::staticKind(), "nl.row_constant reads a mask chunk out of a mask");
-
-    result = memory->alloc<ColumnConst<types::Bool::Primitive>>();
-    return &readSingleMaskRowAsConstant;
 }
 
 // A !storage.any chunk is a ColumnVector<CellView> of fixed-width tagged
@@ -13248,54 +13070,6 @@ NLCopyFunction NLExecutor::selectConstCopyFunction() {
 
 NLGatherFunction NLExecutor::selectConstGatherFunction() {
     return &gatherConstColumn;
-}
-
-// A nullable value chunk gathers the same way an ID chunk does - copy the indexed
-// rows - on the ColumnOptVector<Primitive> instantiation of the gather template.
-NLGatherFunction NLExecutor::selectMaskGather() {
-    return &gatherColumn<ColumnMask::Bool_t, ColumnMask>;
-}
-
-NLAppendFunction NLExecutor::selectMaskAppend() {
-    return &appendColumn<ColumnMask::Bool_t, ColumnMask>;
-}
-
-NLCopyFunction NLExecutor::selectMaskCopy() {
-    return &copyRangeColumn<ColumnMask::Bool_t, ColumnMask>;
-}
-
-NLGroupKeyGatherFunction NLExecutor::selectMaskGroupKeyGather() {
-    return &groupGatherAppendColumn<ColumnMask::Bool_t, ColumnMask>;
-}
-
-NLCompareFunction NLExecutor::selectMaskCompare() {
-    return &compareColumn<ColumnMask::Bool_t, ColumnMask>;
-}
-
-NLKeyAppendFunction NLExecutor::selectMaskKeyAppend() {
-    return &distinctKeyAppendPlainColumn<ColumnMask::Bool_t, ColumnMask>;
-}
-
-NLBroadcastFunction NLExecutor::selectMaskBlockRepeat() {
-    return &blockRepeatColumn<ColumnMask::Bool_t, ColumnMask>;
-}
-
-NLBroadcastFunction NLExecutor::selectMaskTile() {
-    return &tileColumn<ColumnMask::Bool_t, ColumnMask>;
-}
-
-NLKeyAppendFunction NLExecutor::selectMaskMergeKeyAppend(ValueType keyType) {
-    throwUnlessKeyedAsItsOwnType(ValueType::Bool, keyType);
-    return &mergeKeyAppendPlainColumn<ColumnMask::Bool_t, ColumnMask>;
-}
-
-NLUnaryFn NLExecutor::selectMaskToNullable(LocalMemory* memory, Column*& result) {
-    result = memory->alloc<ColumnOptMask>();
-    return &toNullableColumn<types::Bool::Primitive, ColumnMask>;
-}
-
-NLGroupAggregateFoldFunction NLExecutor::selectMaskGroupCountDistinctFold() {
-    return &groupFoldCountDistinctChunk<ColumnMask::Bool_t, ColumnMask>;
 }
 
 // A nullable chunk is a ColumnOptVector<Element> - that is,
@@ -13676,10 +13450,6 @@ NLKeyPacking NLExecutor::selectOptKeyPacking(NLChunkKind kind) {
     return NLKeyPacking {};
 }
 
-NLKeyPacking NLExecutor::selectMaskKeyPacking() {
-    return keyPacking<ColumnMask::Bool_t, ColumnMask>();
-}
-
 NLJoinKeyFunctions NLExecutor::selectJoinKeyFunctions(NLChunkKind kind) {
     switch (kind) {
         case NLChunkKind::NodeID:
@@ -13782,10 +13552,6 @@ NLJoinKeyFunctions NLExecutor::selectOptCellJoinKeyFunctions() {
     return optJoinKeyFunctions<CellView>();
 }
 
-NLJoinKeyFunctions NLExecutor::selectMaskJoinKeyFunctions() {
-    return {&hashMaskKeyColumn, &keyEqualMaskColumn, &everyRowMatchable};
-}
-
 // The pairs `=` compares are the pairs its kernel takes, so a pair the kernel has no
 // comparison for never reaches a join: the filter it replaces could not have run.
 NLKeyEqualFunction NLExecutor::selectCrossTypeKeyEqualFunction(const Column* probe, const Column* build) {
@@ -13793,7 +13559,6 @@ NLKeyEqualFunction NLExecutor::selectCrossTypeKeyEqualFunction(const Column* pro
 
     CrossTypeKeyEqualSelector selector;
     ColumnDoubleDispatcher<typename Pairs::Allowed,
-                           typename Pairs::AllowedMixed,
                            CrossTypeKeyEqualSelector,
                            typename Pairs::Excluded>::dispatch(probe, build, selector);
 

@@ -356,17 +356,6 @@ private:
     PropertyTypeID _propID;
 };
 
-void extractMaskProperties(const ColumnMask* mask,
-                           PropertyTypeID propID,
-                           CommitWriteBuffer::UntypedProperties& buf) {
-    buf.clear();
-    buf.reserve(mask->size());
-    for (const ColumnMask::Bool_t flag : mask->getRaw()) {
-        const std::optional<types::Bool::Primitive> val {flag._value};
-        buf.emplace_back(propID, val);
-    }
-}
-
 void disengagedValue(ValueType valueType, CommitWriteBuffer::SupportedTypeVariant& value) {
     const auto disengage = [&]<SupportedType T>() {
         if constexpr (TrivialSupportedType<T>) {
@@ -825,8 +814,6 @@ void db::extractColumnProperties(const Column* column,
         ColumnSingleDispatcher<Types::AllowedConst,
                                ConstPropertyExtractor,
                                Types::ExcludedConst>::dispatch(column, extractor);
-    } else if (containerKind == ContainerKind::code<ColumnMask>()) {
-        extractMaskProperties(static_cast<const ColumnMask*>(column), propID, buf);
     } else {
         VectorPropertyExtractor extractor(buf, propID);
         ColumnSingleDispatcher<Types::AllowedVector,

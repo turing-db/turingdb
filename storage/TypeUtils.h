@@ -6,7 +6,6 @@
 #include <type_traits>
 #include <variant>
 
-#include "columns/ColumnMask.h"
 #include "columns/KindTypes.h"
 #include "metadata/PropertyType.h"
 
@@ -112,8 +111,7 @@ concept OptionallyInvokable =
 
 template <typename Func, typename... Args>
 concept TuringPredicate =
-    std::same_as<ColumnMask::Bool_t, std::invoke_result_t<Func, Args...>>
-    || std::same_as<CustomBool,  std::invoke_result_t<Func, Args...>>
+    std::same_as<CustomBool, std::invoke_result_t<Func, Args...>>
     || std::same_as<bool,  std::invoke_result_t<Func, Args...>>;
 
 /**
