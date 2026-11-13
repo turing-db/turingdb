@@ -149,8 +149,13 @@ void GetPropertiesWithNullChunkWriter<ID, T>::fill(size_t maxCount) {
     const size_t rangeSize = std::min(maxCount, availableSize);
 
     output.resize(rangeSize);
-    for (size_t i = 0; i < rangeSize; i++) {
-        output[i] = this->get();
+    for (size_t row = 0; row < rangeSize; row++) {
+        const typename T::Primitive* property = this->_prop;
+        if (property) {
+            output.set(row, *property);
+        } else {
+            output.setNull(row);
+        }
 
         this->next();
     }
