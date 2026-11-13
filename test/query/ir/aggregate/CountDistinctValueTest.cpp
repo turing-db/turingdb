@@ -40,6 +40,7 @@
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
+#include "IRTestColumns.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
@@ -106,18 +107,14 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
-        const auto* names = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
+        const auto* names = columnAs<ColumnOptVector<std::string_view>>(chunks[0]);
         const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[1]);
         ASSERT_NE(names, nullptr);
         ASSERT_NE(counts, nullptr);
 
-        const auto& nameRaw = names->getRaw();
         const auto& countRaw = counts->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            std::optional<std::string> name;
-            if (nameRaw[rowIndex]) {
-                name = std::string(*nameRaw[rowIndex]);
-            }
+            const std::optional<std::string> name = getOptionalString(names, rowIndex);
 
             _rows.emplace_back(name, countRaw[rowIndex]);
         }
@@ -139,17 +136,16 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
-        const auto* flags = dynamic_cast<const ColumnOptVector<CustomBool>*>(chunks[0]);
+        const auto* flags = columnAs<ColumnOptVector<CustomBool>>(chunks[0]);
         const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[1]);
         ASSERT_NE(flags, nullptr);
         ASSERT_NE(counts, nullptr);
 
-        const auto& flagRaw = flags->getRaw();
         const auto& countRaw = counts->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
             std::optional<bool> flag;
-            if (flagRaw[rowIndex]) {
-                flag = static_cast<bool>(*flagRaw[rowIndex]);
+            if (flags->isValid(rowIndex)) {
+                flag = static_cast<bool>(flags->getValue(rowIndex));
             }
 
             _rows.emplace_back(flag, countRaw[rowIndex]);
@@ -170,15 +166,14 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
-        const auto* durations = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[0]);
+        const auto* durations = columnAs<ColumnOptVector<int64_t>>(chunks[0]);
         const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[1]);
         ASSERT_NE(durations, nullptr);
         ASSERT_NE(counts, nullptr);
 
-        const auto& durationRaw = durations->getRaw();
         const auto& countRaw = counts->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _rows.emplace_back(durationRaw[rowIndex], countRaw[rowIndex]);
+            _rows.emplace_back(durations->get(rowIndex), countRaw[rowIndex]);
         }
     }
 

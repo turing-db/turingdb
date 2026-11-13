@@ -27,6 +27,7 @@
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 
+#include "IRTestColumns.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
@@ -52,6 +53,15 @@ public:
     void appendChunks(std::span<const Column* const>, size_t, size_t) override {}
 };
 
+uint64_t readReduction(const ColumnVector<uint64_t>* counts, size_t row) {
+    return counts->getRaw()[row];
+}
+
+template <typename T>
+std::optional<T> readReduction(const ColumnOptVector<T>* values, size_t row) {
+    return values->get(row);
+}
+
 // Collects the (team, [names], reduction) rows a grouped collect emits beside one
 // reduction, reading the reduction column as the type its kind produces: a count is an
 // unsigned tally, a sum or an extremum is a nullable Int64, an average a nullable Double.
@@ -63,27 +73,22 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 3u);
 
-        const auto* keys = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
+        const auto* keys = columnAs<ColumnOptVector<std::string_view>>(chunks[0]);
         const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(chunks[1]);
-        const auto* reductions = dynamic_cast<const ReductionColumn*>(chunks[2]);
+        const ReductionColumn* reductions = columnAs<ReductionColumn>(chunks[2]);
         ASSERT_NE(keys, nullptr);
         ASSERT_NE(lists, nullptr);
         ASSERT_NE(reductions, nullptr);
         ASSERT_EQ(keys->size(), lists->size());
 
-        const auto& keyRaw = keys->getRaw();
         const auto& listRaw = lists->getRaw();
-        const auto& reductionRaw = reductions->getRaw();
         for (size_t row = offset; row < offset + rowCount; row++) {
-            std::optional<std::string> key;
-            if (keyRaw[row]) {
-                key = std::string(*keyRaw[row]);
-            }
+            const std::optional<std::string> key = getOptionalString(keys, row);
 
             Names names;
             readStringList(listRaw[row], names);
 
-            _rows.push_back({key, names, reductionRaw[row]});
+            _rows.push_back({key, names, readReduction(reductions, row)});
         }
     }
 
@@ -114,14 +119,14 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 8u);
 
-        const auto* keys = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
+        const auto* keys = columnAs<ColumnOptVector<std::string_view>>(chunks[0]);
         const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(chunks[1]);
         const auto* rowCounts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[2]);
         const auto* valueCounts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[3]);
-        const auto* sums = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[4]);
-        const auto* minima = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[5]);
-        const auto* maxima = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[6]);
-        const auto* averages = dynamic_cast<const ColumnOptVector<double>*>(chunks[7]);
+        const auto* sums = columnAs<ColumnOptVector<int64_t>>(chunks[4]);
+        const auto* minima = columnAs<ColumnOptVector<int64_t>>(chunks[5]);
+        const auto* maxima = columnAs<ColumnOptVector<int64_t>>(chunks[6]);
+        const auto* averages = columnAs<ColumnOptVector<double>>(chunks[7]);
         ASSERT_NE(keys, nullptr);
         ASSERT_NE(lists, nullptr);
         ASSERT_NE(rowCounts, nullptr);
@@ -131,19 +136,11 @@ public:
         ASSERT_NE(maxima, nullptr);
         ASSERT_NE(averages, nullptr);
 
-        const auto& keyRaw = keys->getRaw();
         const auto& listRaw = lists->getRaw();
         const auto& rowCountRaw = rowCounts->getRaw();
         const auto& valueCountRaw = valueCounts->getRaw();
-        const auto& sumRaw = sums->getRaw();
-        const auto& minimumRaw = minima->getRaw();
-        const auto& maximumRaw = maxima->getRaw();
-        const auto& averageRaw = averages->getRaw();
         for (size_t row = offset; row < offset + rowCount; row++) {
-            std::optional<std::string> key;
-            if (keyRaw[row]) {
-                key = std::string(*keyRaw[row]);
-            }
+            const std::optional<std::string> key = getOptionalString(keys, row);
 
             Names names;
             readStringList(listRaw[row], names);
@@ -152,10 +149,10 @@ public:
                              names,
                              rowCountRaw[row],
                              valueCountRaw[row],
-                             sumRaw[row],
-                             minimumRaw[row],
-                             maximumRaw[row],
-                             averageRaw[row]});
+                             sums->get(row),
+                             minima->get(row),
+                             maxima->get(row),
+                             averages->get(row)});
         }
     }
 
@@ -176,8 +173,8 @@ public:
         ASSERT_EQ(chunks.size(), 3u);
 
         const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(chunks[0]);
-        const auto* minima = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[1]);
-        const auto* averages = dynamic_cast<const ColumnOptVector<double>*>(chunks[2]);
+        const auto* minima = columnAs<ColumnOptVector<int64_t>>(chunks[1]);
+        const auto* averages = columnAs<ColumnOptVector<double>>(chunks[2]);
         ASSERT_NE(lists, nullptr);
         ASSERT_NE(minima, nullptr);
         ASSERT_NE(averages, nullptr);
@@ -186,8 +183,8 @@ public:
         for (size_t row = offset; row < offset + rowCount; row++) {
             readStringList(listRaw[row], _names);
 
-            _min = minima->getRaw()[row];
-            _average = averages->getRaw()[row];
+            _min = minima->get(row);
+            _average = averages->get(row);
             _rowCount++;
         }
     }
