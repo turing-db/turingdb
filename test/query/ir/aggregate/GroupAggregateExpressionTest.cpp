@@ -43,6 +43,7 @@
 
 #include "TuringException.h"
 
+#include "IRTestColumns.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
@@ -62,15 +63,12 @@ std::optional<double> readNumeric(const Column* column, size_t row) {
         return static_cast<double>(c->getRaw()[row]);
     } else if (const auto* c = dynamic_cast<const ColumnVector<double>*>(column)) {
         return c->getRaw()[row];
-    } else if (const auto* c = dynamic_cast<const ColumnOptVector<int64_t>*>(column)) {
-        const auto& value = c->getRaw()[row];
-        return value ? std::optional<double>(static_cast<double>(*value)) : std::nullopt;
-    } else if (const auto* c = dynamic_cast<const ColumnOptVector<uint64_t>*>(column)) {
-        const auto& value = c->getRaw()[row];
-        return value ? std::optional<double>(static_cast<double>(*value)) : std::nullopt;
-    } else if (const auto* c = dynamic_cast<const ColumnOptVector<double>*>(column)) {
-        const auto& value = c->getRaw()[row];
-        return value ? std::optional<double>(*value) : std::nullopt;
+    } else if (const auto* c = columnAs<ColumnOptVector<int64_t>>(column)) {
+        return c->isValid(row) ? std::optional<double>(static_cast<double>(c->getValue(row))) : std::nullopt;
+    } else if (const auto* c = columnAs<ColumnOptVector<uint64_t>>(column)) {
+        return c->isValid(row) ? std::optional<double>(static_cast<double>(c->getValue(row))) : std::nullopt;
+    } else if (const auto* c = columnAs<ColumnOptVector<double>>(column)) {
+        return c->get(row);
     } else if (const auto* c = dynamic_cast<const ColumnConst<int64_t>*>(column)) {
         return static_cast<double>((*c)[row]);
     } else if (const auto* c = dynamic_cast<const ColumnConst<uint64_t>*>(column)) {
@@ -84,9 +82,8 @@ std::optional<double> readNumeric(const Column* column, size_t row) {
 }
 
 std::optional<std::string> readStringKey(const Column* column, size_t row) {
-    if (const auto* c = dynamic_cast<const ColumnOptVector<std::string_view>*>(column)) {
-        const auto& value = c->getRaw()[row];
-        return value ? std::optional<std::string>(std::string(*value)) : std::nullopt;
+    if (const auto* c = columnAs<ColumnOptVector<std::string_view>>(column)) {
+        return getOptionalString(c, row);
     } else if (const auto* c = dynamic_cast<const ColumnVector<std::string_view>*>(column)) {
         return std::string(c->getRaw()[row]);
     }

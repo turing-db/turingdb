@@ -39,6 +39,7 @@
 #include "NLOutputSink.h"
 #include "StorageDialect.h"
 
+#include "IRTestColumns.h"
 #include "TuringTest.h"
 
 using namespace db;
@@ -55,16 +56,15 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
-        const auto* keys = dynamic_cast<const ColumnOptVector<double>*>(chunks[0]);
+        const auto* keys = columnAs<ColumnOptVector<double>>(chunks[0]);
         const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[1]);
         ASSERT_NE(keys, nullptr);
         ASSERT_NE(counts, nullptr);
         ASSERT_EQ(keys->size(), counts->size());
 
-        const auto& keyRaw = keys->getRaw();
         const auto& countRaw = counts->getRaw();
         for (size_t row = offset; row < offset + rowCount; row++) {
-            _rows.push_back({keyRaw[row], countRaw[row]});
+            _rows.push_back({keys->get(row), countRaw[row]});
         }
     }
 
@@ -85,13 +85,12 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
-        const auto* keys = dynamic_cast<const ColumnOptVector<double>*>(chunks[0]);
+        const auto* keys = columnAs<ColumnOptVector<double>>(chunks[0]);
         const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(chunks[1]);
         ASSERT_NE(keys, nullptr);
         ASSERT_NE(lists, nullptr);
         ASSERT_EQ(keys->size(), lists->size());
 
-        const auto& keyRaw = keys->getRaw();
         const auto& listRaw = lists->getRaw();
         for (size_t row = offset; row < offset + rowCount; row++) {
             std::vector<int64_t> scores;
@@ -99,7 +98,7 @@ public:
                 scores.push_back(element.getAs<int64_t>());
             }
 
-            _rows.push_back({keyRaw[row], scores});
+            _rows.push_back({keys->get(row), scores});
         }
     }
 

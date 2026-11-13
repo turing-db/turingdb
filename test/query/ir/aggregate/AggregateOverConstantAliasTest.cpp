@@ -23,6 +23,7 @@
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 
+#include "IRTestColumns.h"
 #include "IRTestRows.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
@@ -46,12 +47,11 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_FALSE(chunks.empty());
 
-        const auto* sums = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks.back());
+        const auto* sums = columnAs<ColumnOptVector<int64_t>>(chunks.back());
         ASSERT_NE(sums, nullptr);
 
-        const auto& sumRaw = sums->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _sums.push_back(sumRaw[rowIndex]);
+            _sums.push_back(sums->get(rowIndex));
         }
     }
 
