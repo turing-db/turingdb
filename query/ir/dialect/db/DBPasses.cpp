@@ -2766,6 +2766,31 @@ void eraseUnusedConjunction(Value mask, mlir::RewriterBase& rewriter) {
     }
 }
 
+// Erases @param root if nothing reads it, then each row computation it read that nothing
+// else reads. A handle the caller holds to an op of that cone may be freed afterwards.
+void eraseUnusedRowConeOf(Operation* root, mlir::RewriterBase& rewriter) {
+    llvm::SmallVector<Operation*> dead {root};
+    llvm::SmallPtrSet<Operation*, 8> erased;
+    while (!dead.empty()) {
+        Operation* const op = dead.pop_back_val();
+        if (erased.contains(op) || !op->use_empty()) {
+            continue;
+        }
+
+        llvm::SmallVector<Operation*> operandDefs;
+        for (const Value operand : op->getOperands()) {
+            Operation* const def = operand.getDefiningOp();
+            if (def && computesFromTheRow(def)) {
+                operandDefs.push_back(def);
+            }
+        }
+
+        erased.insert(op);
+        rewriter.eraseOp(op);
+        dead.append(operandDefs.begin(), operandDefs.end());
+    }
+}
+
 // Drops a conjunct the filter's rows now hold without it from its mask, and the ops that
 // computed nothing else. The `and` holding it then holds what its other side does on every
 // row, so it gives way to that side. A conjunct read more than once, or a null literal on
@@ -2804,26 +2829,7 @@ void dropConjunct(FilterOp filter, Value conjunct, mlir::RewriterBase& rewriter)
         return;
     }
 
-    llvm::SmallVector<Operation*> dead {conjunctDef};
-    llvm::SmallPtrSet<Operation*, 8> erased;
-    while (!dead.empty()) {
-        Operation* const op = dead.pop_back_val();
-        if (erased.contains(op) || !op->use_empty()) {
-            continue;
-        }
-
-        llvm::SmallVector<Operation*> operandDefs;
-        for (const Value operand : op->getOperands()) {
-            Operation* const def = operand.getDefiningOp();
-            if (def && computesFromTheRow(def)) {
-                operandDefs.push_back(def);
-            }
-        }
-
-        erased.insert(op);
-        rewriter.eraseOp(op);
-        dead.append(operandDefs.begin(), operandDefs.end());
-    }
+    eraseUnusedRowConeOf(conjunctDef, rewriter);
 }
 
 void dropConjuncts(FilterOp filter, llvm::ArrayRef<Value> conjuncts, mlir::RewriterBase& rewriter) {
@@ -6629,16 +6635,8 @@ void fuseExploreListPredicate(ExploreListPredicate& match, mlir::RewriterBase& r
         rewriter.setInsertionPoint(predicate);
         const Value seedTest = cloneElementTest(predicate, expansion.getSrcids(), rowCarried, rewriter);
 
-        Operation* const widened = predicate.getSource().getDefiningOp<ToNullable>();
-        rewriter.replaceOp(predicate, seedTest);
-
-        if (widened && widened->use_empty()) {
-            rewriter.eraseOp(widened);
-        }
-    }
-
-    if (expansion->use_empty()) {
-        rewriter.eraseOp(expansion);
+        rewriter.replaceAllUsesWith(predicate.getResult(), seedTest);
+        eraseUnusedRowConeOf(predicate, rewriter);
     }
 }
 
