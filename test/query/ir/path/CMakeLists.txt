@@ -83,6 +83,8 @@ add_call_v3_test(test_query_ir_explore_list_predicate ExploreListPredicateTest.c
 
 add_call_v3_test(test_query_ir_explore_list_predicate_later_constant ExploreListPredicateLaterConstantTest.cpp)
 
+add_ir_tests(test_query_ir_explore_list_predicate_erased_expansion ExploreListPredicateErasedExpansionTest.cpp)
+
 add_call_v3_test(test_query_ir_named_path NamedPathTest.cpp)
 
 add_call_v3_test(test_query_ir_named_path_functions NamedPathFunctionsTest.cpp)
