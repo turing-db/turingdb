@@ -77,6 +77,43 @@ TEST_F(ObjectMapTest, reservedButNotPublishedIsInvisible) {
     ASSERT_EQ(map.getObject("a"), nullptr);
 }
 
+TEST_F(ObjectMapTest, aNameIsPendingOnlyUntilPublishedOrCancelled) {
+    ObjectMap<TestObject> map;
+
+    ASSERT_FALSE(map.isPending("a"));
+
+    {
+        auto cancelled = map.reserve("a");
+        ASSERT_TRUE(map.isPending("a"));
+    }
+
+    ASSERT_FALSE(map.isPending("a"));
+
+    auto reservation = map.reserve("a");
+    ASSERT_TRUE(map.isPending("a"));
+
+    reservation.publish(makeObject(1));
+    ASSERT_FALSE(map.isPending("a"));
+}
+
+TEST_F(ObjectMapTest, listAllNamesListsPublishedAndReservedSlots) {
+    ObjectMap<TestObject> map;
+
+    auto published = map.reserve("published");
+    published.publish(makeObject(1));
+
+    auto pending = map.reserve("pending");
+
+    std::vector<std::string> allNames;
+    map.listAllNames(allNames);
+    std::ranges::sort(allNames);
+    ASSERT_EQ(allNames, (std::vector<std::string> {"pending", "published"}));
+
+    std::vector<std::string_view> publishedNames;
+    map.listNames(publishedNames);
+    ASSERT_EQ(publishedNames, std::vector<std::string_view> {"published"});
+}
+
 TEST_F(ObjectMapTest, publishMakesObjectVisible) {
     ObjectMap<TestObject> map;
 
