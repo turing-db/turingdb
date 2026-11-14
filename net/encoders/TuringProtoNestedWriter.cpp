@@ -37,8 +37,7 @@ void NestedContainerWriter::writeMapView(const db::MapView& mapView) {
     _outBuf->copyFixedLenData(&entryCount, sizeof(entryCount));
     _outBuf->copyFixedLenData(&mapByteSize, sizeof(mapByteSize));
 
-    _stack.emplace(NestedContainerIterator::map(entries));
-    drainNestedValues();
+    drainNestedValues(NestedContainerIterator::map(entries));
 }
 
 void NestedContainerWriter::writeCells(std::span<const db::CellView> elements) {
@@ -69,20 +68,22 @@ void NestedContainerWriter::writeMapEntries(std::span<const db::MapEntryView> en
 
     _outBuf->copyFixedLenData(&mapByteSize, sizeof(mapByteSize));
 
-    _stack.emplace(NestedContainerIterator::map(entries));
-    drainNestedValues();
+    drainNestedValues(NestedContainerIterator::map(entries));
 }
 
-// Drain the stack of nested values. A nested container will push a nested frame onto the stack
+// Write root and every value nested in it. A nested container will push a nested frame onto the stack
 // which will need to be fully drained and popped off the stack before the parent frame continues draining.
-void NestedContainerWriter::drainNestedValues() {
+void NestedContainerWriter::drainNestedValues(const NestedContainerIterator& root) {
     const ElementWriteVisitor visitor {_outBuf, &_stack};
 
+    _stack.clear();
+    _stack.push_back(root);
+
     while (!_stack.empty()) {
-        NestedContainerIterator& frame = _stack.top();
+        NestedContainerIterator& frame = _stack.back();
 
         if (frame.isExhausted()) {
-            _stack.pop();
+            _stack.pop_back();
             continue;
         }
 
@@ -103,8 +104,7 @@ void NestedContainerWriter::drainNestedValues() {
 }
 
 void NestedContainerWriter::writeCellValues(std::span<const db::CellView> elements) {
-    _stack.emplace(NestedContainerIterator::list(elements));
-    drainNestedValues();
+    drainNestedValues(NestedContainerIterator::list(elements));
 }
 
 void NestedContainerWriter::writeMapKey(std::string_view key) {

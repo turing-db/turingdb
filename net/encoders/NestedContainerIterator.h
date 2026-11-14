@@ -1,7 +1,7 @@
 #pragma once
 
+#include <deque>
 #include <span>
-#include <stack>
 
 #include "BioAssert.h"
 #include "NestedContainerKind.h"
@@ -22,7 +22,7 @@ namespace net::proto {
  */
 class NestedContainerIterator {
 public:
-    using Stack = std::stack<NestedContainerIterator>;
+    using Stack = std::deque<NestedContainerIterator>;
 
     static NestedContainerIterator list(std::span<const db::CellView> elements) { return NestedContainerIterator {elements}; }
     static NestedContainerIterator map(std::span<const db::MapEntryView> entries) { return NestedContainerIterator {entries}; }

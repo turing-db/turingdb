@@ -20,6 +20,12 @@ using ResultRows = std::vector<std::vector<std::string>>;
 // the request by hand.
 void makeProtoRequestBody(const std::string& query, std::string& body);
 
+// Fills the parameter $p with more pairs of integers than a request body can hold.
+void makeTooLargeParameters(db::ParameterMap& parameters);
+
+// The message a request body refuses parameters larger than its buffer with.
+void makeTooLargeParametersMessage(std::string& message);
+
 // Runs the query on a connected client and renders every row as text.
 void runProtoQuery(net::proto::TuringClient* client,
                    const std::string& query,
