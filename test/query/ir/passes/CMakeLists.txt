@@ -130,6 +130,8 @@ add_turing_test(test_query_ir_hops_after_join HopsAfterJoinTest.cpp)
 
 add_turing_test(test_query_ir_ungrouped_aggregate_estimate UngroupedAggregateEstimateTest.cpp)
 
+add_turing_test(test_query_ir_property_equality_estimate PropertyEqualityEstimateTest.cpp)
+
 add_turing_test(test_query_ir_reroot_pattern_at_seed RerootPatternAtSeedTest.cpp)
 target_sources(test_query_ir_reroot_pattern_at_seed PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
 target_include_directories(test_query_ir_reroot_pattern_at_seed PRIVATE ${IR_TEST_DIR})

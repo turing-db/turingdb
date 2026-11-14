@@ -248,9 +248,10 @@ TEST_F(HashJoinCostModelTest, buildsTheSideTheLabelsNarrow) {
     EXPECT_LT(program.find("} factor {"), program.find("db.scan_nodes_by_label")) << program;
 }
 
-// A property equality keeps a tenth of the nodes it reads, the System R default, so the
-// four hundred named nodes filtered to one name are forty rows against the four hundred
-// of the bare scan, and the filtered side is the one to hold.
+// A property equality keeps one node in 200, PostgreSQL's count of distinct values in a
+// column it holds no statistics of, so the four hundred named nodes filtered to one name
+// are two rows against the four hundred of the bare scan, and the filtered side is the one
+// to hold.
 TEST_F(HashJoinCostModelTest, buildsTheSideItsFilterNarrows) {
     buildGraph(400, 0);
 
@@ -325,9 +326,10 @@ TEST_F(HashJoinCostModelTest, sizesAFactorThroughTheListItUnwinds) {
     EXPECT_LT(program.find("db.cross_product"), program.find("} factor {")) << program;
 }
 
-// A join makes as many rows as its smaller side, so the first MATCH joins the 20 pairs to
-// the 400 nodes in 20 rows. Read as the product its equality keeps a tenth of, they would
-// be 800, twice b's scan: the second join holds the 20 rows and streams the scan.
+// A join makes as many rows as its smaller side, so the first MATCH joins the 300 pairs to
+// the 400 nodes in 300 rows. Read as the product its equality keeps one pair in 200 of,
+// they would be 600, more than b's scan: the second join holds the 300 rows and streams
+// the scan.
 TEST_F(HashJoinCostModelTest, sizesAJoinByItsSmallerSide) {
     buildGraph(400, 0);
 
@@ -337,9 +339,9 @@ TEST_F(HashJoinCostModelTest, sizesAJoinByItsSmallerSide) {
     const mlir::db::DBPassContext forced {&view, true, true};
 
     std::string pairs;
-    for (size_t pair = 0; pair < 20; pair++) {
+    for (size_t pair = 0; pair < 300; pair++) {
         pairs += pair == 0 ? "[" : ", [";
-        pairs += "'" + _names[2 * pair] + "', '" + _names[2 * pair + 1] + "']";
+        pairs += "'" + _names[pair] + "', '" + _names[pair + 100] + "']";
     }
 
     std::string program;

@@ -9605,13 +9605,13 @@ constexpr size_t uncountableRows = 10;
 
 // System R's share of rows a predicate keeps (Selinger et al., 1979): the graph counts
 // nodes per label set and edges per end, but no value per property.
-constexpr double EQUALITY_SELECTIVITY = 0.1;
 constexpr double RANGE_SELECTIVITY = 1.0 / 3.0;
 constexpr double MEMBERSHIP_SELECTIVITY_CEILING = 0.5;
 
 // PostgreSQL's count of distinct values in a column it holds no statistics of
-// (DEFAULT_NUM_DISTINCT): as many as the rows, up to this many
+// (DEFAULT_NUM_DISTINCT): as many as the rows, up to this many, and two in a boolean one
 constexpr double DEFAULT_DISTINCT_VALUES = 200;
+constexpr double BOOLEAN_DISTINCT_VALUES = 2;
 
 std::optional<int64_t> literalInteger(Value value) {
     ConstantOp constant = value.getDefiningOp<ConstantOp>();
@@ -9756,6 +9756,18 @@ public:
         knowledge._labels[nodes] = labels;
 
         return getLabelledNodes(labels);
+    }
+
+    // The nodes a scan by property value makes: of those scanNodes reads, the ones holding
+    // one of the property's distinct values
+    double scanNodesByPropertyValue(ScanNodesByPropertyValue scan, WalkKnowledge& knowledge) const {
+        const std::optional<ArrayAttr> labels = scan.getLabels();
+        const double scanned = scanNodes(scan.getResult(), labels ? *labels : ArrayAttr(), knowledge);
+
+        const TypedAttr value = scan.getValueAttr();
+        const Type element = value ? value.getType() : ::db::declaredColumnElement(scan.getBoundValue());
+
+        return scanned * getEqualityShare(getPropertyDistinctValues(element, scanned));
     }
 
     // The rows an edge scan makes: the edges of the types @param typeNames names, every type
@@ -10204,40 +10216,68 @@ private:
         return kept;
     }
 
-    // An equality naming a node keeps one node of those it compares, as one on a key does
-    double getEqualitySelectivity(EqOp equality, llvm::function_ref<Value(Value)> nodeOf, const WalkKnowledge& knowledge) const {
-        double nodes = 0;
-        for (const Value side : {equality.getLhs(), equality.getRhs()}) {
-            const Value nodeColumn = comparedEntityColumn(side);
-            if (nodeColumn && isNodeColumn(nodeColumn)) {
-                nodes = std::max(nodes, getLabelledNodes(knowledge._labels.lookup(nodeOf(nodeColumn))));
-            }
-        }
-
-        return nodes >= 1 ? 1 / nodes : EQUALITY_SELECTIVITY;
+    // With nothing to count the values by, one in DEFAULT_DISTINCT_VALUES: PostgreSQL's
+    // DEFAULT_EQ_SEL
+    static double getEqualityShare(double distinctValues) {
+        return distinctValues >= 1 ? 1 / distinctValues : 1 / DEFAULT_DISTINCT_VALUES;
     }
 
-    double getMembershipSelectivity(InOp membership) const {
+    static double getPropertyDistinctValues(Type element, double nodes) {
+        const bool isBoolean = element && (isa<storage::BoolType>(element) || element.isInteger(1));
+
+        return isBoolean ? BOOLEAN_DISTINCT_VALUES : std::min(DEFAULT_DISTINCT_VALUES, nodes);
+    }
+
+    // The distinct values a side of an equality holds: one per node in a node column, and
+    // none in a value read off no node
+    double getDistinctValues(Value side, llvm::function_ref<Value(Value)> nodeOf, const WalkKnowledge& knowledge) const {
+        const Value entityColumn = comparedEntityColumn(side);
+        GetNodeProperties propertyRead = nodeOf(side).getDefiningOp<GetNodeProperties>();
+
+        if (entityColumn && isNodeColumn(entityColumn)) {
+            return getLabelledNodes(knowledge._labels.lookup(nodeOf(entityColumn)));
+        } else if (propertyRead) {
+            const Value propertyColumn = propertyRead.getResult();
+            const double nodes = getLabelledNodes(knowledge._labels.lookup(nodeOf(propertyRead.getInputNodes())));
+
+            return getPropertyDistinctValues(::db::declaredColumnElement(propertyColumn), nodes);
+        }
+
+        return 0;
+    }
+
+    // An equality keeps one row in the distinct values of the side holding more, as
+    // PostgreSQL estimates one over columns it holds no statistics of
+    double getEqualitySelectivity(Value lhs, Value rhs, llvm::function_ref<Value(Value)> nodeOf, const WalkKnowledge& knowledge) const {
+        const double lhsValues = getDistinctValues(lhs, nodeOf, knowledge);
+        const double rhsValues = getDistinctValues(rhs, nodeOf, knowledge);
+
+        return getEqualityShare(std::max(lhsValues, rhsValues));
+    }
+
+    double getMembershipSelectivity(InOp membership, llvm::function_ref<Value(Value)> nodeOf, const WalkKnowledge& knowledge) const {
         ConstantOp constant = membership.getRhs().getDefiningOp<ConstantOp>();
         const ArrayAttr elements = constant ? dyn_cast<ArrayAttr>(constant.getValue()) : ArrayAttr();
         if (!elements) {
             return MEMBERSHIP_SELECTIVITY_CEILING;
         }
 
-        return std::min(MEMBERSHIP_SELECTIVITY_CEILING, EQUALITY_SELECTIVITY * static_cast<double>(elements.size()));
+        const double elementShare = getEqualityShare(getDistinctValues(membership.getLhs(), nodeOf, knowledge));
+
+        return std::min(MEMBERSHIP_SELECTIVITY_CEILING, elementShare * static_cast<double>(elements.size()));
     }
 
     double getLeafSelectivity(Value predicate, llvm::function_ref<Value(Value)> nodeOf, const WalkKnowledge& knowledge) const {
         Operation* const def = predicate.getDefiningOp();
 
         if (EqOp equality = dyn_cast_or_null<EqOp>(def)) {
-            return getEqualitySelectivity(equality, nodeOf, knowledge);
-        } else if (isa_and_nonnull<NeqOp>(def)) {
-            return 1 - EQUALITY_SELECTIVITY;
+            return getEqualitySelectivity(equality.getLhs(), equality.getRhs(), nodeOf, knowledge);
+        } else if (NeqOp inequality = dyn_cast_or_null<NeqOp>(def)) {
+            return 1 - getEqualitySelectivity(inequality.getLhs(), inequality.getRhs(), nodeOf, knowledge);
         } else if (isa_and_nonnull<GtOp, LtOp, GteOp, LteOp>(def)) {
             return RANGE_SELECTIVITY;
         } else if (InOp membership = dyn_cast_or_null<InOp>(def)) {
-            return getMembershipSelectivity(membership);
+            return getMembershipSelectivity(membership, nodeOf, knowledge);
         } else if (CheckEdgeTypeConstraint typeCheck = dyn_cast_or_null<CheckEdgeTypeConstraint>(def)) {
             return shareTyped(typeCheck, nodeOf, knowledge);
         } else if (const LabelCheck check = readLabelCheck(predicate); check._alternatives) {
@@ -10277,10 +10317,7 @@ std::optional<double> estimateSourceRows(Operation* op, const RowEstimator& esti
     } else if (ScanNodes scan = dyn_cast<ScanNodes>(op)) {
         return estimator.scanNodes(scan.getResult(), ArrayAttr(), knowledge);
     } else if (ScanNodesByPropertyValue byValue = dyn_cast<ScanNodesByPropertyValue>(op)) {
-        const std::optional<ArrayAttr> labels = byValue.getLabels();
-        const double scanned = estimator.scanNodes(byValue->getResult(0), labels ? *labels : ArrayAttr(), knowledge);
-
-        return scanned * EQUALITY_SELECTIVITY;
+        return estimator.scanNodesByPropertyValue(byValue, knowledge);
     } else if (EdgeScanLabels scanLabels; readEdgeScanLabels(op, scanLabels)) {
         return estimator.scanEdges(op, scanLabels._source, scanLabels._target, ArrayAttr(), knowledge);
     } else if (ScanEdgesByType byType = dyn_cast<ScanEdgesByType>(op)) {
