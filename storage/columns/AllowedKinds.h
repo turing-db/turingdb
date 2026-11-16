@@ -454,6 +454,32 @@ struct CellListKindPairs<OP_ADD> {
     using Pairs = CellKindPairs<ListView>::Pairs;
 };
 
+// A cell meets a value only a list takes under '+' alone, which joins it to the list the
+// cell holds
+template <ColumnOperator Op>
+struct CellListElementKindPairs {
+    using Pairs = std::tuple<>;
+};
+
+template <>
+struct CellListElementKindPairs<OP_ADD> {
+    using Pairs = TupleFlatten<
+        CellKindPairs<types::Point::Primitive>::Pairs,
+        CellKindPairs<types::Embedding::Primitive>::Pairs,
+        CellKindPairs<MapView>::Pairs,
+        CellKindPairs<NodeID>::Pairs,
+        CellKindPairs<EdgeID>::Pairs,
+        CellKindPairs<LabelID>::Pairs,
+        CellKindPairs<EdgeTypeID>::Pairs,
+        CellKindPairs<PropertyTypeID>::Pairs,
+        CellKindPairs<ValueType>::Pairs,
+        std::tuple<
+            KindPair<CellView, GraphPath>,
+            KindPair<std::optional<CellView>, GraphPath>
+        >
+    >::Type;
+};
+
 template <ColumnOperator Op>
     requires (Op == OP_ADD) || (Op == OP_SUB) || (Op == OP_MUL) || (Op == OP_DIV)
           || (Op == OP_MOD) || (Op == OP_POW)
@@ -479,7 +505,8 @@ struct PairRestrictions<Op> {
         typename TemporalArithmeticKindPairs<Op>::Pairs,
 
         typename CellTextKindPairs<Op>::Pairs,
-        typename CellListKindPairs<Op>::Pairs
+        typename CellListKindPairs<Op>::Pairs,
+        typename CellListElementKindPairs<Op>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<>;
