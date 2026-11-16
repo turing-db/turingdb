@@ -5,6 +5,7 @@
 #include "BinaryOperators.h"
 #include "BinaryPredicates.h"
 #include "NullableArithmetic.h"
+#include "NullablePredicates.h"
 
 #include "ColumnCombinations.h"
 #include "TypeUtils.h"
@@ -32,7 +33,13 @@ struct BinaryPredicates {
     template <typename Op, typename ColW, typename ColT, typename ColU>
         requires is_result_column<Op, ColT, ColU, ColW>
     static void exec(ColW* res, const ColT* lhs, const ColU* rhs) {
-        BinaryOpExecutor<Op>::apply(res, lhs, rhs);
+        if constexpr (ConnectsNullableBooleans<Op, ColW, ColT, ColU>) {
+            NullablePredicateExecutor::connect<Op>(res, lhs, rhs);
+        } else if constexpr (ComputesNullablePredicate<Op, ColW, ColT, ColU>) {
+            NullablePredicateExecutor::apply<Op>(res, lhs, rhs);
+        } else {
+            BinaryOpExecutor<Op>::apply(res, lhs, rhs);
+        }
     }
 };
 

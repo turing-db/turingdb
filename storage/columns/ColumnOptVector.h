@@ -255,7 +255,9 @@ public:
         } else {
             const ValidityMask* source = first != nullptr ? first : second;
             bioassert(source->size() == size, "ColumnOptVector::assignValidity: the mask is not the size of the column");
-            std::copy_n(source->data(), wordCount, words);
+            if (source != &_mask) {
+                std::copy_n(source->data(), wordCount, words);
+            }
         }
 
         settleValidity();
