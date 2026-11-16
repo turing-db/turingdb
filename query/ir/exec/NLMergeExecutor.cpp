@@ -105,8 +105,7 @@ void readStagedValue(NLWrittenValues& written,
                      const NLMergeScanProperty& property) {
     const auto read = [&]<SupportedType T>() {
         auto* column = static_cast<ColumnOptVector<typename T::Primitive>*>(property._values);
-        column->clear();
-        column->resize(1);
+        column->assignNulls(1);
 
         if (value) {
             column->setOptional(0, written.read<T>(*value, readValues));
