@@ -233,6 +233,59 @@ public:
     ValidityMask* getValidity() { return hasMask() ? &_mask : nullptr; }
     const ValidityMask* getValidity() const { return hasMask() ? &_mask : nullptr; }
 
+    // Call visitRun(first, last) on each maximal run of present rows in [beginRow, endRow),
+    // reading the validity mask a word at a time
+    template <typename VisitRun>
+    void forEachPresentRun(size_t beginRow, size_t endRow, VisitRun&& visitRun) const {
+        constexpr size_t WORD_BITS = ValidityMask::BITS_PER_ELEMENT;
+
+        if (beginRow == endRow) {
+            return;
+        }
+
+        if (_nullCount == 0) {
+            visitRun(beginRow, endRow);
+            return;
+        }
+
+        const BitMaskType* words = _mask.data();
+        size_t pendingFirst = beginRow;
+        size_t pendingLast = beginRow;
+
+        size_t row = beginRow;
+        while (row < endRow) {
+            const size_t wordEnd = std::min((row / WORD_BITS + 1) * WORD_BITS, endRow);
+            const size_t width = wordEnd - row;
+
+            BitMaskType word = (words[row / WORD_BITS] >> (row % WORD_BITS)) & ValidityMask::lowBits(width);
+
+            size_t runFirst = row;
+            while (word != 0) {
+                const size_t skipped = static_cast<size_t>(std::countr_zero(word));
+                runFirst += skipped;
+                word >>= skipped;
+
+                const size_t runLength = static_cast<size_t>(std::countr_one(word));
+                if (runFirst != pendingLast) {
+                    if (pendingFirst != pendingLast) {
+                        visitRun(pendingFirst, pendingLast);
+                    }
+                    pendingFirst = runFirst;
+                }
+
+                runFirst += runLength;
+                pendingLast = runFirst;
+                word = runLength == WORD_BITS ? BitMaskType {0} : word >> runLength;
+            }
+
+            row = wordEnd;
+        }
+
+        if (pendingFirst != pendingLast) {
+            visitRun(pendingFirst, pendingLast);
+        }
+    }
+
     // A row is valid where both masks hold it valid, and a missing mask holds every row
     // valid. Every null row's value is reset to T {}.
     void assignValidity(const ValidityMask* first, const ValidityMask* second) {
