@@ -396,12 +396,27 @@ void NLStringGroupHashTable<Element>::assign(std::span<const Column* const> keyC
     const ColumnVectorOf<Element>* input = static_cast<const ColumnVectorOf<Element>*>(keyColumns.front());
     const size_t rowCount = assignment.getRowCount();
 
-    for (size_t row = 0; row < rowCount; row++) {
-        if constexpr (std::same_as<Element, std::string_view>) {
+    if constexpr (std::same_as<Element, std::string_view>) {
+        for (size_t row = 0; row < rowCount; row++) {
             assignment.setGroup(row, _cells.findOrCreateGroup((*input)[row], row, assignment));
-        } else if (input->isValid(row)) {
-            assignment.setGroup(row, _cells.findOrCreateGroup(input->getValue(row), row, assignment));
-        } else {
+        }
+    } else {
+        const std::vector<std::string_view>& values = input->getValues();
+        size_t nullFirst = 0;
+
+        input->forEachPresentRun(0, rowCount, [&](size_t first, size_t last) {
+            for (size_t row = nullFirst; row < first; row++) {
+                assignment.assignNullGroup(row, &_nullGroup);
+            }
+
+            for (size_t row = first; row < last; row++) {
+                assignment.setGroup(row, _cells.findOrCreateGroup(values[row], row, assignment));
+            }
+
+            nullFirst = last;
+        });
+
+        for (size_t row = nullFirst; row < rowCount; row++) {
             assignment.assignNullGroup(row, &_nullGroup);
         }
     }

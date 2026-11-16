@@ -3918,6 +3918,31 @@ bool replacesExtremum(const Primitive& current, const Primitive& value) {
     }
 }
 
+// Fold values[first, last) into a running min (IsMax false) or max (IsMax true), noting in
+// @param replaced whether any value replaced it. A number's order is a strict weak order, so
+// a value replaced the seed exactly when the result replaces it.
+template <typename Primitive, bool IsMax>
+void foldExtremum(const Primitive* values, size_t first, size_t last, Primitive& extreme, bool& replaced) {
+    Primitive running = extreme;
+
+    if constexpr (std::is_arithmetic_v<Primitive>) {
+        for (size_t row = first; row < last; row++) {
+            running = replacesExtremum<Primitive, IsMax>(running, values[row]) ? values[row] : running;
+        }
+
+        replaced |= replacesExtremum<Primitive, IsMax>(extreme, running);
+    } else {
+        for (size_t row = first; row < last; row++) {
+            if (replacesExtremum<Primitive, IsMax>(running, values[row])) {
+                running = values[row];
+                replaced = true;
+            }
+        }
+    }
+
+    extreme = running;
+}
+
 // The number a tagged cell holds, whatever numeric type its tag names. A deviation over
 // a type-erased column is defined over numbers only, so any other tag is a query error -
 // the check the static column types make for a typed column, made per row here.
@@ -4344,18 +4369,15 @@ State& placedState(std::byte* place) {
     return *std::launder(reinterpret_cast<State*>(place));
 }
 
-// Fold a chunk's present values into a keyless sum
+// Fold a chunk's values into a keyless sum. A null row adds the zero its slot holds.
 template <typename Primitive>
 void aggregateFoldSum(std::byte* place, const Column* input, NLCompactingValueStore& values) {
     Primitive& sum = placedState<Primitive>(place);
     const ColumnOptVector<Primitive>* typedInput = static_cast<const ColumnOptVector<Primitive>*>(input);
 
     Primitive running = sum;
-    const size_t rowCount = typedInput->size();
-    for (size_t row = 0; row < rowCount; row++) {
-        if (typedInput->isValid(row)) {
-            running = numericAdd(running, typedInput->getValue(row));
-        }
+    for (const Primitive value : typedInput->getValues()) {
+        running = numericAdd(running, value);
     }
 
     sum = running;
@@ -4370,15 +4392,24 @@ void aggregateFoldAvg(std::byte* place, const Column* input, NLCompactingValueSt
     State& average = placedState<State>(place);
     const ColumnOptVector<Primitive>* typedInput = static_cast<const ColumnOptVector<Primitive>*>(input);
 
+    const std::vector<Primitive>& inputValues = typedInput->getValues();
+
     AverageTotal<Primitive> total = average._total;
     uint64_t count = average._count;
 
-    const size_t rowCount = typedInput->size();
-    for (size_t row = 0; row < rowCount; row++) {
-        if (typedInput->isValid(row)) {
-            total = addToAverageTotal(total, typedInput->getValue(row), count);
-            count++;
+    if constexpr (std::is_same_v<Primitive, types::Point::Primitive>) {
+        typedInput->forEachPresentRun(0, inputValues.size(), [&](size_t first, size_t last) {
+            for (size_t row = first; row < last; row++) {
+                total = addToAverageTotal(total, inputValues[row], count);
+                count++;
+            }
+        });
+    } else {
+        for (const Primitive value : inputValues) {
+            total = addToAverageTotal(total, value, count);
         }
+
+        count += inputValues.size() - typedInput->getNullCount();
     }
 
     average._total = total;
@@ -4393,14 +4424,11 @@ void aggregateFoldDurationTotal(std::byte* place, const Column* input, NLCompact
         static_cast<const ColumnOptVector<types::Duration::Primitive>*>(input);
 
     __int128 total = 0;
-    uint64_t count = 0;
-    const size_t rowCount = typedInput->size();
-    for (size_t row = 0; row < rowCount; row++) {
-        if (typedInput->isValid(row)) {
-            total += typedInput->getValue(row).getMicroseconds();
-            count++;
-        }
+    for (const types::Duration::Primitive value : typedInput->getValues()) {
+        total += value.getMicroseconds();
     }
+
+    const uint64_t count = typedInput->size() - typedInput->getNullCount();
 
     if constexpr (Averages) {
         NLAverageState<__int128>& average = placedState<NLAverageState<__int128>>(place);
@@ -4448,15 +4476,30 @@ void aggregateFoldMinMax(std::byte* place, const Column* input, NLCompactingValu
 
     bool replaced = false;
     const size_t rowCount = typedInput->size();
-    for (size_t row = 0; row < rowCount; row++) {
-        const std::optional<Primitive> value = presentRow(typedInput, row);
-        if (!value.has_value()) {
-            continue;
-        }
 
-        if (!extreme.has_value() || replacesExtremum<Primitive, IsMax>(*extreme, *value)) {
-            extreme = *value;
-            replaced = true;
+    if constexpr (std::is_same_v<InputColumn, ColumnOptVector<Primitive>>) {
+        const Primitive* inputValues = typedInput->getValues().data();
+
+        typedInput->forEachPresentRun(0, rowCount, [&](size_t first, size_t last) {
+            if (!extreme.has_value()) {
+                extreme = inputValues[first];
+                replaced = true;
+                first++;
+            }
+
+            foldExtremum<Primitive, IsMax>(inputValues, first, last, *extreme, replaced);
+        });
+    } else {
+        for (size_t row = 0; row < rowCount; row++) {
+            const std::optional<Primitive> value = presentRow(typedInput, row);
+            if (!value.has_value()) {
+                continue;
+            }
+
+            if (!extreme.has_value() || replacesExtremum<Primitive, IsMax>(*extreme, *value)) {
+                extreme = *value;
+                replaced = true;
+            }
         }
     }
 
@@ -4652,8 +4695,8 @@ NLAggregateFoldFunction taggedAggregateFoldFor(AggregateKind kind) {
     return nullptr;
 }
 
-// Fold a chunk's present values into per-group sums. Each new group starts at zero, so the
-// value is added into its running sum.
+// Fold a chunk's values into per-group sums. Each new group starts at zero, so the value is
+// added into its running sum, and a null row adds the zero its slot holds.
 template <typename Primitive>
 void groupFoldSum(NLGroupStatePlaces places,
                   const Column* input,
@@ -4662,13 +4705,11 @@ void groupFoldSum(NLGroupStatePlaces places,
                   size_t endRow,
                   const NLGroupDistinctTally* distinct,
                   NLValueStore& values) {
-    const ColumnOptVector<Primitive>* typedInput = static_cast<const ColumnOptVector<Primitive>*>(input);
+    const std::vector<Primitive>& inputValues = static_cast<const ColumnOptVector<Primitive>*>(input)->getValues();
 
     for (size_t row = beginRow; row < endRow; row++) {
-        if (typedInput->isValid(row)) {
-            Primitive& running = places.getState<Primitive>(groups[row]);
-            running = numericAdd(running, typedInput->getValue(row));
-        }
+        Primitive& running = places.getState<Primitive>(groups[row]);
+        running = numericAdd(running, inputValues[row]);
     }
 }
 
@@ -4788,15 +4829,29 @@ void groupFoldMinMax(NLGroupStatePlaces places,
                      NLValueStore& values) {
     const InputColumn* typedInput = static_cast<const InputColumn*>(input);
 
-    for (size_t row = beginRow; row < endRow; row++) {
-        const std::optional<Primitive> value = presentRow(typedInput, row);
-        if (!value.has_value()) {
-            continue;
-        }
+    if constexpr (std::is_same_v<InputColumn, ColumnOptVector<Primitive>>) {
+        const std::vector<Primitive>& inputValues = typedInput->getValues();
 
-        NLKeptValue<Primitive>& current = places.getState<NLKeptValue<Primitive>>(groups[row]);
-        if (!current.isKept() || replacesExtremum<Primitive, IsMax>(current.getValue(), *value)) {
-            current.keep(*value, values);
+        typedInput->forEachPresentRun(beginRow, endRow, [&](size_t first, size_t last) {
+            for (size_t row = first; row < last; row++) {
+                const Primitive& value = inputValues[row];
+                NLKeptValue<Primitive>& current = places.getState<NLKeptValue<Primitive>>(groups[row]);
+                if (!current.isKept() || replacesExtremum<Primitive, IsMax>(current.getValue(), value)) {
+                    current.keep(value, values);
+                }
+            }
+        });
+    } else {
+        for (size_t row = beginRow; row < endRow; row++) {
+            const std::optional<Primitive> value = presentRow(typedInput, row);
+            if (!value.has_value()) {
+                continue;
+            }
+
+            NLKeptValue<Primitive>& current = places.getState<NLKeptValue<Primitive>>(groups[row]);
+            if (!current.isKept() || replacesExtremum<Primitive, IsMax>(current.getValue(), *value)) {
+                current.keep(*value, values);
+            }
         }
     }
 }
@@ -4891,14 +4946,15 @@ void groupFoldAvg(NLGroupStatePlaces places,
     using State = NLAverageState<AverageTotal<Primitive>>;
 
     const ColumnOptVector<Primitive>* typedInput = static_cast<const ColumnOptVector<Primitive>*>(input);
+    const std::vector<Primitive>& inputValues = typedInput->getValues();
 
-    for (size_t row = beginRow; row < endRow; row++) {
-        if (typedInput->isValid(row)) {
+    typedInput->forEachPresentRun(beginRow, endRow, [&](size_t first, size_t last) {
+        for (size_t row = first; row < last; row++) {
             State& average = places.getState<State>(groups[row]);
-            average._total = addToAverageTotal(average._total, typedInput->getValue(row), average._count);
+            average._total = addToAverageTotal(average._total, inputValues[row], average._count);
             average._count++;
         }
-    }
+    });
 }
 
 // Fold a chunk's distinct present values into per-group averages (avg(DISTINCT x)): a value

@@ -216,3 +216,8 @@ add_turing_test(test_query_ir_group_distinct_tally GroupDistinctTallyTest.cpp)
 add_turing_test(test_query_ir_count_over_nullable_schema_id CountOverNullableSchemaIDTest.cpp)
 target_sources(test_query_ir_count_over_nullable_schema_id PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
 target_include_directories(test_query_ir_count_over_nullable_schema_id PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_nullable_aggregate_kernels NullableAggregateKernelsTest.cpp)
+target_include_directories(test_query_ir_nullable_aggregate_kernels PRIVATE ${IR_TEST_DIR})
+
+add_ir_tests(test_query_ir_nullable_string_group_table NullableStringGroupTableTest.cpp)
