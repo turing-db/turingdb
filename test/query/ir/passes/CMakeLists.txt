@@ -231,3 +231,5 @@ add_ir_tests(test_query_ir_node_id_of NodeIDOfTest.cpp)
 add_ir_tests(test_query_ir_fold_constant_map_keys FoldConstantMapKeysTest.cpp)
 
 add_ir_tests(test_query_ir_hoist_repeated_region_invariant_ops HoistRepeatedRegionInvariantOpsTest.cpp)
+
+add_ir_tests(test_query_ir_container_index_speculatability ContainerIndexSpeculatabilityTest.cpp)
