@@ -3820,8 +3820,7 @@ size_t countPresentColumn(const Column* column) {
 template <typename Primitive>
 Primitive numericAdd(Primitive accumulator, Primitive value) {
     if constexpr (std::is_integral_v<Primitive> && std::is_signed_v<Primitive>) {
-        using Unsigned = std::make_unsigned_t<Primitive>;
-        return static_cast<Primitive>(static_cast<Unsigned>(accumulator) + static_cast<Unsigned>(value));
+        return wrappingArithmetic<std::plus<>>(accumulator, value);
     } else {
         return accumulator + value;
     }
