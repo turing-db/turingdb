@@ -129,6 +129,8 @@ add_turing_test(test_query_ir_integer_double_equality IntegerDoubleEqualityTest.
 
 add_turing_test(test_query_ir_normalize_function NormalizeFunctionTest.cpp)
 
+add_turing_test(test_query_ir_normalize_of_a_non_string NormalizeOfANonStringTest.cpp)
+
 add_turing_test(test_query_ir_is_normalized_predicate IsNormalizedPredicateTest.cpp)
 
 add_turing_test(test_query_ir_cross_type_ordering CrossTypeOrderingTest.cpp)
