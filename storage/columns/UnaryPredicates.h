@@ -51,6 +51,8 @@ struct UnaryPredicateExecutor {
         for (size_t i = 0; i < size; i++) {
             writeRow(res, i, op(operandRow(arg, i)));
         }
+
+        finishRowWrites(res);
     }
 
     // Required for RETURN NOT TRUE, etc.

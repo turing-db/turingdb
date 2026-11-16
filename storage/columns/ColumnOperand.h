@@ -57,6 +57,15 @@ void resizeForRowWrites(ColumnOptVector<T>* column, size_t size) {
     column->resizeValid(size);
 }
 
+template <typename T>
+void finishRowWrites(ColumnVector<T>* column) {
+}
+
+template <typename T>
+void finishRowWrites(ColumnOptVector<T>* column) {
+    column->dropAllValidMask();
+}
+
 template <typename ColumnType, typename T>
 void writeRow(ColumnType* column, size_t row, const T& value) {
     column->set(row, value);
@@ -98,6 +107,8 @@ struct BinaryOpExecutor {
         for (size_t i = 0; i < size; i++) {
             writeRow(res, i, op(operandRow(lhs, i), operandRow(rhs, i)));
         }
+
+        finishRowWrites(res);
     }
 
     template <typename ResColumn, typename LhsColumn, typename U>
@@ -113,6 +124,8 @@ struct BinaryOpExecutor {
         for (size_t i = 0; i < size; i++) {
             writeRow(res, i, op(operandRow(lhs, i), value));
         }
+
+        finishRowWrites(res);
     }
 
     template <typename ResColumn, typename T, typename RhsColumn>
@@ -128,6 +141,8 @@ struct BinaryOpExecutor {
         for (size_t i = 0; i < size; i++) {
             writeRow(res, i, op(value, operandRow(rhs, i)));
         }
+
+        finishRowWrites(res);
     }
 
     template <typename Res, typename T, typename U>

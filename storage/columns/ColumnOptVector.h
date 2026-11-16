@@ -224,6 +224,12 @@ public:
         _mask.fill(start, count, false);
     }
 
+    void dropAllValidMask() {
+        if (_nullCount == 0) {
+            _mask.resize(0);
+        }
+    }
+
     size_t getNullCount() const { return _nullCount; }
     bool hasMask() const { return !_mask.empty(); }
 
@@ -458,9 +464,7 @@ private:
 
     void countNulls() {
         _nullCount = _data.size() - _mask.countSet();
-        if (_nullCount == 0) {
-            _mask.resize(0);
-        }
+        dropAllValidMask();
     }
 
     void resetNullValues() {
