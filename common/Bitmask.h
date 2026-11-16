@@ -42,6 +42,8 @@ struct bitmask {
 template <std::unsigned_integral Type>
 class DynamicLargeBitMask {
 public:
+    static constexpr size_t BITS_PER_ELEMENT = sizeof(Type) * 8;
+
     explicit DynamicLargeBitMask(size_t bitCount)
         : _bitCount(bitCount),
         _v(wordCount(bitCount), 0) {
@@ -175,9 +177,15 @@ public:
         return setCount;
     }
 
-private:
-    static constexpr size_t BITS_PER_ELEMENT = sizeof(Type) * 8;
+    [[nodiscard]] static constexpr Type lowBits(size_t bitCount) {
+        if (bitCount == BITS_PER_ELEMENT) {
+            return ~Type {0};
+        }
 
+        return (static_cast<Type>(1) << bitCount) - 1;
+    }
+
+private:
     size_t _bitCount {0};
     std::vector<Type> _v;
 
@@ -191,14 +199,6 @@ private:
 
     [[nodiscard]] static constexpr Type bitValue(size_t bit) {
         return static_cast<Type>(1) << (bit % BITS_PER_ELEMENT);
-    }
-
-    [[nodiscard]] static constexpr Type lowBits(size_t bitCount) {
-        if (bitCount == BITS_PER_ELEMENT) {
-            return ~Type {0};
-        }
-
-        return (static_cast<Type>(1) << bitCount) - 1;
     }
 
     [[nodiscard]] Type readWord(size_t bit) const {

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <stdint.h>
+#include <algorithm>
+#include <bit>
 #include <initializer_list>
 #include <optional>
 #include <type_traits>
@@ -188,17 +190,24 @@ public:
             return;
         }
 
+        shrink(size);
+    }
+
+    void resizeValid(size_t size) {
+        const size_t oldSize = _data.size();
+        if (size <= oldSize) {
+            shrink(size);
+            return;
+        }
+
         if (!hasMask()) {
             _data.resize(size);
             return;
         }
 
-        const size_t removedCount = oldSize - size;
-        const size_t removedNullCount = removedCount - _mask.countSet(size, removedCount);
-
         _data.resize(size);
         _mask.resize(size);
-        _nullCount -= removedNullCount;
+        _mask.fill(oldSize, size - oldSize, true);
     }
 
     size_t getNullCount() const { return _nullCount; }
@@ -209,6 +218,28 @@ public:
 
     ValidityMask* getValidity() { return hasMask() ? &_mask : nullptr; }
     const ValidityMask* getValidity() const { return hasMask() ? &_mask : nullptr; }
+
+    // Calls wordOf(w) once for each word w, in order. Row r is valid where bit r % 64 of
+    // wordOf(r / 64) is set
+    template <typename WordOf>
+    void assignValidityWords(WordOf wordOf) {
+        const size_t size = _data.size();
+        _mask.resize(size);
+
+        BitMaskType* words = _mask.data();
+        const size_t wordCount = _mask.getWordCount();
+
+        for (size_t word = 0; word < wordCount; word++) {
+            words[word] = wordOf(word);
+        }
+
+        const size_t tailBitCount = size % ValidityMask::BITS_PER_ELEMENT;
+        if (tailBitCount != 0) {
+            words[wordCount - 1] &= ValidityMask::lowBits(tailBitCount);
+        }
+
+        settleValidity();
+    }
 
     void assign(const Column* other) override {
         bioassert(other->getKind() == _staticKind,
@@ -277,11 +308,54 @@ private:
         }
     }
 
-    void materialiseMask() {
-        if (hasMask()) {
+    void shrink(size_t size) {
+        if (!hasMask()) {
+            _data.resize(size);
             return;
         }
 
+        const size_t removedCount = _data.size() - size;
+        const size_t removedNullCount = removedCount - _mask.countSet(size, removedCount);
+
+        _data.resize(size);
+        _mask.resize(size);
+        _nullCount -= removedNullCount;
+    }
+
+    void settleValidity() {
+        _nullCount = _data.size() - _mask.countSet();
+        if (_nullCount == 0) {
+            _mask.resize(0);
+            return;
+        }
+
+        resetNullValues();
+    }
+
+    void resetNullValues() {
+        constexpr size_t BITS_PER_WORD = ValidityMask::BITS_PER_ELEMENT;
+
+        const BitMaskType* words = _mask.data();
+        const size_t size = _data.size();
+
+        for (size_t start = 0; start < size; start += BITS_PER_WORD) {
+            const BitMaskType inRange = ValidityMask::lowBits(std::min(BITS_PER_WORD, size - start));
+            BitMaskType nullRows = ~words[start / BITS_PER_WORD] & inRange;
+
+            while (nullRows != 0) {
+                _data[start + std::countr_zero(nullRows)] = T {};
+                nullRows &= nullRows - 1;
+            }
+        }
+    }
+
+    void materialiseMask() {
+        if (!hasMask()) {
+            buildAllValidMask();
+        }
+    }
+
+    [[gnu::cold, gnu::noinline]] void buildAllValidMask() {
         _mask.resize(_data.size());
         _mask.fill(0, _data.size(), true);
     }

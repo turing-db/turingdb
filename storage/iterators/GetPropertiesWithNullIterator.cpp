@@ -1,5 +1,8 @@
 #include "GetPropertiesWithNullIterator.h"
 
+#include <algorithm>
+#include <vector>
+
 #include "datapart/DataPart.h"
 #include "ID.h"
 #include "iterators/Iterator.h"
@@ -144,21 +147,33 @@ GetPropertiesWithNullChunkWriter<ID, T>::GetPropertiesWithNullChunkWriter(const 
 
 template <IteratedID ID, SupportedType T>
 void GetPropertiesWithNullChunkWriter<ID, T>::fill(size_t maxCount) {
+    using ValidityWord = typename ColumnValues::BitMaskType;
+    constexpr size_t BITS_PER_WORD = ColumnValues::ValidityMask::BITS_PER_ELEMENT;
+
     auto& output = *_output;
     const size_t availableSize = std::distance(this->_entityIt, this->_inputIDs->end());
     const size_t rangeSize = std::min(maxCount, availableSize);
 
-    output.resize(rangeSize);
-    for (size_t row = 0; row < rangeSize; row++) {
-        const typename T::Primitive* property = this->_prop;
-        if (property) {
-            output.set(row, *property);
-        } else {
-            output.setNull(row);
+    output.resizeValid(rangeSize);
+    std::vector<typename T::Primitive>& values = output.getValues();
+
+    output.assignValidityWords([&](size_t word) {
+        const size_t start = word * BITS_PER_WORD;
+        const size_t end = std::min(start + BITS_PER_WORD, rangeSize);
+
+        ValidityWord validity = 0;
+        for (size_t row = start; row < end; row++) {
+            const typename T::Primitive* property = this->_prop;
+            if (property) {
+                values[row] = *property;
+                validity |= ValidityWord {1} << (row - start);
+            }
+
+            this->next();
         }
 
-        this->next();
-    }
+        return validity;
+    });
 }
 
 namespace db {

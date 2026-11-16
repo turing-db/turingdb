@@ -45,7 +45,7 @@ struct UnaryPredicateExecutor {
     template <typename ResColumn, typename ArgColumn>
     static void apply(ResColumn* res, const ArgColumn* arg) {
         const size_t size = arg->size();
-        res->resize(size);
+        resizeForRowWrites(res, size);
 
         auto op = Op {};
         for (size_t i = 0; i < size; i++) {
