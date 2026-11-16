@@ -18,6 +18,10 @@ namespace db {
 // carry it, and from a key or an element read off it to the value it was read out of.
 bool holdsOnlyNullOr(mlir::Value column, std::initializer_list<CellTag> tags);
 
+// Whether every row of @param column holds null, a map, a node or an edge: a value a key reads
+// an entry or a property of
+bool holdsOnlyKeyedValues(mlir::Value column);
+
 // The same of what @param reads, taken in order off each row's value, arrive at: the value
 // under a key of a map, or each element of a list where the key is null
 bool readsHoldOnlyNullOr(mlir::Value column,
