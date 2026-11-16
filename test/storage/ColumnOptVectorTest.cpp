@@ -6,7 +6,7 @@
 #include <utility>
 
 #include "columns/ColumnVector.h"
-#include "columns/SplitColumnVector.h"
+#include "columns/ColumnOptVector.h"
 
 #include "TuringException.h"
 
@@ -30,7 +30,7 @@ std::string valueOf<std::string>(size_t row) {
 }
 
 template <typename T>
-void expectInvariants(const SplitColumnVector<T>& column) {
+void expectInvariants(const ColumnOptVector<T>& column) {
     size_t invalidCount = 0;
     for (size_t row = 0; row < column.size(); ++row) {
         if (!column.isValid(row)) {
@@ -67,7 +67,7 @@ void expectInvariants(const SplitColumnVector<T>& column) {
 }
 
 template <typename T>
-void fillPattern(SplitColumnVector<T>& column, size_t rowCount) {
+void fillPattern(ColumnOptVector<T>& column, size_t rowCount) {
     for (size_t row = 0; row < rowCount; ++row) {
         const bool isNull = (row % 3) == 0 || (row % 7) == 5;
         if (isNull) {
@@ -81,26 +81,26 @@ void fillPattern(SplitColumnVector<T>& column, size_t rowCount) {
 }
 
 template <typename T>
-class SplitColumnVectorTest : public ::testing::Test {
+class ColumnOptVectorTest : public ::testing::Test {
 };
 
 using ElementTypes = ::testing::Types<int64_t, std::string>;
-TYPED_TEST_SUITE(SplitColumnVectorTest, ElementTypes);
+TYPED_TEST_SUITE(ColumnOptVectorTest, ElementTypes);
 
-TEST(SplitColumnVectorKindTest, hasItsOwnKind) {
-    const SplitColumnVector<int64_t> column;
+TEST(ColumnOptVectorKindTest, hasItsOwnKind) {
+    const ColumnOptVector<int64_t> column;
 
-    EXPECT_NE(SplitColumnVector<int64_t>::staticKind(), ColumnVector<int64_t>::staticKind());
-    EXPECT_NE(SplitColumnVector<int64_t>::staticKind(), SplitColumnVector<std::string>::staticKind());
-    EXPECT_EQ(column.getKind(), SplitColumnVector<int64_t>::staticKind());
-    EXPECT_EQ(column.getContainerKind(), ContainerKind::code<SplitColumnVector<int64_t>>());
+    EXPECT_NE(ColumnOptVector<int64_t>::staticKind(), ColumnVector<int64_t>::staticKind());
+    EXPECT_NE(ColumnOptVector<int64_t>::staticKind(), ColumnOptVector<std::string>::staticKind());
+    EXPECT_EQ(column.getKind(), ColumnOptVector<int64_t>::staticKind());
+    EXPECT_EQ(column.getContainerKind(), ContainerKind::code<ColumnOptVector<int64_t>>());
     EXPECT_NE(column.getContainerKind(), ContainerKind::code<ColumnVector<int64_t>>());
     EXPECT_EQ(column.getInternalKind(), InternalKind::code<int64_t>());
-    EXPECT_NE(column.getTypeName().find("SplitColumnVector"), std::string_view::npos);
+    EXPECT_NE(column.getTypeName().find("ColumnOptVector"), std::string_view::npos);
 }
 
-TYPED_TEST(SplitColumnVectorTest, constructionHasNoMask) {
-    const SplitColumnVector<TypeParam> column;
+TYPED_TEST(ColumnOptVectorTest, constructionHasNoMask) {
+    const ColumnOptVector<TypeParam> column;
 
     EXPECT_TRUE(column.empty());
     EXPECT_EQ(column.size(), 0u);
@@ -109,8 +109,8 @@ TYPED_TEST(SplitColumnVectorTest, constructionHasNoMask) {
     expectInvariants(column);
 }
 
-TYPED_TEST(SplitColumnVectorTest, pushBackValuesKeepsMaskAbsent) {
-    SplitColumnVector<TypeParam> column;
+TYPED_TEST(ColumnOptVectorTest, pushBackValuesKeepsMaskAbsent) {
+    ColumnOptVector<TypeParam> column;
     column.reserve(200);
 
     for (size_t row = 0; row < 200; ++row) {
@@ -130,8 +130,8 @@ TYPED_TEST(SplitColumnVectorTest, pushBackValuesKeepsMaskAbsent) {
     expectInvariants(column);
 }
 
-TYPED_TEST(SplitColumnVectorTest, pushNullOnEmptyColumn) {
-    SplitColumnVector<TypeParam> column;
+TYPED_TEST(ColumnOptVectorTest, pushNullOnEmptyColumn) {
+    ColumnOptVector<TypeParam> column;
     column.pushNull();
 
     EXPECT_TRUE(column.hasMask());
@@ -140,8 +140,8 @@ TYPED_TEST(SplitColumnVectorTest, pushNullOnEmptyColumn) {
     expectInvariants(column);
 }
 
-TYPED_TEST(SplitColumnVectorTest, pushAcrossWordBoundary) {
-    SplitColumnVector<TypeParam> column;
+TYPED_TEST(ColumnOptVectorTest, pushAcrossWordBoundary) {
+    ColumnOptVector<TypeParam> column;
     for (size_t row = 0; row < 63; ++row) {
         column.push_back(valueOf<TypeParam>(row));
     }
@@ -167,16 +167,16 @@ TYPED_TEST(SplitColumnVectorTest, pushAcrossWordBoundary) {
     EXPECT_EQ(column.getValue(64), valueOf<TypeParam>(64));
 }
 
-TYPED_TEST(SplitColumnVectorTest, resizeOnEmptyToZeroHasNoMask) {
-    SplitColumnVector<TypeParam> column;
+TYPED_TEST(ColumnOptVectorTest, resizeOnEmptyToZeroHasNoMask) {
+    ColumnOptVector<TypeParam> column;
     column.resize(0);
 
     EXPECT_FALSE(column.hasMask());
     expectInvariants(column);
 }
 
-TYPED_TEST(SplitColumnVectorTest, resizeGrowAddsNullRows) {
-    SplitColumnVector<TypeParam> column;
+TYPED_TEST(ColumnOptVectorTest, resizeGrowAddsNullRows) {
+    ColumnOptVector<TypeParam> column;
     for (size_t row = 0; row < 5; ++row) {
         column.push_back(valueOf<TypeParam>(row));
     }
@@ -198,8 +198,8 @@ TYPED_TEST(SplitColumnVectorTest, resizeGrowAddsNullRows) {
     expectInvariants(column);
 }
 
-TYPED_TEST(SplitColumnVectorTest, resizeShrinkSubtractsRemovedNulls) {
-    SplitColumnVector<TypeParam> column;
+TYPED_TEST(ColumnOptVectorTest, resizeShrinkSubtractsRemovedNulls) {
+    ColumnOptVector<TypeParam> column;
     fillPattern(column, 140);
     expectInvariants(column);
 
@@ -215,8 +215,8 @@ TYPED_TEST(SplitColumnVectorTest, resizeShrinkSubtractsRemovedNulls) {
     expectInvariants(column);
 }
 
-TYPED_TEST(SplitColumnVectorTest, setOverEveryResizedRowClearsTheCount) {
-    SplitColumnVector<TypeParam> column;
+TYPED_TEST(ColumnOptVectorTest, setOverEveryResizedRowClearsTheCount) {
+    ColumnOptVector<TypeParam> column;
     column.resize(130);
     EXPECT_EQ(column.getNullCount(), 130u);
 
@@ -236,8 +236,8 @@ TYPED_TEST(SplitColumnVectorTest, setOverEveryResizedRowClearsTheCount) {
     expectInvariants(column);
 }
 
-TYPED_TEST(SplitColumnVectorTest, setNullTwiceCountsOnce) {
-    SplitColumnVector<TypeParam> column;
+TYPED_TEST(ColumnOptVectorTest, setNullTwiceCountsOnce) {
+    ColumnOptVector<TypeParam> column;
     for (size_t row = 0; row < 70; ++row) {
         column.push_back(valueOf<TypeParam>(row));
     }
@@ -259,8 +259,8 @@ TYPED_TEST(SplitColumnVectorTest, setNullTwiceCountsOnce) {
     expectInvariants(column);
 }
 
-TYPED_TEST(SplitColumnVectorTest, setOptionalBothWays) {
-    SplitColumnVector<TypeParam> column;
+TYPED_TEST(ColumnOptVectorTest, setOptionalBothWays) {
+    ColumnOptVector<TypeParam> column;
     column.resize(4);
 
     const std::optional<TypeParam> present = valueOf<TypeParam>(0);
@@ -286,8 +286,8 @@ TYPED_TEST(SplitColumnVectorTest, setOptionalBothWays) {
     expectInvariants(column);
 }
 
-TYPED_TEST(SplitColumnVectorTest, nullSlotHoldsDefaultValue) {
-    SplitColumnVector<TypeParam> column;
+TYPED_TEST(ColumnOptVectorTest, nullSlotHoldsDefaultValue) {
+    ColumnOptVector<TypeParam> column;
     column.push_back(valueOf<TypeParam>(0));
     column.setNull(0);
 
@@ -295,8 +295,8 @@ TYPED_TEST(SplitColumnVectorTest, nullSlotHoldsDefaultValue) {
     expectInvariants(column);
 }
 
-TYPED_TEST(SplitColumnVectorTest, getValueOnNullRowThrows) {
-    SplitColumnVector<TypeParam> column;
+TYPED_TEST(ColumnOptVectorTest, getValueOnNullRowThrows) {
+    ColumnOptVector<TypeParam> column;
     column.push_back(valueOf<TypeParam>(0));
     column.pushNull();
 
@@ -304,8 +304,8 @@ TYPED_TEST(SplitColumnVectorTest, getValueOnNullRowThrows) {
     EXPECT_THROW(column.getValue(1), TuringException);
 }
 
-TYPED_TEST(SplitColumnVectorTest, clearDropsTheMask) {
-    SplitColumnVector<TypeParam> column;
+TYPED_TEST(ColumnOptVectorTest, clearDropsTheMask) {
+    ColumnOptVector<TypeParam> column;
     fillPattern(column, 100);
     EXPECT_TRUE(column.hasMask());
     EXPECT_NE(column.getValidity(), nullptr);
@@ -321,11 +321,11 @@ TYPED_TEST(SplitColumnVectorTest, clearDropsTheMask) {
     expectInvariants(column);
 }
 
-TYPED_TEST(SplitColumnVectorTest, assignCopiesValuesBitsAndCount) {
-    SplitColumnVector<TypeParam> source;
+TYPED_TEST(ColumnOptVectorTest, assignCopiesValuesBitsAndCount) {
+    ColumnOptVector<TypeParam> source;
     fillPattern(source, 100);
 
-    SplitColumnVector<TypeParam> destination;
+    ColumnOptVector<TypeParam> destination;
     destination.push_back(valueOf<TypeParam>(0));
     destination.assign(&source);
 
@@ -337,13 +337,13 @@ TYPED_TEST(SplitColumnVectorTest, assignCopiesValuesBitsAndCount) {
     expectInvariants(destination);
 }
 
-TYPED_TEST(SplitColumnVectorTest, assignFromLineAtUnalignedStarts) {
-    SplitColumnVector<TypeParam> source;
+TYPED_TEST(ColumnOptVectorTest, assignFromLineAtUnalignedStarts) {
+    ColumnOptVector<TypeParam> source;
     fillPattern(source, 300);
 
     for (const size_t start : {0, 1, 63, 64, 65}) {
         for (const size_t count : {0, 1, 63, 64, 65, 129, 200}) {
-            SplitColumnVector<TypeParam> destination;
+            ColumnOptVector<TypeParam> destination;
             destination.pushNull();
             destination.assignFromLine(&source, start, count);
 
@@ -360,17 +360,17 @@ TYPED_TEST(SplitColumnVectorTest, assignFromLineAtUnalignedStarts) {
     }
 }
 
-TYPED_TEST(SplitColumnVectorTest, assignFromLineWithoutNullsHasNoMask) {
-    SplitColumnVector<TypeParam> source;
+TYPED_TEST(ColumnOptVectorTest, assignFromLineWithoutNullsHasNoMask) {
+    ColumnOptVector<TypeParam> source;
     fillPattern(source, 100);
 
-    SplitColumnVector<TypeParam> destination;
+    ColumnOptVector<TypeParam> destination;
     destination.assignFromLine(&source, 1, 2);
     EXPECT_EQ(destination.getNullCount(), 0u);
     EXPECT_FALSE(destination.hasMask());
     expectInvariants(destination);
 
-    SplitColumnVector<TypeParam> valid;
+    ColumnOptVector<TypeParam> valid;
     for (size_t row = 0; row < 100; ++row) {
         valid.push_back(valueOf<TypeParam>(row));
     }
@@ -380,21 +380,21 @@ TYPED_TEST(SplitColumnVectorTest, assignFromLineWithoutNullsHasNoMask) {
     expectInvariants(destination);
 }
 
-TYPED_TEST(SplitColumnVectorTest, appendRowsAtUnalignedOffsets) {
-    SplitColumnVector<TypeParam> sourceWithNulls;
+TYPED_TEST(ColumnOptVectorTest, appendRowsAtUnalignedOffsets) {
+    ColumnOptVector<TypeParam> sourceWithNulls;
     fillPattern(sourceWithNulls, 300);
 
-    SplitColumnVector<TypeParam> sourceWithoutNulls;
+    ColumnOptVector<TypeParam> sourceWithoutNulls;
     for (size_t row = 0; row < 300; ++row) {
         sourceWithoutNulls.push_back(valueOf<TypeParam>(row));
     }
 
     for (const bool destinationHasNulls : {false, true}) {
-        for (const SplitColumnVector<TypeParam>* source : {&sourceWithNulls, &sourceWithoutNulls}) {
+        for (const ColumnOptVector<TypeParam>* source : {&sourceWithNulls, &sourceWithoutNulls}) {
             for (const size_t prefix : {0, 1, 63, 64, 65}) {
                 for (const size_t offset : {0, 1, 63, 64, 65}) {
                     for (const size_t count : {0, 1, 63, 64, 65, 129, 200}) {
-                        SplitColumnVector<TypeParam> destination;
+                        ColumnOptVector<TypeParam> destination;
                         for (size_t row = 0; row < prefix; ++row) {
                             destination.push_back(valueOf<TypeParam>(1000 + row));
                         }
@@ -402,7 +402,7 @@ TYPED_TEST(SplitColumnVectorTest, appendRowsAtUnalignedOffsets) {
                             destination.setNull(prefix / 2);
                         }
 
-                        const SplitColumnVector<TypeParam> before = destination;
+                        const ColumnOptVector<TypeParam> before = destination;
                         destination.appendRows(*source, offset, count);
 
                         ASSERT_EQ(destination.size(), prefix + count);
@@ -428,8 +428,8 @@ TYPED_TEST(SplitColumnVectorTest, appendRowsAtUnalignedOffsets) {
     }
 }
 
-TYPED_TEST(SplitColumnVectorTest, sameSizeResizeThenPushNullKeepsEarlierRowsValid) {
-    SplitColumnVector<TypeParam> column;
+TYPED_TEST(ColumnOptVectorTest, sameSizeResizeThenPushNullKeepsEarlierRowsValid) {
+    ColumnOptVector<TypeParam> column;
     column.push_back(valueOf<TypeParam>(0));
     column.push_back(valueOf<TypeParam>(1));
 
@@ -446,8 +446,8 @@ TYPED_TEST(SplitColumnVectorTest, sameSizeResizeThenPushNullKeepsEarlierRowsVali
     expectInvariants(column);
 }
 
-TYPED_TEST(SplitColumnVectorTest, shrinkThenSetNullCountsTheNull) {
-    SplitColumnVector<TypeParam> column;
+TYPED_TEST(ColumnOptVectorTest, shrinkThenSetNullCountsTheNull) {
+    ColumnOptVector<TypeParam> column;
     for (size_t row = 0; row < 3; ++row) {
         column.push_back(valueOf<TypeParam>(row));
     }
@@ -461,8 +461,8 @@ TYPED_TEST(SplitColumnVectorTest, shrinkThenSetNullCountsTheNull) {
     expectInvariants(column);
 }
 
-TYPED_TEST(SplitColumnVectorTest, resizeWithoutNullsKeepsNoMask) {
-    SplitColumnVector<TypeParam> column;
+TYPED_TEST(ColumnOptVectorTest, resizeWithoutNullsKeepsNoMask) {
+    ColumnOptVector<TypeParam> column;
     for (size_t row = 0; row < 130; ++row) {
         column.push_back(valueOf<TypeParam>(row));
     }
@@ -487,8 +487,8 @@ TYPED_TEST(SplitColumnVectorTest, resizeWithoutNullsKeepsNoMask) {
     expectInvariants(column);
 }
 
-TYPED_TEST(SplitColumnVectorTest, appendRowsFromMaskWithoutNulls) {
-    SplitColumnVector<TypeParam> source;
+TYPED_TEST(ColumnOptVectorTest, appendRowsFromMaskWithoutNulls) {
+    ColumnOptVector<TypeParam> source;
     for (size_t row = 0; row < 100; ++row) {
         source.push_back(valueOf<TypeParam>(row));
     }
@@ -497,7 +497,7 @@ TYPED_TEST(SplitColumnVectorTest, appendRowsFromMaskWithoutNulls) {
     ASSERT_TRUE(source.hasMask());
     ASSERT_EQ(source.getNullCount(), 0u);
 
-    SplitColumnVector<TypeParam> withoutMask;
+    ColumnOptVector<TypeParam> withoutMask;
     withoutMask.push_back(valueOf<TypeParam>(500));
     withoutMask.appendRows(source, 3, 70);
     EXPECT_FALSE(withoutMask.hasMask());
@@ -505,7 +505,7 @@ TYPED_TEST(SplitColumnVectorTest, appendRowsFromMaskWithoutNulls) {
     EXPECT_EQ(withoutMask.getValue(8), valueOf<TypeParam>(10));
     expectInvariants(withoutMask);
 
-    SplitColumnVector<TypeParam> withMask;
+    ColumnOptVector<TypeParam> withMask;
     withMask.pushNull();
     withMask.appendRows(source, 3, 70);
     EXPECT_EQ(withMask.getNullCount(), 1u);
@@ -518,8 +518,8 @@ TYPED_TEST(SplitColumnVectorTest, appendRowsFromMaskWithoutNulls) {
     expectInvariants(withMask);
 }
 
-TYPED_TEST(SplitColumnVectorTest, pushBackAfterMaskWithoutNulls) {
-    SplitColumnVector<TypeParam> column;
+TYPED_TEST(ColumnOptVectorTest, pushBackAfterMaskWithoutNulls) {
+    ColumnOptVector<TypeParam> column;
     for (size_t row = 0; row < 64; ++row) {
         column.push_back(valueOf<TypeParam>(row));
     }

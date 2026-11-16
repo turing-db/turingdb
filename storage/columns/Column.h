@@ -7,9 +7,19 @@ namespace db {
 template <class>
 struct ColumnSupportFor : std::false_type {};
 
+// The column a container holds a value kind in, asked as Container<Kind>: a ColumnOptVector
+// holds std::optional<T> as ColumnOptVector<T>, and no kind that is not optional
+template <typename ContainerOfKind>
+struct ColumnForKind {
+    using type = ContainerOfKind;
+};
+
+template <template <typename> class Container, typename T>
+using ColumnForKindT = typename ColumnForKind<Container<T>>::type;
+
 template <template <typename> class Container, typename T>
 inline constexpr bool ColumnSupportsInternal =
-    ColumnSupportFor<Container<T>>::value;
+    ColumnSupportFor<ColumnForKindT<Container, T>>::value;
 
 class Column {
 public:

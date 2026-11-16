@@ -66,13 +66,22 @@ struct ColumnTypeFromKindImpl;
 template <ColumnKind::Code K, typename... Types>
 struct ColumnTypeFromKindImpl<K, TypeList<Types...>> {
 private:
+    template <template <typename> class Container, typename T>
+    static consteval bool isKindOf() {
+        if constexpr (ColumnSupportsInternal<Container, T>) {
+            return K == ColumnForKindT<Container, T>::staticKind();
+        } else {
+            return false;
+        }
+    }
+
     template <typename T>
     static consteval auto tryType() {
-        if constexpr (K == ColumnVector<T>::staticKind()) {
-            // Found the type: it's a ColumnVector
+        if constexpr (isKindOf<ColumnVector, T>()) {
             return std::type_identity<ColumnVector<T>> {};
-        } else if constexpr (K == ColumnConst<T>::staticKind()) {
-            // Found the type: it's a ColumnConst
+        } else if constexpr (isKindOf<ColumnOptVector, T>()) {
+            return std::type_identity<ColumnForKindT<ColumnOptVector, T>> {};
+        } else if constexpr (isKindOf<ColumnConst, T>()) {
             return std::type_identity<ColumnConst<T>> {};
         } else {
             return std::type_identity<void> {}; // Type did not match
