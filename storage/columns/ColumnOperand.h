@@ -38,6 +38,16 @@ decltype(auto) operandRow(const ColumnConst<T>* column, size_t) {
     return constantOperand(column);
 }
 
+template <typename T>
+void resizeForRowWrites(ColumnVector<T>* column, size_t size) {
+    column->resize(size);
+}
+
+template <typename T>
+void resizeForRowWrites(ColumnOptVector<T>* column, size_t size) {
+    column->resizeValid(size);
+}
+
 template <typename ColumnType, typename T>
 void writeRow(ColumnType* column, size_t row, const T& value) {
     column->set(row, value);
@@ -74,7 +84,7 @@ struct BinaryOpExecutor {
                       Op op = {}) {
         bioassert(lhs->size() == rhs->size(), "Misshapen ColumnVectors.");
         const size_t size = lhs->size();
-        res->resize(size);
+        resizeForRowWrites(res, size);
 
         for (size_t i = 0; i < size; i++) {
             writeRow(res, i, op(operandRow(lhs, i), operandRow(rhs, i)));
@@ -87,7 +97,7 @@ struct BinaryOpExecutor {
                       const ColumnConst<U>* rhs,
                       Op op = {}) {
         const size_t size = lhs->size();
-        res->resize(size);
+        resizeForRowWrites(res, size);
 
         const auto& value = constantOperand(rhs);
 
@@ -102,7 +112,7 @@ struct BinaryOpExecutor {
                       const RhsColumn* rhs,
                       Op op = {}) {
         const size_t size = rhs->size();
-        res->resize(size);
+        resizeForRowWrites(res, size);
 
         const auto& value = constantOperand(lhs);
 
