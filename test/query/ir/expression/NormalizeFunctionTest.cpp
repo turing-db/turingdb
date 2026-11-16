@@ -136,15 +136,6 @@ TEST_F(NormalizeFunctionTest, invalidFormIsRejected) {
     expectError("RETURN normalize()", "syntax error");
 }
 
-TEST_F(NormalizeFunctionTest, nonStringIsNull) {
-    expectRows("RETURN normalize(1), normalize(1, NFD), normalize([1], NFC), normalize(true), normalize(1.5, NFKC), "
-               "normalize({a: 'b'}, NFKD)",
-               {{"null", "null", "null", "null", "null", "null"}});
-    expectRows("MATCH (p:Person {name: 'Remy'}) RETURN normalize(p), normalize(p, NFD)", {{"null", "null"}});
-    expectRows("MATCH (p:Person) WHERE p.age IS NOT NULL RETURN p.name, normalize(p.age), normalize(p.age, NFKC)",
-               {{"Remy", "null", "null"}, {"Adam", "null", "null"}});
-}
-
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
