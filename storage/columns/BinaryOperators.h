@@ -89,6 +89,16 @@ inline auto arithmeticOperand(T&& value) {
     }
 }
 
+// Integer +, - and * wrap in two's complement, as a Java long does, where C++ leaves a
+// signed overflow undefined.
+template <typename F, std::integral T, std::integral U>
+inline std::common_type_t<T, U> wrappingArithmetic(T a, U b) {
+    using Common = std::common_type_t<T, U>;
+    using Unsigned = std::make_unsigned_t<Common>;
+
+    return static_cast<Common>(F {}(static_cast<Unsigned>(a), static_cast<Unsigned>(b)));
+}
+
 /**
  * @brief The number a type-erased cell holds, whatever numeric type it is tagged as.
  * Absent when the cell holds no number - a string, a nested list or a null.
@@ -366,6 +376,9 @@ concept ComputesNumbers = std::is_same_v<F, std::plus<>>
 template <typename F>
 concept ComputesReals = std::is_same_v<F, Power>;
 
+template <typename F>
+concept ChecksItsOperands = std::is_same_v<F, SafeDivides> || std::is_same_v<F, SafeModulo>;
+
 template <typename F, typename T, typename U>
 concept ComputesOverTaggedCell = ComputesNumbers<F> && (TaggedCell<T> || TaggedCell<U>);
 
@@ -502,6 +515,8 @@ std::optional<std::string_view> joinedText(StringBuffer* stringBuffer, const T& 
  */
 template <typename F, bool NarrowsUnsigned = true>
 struct BinaryOp {
+    using Functor = F;
+
     QueryListBuffer* _listBuffer {nullptr};
     StringBuffer* _stringBuffer {nullptr};
 
@@ -640,22 +655,45 @@ struct SafeDivides {
     template <typename T, typename U>
         requires (!Temporal<U>) && requires(T&& a, U&& b) { std::divides<> {}(a, b); }
     inline auto operator()(T&& a, U&& b) const {
-        using DecayT = std::decay_t<T>;
-        using DecayU = std::decay_t<U>;
-
         if (b == 0) {
             throw TuringException("Attempted to divide by zero.");
-        }
-
-        if constexpr (std::is_integral_v<DecayT> && std::is_signed_v<DecayT>
-                      && std::is_integral_v<DecayU> && std::is_signed_v<DecayU>) {
-            const bool overflows = a == std::numeric_limits<DecayT>::min() && b == -1;
-            if (overflows) {
-                throw TuringException("Division overflow.");
-            }
+        } else if (overflows(a, b)) {
+            throw TuringException("Division overflow.");
         }
 
         return std::divides<> {}(std::forward<T>(a), std::forward<U>(b));
+    }
+
+    template <typename T, typename U>
+        requires std::is_arithmetic_v<T> && std::is_arithmetic_v<U>
+    static bool raises(T a, U b) {
+        return b == 0 || overflows(a, b);
+    }
+
+    // A pair that raises gets a value with no undefined behaviour, which is never read:
+    // the kernels compute every row, null rows included, and check the valid ones apart.
+    template <typename T, typename U>
+        requires std::is_arithmetic_v<T> && std::is_arithmetic_v<U>
+    static auto compute(T a, U b) {
+        if constexpr (std::is_integral_v<T> && std::is_integral_v<U>) {
+            const U divisor = raises(a, b) ? U {1} : b;
+            return a / divisor;
+        } else {
+            return a / b;
+        }
+    }
+
+    template <typename T, typename U>
+    static bool overflows(const T& a, const U& b) {
+        using DecayT = std::decay_t<T>;
+        using DecayU = std::decay_t<U>;
+
+        if constexpr (std::is_integral_v<DecayT> && std::is_signed_v<DecayT>
+                      && std::is_integral_v<DecayU> && std::is_signed_v<DecayU>) {
+            return a == std::numeric_limits<DecayT>::min() && b == -1;
+        } else {
+            return false;
+        }
     }
 
     // Reached over a type-erased cell alone: the analyzer turns the typed pair away
@@ -669,21 +707,32 @@ struct SafeModulo {
     template <typename T, typename U>
         requires (!Temporal<T>) && std::is_arithmetic_v<std::decay_t<T>> && std::is_arithmetic_v<std::decay_t<U>>
     inline auto operator()(T&& a, U&& b) const {
-        using DecayT = std::decay_t<T>;
-        using DecayU = std::decay_t<U>;
-
         if (b == 0) {
             throw TuringException("Attempted modulo by zero.");
         }
 
-        if constexpr (std::is_integral_v<DecayT> && std::is_integral_v<DecayU>) {
-            if constexpr (std::is_signed_v<DecayT> && std::is_signed_v<DecayU>) {
-                if (b == -1) {
-                    return decltype(a % b) {0};
-                }
-            }
+        return compute(a, b);
+    }
 
-            return std::modulus<> {}(std::forward<T>(a), std::forward<U>(b));
+    template <typename T, typename U>
+        requires std::is_arithmetic_v<T> && std::is_arithmetic_v<U>
+    static bool raises(T a, U b) {
+        return b == 0;
+    }
+
+    // A remainder by -1 is 0, as by 1, and dividing the minimum integer by -1 overflows.
+    // A divisor of 0 raises in operator(), so the value computed for it is never read.
+    template <typename T, typename U>
+        requires std::is_arithmetic_v<T> && std::is_arithmetic_v<U>
+    static auto compute(T a, U b) {
+        if constexpr (std::is_integral_v<T> && std::is_integral_v<U>) {
+            if constexpr (std::is_signed_v<T> && std::is_signed_v<U>) {
+                const U divisor = (b == 0 || b == -1) ? U {1} : b;
+                return a % divisor;
+            } else {
+                const U divisor = b == 0 ? U {1} : b;
+                return a % divisor;
+            }
         } else {
             return std::fmod(static_cast<double>(a), static_cast<double>(b));
         }

@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <algorithm>
 #include <bit>
+#include <functional>
 #include <initializer_list>
 #include <optional>
 #include <type_traits>
@@ -231,6 +232,34 @@ public:
 
     ValidityMask* getValidity() { return hasMask() ? &_mask : nullptr; }
     const ValidityMask* getValidity() const { return hasMask() ? &_mask : nullptr; }
+
+    // A row is valid where both masks hold it valid, and a missing mask holds every row
+    // valid. Every null row's value is reset to T {}.
+    void assignValidity(const ValidityMask* first, const ValidityMask* second) {
+        if (first == nullptr && second == nullptr) {
+            _mask.resize(0);
+            _nullCount = 0;
+            return;
+        }
+
+        const size_t size = _data.size();
+        _mask.resize(size);
+
+        BitMaskType* words = _mask.data();
+        const size_t wordCount = _mask.getWordCount();
+
+        if (first != nullptr && second != nullptr) {
+            bioassert(first->size() == size && second->size() == size,
+                      "ColumnOptVector::assignValidity: a mask is not the size of the column");
+            std::transform(first->data(), first->data() + wordCount, second->data(), words, std::bit_and<> {});
+        } else {
+            const ValidityMask* source = first != nullptr ? first : second;
+            bioassert(source->size() == size, "ColumnOptVector::assignValidity: the mask is not the size of the column");
+            std::copy_n(source->data(), wordCount, words);
+        }
+
+        settleValidity();
+    }
 
     // Calls wordOf(w) once for each word w, in order. Row r is valid where bit r % 64 of
     // wordOf(r / 64) is set

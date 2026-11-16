@@ -4,6 +4,7 @@
 
 #include "BinaryOperators.h"
 #include "BinaryPredicates.h"
+#include "NullableArithmetic.h"
 
 #include "ColumnCombinations.h"
 #include "TypeUtils.h"
@@ -18,7 +19,11 @@ struct BinaryOperators {
     static void exec(ColW* res, const ColT* lhs, const ColU* rhs, Op op = {}) {
         static_assert(std::is_trivially_copyable_v<Op>, "NOTE: Op passed by value");
 
-        BinaryOpExecutor<Op>::apply(res, lhs, rhs, op);
+        if constexpr (ComputesNullableArithmetic<Op, ColW, ColT, ColU>) {
+            NullableArithmeticExecutor<typename ColW::UnwrappedType>::apply(res, lhs, rhs, op);
+        } else {
+            BinaryOpExecutor<Op>::apply(res, lhs, rhs, op);
+        }
     }
 };
 
