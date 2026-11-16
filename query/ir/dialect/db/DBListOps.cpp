@@ -331,6 +331,16 @@ Speculation::Speculatability DynamicMapKey::getSpeculatability() {
     return speculatableWhen(holdsOnlyKeyedValues(getMap()));
 }
 
+Speculation::Speculatability ContainerIndex::getSpeculatability() {
+    const Value base = getBase();
+    const Value index = getIndex();
+
+    const bool readsAnElement = holdsOnlyLists(base) && holdsOnlyIntegers(index);
+    const bool readsAKey = holdsOnlyKeyedValues(base) && ::db::holdsOnlyNullOr(index, {::db::CellTag::String});
+
+    return speculatableWhen(readsAnElement || readsAKey);
+}
+
 double MakeList::getRowCost() {
     return CONTAINER_BUILD_ROW_COST;
 }
