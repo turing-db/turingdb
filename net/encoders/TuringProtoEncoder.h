@@ -202,12 +202,7 @@ public:
         const size_t endRow = _offset + rowCount;
 
         writeRowCount(rowCount);
-
-        DynamicLargeBitMask<uint64_t> mask(rowCount);
-        for (size_t row = 0; row < rowCount; row++) {
-            mask.set(row, col->isValid(_offset + row));
-        }
-        _outBuf->copyVarLenData(mask.data(), mask.byteSize());
+        writeValidity(col, rowCount);
 
         if constexpr (db::StringLike<T>) {
             for (size_t row = _offset; row < endRow; row++) {
@@ -252,15 +247,9 @@ public:
         } else {
             static_assert(std::is_trivially_copyable_v<T>,
                           "TuringProtoEncoder only supports trivially copyable types and string");
-            for (size_t row = _offset; row < endRow; row++) {
-                if (!col->isValid(row)) {
-                    const T zero {};
-                    _outBuf->copyFixedLenData(&zero, sizeof(T));
-                    continue;
-                }
-
-                _outBuf->copyFixedLenData(&col->getValue(row), sizeof(T));
-            }
+            const std::vector<T>& columnValues = col->getValues();
+            const std::span<const T> values = columnWindow(columnValues.data(), columnValues.size());
+            _outBuf->copyVector<T>(values.data(), values.size_bytes());
         }
     }
 
@@ -351,6 +340,19 @@ private:
     template <typename T>
     std::span<const T> columnWindow(const T* data, size_t columnSize) const {
         return std::span<const T>(data + _offset, windowRowCount(columnSize));
+    }
+
+    template <typename T>
+    void writeValidity(const db::ColumnOptVector<T>* col, size_t rowCount) {
+        DynamicLargeBitMask<uint64_t> mask(0);
+        if (col->getNullCount() == 0) {
+            mask.resize(rowCount);
+            mask.fill(0, rowCount, true);
+        } else {
+            mask.appendRange(*col->getValidity(), _offset, rowCount);
+        }
+
+        _outBuf->copyVarLenData(mask.data(), mask.byteSize());
     }
 
     void writePath(const db::GraphPath& path) {

@@ -8,8 +8,11 @@
 #include <string_view>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "PathView.h"
+
+#include "Bitmask.h"
 
 namespace net::proto {
 
@@ -37,6 +40,12 @@ concept OptionalVectorColumn = requires(Column column, const Column constColumn,
     { constColumn.isValid(count) } -> std::convertible_to<bool>;
     { column.set(count, constValue) };
     { column.set(count, std::move(value)) };
+};
+
+template <typename Column, typename T>
+concept OptionalBufferColumn = requires(Column column, const DynamicLargeBitMask<uint64_t>& validity) {
+    { column.getValues() } -> std::same_as<std::vector<T>&>;
+    { column.setValidity(validity) };
 };
 
 template <typename Column, typename T>

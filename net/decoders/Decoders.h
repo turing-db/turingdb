@@ -284,6 +284,17 @@ struct OptionalVectorColumnDecoder {
                        ProtoColumnState* columnState) {
         static_assert(TrivialInternalTypes<T>, "Unsupported type for decodeOptVector");
 
+        if constexpr (OptionalBufferColumn<SinkColumnOptVector<T, Sink>, T>) {
+            return decodeBuffers(context, typedColumn, columnState);
+        } else {
+            return decodeRows(context, typedColumn, columnState);
+        }
+    }
+
+private:
+    static bool decodeRows(DecodeContext* context,
+                           SinkColumnOptVector<T, Sink>* typedColumn,
+                           ProtoColumnState* columnState) {
         for (size_t i = 0; context->_rowIndex + i < columnState->getNumRows(); ++i) {
             if (context->_inBuf->readable() < sizeof(T)) {
                 context->_rowIndex += i;
@@ -302,6 +313,24 @@ struct OptionalVectorColumnDecoder {
             context->_inBuf->readData(&value, sizeof(T));
             typedColumn->set(row, value);
         }
+        return true;
+    }
+
+    static bool decodeBuffers(DecodeContext* context,
+                              SinkColumnOptVector<T, Sink>* typedColumn,
+                              ProtoColumnState* columnState) {
+        std::vector<T>& values = typedColumn->getValues();
+        const size_t rowsRemaining = columnState->getNumRows() - context->_rowIndex;
+
+        if (rowsRemaining * sizeof(T) > context->_inBuf->readable()) {
+            const size_t numRowsRead = context->_inBuf->readable() / sizeof(T);
+            context->_inBuf->readData(values.data() + context->_rowIndex, numRowsRead * sizeof(T));
+            context->_rowIndex += numRowsRead;
+            return false;
+        }
+
+        context->_inBuf->readData(values.data() + context->_rowIndex, rowsRemaining * sizeof(T));
+        typedColumn->setValidity(columnState->getBitMask());
         return true;
     }
 };
