@@ -217,21 +217,25 @@ LogicalResult SortMulti::verify() {
 
 bool ListComprehension::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
     fillTrailingRegionCarrySet(getOperation(), region, getColumnsToFilter().size(), carrySet);
+    carrySet._repeatsRows = true;
     return true;
 }
 
 bool ListPredicate::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
     fillTrailingRegionCarrySet(getOperation(), region, getColumnsToFilter().size(), carrySet);
+    carrySet._repeatsRows = true;
     return true;
 }
 
 bool Reduce::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
     fillTrailingRegionCarrySet(getOperation(), region, getColumnsToFilter().size(), carrySet);
+    carrySet._repeatsRows = true;
     return true;
 }
 
 bool AllReduce::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
     fillTrailingRegionCarrySet(getOperation(), region, getColumnsToFilter().size(), carrySet);
+    carrySet._repeatsRows = true;
     return true;
 }
 

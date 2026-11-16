@@ -357,7 +357,8 @@ bool ExplorePaths::getRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
     const MutableOperandRange carried = getRegionCarrySetMutable();
     carrySet = RegionCarrySet {._operandOffset = operandRunOffset(carried),
                                ._argumentOffset = hopWalkArgumentCount(region.getRegionNumber()),
-                               ._count = carried.size()};
+                               ._count = carried.size(),
+                               ._repeatsRows = true};
     return true;
 }
 
