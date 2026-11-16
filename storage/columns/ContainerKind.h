@@ -22,7 +22,7 @@ class ColumnSet;
 class ColumnStringTable;
 
 template <typename T>
-class SplitColumnVector;
+class ColumnOptVector;
 
 // Implementation
 
@@ -33,7 +33,7 @@ public:
         TemplateKind<ColumnConst>,
         TemplateKind<ColumnSet>,
         ColumnStringTable,
-        TemplateKind<SplitColumnVector>>;
+        TemplateKind<ColumnOptVector>>;
 
     using Code = uint8_t;
 

@@ -2,6 +2,7 @@
 
 #include "AllowedKinds.h"
 #include "ColumnVector.h"
+#include "ColumnOptVector.h"
 #include "ColumnConst.h"
 #include "ColumnSet.h"
 #include "PairColumnKind.h"
@@ -50,6 +51,7 @@ public:
 
         switch (containerKind) {
             CASE_SINGLE_DISPATCH(ColumnVector<Dummy>)
+            CASE_SINGLE_DISPATCH(ColumnOptVector<Dummy>)
             CASE_SINGLE_DISPATCH(ColumnConst<Dummy>)
             CASE_SINGLE_DISPATCH(ColumnSet<Dummy>)
 
@@ -84,17 +86,17 @@ private:
 
     static constexpr std::size_t N = InternalKind::Types::count();
 
-    template <template <typename> class Container, typename T>
+    template <typename ColumnType>
     static void invoke(const Column* operand, Functor& fn) {
-        fn(static_cast<const Container<T>*>(operand));
+        fn(static_cast<const ColumnType*>(operand));
     }
 
     template <template <typename> class Container, typename T>
     static consteval void installFuncs(std::array<Fn, N + 1>& t) {
-        constexpr auto i = InternalKind::code<T>();
-
         if constexpr (ColumnSupportsInternal<Container, T>) {
-            t[i] = &invoke<Container, T>;
+            using ColumnType = ColumnForKindT<Container, T>;
+            constexpr auto i = ColumnKind::extractInternalKind(ColumnType::staticKind());
+            t[i] = &invoke<ColumnType>;
         }
     }
 
@@ -132,16 +134,25 @@ public:
         switch (pairKind) {
             // Vector vs X
             CASE_DOUBLE_DISPATCH(ColumnVector<Dummy>, ColumnVector<Dummy>)
+            CASE_DOUBLE_DISPATCH(ColumnVector<Dummy>, ColumnOptVector<Dummy>)
             CASE_DOUBLE_DISPATCH(ColumnVector<Dummy>, ColumnConst<Dummy>)
             CASE_DOUBLE_DISPATCH(ColumnVector<Dummy>, ColumnSet<Dummy>)
 
+            // OptVector vs X
+            CASE_DOUBLE_DISPATCH(ColumnOptVector<Dummy>, ColumnVector<Dummy>)
+            CASE_DOUBLE_DISPATCH(ColumnOptVector<Dummy>, ColumnOptVector<Dummy>)
+            CASE_DOUBLE_DISPATCH(ColumnOptVector<Dummy>, ColumnConst<Dummy>)
+            CASE_DOUBLE_DISPATCH(ColumnOptVector<Dummy>, ColumnSet<Dummy>)
+
             // Const vs X
             CASE_DOUBLE_DISPATCH(ColumnConst<Dummy>, ColumnVector<Dummy>)
+            CASE_DOUBLE_DISPATCH(ColumnConst<Dummy>, ColumnOptVector<Dummy>)
             CASE_DOUBLE_DISPATCH(ColumnConst<Dummy>, ColumnConst<Dummy>)
             CASE_DOUBLE_DISPATCH(ColumnConst<Dummy>, ColumnSet<Dummy>)
 
             // Set vs X
             CASE_DOUBLE_DISPATCH(ColumnSet<Dummy>, ColumnVector<Dummy>)
+            CASE_DOUBLE_DISPATCH(ColumnSet<Dummy>, ColumnOptVector<Dummy>)
             CASE_DOUBLE_DISPATCH(ColumnSet<Dummy>, ColumnConst<Dummy>)
             CASE_DOUBLE_DISPATCH(ColumnSet<Dummy>, ColumnSet<Dummy>)
 
@@ -166,25 +177,28 @@ private:
 
     static constexpr std::size_t N = InternalKind::Types::count();
 
-    template <template <typename> class LhsContainer, template <typename> class RhsContainer, typename LK, typename RK>
+    template <typename LhsColumn, typename RhsColumn>
     static void invokeLR(const Column* lhs, const Column* rhs, Functor& fn) {
-        auto* l = static_cast<const LhsContainer<LK>*>(lhs);
-        auto* r = static_cast<const RhsContainer<RK>*>(rhs);
+        const LhsColumn* l = static_cast<const LhsColumn*>(lhs);
+        const RhsColumn* r = static_cast<const RhsColumn*>(rhs);
         fn(l, r);
     }
 
     template <template <typename> class LhsContainer, template <typename> class RhsContainer, typename LK, typename RK>
-    static consteval void installLRPair(std::array<std::array<Fn, N + 1>, N + 1>& t) {
-        constexpr auto li = InternalKind::code<LK>();
-        constexpr auto ri = InternalKind::code<RK>();
-
+    static consteval void installLRSide(std::array<std::array<Fn, N + 1>, N + 1>& t) {
         if constexpr (ColumnSupportsInternal<LhsContainer, LK> && ColumnSupportsInternal<RhsContainer, RK>) {
-            t[li][ri] = &invokeLR<LhsContainer, RhsContainer, LK, RK>;
+            using LhsColumn = ColumnForKindT<LhsContainer, LK>;
+            using RhsColumn = ColumnForKindT<RhsContainer, RK>;
+            constexpr auto li = ColumnKind::extractInternalKind(LhsColumn::staticKind());
+            constexpr auto ri = ColumnKind::extractInternalKind(RhsColumn::staticKind());
+            t[li][ri] = &invokeLR<LhsColumn, RhsColumn>;
         }
+    }
 
-        if constexpr (ColumnSupportsInternal<LhsContainer, RK> && ColumnSupportsInternal<RhsContainer, LK>) {
-            t[ri][li] = &invokeLR<LhsContainer, RhsContainer, RK, LK>;
-        }
+    template <template <typename> class LhsContainer, template <typename> class RhsContainer, typename LK, typename RK>
+    static consteval void installLRPair(std::array<std::array<Fn, N + 1>, N + 1>& t) {
+        installLRSide<LhsContainer, RhsContainer, LK, RK>(t);
+        installLRSide<LhsContainer, RhsContainer, RK, LK>(t);
     }
 
     template <template <typename> class LhsContainer, template <typename> class RhsContainer, typename... Pairs>

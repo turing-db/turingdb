@@ -6,6 +6,7 @@
 
 #include "columns/ColumnConst.h"
 #include "columns/ColumnVector.h"
+#include "columns/ColumnOptVector.h"
 #include "list/ListBuffer.h"
 #include "ID.h"
 #include "map/MapBuffer.h"
@@ -722,7 +723,8 @@ struct WriteProcessorPropertyTypes {
     // Used for specialised dispatching logic for only consts
     using ExcludedConst = ExcludedContainers<
         ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnVector>()
+        ContainerKind::code<ColumnVector>(),
+        ContainerKind::code<ColumnOptVector>()
     >;
 
 };
@@ -734,6 +736,7 @@ struct ListableTypes {
     /// For constructing list literals: all elements should be const
     using LiteralExcluded = ExcludedContainers<
         ContainerKind::code<ColumnVector>(),
+        ContainerKind::code<ColumnOptVector>(),
         ContainerKind::code<ColumnSet>()
     >;
 };
@@ -744,6 +747,7 @@ struct MappableTypes {
     /// For constructing map literals: all elements should be const
     using LiteralExcluded = ExcludedContainers<
         ContainerKind::code<ColumnVector>(),
+        ContainerKind::code<ColumnOptVector>(),
         ContainerKind::code<ColumnSet>()
     >;
 };

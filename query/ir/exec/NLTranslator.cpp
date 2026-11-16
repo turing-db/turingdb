@@ -1024,7 +1024,7 @@ bool columnHoldsNulls(const Column* column) {
     const ColumnKind::Code kind = column->getKind();
     const std::make_index_sequence<InternalKind::Count> internalKinds;
 
-    return isNullHoldingColumn<ColumnVector>(kind, internalKinds)
+    return column->getContainerKind() == ContainerKind::code<ColumnOptVector>()
         || isNullHoldingColumn<ColumnConst>(kind, internalKinds)
         || kind == ColumnVector<PropertyNull>::staticKind()
         || kind == ColumnConst<PropertyNull>::staticKind();

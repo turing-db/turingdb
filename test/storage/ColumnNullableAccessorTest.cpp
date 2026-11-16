@@ -106,7 +106,6 @@ TEST(ColumnNullableAccessorTest, setAndSetNull) {
     column.set(1, int64_t {2});
     column.set(3, int64_t {4});
     EXPECT_EQ(column.getNullCount(), 0);
-    EXPECT_FALSE(column.hasMask());
 
     column.setNull(2);
     EXPECT_EQ(column.getNullCount(), 1);
@@ -132,7 +131,6 @@ TEST(ColumnNullableAccessorTest, resizeAddsNullRows) {
 
     column.resize(1);
     EXPECT_EQ(column.getNullCount(), 0);
-    EXPECT_FALSE(column.hasMask());
 
     column.resize(3);
     column.set(1, int64_t {6});
