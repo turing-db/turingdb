@@ -518,6 +518,7 @@ public:
 
     // Size the CASE result to the step's rows, all absent
     static NLCaseResetFn selectCaseReset(NLChunkKind kind);
+    static NLCaseFinishFn selectCaseFinish(NLChunkKind kind);
 
     // Read one branch's condition column: a mask, a nullable mask - where a null row is
     // not a match - or the null literal, which matches no row at all

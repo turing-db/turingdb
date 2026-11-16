@@ -4721,7 +4721,7 @@ void NLTranslator::translateFoldBody(Op op, NLFoldData* data) {
     const mlir::Value initialValue = op.getInitialValue();
     const bool accumulatesTaggedCells = isAnyChunk(accumulatorType);
 
-    data->setReset(selectCaseResetForChunkType(accumulatorType));
+    data->setReset(selectCaseResetForChunkType(accumulatorType), selectCaseFinishForChunkType(accumulatorType));
     data->setWrites(selectCellWriteForChunkType(accumulatorType, data->getInitialValue(), initialValue.getType()),
                     selectCellWriteForChunkType(accumulatorType, yielded, yieldedValue.getType()));
 
@@ -4788,6 +4788,7 @@ void NLTranslator::translateCase(CaseOp caseOp, NLHandlerFunction run, NLStmtCon
     NLCaseData* data = _program->allocFunctionData<NLCaseData>(getColumn(conditions.front()),
                                                                result,
                                                                selectCaseResetForChunkType(resultChunkType),
+                                                               selectCaseFinishForChunkType(resultChunkType),
                                                                _program->allocStepBuffers());
 
     for (size_t branchIndex = 0; branchIndex < conditions.size(); branchIndex++) {
@@ -4908,6 +4909,16 @@ NLCaseResetFn NLTranslator::selectCaseResetForChunkType(mlir::Type chunkType) {
     }
 
     return NLExecutor::selectCaseReset(getNullableChunkKind(chunkType));
+}
+
+NLCaseFinishFn NLTranslator::selectCaseFinishForChunkType(mlir::Type chunkType) {
+    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+
+    if (isAnyChunk(chunkType) || holdsItsOwnNull(chunk.getElementType())) {
+        return nullptr;
+    }
+
+    return NLExecutor::selectCaseFinish(getNullableChunkKind(chunkType));
 }
 
 NLFillNullRowsFn NLTranslator::selectFillNullRowsForChunkType(mlir::Type chunkType) {

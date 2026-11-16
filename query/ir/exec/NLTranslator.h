@@ -986,6 +986,7 @@ private:
     // in the ID, a !storage.any column in the tag, every other column in an optional.
     // Used by nl.case.
     static NLCaseResetFn selectCaseResetForChunkType(mlir::Type chunkType);
+    static NLCaseFinishFn selectCaseFinishForChunkType(mlir::Type chunkType);
     static NLCaseWriteFn selectCaseWriteForChunkType(mlir::Type resultChunkType,
                                                      const Column* value,
                                                      mlir::Type valueChunkType);

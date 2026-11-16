@@ -336,6 +336,9 @@ public:
     // one came from. @param values is null where nothing reads the integers.
     void fillChunk(size_t chunkSize, ColumnOptVector<types::Int64::Primitive>* values, std::vector<size_t>& rows) {
         rows.resize(chunkSize);
+        if (values) {
+            values->clear();
+        }
 
         size_t filled = 0;
         while (filled < chunkSize && !exhausted()) {
@@ -345,10 +348,11 @@ public:
             const size_t count = finishesRow ? static_cast<size_t>(remainingSteps) + 1 : room;
 
             if (values) {
-                values->resize(filled + count);
+                values->resizeValid(filled + count);
+                std::vector<types::Int64::Primitive>& valuesRaw = values->getValues();
 
                 for (size_t index = 0; index < count; index++) {
-                    values->set(filled + index, _span.at(_position + index));
+                    valuesRaw[filled + index] = _span.at(_position + index);
                 }
             }
 
@@ -415,7 +419,8 @@ void fillHomogeneousChunk(Column* output, ValueType valueType, const ListView li
 
         ColumnOptVector<Primitive>* typed = static_cast<ColumnOptVector<Primitive>*>(output);
 
-        typed->resize(rows);
+        resetForRowWrites(typed, rows);
+        std::vector<Primitive>& typedRaw = typed->getValues();
 
         // CellView::getAs reinterprets the element's bytes as the primitive
         // without consulting its type tag, so check the tag against the one the
@@ -434,7 +439,7 @@ void fillHomogeneousChunk(Column* output, ValueType valueType, const ListView li
 
             bioassert(tag == expectedTag, "Unwound element does not have the unwind's value type.");
 
-            typed->set(index, element.getAs<Primitive>());
+            typedRaw[index] = element.getAs<Primitive>();
         }
     };
 
@@ -514,7 +519,8 @@ void unwindListValueEmit(const Column* source,
     const std::vector<size_t>& positionsRaw = positions->getRaw();
 
     ColumnOptVector<Primitive>* typedOutput = static_cast<ColumnOptVector<Primitive>*>(output);
-    typedOutput->resize(rowsRaw.size());
+    resetForRowWrites(typedOutput, rowsRaw.size());
+    std::vector<Primitive>& outputRaw = typedOutput->getValues();
 
     constexpr CellTag expectedTag = TypeToCellTag<Primitive>::Tag;
 
@@ -529,7 +535,7 @@ void unwindListValueEmit(const Column* source,
 
         bioassert(tag == expectedTag, "Unwound element does not have the unwound list's value type.");
 
-        typedOutput->set(index, element.getAs<Primitive>());
+        outputRaw[index] = element.getAs<Primitive>();
     }
 }
 
@@ -1658,6 +1664,11 @@ void fillNullOptColumn(Column* output, size_t rowCount) {
     typedOutput->assignNulls(rowCount);
 }
 
+template <typename Element>
+void dropAllValidOptMask(Column* output) {
+    static_cast<ColumnOptVector<Element>*>(output)->dropAllValidMask();
+}
+
 void collectBooleanSurvivors(const Column* mask, ColumnVector<size_t>* indices) {
     const std::vector<CustomBool>& maskRaw = static_cast<const ColumnVector<CustomBool>*>(mask)->getRaw();
     std::vector<size_t>& survivingRaw = indices->getRaw();
@@ -2568,7 +2579,7 @@ void readPathElements(const Column* paths,
 
     if (kind == PathElementsKind::Length) {
         ColumnOptVector<uint64_t>* lengths = static_cast<ColumnOptVector<uint64_t>*>(output);
-        lengths->resize(rowCount);
+        resetForRowWrites(lengths, rowCount);
 
         for (size_t row = 0; row < rowCount; row++) {
             const std::optional<PathView> path = read(paths, row);
@@ -2583,7 +2594,7 @@ void readPathElements(const Column* paths,
     }
 
     ColumnOptVector<ListView>* lists = static_cast<ColumnOptVector<ListView>*>(output);
-    lists->resize(rowCount);
+    resetForRowWrites(lists, rowCount);
 
     for (size_t row = 0; row < rowCount; row++) {
         const std::optional<PathView> path = read(paths, row);
@@ -2927,6 +2938,11 @@ void foldElements(NLExecutionContext* context, NLFoldData* fold, TestStep testSt
             reown(accumulator, accumulatorValues.getSpare());
             accumulatorValues.flip();
         }
+    }
+
+    const NLCaseFinishFn finish = fold->getFinish();
+    if (finish) {
+        finish(accumulator);
     }
 }
 
@@ -5629,11 +5645,11 @@ void unwindCollectValueEmit(const Column* values,
     ColumnOptVector<Primitive>* typedOutput = static_cast<ColumnOptVector<Primitive>*>(output);
     const auto& positionsRaw = positions->getRaw();
 
-    typedOutput->clear();
-    typedOutput->resize(positionsRaw.size());
+    resetForRowWrites(typedOutput, positionsRaw.size());
+    std::vector<Primitive>& outputRaw = typedOutput->getValues();
 
     for (size_t row = 0; row < positionsRaw.size(); row++) {
-        typedOutput->set(row, valuesRaw[positionsRaw[row]]);
+        outputRaw[row] = valuesRaw[positionsRaw[row]];
     }
 }
 
@@ -6453,7 +6469,7 @@ void runPercentileRows(const NLPercentileData* data, std::string_view functionNa
 
     using OutputColumn = ColumnVectorOf<Result>;
     OutputColumn* output = static_cast<OutputColumn*>(data->getResult());
-    output->resize(rowCount);
+    resetForRowWrites(output, rowCount);
 
     std::vector<CellView> numbers;
 
@@ -6546,7 +6562,7 @@ void selectCollectIDHandlers(bool distinctValues,
 template <typename State, typename OutputColumn, typename Finalize>
 void finalizeGroupStates(NLGroupStatePlaces places, size_t begin, size_t count, Column* output, Finalize finalize) {
     OutputColumn* typedOutput = static_cast<OutputColumn*>(output);
-    typedOutput->resize(count);
+    resetForRowWrites(typedOutput, count);
 
     for (size_t index = 0; index < count; index++) {
         const typename OutputColumn::ValueType value = finalize(places.getState<State>(begin + index));
@@ -7630,6 +7646,8 @@ void shortestPathSearch(NLExecutionContext* context, NLShortestPathLoopData* loo
                     properties->setOptional(row, written.read<T>(*update, weightValues));
                 }
             }
+
+            properties->dropAllValidMask();
         }
 
         // loop over all the edge properties
@@ -9917,6 +9935,11 @@ void NLExecutor::runCase(NLExecutionContext*, NLFunctionData* data) {
             writeCell(result, row, writeDefault, defaultValue, row, stepBuffers, values);
         }
     }
+
+    const NLCaseFinishFn finish = caseData->getFinish();
+    if (finish) {
+        finish(result);
+    }
 }
 
 void NLExecutor::runCaseMerge(NLExecutionContext*, NLFunctionData* data) {
@@ -9964,6 +9987,11 @@ void NLExecutor::runCaseMerge(NLExecutionContext*, NLFunctionData* data) {
             writeCell(result, row, writeDefault, defaultValue, defaultRow, stepBuffers, values);
             defaultRow++;
         }
+    }
+
+    const NLCaseFinishFn finish = caseData->getFinish();
+    if (finish) {
+        finish(result);
     }
 }
 
@@ -10091,7 +10119,7 @@ void NLExecutor::runSortMulti(NLExecutionContext*, NLFunctionData* data) {
     const size_t rowCount = list->size();
 
     ColumnOptVector<ListView>* output = static_cast<ColumnOptVector<ListView>*>(sortMulti->getResult());
-    output->resize(rowCount);
+    resetForRowWrites(output, rowCount);
 
     std::vector<SortField> sortFields;
     std::span<const CellView> parsedNames;
@@ -10253,7 +10281,7 @@ void NLExecutor::runMergeMaps(NLExecutionContext*, NLFunctionData* data) {
 
     using OutputColumn = ColumnVectorOf<Result>;
     OutputColumn* output = static_cast<OutputColumn*>(merge->getResult());
-    output->resize(rowCount);
+    resetForRowWrites(output, rowCount);
 
     std::vector<MapEntryView> entries;
     std::vector<size_t> order;
@@ -10331,7 +10359,7 @@ void NLExecutor::runSubstring(NLExecutionContext*, NLFunctionData* data) {
               "Length column of a substring is not row-aligned with its string.");
 
     ColumnVectorOf<Result>* output = static_cast<ColumnVectorOf<Result>*>(substring->getResult());
-    output->resize(rowCount);
+    resetForRowWrites(output, rowCount);
 
     const SubstringFunction function {};
     constexpr std::string_view name = SubstringFunction::NAME;
@@ -10373,7 +10401,7 @@ void NLExecutor::runSplit(NLExecutionContext*, NLFunctionData* data) {
 
     using OutputColumn = ColumnVectorOf<Result>;
     OutputColumn* output = static_cast<OutputColumn*>(split->getResult());
-    output->resize(rowCount);
+    resetForRowWrites(output, rowCount);
 
     NLStepBuffers* const stepBuffers = split->getStepBuffers();
     stepBuffers->clear();
@@ -10412,7 +10440,7 @@ void NLExecutor::runStringEnd(NLExecutionContext*, NLFunctionData* data) {
     bioassert(length._column->size() == rowCount, "Length column of a string end is not row-aligned with its string.");
 
     ColumnVectorOf<Result>* output = static_cast<ColumnVectorOf<Result>*>(stringEnd->getResult());
-    output->resize(rowCount);
+    resetForRowWrites(output, rowCount);
 
     const Function function {};
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
@@ -10451,7 +10479,7 @@ void NLExecutor::runReplace(NLExecutionContext*, NLFunctionData* data) {
     bioassert(replacement._column->size() == rowCount, "Replacement column of a replace is not row-aligned with its string.");
 
     ColumnVectorOf<Result>* output = static_cast<ColumnVectorOf<Result>*>(replace->getResult());
-    output->resize(rowCount);
+    resetForRowWrites(output, rowCount);
 
     NLStepBuffers* const stepBuffers = replace->getStepBuffers();
     stepBuffers->clear();
@@ -10487,7 +10515,7 @@ void NLExecutor::runPointDistance(NLExecutionContext*, NLFunctionData* data) {
     bioassert(rhs._column->size() == rowCount, "Columns of a point.distance are not row-aligned.");
 
     ColumnOptVector<types::Double::Primitive>* output = static_cast<ColumnOptVector<types::Double::Primitive>*>(function->getResult());
-    output->resize(rowCount);
+    resetForRowWrites(output, rowCount);
 
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
         const std::optional<Point> from = lhs._read(lhs._column, rowIndex, "point.distance");
@@ -10514,7 +10542,7 @@ void NLExecutor::runPointWithinBBox(NLExecutionContext*, NLFunctionData* data) {
     bioassert(upperRight._column->size() == rowCount, "Columns of a point.withinBBox are not row-aligned.");
 
     ColumnOptVector<types::Bool::Primitive>* output = static_cast<ColumnOptVector<types::Bool::Primitive>*>(function->getResult());
-    output->resize(rowCount);
+    resetForRowWrites(output, rowCount);
 
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
         const std::optional<Point> value = point._read(point._column, rowIndex, "point.withinBBox");
@@ -10685,7 +10713,7 @@ void NLExecutor::runListPredicate(NLExecutionContext* context, NLFunctionData* d
     });
 
     ColumnOptVector<CustomBool>* result = static_cast<ColumnOptVector<CustomBool>*>(predicate->getResult());
-    result->resize(sourceRows);
+    resetForRowWrites(result, sourceRows);
 
     for (size_t row = 0; row < sourceRows; row++) {
         if (cellAbsent(source, row)) {
@@ -10818,7 +10846,7 @@ void NLExecutor::runAllReduce(NLExecutionContext* context, NLFunctionData* data)
     });
 
     ColumnOptVector<CustomBool>* result = static_cast<ColumnOptVector<CustomBool>*>(allReduce->getResult());
-    result->resize(sourceRows);
+    resetForRowWrites(result, sourceRows);
 
     for (size_t row = 0; row < sourceRows; row++) {
         if (cellAbsent(source, row)) {
@@ -11071,7 +11099,7 @@ void NLExecutor::runContainerIndex(NLExecutionContext* context, NLFunctionData* 
     using OutputColumn = ColumnVectorOf<Element>;
     OutputColumn* output = static_cast<OutputColumn*>(containerIndex->getResult());
 
-    output->resize(rowCount);
+    resetForRowWrites(output, rowCount);
 
     for (size_t row = 0; row < rowCount; row++) {
         const CellView element = readContainerElement(readBase(base, row),
@@ -11313,6 +11341,13 @@ NLCaseResetFn NLExecutor::selectCaseReset(NLChunkKind kind) {
     dispatchOptChunkKind(kind, [&]<typename Element>() { reset = &fillNullOptColumn<Element>; });
 
     return reset;
+}
+
+NLCaseFinishFn NLExecutor::selectCaseFinish(NLChunkKind kind) {
+    NLCaseFinishFn finish = nullptr;
+    dispatchOptChunkKind(kind, [&]<typename Element>() { finish = &dropAllValidOptMask<Element>; });
+
+    return finish;
 }
 
 NLTruthReadFunction NLExecutor::selectTruthRead(NLTruthColumnKind kind) {
@@ -14647,6 +14682,8 @@ void NLExecutor::runPropertyFetch(NLExecutionContext* context, NLFunctionData* d
             output->setOptional(row, written.read<T>(*update, fetchedValues));
         }
     }
+
+    output->dropAllValidMask();
 }
 
 // The translator selects among these by the value type the property resolves
@@ -14749,7 +14786,7 @@ void NLExecutor::runCheckLabelConstraint(NLExecutionContext* context, NLFunction
     MaskColumn* output = static_cast<MaskColumn*>(checkData->getOutput());
 
     const size_t rowCount = input->size();
-    output->resize(rowCount);
+    resetForRowWrites(output, rowCount);
 
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
         const LabelSetID id = (*input)[rowIndex];
@@ -14776,7 +14813,7 @@ void NLExecutor::runCheckEdgeTypeConstraint(NLExecutionContext* context, NLFunct
     MaskColumn* output = static_cast<MaskColumn*>(checkData->getOutput());
 
     const size_t rowCount = input->size();
-    output->resize(rowCount);
+    resetForRowWrites(output, rowCount);
 
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
         const EdgeTypeID id = (*input)[rowIndex];

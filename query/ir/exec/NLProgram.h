@@ -4285,6 +4285,10 @@ using NLCaseWriteFn = void (*)(Column* result, size_t resultRow, const Column* v
 // every branch of a defaultless CASE holds
 using NLCaseResetFn = void (*)(Column* result, size_t rowCount);
 
+// Ends the row writes into a CASE result: a nullable result whose rows all took a value
+// drops the validity mask its reset built. Null for a result that has no mask.
+using NLCaseFinishFn = void (*)(Column* result);
+
 // Read the cell one element column holds at @param row as the value the list buffer
 // stores for it, tagged with the type it is. One per column kind, selected during
 // translation the way the case write families are. The memory is what a column owning its
@@ -4318,10 +4322,15 @@ public:
         size_t _valueRow {0};
     };
 
-    NLCaseData(const Column* cardinality, Column* result, NLCaseResetFn reset, NLStepBuffers* stepBuffers)
+    NLCaseData(const Column* cardinality,
+               Column* result,
+               NLCaseResetFn reset,
+               NLCaseFinishFn finish,
+               NLStepBuffers* stepBuffers)
         : _cardinality(cardinality),
         _result(result),
         _reset(reset),
+        _finish(finish),
         _stepBuffers(stepBuffers)
     {
     }
@@ -4329,6 +4338,7 @@ public:
     const Column* getCardinality() const { return _cardinality; }
     Column* getResult() const { return _result; }
     NLCaseResetFn getReset() const { return _reset; }
+    NLCaseFinishFn getFinish() const { return _finish; }
     NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
     const Column* getDefaultValue() const { return _defaultValue; }
@@ -4351,6 +4361,7 @@ private:
     const Column* _cardinality {nullptr};
     Column* _result {nullptr};
     NLCaseResetFn _reset {nullptr};
+    NLCaseFinishFn _finish {nullptr};
     NLStepBuffers* _stepBuffers {nullptr};
     std::vector<Branch> _branches;
     std::vector<BranchCursor> _cursors;
@@ -5339,7 +5350,12 @@ public:
     void setValue(const Column* value) { _value = value; }
 
     NLCaseResetFn getReset() const { return _reset; }
-    void setReset(NLCaseResetFn reset) { _reset = reset; }
+    NLCaseFinishFn getFinish() const { return _finish; }
+
+    void setReset(NLCaseResetFn reset, NLCaseFinishFn finish) {
+        _reset = reset;
+        _finish = finish;
+    }
 
     const NLCellWrite& getInitialWrite() const { return _initialWrite; }
     const NLCellWrite& getValueWrite() const { return _valueWrite; }
@@ -5382,6 +5398,7 @@ private:
     NLStepBuffers* _stepBuffers {nullptr};
     const Column* _value {nullptr};
     NLCaseResetFn _reset {nullptr};
+    NLCaseFinishFn _finish {nullptr};
     NLCellWrite _initialWrite;
     NLCellWrite _valueWrite;
     NLCompactingValueStore _accumulatorValues;

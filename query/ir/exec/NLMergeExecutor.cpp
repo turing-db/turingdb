@@ -71,6 +71,8 @@ void fetchMergeProperty(const GraphView& view,
             typed->setOptional(row, written.read<T>(*update, readValues));
         }
     }
+
+    typed->dropAllValidMask();
 }
 
 void fetchMergeNodeProperty(const GraphView& view,
@@ -105,10 +107,13 @@ void readStagedValue(NLWrittenValues& written,
                      const NLMergeScanProperty& property) {
     const auto read = [&]<SupportedType T>() {
         auto* column = static_cast<ColumnOptVector<typename T::Primitive>*>(property._values);
-        column->assignNulls(1);
+        column->clear();
 
         if (value) {
+            column->resizeValid(1);
             column->setOptional(0, written.read<T>(*value, readValues));
+        } else {
+            column->pushNull();
         }
     };
 
