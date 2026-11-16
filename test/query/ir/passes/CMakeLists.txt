@@ -227,3 +227,5 @@ add_ir_tests(test_query_ir_repeated_flag_conjunct RepeatedFlagConjunctTest.cpp)
 add_call_v3_test(test_query_ir_node_id_equality NodeIDEqualityTest.cpp)
 
 add_ir_tests(test_query_ir_node_id_of NodeIDOfTest.cpp)
+
+add_ir_tests(test_query_ir_fold_constant_map_keys FoldConstantMapKeysTest.cpp)

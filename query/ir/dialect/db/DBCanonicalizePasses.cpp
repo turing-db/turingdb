@@ -17,13 +17,16 @@
 #include "BoundEntityIDs.h"
 #include "DBOps.h"
 #include "DBCarriedColumns.h"
+#include "DBColumnChecks.h"
 #include "DBLookupPredicates.h"
 #include "DBPassUtils.h"
+#include "DBPassWorklist.h"
 
 namespace mlir::db {
 
 #define GEN_PASS_DEF_CANONICALIZECOALESCE
 #define GEN_PASS_DEF_CANONICALIZEIDEQUALITIES
+#define GEN_PASS_DEF_FOLDCONSTANTMAPKEYS
 #define GEN_PASS_DEF_HOISTUNCONDITIONALREGIONS
 #include "DBPasses.h.inc"
 
@@ -156,6 +159,65 @@ struct CanonicalizeCoalesce : public impl::CanonicalizeCoalesceBase<Canonicalize
         if (failed(mlir::applyOpPatternsGreedily(coalesces, frozenPatterns, config))) {
             signalPassFailure();
         }
+    }
+};
+
+// The literal every row of @param column holds: a constant, laid out over rows and carried row
+// for row by the ops after it. Null where its rows hold no one literal.
+Attribute heldLiteralOf(Value column) {
+    Value source = column;
+    while (source) {
+        if (ConstantOp constant = source.getDefiningOp<ConstantOp>()) {
+            return constant.getValue();
+        } else if (BroadcastConstant laidOut = source.getDefiningOp<BroadcastConstant>()) {
+            source = laidOut.getValue();
+        } else if (const BlockArgument argument = dyn_cast<BlockArgument>(source)) {
+            source = carriedColumnOf(argument);
+        } else {
+            const OpResult result = cast<OpResult>(source);
+            ColumnCarrierOpInterface carrier = dyn_cast<ColumnCarrierOpInterface>(result.getOwner());
+            source = carrier ? carrier.getRowSource(result) : Value();
+        }
+    }
+
+    return {};
+}
+
+// m['k'] reads what m.k reads where every row of m holds a map, a node, an edge or null. On a
+// datetime or a duration m.year reads a component m['year'] raises on.
+bool foldConstantMapKey(DynamicMapKey mapKey, mlir::RewriterBase& rewriter) {
+    const Value map = mapKey.getMap();
+    const Value keyColumn = mapKey.getKey();
+
+    const StringAttr key = dyn_cast_or_null<StringAttr>(heldLiteralOf(keyColumn));
+    const bool holdsAStringKey = key && isa<storage::StringType>(key.getType());
+    if (!holdsAStringKey) {
+        return false;
+    }
+
+    // A key laid out over rows carries them: a read of a constant map alone would keep a row
+    // the WHERE after the key's WITH dropped
+    const bool mapCarriesTheRows = !::db::yieldsConstantColumn(map) || ::db::yieldsConstantColumn(keyColumn);
+    if (!mapCarriesTheRows || !holdsOnlyKeyedValues(map)) {
+        return false;
+    }
+
+    ConstantOp keyConstant = keyColumn.getDefiningOp<ConstantOp>();
+    const StringAttr keyName = rewriter.getStringAttr(key.getValue());
+
+    rewriter.setInsertionPoint(mapKey);
+    rewriter.replaceOpWithNewOp<StaticMapKey>(mapKey, mapKey.getResult().getType(), map, keyName);
+
+    eraseIfUnused(keyConstant.getOperation(), rewriter);
+
+    return true;
+}
+
+struct FoldConstantMapKeys : public impl::FoldConstantMapKeysBase<FoldConstantMapKeys> {
+    void runOnOperation() override {
+        runWorklist<DynamicMapKey>(getOperation(), [](Operation* op, mlir::RewriterBase& rewriter) {
+            return foldConstantMapKey(cast<DynamicMapKey>(op), rewriter);
+        });
     }
 };
 
