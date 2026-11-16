@@ -347,6 +347,8 @@ inline std::optional<CustomBool> optionalPredicate(T&& a, U&& b) {
  */
 template <typename F>
 struct BinaryPredicate {
+    using Functor = F;
+
     // Predicate whose result is always null irrespective of input nullity
     template <typename T, typename U>
         requires NullableResultPredicate<F, T, U>
