@@ -121,8 +121,17 @@ public:
     template <typename ColumnType>
     void ownRows(ColumnType* column, size_t firstRow) {
         const size_t rowCount = column->size();
-        for (size_t row = firstRow; row < rowCount; row++) {
-            ownRow(column, row);
+        if constexpr (ColumnType::IS_NULLABLE) {
+            auto& rowValues = column->getValues();
+            for (size_t row = firstRow; row < rowCount; row++) {
+                if (column->isValid(row)) {
+                    rowValues[row] = own(rowValues[row]);
+                }
+            }
+        } else {
+            for (size_t row = firstRow; row < rowCount; row++) {
+                ownRow(column, row);
+            }
         }
     }
 

@@ -24,16 +24,23 @@ TEST(ColumnDispatcherTest, colVectorSize) {
     ASSERT_EQ(SIZE, dispatchedSize);
 }
 
-TEST(ColumnDispatcherTest, colVectorResize) {
+class ColumnDispatcherResizeTest : public ::testing::Test {
+protected:
+    std::unique_ptr<Column> _column;
+
+    void SetUp() override {
+        _column = std::make_unique<ColumnVector<NodeID>>();
+    }
+};
+
+TEST_F(ColumnDispatcherResizeTest, colVectorResize) {
     constexpr size_t SIZE = 10;
 
-    std::unique_ptr<Column> col = std::make_unique<ColumnVector<NodeID>>();
+    ASSERT_EQ(_column->size(), 0);
 
-    ASSERT_EQ(col->size(), 0);
+    dispatchColumnVector(_column.get(), [&](auto* c) { c->resize(SIZE); });
 
-    dispatchColumnVector(col.get(), [&](auto* c) { c->resize(SIZE); });
-
-    ASSERT_EQ(col->size(), SIZE);
+    ASSERT_EQ(_column->size(), SIZE);
 }
 
 TEST(ColumnDispatcherTest, copyOneFromOther) {

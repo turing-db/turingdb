@@ -57,6 +57,10 @@ public:
         return _v.empty();
     }
 
+    [[nodiscard]] size_t capacity() const {
+        return _v.capacity() * BITS_PER_ELEMENT;
+    }
+
     [[nodiscard]] size_t byteSize() const {
         return _v.size() * sizeof(Type);
     }

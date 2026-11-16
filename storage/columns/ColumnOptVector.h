@@ -115,32 +115,26 @@ public:
     }
 
     void push_back(const T& value) {
-        const bool maskExists = hasMask();
-        if (maskExists) {
-            _mask.reserve(_data.size() + 1);
-        }
+        reserveMaskForAppend(1);
 
         _data.push_back(value);
-        if (maskExists) {
+        if (hasMask()) {
             _mask.push_back(true);
         }
     }
 
     void push_back(T&& value) {
-        const bool maskExists = hasMask();
-        if (maskExists) {
-            _mask.reserve(_data.size() + 1);
-        }
+        reserveMaskForAppend(1);
 
         _data.push_back(std::move(value));
-        if (maskExists) {
+        if (hasMask()) {
             _mask.push_back(true);
         }
     }
 
     void pushNull() {
         materialiseMask();
-        _mask.reserve(_data.size() + 1);
+        reserveForAppend(1);
 
         _data.emplace_back();
         _mask.push_back(false);
@@ -158,8 +152,9 @@ public:
         const size_t destinationSize = _data.size();
         if (needsMask) {
             materialiseMask();
-            _mask.reserve(destinationSize + rowCount);
         }
+
+        reserveForAppend(rowCount);
 
         const typename std::vector<T>::const_iterator sourceStart = source._data.cbegin() + startLine;
         _data.insert(_data.end(), sourceStart, sourceStart + rowCount);
@@ -208,6 +203,24 @@ public:
         _data.resize(size);
         _mask.resize(size);
         _mask.fill(oldSize, size - oldSize, true);
+    }
+
+    void assignNulls(size_t count) {
+        clear();
+        resize(count);
+    }
+
+    void fillNull(size_t start, size_t count) {
+        bioassert(start + count <= _data.size(), "ColumnOptVector::fillNull: the range is past the end of the column");
+
+        if (count == 0) {
+            return;
+        }
+
+        materialiseMask();
+        std::fill_n(_data.begin() + start, count, T {});
+        _nullCount += _mask.countSet(start, count);
+        _mask.fill(start, count, false);
     }
 
     size_t getNullCount() const { return _nullCount; }
@@ -322,6 +335,24 @@ private:
         _nullCount -= removedNullCount;
     }
 
+    void reserveForAppend(size_t rowCount) {
+        const size_t size = _data.size() + rowCount;
+        const size_t valueCapacity = _data.capacity();
+        if (size > valueCapacity) {
+            _data.reserve(std::max(size, 2 * valueCapacity));
+        }
+
+        reserveMaskForAppend(rowCount);
+    }
+
+    void reserveMaskForAppend(size_t rowCount) {
+        const size_t size = _data.size() + rowCount;
+        const size_t maskCapacity = _mask.capacity();
+        if (hasMask() && size > maskCapacity) {
+            _mask.reserve(std::max(size, 2 * maskCapacity));
+        }
+    }
+
     void settleValidity() {
         _nullCount = _data.size() - _mask.countSet();
         if (_nullCount == 0) {
@@ -356,6 +387,7 @@ private:
     }
 
     [[gnu::cold, gnu::noinline]] void buildAllValidMask() {
+        _mask.reserve(_data.capacity());
         _mask.resize(_data.size());
         _mask.fill(0, _data.size(), true);
     }

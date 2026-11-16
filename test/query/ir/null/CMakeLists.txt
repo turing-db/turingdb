@@ -92,3 +92,9 @@ target_sources(test_query_ir_nullable_similarity_function PRIVATE ${IR_TEST_DIR}
 target_include_directories(test_query_ir_nullable_similarity_function PRIVATE ${IR_TEST_DIR})
 
 add_ir_tests(test_query_ir_untyped_null_function_argument UntypedNullFunctionArgumentTest.cpp)
+
+add_ir_tests(test_query_ir_nullable_row_mover_mask NullableRowMoverMaskTest.cpp)
+target_include_directories(test_query_ir_nullable_row_mover_mask PRIVATE ${CMAKE_SOURCE_DIR}/test/storage)
+
+add_ir_tests(test_query_ir_owned_nullable_append OwnedNullableAppendTest.cpp)
+target_include_directories(test_query_ir_owned_nullable_append PRIVATE ${CMAKE_SOURCE_DIR}/test/storage)
