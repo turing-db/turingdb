@@ -215,11 +215,8 @@ public:
                   "ColumnOptVector::assign: other is not a ColumnOptVector of the same type");
         const ColumnOptVector<T>* otherColumn = static_cast<const ColumnOptVector<T>*>(other);
 
-        std::vector<T> data = otherColumn->_data;
-        ValidityMask mask = otherColumn->_mask;
-
-        _data.swap(data);
-        _mask.swap(mask);
+        _data = otherColumn->_data;
+        _mask = otherColumn->_mask;
         _nullCount = otherColumn->_nullCount;
     }
 
@@ -231,21 +228,17 @@ public:
         bioassert(otherColumn != this, "ColumnOptVector::assignFromLine: the source is the destination");
 
         const typename std::vector<T>::const_iterator otherStart = otherColumn->_data.cbegin() + startLine;
-        std::vector<T> data(otherStart, otherStart + rowCount);
-        ValidityMask mask {0};
-        size_t nullCount = 0;
+        _data.assign(otherStart, otherStart + rowCount);
+        _mask.resize(0);
+        _nullCount = 0;
 
         if (otherColumn->_nullCount != 0) {
-            mask.appendRange(otherColumn->_mask, startLine, rowCount);
-            nullCount = rowCount - mask.countSet();
-            if (nullCount == 0) {
-                mask.resize(0);
+            _mask.appendRange(otherColumn->_mask, startLine, rowCount);
+            _nullCount = rowCount - _mask.countSet();
+            if (_nullCount == 0) {
+                _mask.resize(0);
             }
         }
-
-        _data.swap(data);
-        _mask.swap(mask);
-        _nullCount = nullCount;
     }
 
     void dump(std::ostream& out) const override {
