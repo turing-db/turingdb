@@ -337,6 +337,66 @@ TYPED_TEST(ColumnOptVectorTest, assignCopiesValuesBitsAndCount) {
     expectInvariants(destination);
 }
 
+TYPED_TEST(ColumnOptVectorTest, assignKeepsCapacity) {
+    ColumnOptVector<TypeParam> source;
+    fillPattern(source, 10);
+
+    ColumnOptVector<TypeParam> destination;
+    destination.reserve(1000);
+    fillPattern(destination, 300);
+    const size_t capacity = destination.getValues().capacity();
+    ASSERT_TRUE(destination.hasMask());
+    const auto* words = destination.getValidity()->data();
+
+    destination.assign(&source);
+    EXPECT_EQ(destination.getValues().capacity(), capacity);
+    ASSERT_TRUE(destination.hasMask());
+    EXPECT_EQ(destination.getValidity()->data(), words);
+    ASSERT_EQ(destination.size(), source.size());
+    for (size_t row = 0; row < source.size(); ++row) {
+        EXPECT_EQ(destination.get(row), source.get(row));
+    }
+    expectInvariants(destination);
+
+    destination.assignFromLine(&source, 2, 5);
+    EXPECT_EQ(destination.getValues().capacity(), capacity);
+    ASSERT_TRUE(destination.hasMask());
+    EXPECT_EQ(destination.getValidity()->data(), words);
+    ASSERT_EQ(destination.size(), 5u);
+    for (size_t row = 0; row < 5; ++row) {
+        EXPECT_EQ(destination.get(row), source.get(2 + row));
+    }
+    expectInvariants(destination);
+
+    ColumnOptVector<TypeParam> valid;
+    for (size_t row = 0; row < 10; ++row) {
+        valid.push_back(valueOf<TypeParam>(row));
+    }
+    ASSERT_FALSE(valid.hasMask());
+
+    destination.assign(&valid);
+    EXPECT_EQ(destination.getValues().capacity(), capacity);
+    EXPECT_FALSE(destination.hasMask());
+    EXPECT_EQ(destination.getNullCount(), 0u);
+    ASSERT_EQ(destination.size(), valid.size());
+    for (size_t row = 0; row < valid.size(); ++row) {
+        EXPECT_EQ(destination.get(row), valid.get(row));
+    }
+    expectInvariants(destination);
+
+    fillPattern(destination, 300);
+    ASSERT_TRUE(destination.hasMask());
+
+    destination.assignFromLine(&valid, 2, 5);
+    EXPECT_FALSE(destination.hasMask());
+    EXPECT_EQ(destination.getNullCount(), 0u);
+    ASSERT_EQ(destination.size(), 5u);
+    for (size_t row = 0; row < 5; ++row) {
+        EXPECT_EQ(destination.get(row), valid.get(2 + row));
+    }
+    expectInvariants(destination);
+}
+
 TYPED_TEST(ColumnOptVectorTest, assignFromLineAtUnalignedStarts) {
     ColumnOptVector<TypeParam> source;
     fillPattern(source, 300);
