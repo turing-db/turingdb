@@ -407,6 +407,10 @@ bool db::holdsOnlyNullOr(mlir::Value column, std::initializer_list<CellTag> tags
     return readsHoldOnlyNullOr(column, {}, tags);
 }
 
+bool db::holdsOnlyKeyedValues(mlir::Value column) {
+    return holdsOnlyNullOr(column, {CellTag::MapView, CellTag::NodeID, CellTag::EdgeID});
+}
+
 bool db::readsHoldOnlyNullOr(mlir::Value column,
                              llvm::ArrayRef<mlir::StringAttr> reads,
                              std::initializer_list<CellTag> tags) {
