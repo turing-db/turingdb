@@ -338,6 +338,13 @@ public:
         settleValidity();
     }
 
+    void setValidity(const ValidityMask& validity) {
+        bioassert(validity.size() == _data.size(), "ColumnOptVector::setValidity: the mask does not cover every row");
+
+        const BitMaskType* words = validity.data();
+        assignValidityWords([words](size_t word) { return words[word]; });
+    }
+
     void assign(const Column* other) override {
         bioassert(other->getKind() == _staticKind,
                   "ColumnOptVector::assign: other is not a ColumnOptVector of the same type");

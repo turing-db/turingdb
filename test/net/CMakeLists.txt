@@ -71,3 +71,5 @@ add_turing_test(test_net_schema_id_cells_over_the_wire SchemaIDCellsOverTheWireT
 target_sources(test_net_schema_id_cells_over_the_wire PRIVATE ProtoServerTest.cpp)
 
 add_turing_test(test_net_turing_proto_nullable_window TuringProtoNullableWindowTest.cpp)
+
+add_turing_test(test_net_turing_proto_nullable_buffer TuringProtoNullableBufferTest.cpp)

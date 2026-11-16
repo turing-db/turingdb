@@ -27,7 +27,8 @@ target_include_directories(turing_db_wasm_s
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
     PUBLIC ${TURINGDB_ROOT}/net/decoders
     PUBLIC ${TURINGDB_ROOT}/net/turing_proto_common
-    PUBLIC ${TURINGDB_ROOT}/storage)
+    PUBLIC ${TURINGDB_ROOT}/storage
+    PUBLIC ${TURINGDB_ROOT}/common)
 
 add_executable(turing_db_wasm_smoke SmokeTest.cpp)
 target_link_libraries(turing_db_wasm_smoke PRIVATE turing_db_wasm_s)
