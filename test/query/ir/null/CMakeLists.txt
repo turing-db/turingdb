@@ -102,3 +102,6 @@ target_include_directories(test_query_ir_owned_nullable_append PRIVATE ${CMAKE_S
 add_turing_test(test_query_ir_nullable_writer_mask NullableWriterMaskTest.cpp)
 target_sources(test_query_ir_nullable_writer_mask PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
 target_include_directories(test_query_ir_nullable_writer_mask PRIVATE ${IR_TEST_DIR})
+
+add_ir_tests(test_query_ir_nullable_key_reader NullableKeyReaderTest.cpp)
+target_include_directories(test_query_ir_nullable_key_reader PRIVATE ${CMAKE_SOURCE_DIR}/test/storage)
