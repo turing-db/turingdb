@@ -3,6 +3,8 @@
 #include <optional>
 #include <type_traits>
 
+#include "OptionalRef.h"
+
 namespace db {
 
 struct OptionalTraits {
@@ -11,6 +13,9 @@ struct OptionalTraits {
 
     template <typename U>
     struct is_optional<std::optional<U>> : std::true_type {};
+
+    template <typename U>
+    struct is_optional<OptionalRef<U>> : std::true_type {};
 
     template <typename T>
     static constexpr bool is_optional_v = is_optional<std::remove_cvref_t<T>>::value;
@@ -22,6 +27,11 @@ struct OptionalTraits {
 
     template <typename U>
     struct unwrap_optional<std::optional<U>> {
+        using underlying_type = U;
+    };
+
+    template <typename U>
+    struct unwrap_optional<OptionalRef<U>> {
         using underlying_type = U;
     };
 

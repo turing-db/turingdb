@@ -1746,8 +1746,8 @@ std::optional<IDType> namedEntity(CellView cell) {
     return std::nullopt;
 }
 
-template <TypedInternalID IDType, typename Cell>
-std::optional<IDType> namedEntity(const std::optional<Cell>& cell) {
+template <TypedInternalID IDType, TypeConcepts::OptionalType Cell>
+std::optional<IDType> namedEntity(const Cell& cell) {
     if (!cell.has_value()) {
         return std::nullopt;
     }

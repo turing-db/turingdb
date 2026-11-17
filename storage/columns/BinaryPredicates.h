@@ -550,8 +550,8 @@ inline std::optional<types::String::Primitive> predicateText(const CellView elem
     return element.getAs<types::String::Primitive>();
 }
 
-template <typename T>
-inline std::optional<types::String::Primitive> predicateText(const std::optional<T>& value) {
+template <TypeConcepts::OptionalType Optional>
+inline std::optional<types::String::Primitive> predicateText(const Optional& value) {
     if (!value.has_value()) {
         return std::nullopt;
     }
