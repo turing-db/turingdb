@@ -62,18 +62,19 @@ struct NullableArithmeticExecutor : private NullableOperands {
         if constexpr (COMPUTES_OVER_VALUES && ChecksItsOperands<Functor>) {
             throwIfAValidRowRaises(op, lhsValues, rhsValues, lhsValidity, rhsValidity, size);
 
-            for (size_t row = 0; row < size; row++) {
-                values[row] = Functor::compute(Op::operand(lhsValues[row]), Op::operand(rhsValues[row]));
-            }
+            result->assignValidityOverZeroedNulls(lhsValidity, rhsValidity);
+            writeRows(values, result->getValidity(), size, [&](size_t row) {
+                return static_cast<R>(Functor::compute(Op::operand(lhsValues[row]), Op::operand(rhsValues[row])));
+            });
         } else if constexpr (COMPUTES_OVER_VALUES) {
-            for (size_t row = 0; row < size; row++) {
-                values[row] = computeRow(op, lhsValues[row], rhsValues[row]);
-            }
+            result->assignValidityOverZeroedNulls(lhsValidity, rhsValidity);
+            writeRows(values, result->getValidity(), size, [&](size_t row) {
+                return static_cast<R>(computeRow(op, lhsValues[row], rhsValues[row]));
+            });
         } else {
             computeValidRows(op, values, lhsValues, rhsValues, lhsValidity, rhsValidity, size);
+            result->assignValidity(lhsValidity, rhsValidity);
         }
-
-        result->assignValidity(lhsValidity, rhsValidity);
     }
 
 private:

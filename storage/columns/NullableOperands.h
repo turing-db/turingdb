@@ -2,6 +2,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <algorithm>
 #include <optional>
 
 #include "ColumnVector.h"
@@ -97,6 +98,28 @@ struct NullableOperands {
         } else {
             bioassert(lhs->size() == rhs->size(), "Misshapen ColumnVectors.");
             return lhs->size();
+        }
+    }
+
+    // Writes rowValue(row) into every valid row and T {} into every null row
+    template <typename T, typename RowValue>
+    static void writeRows(T* values, const ValidityMask* validity, size_t size, RowValue rowValue) {
+        if (validity == nullptr) {
+            for (size_t row = 0; row < size; row++) {
+                values[row] = rowValue(row);
+            }
+            return;
+        }
+
+        const ValidityWord* words = validity->data();
+        for (size_t start = 0; start < size; start += BITS_PER_WORD) {
+            const ValidityWord valid = words[start / BITS_PER_WORD];
+            const size_t count = std::min(BITS_PER_WORD, size - start);
+
+            for (size_t bit = 0; bit < count; bit++) {
+                const T value = rowValue(start + bit);
+                values[start + bit] = ((valid >> bit) & 1) != 0 ? value : T {};
+            }
         }
     }
 
