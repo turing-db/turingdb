@@ -3137,7 +3137,7 @@ void distinctKeyAppendOptColumn(const Column* column, size_t row, NLSerializedKe
         return;
     }
 
-    distinctAppendPresentValue(key, typedColumn->getValue(row));
+    distinctAppendPresentValue(key, typedColumn->getValues()[row]);
 }
 
 // What a key value packs as, holding the value as its serialized key does: an ID's integer, a
@@ -3196,22 +3196,34 @@ void packKeyColumn(const Column* column, size_t beginRow, size_t endRow, const N
 template <typename Primitive>
 void packOptKeyColumn(const Column* column, size_t beginRow, size_t endRow, const NLKeyPackTarget& target) {
     const ColumnOptVector<Primitive>* typedColumn = static_cast<const ColumnOptVector<Primitive>*>(column);
+    const std::vector<Primitive>& values = typedColumn->getValues();
     const std::byte nullMask {static_cast<uint8_t>(1u << (target._nullBit % 8))};
 
-    std::byte* value = target._values;
-    std::byte* nulls = target._nulls + target._nullBit / 8;
+    const auto markNulls = [&](size_t first, size_t last) {
+        std::byte* nulls = target._nulls + target._nullBit / 8 + (first - beginRow) * target._nullStride;
 
-    for (size_t row = beginRow; row < endRow; row++) {
-        if (typedColumn->isValid(row)) {
-            const auto packed = packedKeyValue(typedColumn->getValue(row));
-            std::memcpy(value, &packed, sizeof(packed));
-        } else {
+        for (size_t row = first; row < last; row++) {
             *nulls |= nullMask;
+            nulls += target._nullStride;
+        }
+    };
+
+    size_t nullFirst = beginRow;
+    typedColumn->forEachPresentRun(beginRow, endRow, [&](size_t first, size_t last) {
+        markNulls(nullFirst, first);
+
+        std::byte* value = target._values + (first - beginRow) * target._valueStride;
+        for (size_t row = first; row < last; row++) {
+            const auto packed = packedKeyValue(values[row]);
+            std::memcpy(value, &packed, sizeof(packed));
+
+            value += target._valueStride;
         }
 
-        value += target._valueStride;
-        nulls += target._nullStride;
-    }
+        nullFirst = last;
+    });
+
+    markNulls(nullFirst, endRow);
 }
 
 template <typename ElementType>
@@ -3712,12 +3724,19 @@ template <typename Primitive>
 void hashOptKeyColumn(const Column* column, std::vector<uint64_t>& hashes) {
     const ColumnOptVector<Primitive>* typedColumn = static_cast<const ColumnOptVector<Primitive>*>(column);
 
-    const size_t rowCount = typedColumn->size();
+    const std::vector<Primitive>& values = typedColumn->getValues();
+    const size_t rowCount = values.size();
     hashes.resize(rowCount);
 
-    for (size_t row = 0; row < rowCount; row++) {
-        hashes[row] = typedColumn->isValid(row) ? hashKeyValue(typedColumn->getValue(row)) : uint64_t {0};
+    if (typedColumn->getNullCount() != 0) {
+        std::fill(hashes.begin(), hashes.end(), uint64_t {0});
     }
+
+    typedColumn->forEachPresentRun(0, rowCount, [&](size_t first, size_t last) {
+        std::transform(values.begin() + first, values.begin() + last, hashes.begin() + first, [](const Primitive& value) {
+            return hashKeyValue(value);
+        });
+    });
 }
 
 template <typename ElementType>
@@ -4246,10 +4265,19 @@ void groupGatherAppendOptColumn(const Column* input,
                                 NLValueStore& values) {
     const ColumnOptVector<Element>* typedInput = static_cast<const ColumnOptVector<Element>*>(input);
     ColumnOptVector<Element>* typedBuffer = static_cast<ColumnOptVector<Element>*>(buffer);
+    const std::vector<Element>& inputValues = typedInput->getValues();
+
+    if (typedInput->getNullCount() == 0) {
+        for (const size_t row : rows) {
+            typedBuffer->push_back(values.ownElement(inputValues[row]));
+        }
+
+        return;
+    }
 
     for (const size_t row : rows) {
         if (typedInput->isValid(row)) {
-            typedBuffer->push_back(values.ownElement(typedInput->getValue(row)));
+            typedBuffer->push_back(values.ownElement(inputValues[row]));
         } else {
             typedBuffer->pushNull();
         }
@@ -5200,15 +5228,15 @@ void collectFold(Column* values,
                  NLValueStore& store) {
     auto& valuesRaw = static_cast<ColumnVector<Primitive>*>(values)->getRaw();
     const ColumnOptVector<Primitive>* typedInput = static_cast<const ColumnOptVector<Primitive>*>(input);
+    const std::vector<Primitive>& inputValues = typedInput->getValues();
 
-    const size_t rowCount = typedInput->size();
-    for (size_t row = 0; row < rowCount; row++) {
-        if (typedInput->isValid(row)) {
+    typedInput->forEachPresentRun(0, inputValues.size(), [&](size_t first, size_t last) {
+        for (size_t row = first; row < last; row++) {
             const size_t position = valuesRaw.size();
-            valuesRaw.push_back(store.ownElement(typedInput->getValue(row)));
+            valuesRaw.push_back(store.ownElement(inputValues[row]));
             groupPositions[groups[row]].push_back(position);
         }
-    }
+    });
 }
 
 // Append this step's values a group has not collected yet - collect(DISTINCT x). A value
@@ -5223,23 +5251,19 @@ void collectFoldDistinct(Column* values,
                          NLValueStore& store) {
     auto& valuesRaw = static_cast<ColumnVector<Primitive>*>(values)->getRaw();
     const ColumnOptVector<Primitive>* typedInput = static_cast<const ColumnOptVector<Primitive>*>(input);
+    const std::vector<Primitive>& inputValues = typedInput->getValues();
 
-    const size_t rowCount = typedInput->size();
-    for (size_t row = 0; row < rowCount; row++) {
-        if (!typedInput->isValid(row)) {
-            continue;
+    typedInput->forEachPresentRun(0, inputValues.size(), [&](size_t first, size_t last) {
+        for (size_t row = first; row < last; row++) {
+            if (!distinct->isNew(row)) {
+                continue;
+            }
+
+            const size_t position = valuesRaw.size();
+            valuesRaw.push_back(store.ownElement(inputValues[row]));
+            groupPositions[groups[row]].push_back(position);
         }
-
-        const size_t group = groups[row];
-
-        if (!distinct->isNew(row)) {
-            continue;
-        }
-
-        const size_t position = valuesRaw.size();
-        valuesRaw.push_back(store.ownElement(typedInput->getValue(row)));
-        groupPositions[group].push_back(position);
-    }
+    });
 }
 
 // The cell sibling of collectFold, for a chunk holding a value in every row: every row of
@@ -5593,17 +5617,15 @@ void collectOptContainerFold(Column* values,
                              NLValueStore& store) {
     auto& valuesRaw = static_cast<ColumnVector<Container>*>(values)->getRaw();
     const ColumnOptVector<Container>* typedInput = static_cast<const ColumnOptVector<Container>*>(input);
+    const std::vector<Container>& inputValues = typedInput->getValues();
 
-    const size_t rowCount = typedInput->size();
-    for (size_t row = 0; row < rowCount; row++) {
-        if (!typedInput->isValid(row)) {
-            continue;
+    typedInput->forEachPresentRun(0, inputValues.size(), [&](size_t first, size_t last) {
+        for (size_t row = first; row < last; row++) {
+            const size_t position = valuesRaw.size();
+            valuesRaw.push_back(store.ownElement(inputValues[row]));
+            groupPositions[groups[row]].push_back(position);
         }
-
-        const size_t position = valuesRaw.size();
-        valuesRaw.push_back(store.ownElement(typedInput->getValue(row)));
-        groupPositions[groups[row]].push_back(position);
-    }
+    });
 }
 
 template <typename Container>
@@ -5615,23 +5637,19 @@ void collectOptContainerFoldDistinct(Column* values,
                                      NLValueStore& store) {
     auto& valuesRaw = static_cast<ColumnVector<Container>*>(values)->getRaw();
     const ColumnOptVector<Container>* typedInput = static_cast<const ColumnOptVector<Container>*>(input);
+    const std::vector<Container>& inputValues = typedInput->getValues();
 
-    const size_t rowCount = typedInput->size();
-    for (size_t row = 0; row < rowCount; row++) {
-        if (!typedInput->isValid(row)) {
-            continue;
+    typedInput->forEachPresentRun(0, inputValues.size(), [&](size_t first, size_t last) {
+        for (size_t row = first; row < last; row++) {
+            if (!distinct->isNew(row)) {
+                continue;
+            }
+
+            const size_t position = valuesRaw.size();
+            valuesRaw.push_back(store.ownElement(inputValues[row]));
+            groupPositions[groups[row]].push_back(position);
         }
-
-        const size_t group = groups[row];
-
-        if (!distinct->isNew(row)) {
-            continue;
-        }
-
-        const size_t position = valuesRaw.size();
-        valuesRaw.push_back(store.ownElement(typedInput->getValue(row)));
-        groupPositions[group].push_back(position);
-    }
+    });
 }
 
 // Emit a chunk of unwound values (nl.unwind_collect): for each flat-buffer position this chunk
