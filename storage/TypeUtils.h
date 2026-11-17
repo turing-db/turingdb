@@ -85,6 +85,9 @@ namespace TypeConcepts {
 template <typename T>
 concept OptionalType = TypeUtils::is_optional_v<T>;
 
+template <typename T, typename U>
+concept OptionalOf = OptionalType<T> && std::same_as<TypeUtils::unwrap_optional_t<T>, U>;
+
 /// Helpers to define a concept based on if a type is in a tuple
 template <typename T, typename... Ts>
 concept AnyOf = (std::same_as<T, Ts> or ...);

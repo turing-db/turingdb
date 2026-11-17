@@ -8,6 +8,7 @@
 #include "ColumnVector.h"
 #include "ColumnOptVector.h"
 #include "ColumnConst.h"
+#include "OptionalRef.h"
 
 #include "BioAssert.h"
 
@@ -19,8 +20,12 @@ const T& operandRow(const ColumnVector<T>* column, size_t row) {
 }
 
 template <typename T>
-auto operandRow(const ColumnOptVector<T>* column, size_t row) {
-    return column->get(row);
+OptionalRef<T> operandRow(const ColumnOptVector<T>* column, size_t row) {
+    if (!column->isValid(row)) {
+        return OptionalRef<T> {nullptr};
+    }
+
+    return OptionalRef<T> {&column->getValues()[row]};
 }
 
 template <typename T>
@@ -29,8 +34,12 @@ const T& constantOperand(const ColumnConst<T>* column) {
 }
 
 template <typename T>
-std::optional<T> constantOperand(const ColumnConst<std::optional<T>>* column) {
-    return column->get(0);
+OptionalRef<T> constantOperand(const ColumnConst<std::optional<T>>* column) {
+    if (!column->isValid(0)) {
+        return OptionalRef<T> {nullptr};
+    }
+
+    return OptionalRef<T> {&column->getValue(0)};
 }
 
 template <typename T>

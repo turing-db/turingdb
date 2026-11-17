@@ -1676,8 +1676,8 @@ private:
         return cellEmbedding(cell, F::NAME);
     }
 
-    template <typename T>
-    static std::optional<Embedding> argument(const std::optional<T>& value) {
+    template <TypeConcepts::OptionalType Optional>
+    static std::optional<Embedding> argument(const Optional& value) {
         if (!value.has_value()) {
             return std::nullopt;
         }

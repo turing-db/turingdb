@@ -78,7 +78,7 @@ inline auto arithmeticOperand(T&& value) {
 
     if constexpr (std::is_same_v<Decayed, uint64_t>) {
         return static_cast<int64_t>(value);
-    } else if constexpr (std::is_same_v<Decayed, std::optional<uint64_t>>) {
+    } else if constexpr (TypeConcepts::OptionalOf<Decayed, uint64_t>) {
         if (!value.has_value()) {
             return std::optional<int64_t> {};
         }
