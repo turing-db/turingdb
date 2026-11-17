@@ -56,11 +56,10 @@ struct NullablePredicateExecutor : private NullableOperands {
         const auto rhsValues = operandValues(rhs);
         CustomBool* values = result->getValues().data();
 
-        for (size_t row = 0; row < size; row++) {
-            values[row] = Functor {}(lhsValues[row], rhsValues[row]);
-        }
-
-        result->assignValidity(operandValidity(lhs), operandValidity(rhs));
+        result->assignValidityOverZeroedNulls(operandValidity(lhs), operandValidity(rhs));
+        writeRows(values, result->getValidity(), size, [&](size_t row) {
+            return CustomBool(Functor {}(lhsValues[row], rhsValues[row]));
+        });
     }
 
     template <typename Op, typename LhsColumn, typename RhsColumn>
@@ -78,7 +77,7 @@ struct NullablePredicateExecutor : private NullableOperands {
         const ValidityWord lhsConstantValid = holdsNullConstant(lhs) ? ValidityWord {0} : ~ValidityWord {0};
         const ValidityWord rhsConstantValid = holdsNullConstant(rhs) ? ValidityWord {0} : ~ValidityWord {0};
 
-        result->assignValidityWords([&](size_t word) {
+        result->assignValidityWordsOverZeroedNulls([&](size_t word) {
             const size_t start = word * BITS_PER_WORD;
             const size_t end = std::min(start + BITS_PER_WORD, size);
 

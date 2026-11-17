@@ -289,6 +289,12 @@ public:
     // A row is valid where both masks hold it valid, and a missing mask holds every row
     // valid. Every null row's value is reset to T {}.
     void assignValidity(const ValidityMask* first, const ValidityMask* second) {
+        assignValidityOverZeroedNulls(first, second);
+        resetNullValues();
+    }
+
+    // As assignValidity, for a caller that writes T {} into every null row itself
+    void assignValidityOverZeroedNulls(const ValidityMask* first, const ValidityMask* second) {
         if (first == nullptr && second == nullptr) {
             _mask.resize(0);
             _nullCount = 0;
@@ -313,13 +319,19 @@ public:
             }
         }
 
-        settleValidity();
+        countNulls();
     }
 
     // Calls wordOf(w) once for each word w, in order. Row r is valid where bit r % 64 of
     // wordOf(r / 64) is set
     template <typename WordOf>
     void assignValidityWords(WordOf wordOf) {
+        assignValidityWordsOverZeroedNulls(wordOf);
+        resetNullValues();
+    }
+
+    template <typename WordOf>
+    void assignValidityWordsOverZeroedNulls(WordOf wordOf) {
         const size_t size = _data.size();
         _mask.resize(size);
 
@@ -335,7 +347,7 @@ public:
             words[wordCount - 1] &= ValidityMask::lowBits(tailBitCount);
         }
 
-        settleValidity();
+        countNulls();
     }
 
     void setValidity(const ValidityMask& validity) {
@@ -444,17 +456,18 @@ private:
         }
     }
 
-    void settleValidity() {
+    void countNulls() {
         _nullCount = _data.size() - _mask.countSet();
         if (_nullCount == 0) {
             _mask.resize(0);
-            return;
         }
-
-        resetNullValues();
     }
 
     void resetNullValues() {
+        if (_nullCount == 0) {
+            return;
+        }
+
         constexpr size_t BITS_PER_WORD = ValidityMask::BITS_PER_ELEMENT;
 
         const BitMaskType* words = _mask.data();
