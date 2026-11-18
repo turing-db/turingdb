@@ -15,9 +15,8 @@ namespace wasm {
 using ColumnKind = net::proto::ColumnKind;
 using ColumnType = net::proto::ColumnInternalKind;
 
-// Optionality is expressed through the element type, as in the native decoder:
-// ColumnVector<std::optional<T>> is an OPTIONAL_VECTOR and ColumnConst<std::optional<T>>
-// an OPTIONAL_CONSTANT, so all four wire kinds come from two class templates.
+// ColumnConst<std::optional<T>> is an OPTIONAL_CONSTANT. An OPTIONAL_VECTOR is a
+// ColumnOptVector, which keeps values and validity apart.
 template <typename T>
 inline constexpr bool isOptional = false;
 
