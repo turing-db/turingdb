@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <array>
+#include <bit>
 #include <optional>
 #include <span>
 #include <string>
@@ -200,6 +201,24 @@ val exportItems(ExportBuffers& out, ColumnInternalKind typeCode, ColumnKind enco
     return descriptor;
 }
 
+template <typename T>
+val exportFixedWidthOptionalVector(ColumnInternalKind typeCode, const wasm::ColumnOptVector<T>& column) {
+    static_assert(std::endian::native == std::endian::little);
+
+    const std::vector<T>& values = column.getValues();
+    const DynamicLargeBitMask<uint64_t>& validity = column.getValidity();
+
+    val descriptor = val::object();
+    descriptor.set("typeCode", static_cast<uint32_t>(typeCode));
+    descriptor.set("encoding", static_cast<uint32_t>(ColumnKind::OPTIONAL_VECTOR));
+    descriptor.set("count", static_cast<uint32_t>(values.size()));
+    descriptor.set("elementSize", static_cast<uint32_t>(sizeof(T)));
+    descriptor.set("values", copyToUint8Array(values));
+    descriptor.set("validity", copyToUint8Array(validity.data(), (values.size() + 7) / 8));
+
+    return descriptor;
+}
+
 // Take a decoded wasm column and use the functor to return a JS Descriptor object
 struct ColumnBuffersFn {
     wasm::Column* _column {nullptr};
@@ -222,12 +241,17 @@ struct ColumnBuffersFn {
             break;
             case ColumnKind::OPTIONAL_VECTOR: {
                 if constexpr (SupportedColumnOptVectorTypes<T, wasm::WasmSink>) {
-                    wasm::ColumnVector<std::optional<T>>* column = static_cast<wasm::ColumnVector<std::optional<T>>*>(_column);
-                    const auto getItem = [column](size_t index) -> const T* {
-                        const std::optional<T>& value = (*column)[index];
-                        return value.has_value() ? presentItem(*value) : nullptr;
-                    };
-                    return exportItems<T>(*_buffers, typeCode, encoding, column->size(), getItem);
+                    const wasm::ColumnOptVector<T>* column = static_cast<const wasm::ColumnOptVector<T>*>(_column);
+
+                    if constexpr (isFixedWidth<T>) {
+                        return exportFixedWidthOptionalVector<T>(typeCode, *column);
+                    } else {
+                        const std::vector<T>& values = column->getValues();
+                        const auto getItem = [column, &values](size_t index) -> const T* {
+                            return column->isValid(index) ? presentItem(values[index]) : nullptr;
+                        };
+                        return exportItems<T>(*_buffers, typeCode, encoding, values.size(), getItem);
+                    }
                 } else {
                     throw TuringException("Unsupported type for Optional Vector");
                 }

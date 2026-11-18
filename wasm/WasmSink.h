@@ -18,6 +18,7 @@
 #include "Column.h"
 #include "ColumnConst.h"
 #include "ColumnContainer.h"
+#include "ColumnOptVector.h"
 #include "ColumnVector.h"
 #include "WasmCellView.h"
 #include "ListView.h"
@@ -104,7 +105,7 @@ public:
     using ColumnVector = wasm::ColumnVector<T>;
 
     template <typename T>
-    using ColumnOptVector = wasm::ColumnVector<std::optional<T>>;
+    using ColumnOptVector = wasm::ColumnOptVector<T>;
 
     template <typename T>
     using ColumnConst = wasm::ColumnConst<T>;

@@ -7,7 +7,6 @@
 #include <utility>
 #include <vector>
 
-#include "OptionalTraits.h"
 #include "ProtoDecodeSink.h"
 
 #include "Column.h"
@@ -21,12 +20,9 @@ template <typename T>
 class ColumnVector : public Column {
 public:
     using ValueType = T;
-    using UnwrappedType = db::OptionalTraits::unwrap_optional_t<T>;
-
-    static constexpr bool IS_NULLABLE = db::OptionalTraits::is_optional_v<T>;
 
     ColumnVector(ColumnType type)
-        : Column(IS_NULLABLE ? ColumnKind::OPTIONAL_VECTOR : ColumnKind::VECTOR, type)
+        : Column(ColumnKind::VECTOR, type)
     {
     }
 
@@ -37,10 +33,6 @@ public:
 
     T& operator[](size_t index) { return _container[index]; }
     const T& operator[](size_t index) const { return _container[index]; }
-
-    bool isValid(size_t row) const requires IS_NULLABLE { return _container[row].has_value(); }
-    void set(size_t row, const UnwrappedType& value) requires IS_NULLABLE { _container[row] = value; }
-    void set(size_t row, UnwrappedType&& value) requires IS_NULLABLE { _container[row] = std::move(value); }
 
     template <typename... Args>
     T& emplace_back(Args&&... args) { return _container.emplace_back(std::forward<Args>(args)...); }
@@ -55,6 +47,5 @@ private:
 };
 
 static_assert(net::proto::VectorColumn<ColumnVector<uint64_t>, uint64_t>);
-static_assert(net::proto::OptionalVectorColumn<ColumnVector<std::optional<double>>, double>);
 
 }

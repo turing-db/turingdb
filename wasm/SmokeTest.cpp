@@ -7,6 +7,7 @@
 
 #include "ColumnConst.h"
 #include "ColumnContainer.h"
+#include "ColumnOptVector.h"
 #include "ColumnVector.h"
 
 using namespace wasm;
@@ -21,9 +22,9 @@ int main() {
     strings->emplace_back("abc", 3);
     strings->emplace_back(size_t(5), '\0');
 
-    auto* optionalIds = new ColumnVector<std::optional<uint64_t>>(ColumnType::UINT64);
+    auto* optionalIds = new ColumnOptVector<uint64_t>(ColumnType::UINT64);
     optionalIds->resize(3);
-    (*optionalIds)[1] = 9;
+    optionalIds->set(1, 9);
 
     auto* name = new ColumnConst<std::string>(ColumnType::STRING);
     name->set(std::string("turing"));
@@ -45,7 +46,9 @@ int main() {
 
     const bool valuesOk = (*ids)[2] == 7
                           && strings->size() == 2
-                          && (*optionalIds)[1].has_value()
+                          && optionalIds->isValid(1)
+                          && !optionalIds->isValid(0)
+                          && optionalIds->getValues()[1] == 9
                           && name->getValue() == "turing"
                           && optionalScore->getValue().has_value()
                           && container.getName(1) == "strings";

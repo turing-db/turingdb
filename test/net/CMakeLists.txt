@@ -73,3 +73,8 @@ target_sources(test_net_schema_id_cells_over_the_wire PRIVATE ProtoServerTest.cp
 add_turing_test(test_net_turing_proto_nullable_window TuringProtoNullableWindowTest.cpp)
 
 add_turing_test(test_net_turing_proto_nullable_buffer TuringProtoNullableBufferTest.cpp)
+
+if (TURINGDB_BUILD_WASM)
+    add_turing_test(test_net_wasm_optional_column_decode WasmOptionalColumnDecodeTest.cpp)
+    target_link_libraries(test_net_wasm_optional_column_decode PRIVATE turing_db_wasm_s)
+endif()
