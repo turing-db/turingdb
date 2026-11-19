@@ -667,7 +667,9 @@ struct SafeDivides {
     template <typename T, typename U>
         requires std::is_arithmetic_v<T> && std::is_arithmetic_v<U>
     static bool raises(T a, U b) {
-        return b == 0 || overflows(a, b);
+        const bool dividesByZero = b == 0;
+        const bool overflowsDivision = overflows(a, b);
+        return dividesByZero | overflowsDivision;
     }
 
     // A pair that raises gets a value with no undefined behaviour, which is never read:
@@ -690,7 +692,9 @@ struct SafeDivides {
 
         if constexpr (std::is_integral_v<DecayT> && std::is_signed_v<DecayT>
                       && std::is_integral_v<DecayU> && std::is_signed_v<DecayU>) {
-            return a == std::numeric_limits<DecayT>::min() && b == -1;
+            const bool smallestDividend = a == std::numeric_limits<DecayT>::min();
+            const bool minusOneDivisor = b == -1;
+            return smallestDividend & minusOneDivisor;
         } else {
             return false;
         }
