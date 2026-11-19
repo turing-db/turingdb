@@ -13,8 +13,6 @@
 #include "ColumnConst.h"
 #include "NullableOperands.h"
 
-#include "BioAssert.h"
-
 namespace db {
 
 template <typename T>
@@ -60,12 +58,8 @@ struct NullableArithmeticExecutor : private NullableOperands {
         constexpr bool COMPUTES_OVER_VALUES = ArithmeticElement<Lhs> && ArithmeticElement<Rhs>;
 
         if constexpr (COMPUTES_OVER_VALUES && ChecksItsOperands<Functor>) {
-            throwIfAValidRowRaises(op, lhsValues, rhsValues, lhsValidity, rhsValidity, size);
-
             result->assignValidityOverZeroedNulls(lhsValidity, rhsValidity);
-            writeRows(values, result->getValidity(), size, [&](size_t row) {
-                return static_cast<R>(Functor::compute(Op::operand(lhsValues[row]), Op::operand(rhsValues[row])));
-            });
+            writeCheckedRows<Op>(values, result->getValidity(), lhsValues, rhsValues, size);
         } else if constexpr (COMPUTES_OVER_VALUES) {
             result->assignValidityOverZeroedNulls(lhsValidity, rhsValidity);
             writeRows(values, result->getValidity(), size, [&](size_t row) {
@@ -93,31 +87,35 @@ private:
         }
     }
 
+    // Checks a word of rows, then computes it while its operands are still in L1. The
+    // first valid row that raises throws, after the words before it are written.
     template <typename Op, typename LhsValues, typename RhsValues>
-    static void throwIfAValidRowRaises(Op op,
-                                       const LhsValues& lhs,
-                                       const RhsValues& rhs,
-                                       const ValidityMask* lhsValidity,
-                                       const ValidityMask* rhsValidity,
-                                       size_t size) {
+    static void writeCheckedRows(R* values,
+                                 const ValidityMask* validity,
+                                 const LhsValues& lhs,
+                                 const RhsValues& rhs,
+                                 size_t size) {
         using Functor = typename Op::Functor;
 
         for (size_t start = 0; start < size; start += BITS_PER_WORD) {
-            const size_t end = std::min(start + BITS_PER_WORD, size);
+            const size_t count = std::min(BITS_PER_WORD, size - start);
+            const ValidityWord valid = validWord(validity, start / BITS_PER_WORD);
 
             ValidityWord raising = 0;
-            for (size_t row = start; row < end; row++) {
-                const bool raises = Functor::raises(Op::operand(lhs[row]), Op::operand(rhs[row]));
-                raising |= static_cast<ValidityWord>(raises) << (row - start);
+            for (size_t bit = 0; bit < count; bit++) {
+                const bool raises = Functor::raises(Op::operand(lhs[start + bit]), Op::operand(rhs[start + bit]));
+                raising |= static_cast<ValidityWord>(raises) << bit;
             }
 
-            const size_t word = start / BITS_PER_WORD;
-            const ValidityWord failing = raising & validWord(lhsValidity, word) & validWord(rhsValidity, word);
-
+            const ValidityWord failing = raising & valid;
             if (failing != 0) {
                 const size_t row = start + std::countr_zero(failing);
-                op(lhs[row], rhs[row]);
-                bioassert(false, "An arithmetic row flagged as raising did not raise");
+                Functor::throwError(Op::operand(lhs[row]), Op::operand(rhs[row]));
+            }
+
+            for (size_t bit = 0; bit < count; bit++) {
+                const R value = static_cast<R>(Functor::compute(Op::operand(lhs[start + bit]), Op::operand(rhs[start + bit])));
+                values[start + bit] = ((valid >> bit) & 1) != 0 ? value : R {};
             }
         }
     }

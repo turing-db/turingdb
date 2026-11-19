@@ -655,13 +655,20 @@ struct SafeDivides {
     template <typename T, typename U>
         requires (!Temporal<U>) && requires(T&& a, U&& b) { std::divides<> {}(a, b); }
     inline auto operator()(T&& a, U&& b) const {
-        if (b == 0) {
-            throw TuringException("Attempted to divide by zero.");
-        } else if (overflows(a, b)) {
-            throw TuringException("Division overflow.");
+        if (b == 0 || overflows(a, b)) {
+            throwError(a, b);
         }
 
         return std::divides<> {}(std::forward<T>(a), std::forward<U>(b));
+    }
+
+    template <typename T, typename U>
+    [[noreturn]] static void throwError(const T& a, const U& b) {
+        if (b == 0) {
+            throw TuringException("Attempted to divide by zero.");
+        }
+
+        throw TuringException("Division overflow.");
     }
 
     template <typename T, typename U>
@@ -712,10 +719,15 @@ struct SafeModulo {
         requires (!Temporal<T>) && std::is_arithmetic_v<std::decay_t<T>> && std::is_arithmetic_v<std::decay_t<U>>
     inline auto operator()(T&& a, U&& b) const {
         if (b == 0) {
-            throw TuringException("Attempted modulo by zero.");
+            throwError(a, b);
         }
 
         return compute(a, b);
+    }
+
+    template <typename T, typename U>
+    [[noreturn]] static void throwError(const T& a, const U& b) {
+        throw TuringException("Attempted modulo by zero.");
     }
 
     template <typename T, typename U>
