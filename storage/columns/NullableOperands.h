@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <algorithm>
+#include <bit>
 #include <optional>
 
 #include "ColumnVector.h"
@@ -120,6 +121,44 @@ struct NullableOperands {
                 const T value = rowValue(start + bit);
                 values[start + bit] = ((valid >> bit) & 1) != 0 ? value : T {};
             }
+        }
+    }
+
+    // As writeRows, but calls rowValue on the valid rows only
+    template <typename T, typename RowValue>
+    static void writeValidRows(T* values, const ValidityMask* validity, size_t size, RowValue rowValue) {
+        if (validity == nullptr) {
+            for (size_t row = 0; row < size; row++) {
+                values[row] = rowValue(row);
+            }
+            return;
+        }
+
+        const ValidityWord* words = validity->data();
+        for (size_t start = 0; start < size; start += BITS_PER_WORD) {
+            const size_t count = std::min(BITS_PER_WORD, size - start);
+            writeValidWordRows(values, start, words[start / BITS_PER_WORD], count, rowValue);
+        }
+    }
+
+    template <typename T, typename RowValue>
+    static void writeValidWordRows(T* values, size_t start, ValidityWord valid, size_t count, RowValue rowValue) {
+        const ValidityWord inRange = ValidityMask::lowBits(count);
+        ValidityWord validRows = valid & inRange;
+
+        if (validRows == inRange) {
+            for (size_t bit = 0; bit < count; bit++) {
+                values[start + bit] = rowValue(start + bit);
+            }
+            return;
+        }
+
+        std::fill_n(values + start, count, T {});
+
+        while (validRows != 0) {
+            const size_t row = start + std::countr_zero(validRows);
+            values[row] = rowValue(row);
+            validRows &= validRows - 1;
         }
     }
 

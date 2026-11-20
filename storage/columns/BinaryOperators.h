@@ -380,6 +380,10 @@ template <typename F>
 concept ChecksItsOperands = std::is_same_v<F, SafeDivides> || std::is_same_v<F, SafeModulo>;
 
 template <typename F, typename T, typename U>
+concept ComputesThroughLibraryCall = std::is_same_v<F, Power>
+                                  || (std::is_same_v<F, SafeModulo> && (std::is_floating_point_v<T> || std::is_floating_point_v<U>));
+
+template <typename F, typename T, typename U>
 concept ComputesOverTaggedCell = ComputesNumbers<F> && (TaggedCell<T> || TaggedCell<U>);
 
 template <typename T>
