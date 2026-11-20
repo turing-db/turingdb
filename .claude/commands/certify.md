@@ -101,7 +101,9 @@ python3 scripts/review_certificate.py issue --input build/review-certificate.jso
 
 The script recomputes the patch ID from `head` and dispatches the `Review Certificate`
 workflow on `main` with the certificate. That run posts the comment as github-actions[bot],
-deletes your earlier certificates on the PR, and sets the status. The script waits for the
+deletes your earlier certificates on the PR, and sets the status. It keeps an earlier one
+that covers the head on GitHub when the new one does not, so certifying an unpushed commit
+leaves the pushed one certified. The script waits for the
 run, then prints its URL, the comment's URL and the verdict on the PR as it stands.
 `pending: the certificate covers another diff` means the head is not pushed yet. Only a
 user with write access can dispatch it.

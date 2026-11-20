@@ -695,4 +695,5 @@ only when a dispatched run of that workflow on `main`, by someone with write acc
 for its exact content. It passes when the certificate covers the PR's current diff by patch
 ID and every correctness or efficiency finding is fixed or rejected. Other categories
 (simplification, test coverage, style) are shown but do not block. Any change to the diff
-needs a new certificate; a rebase that leaves the diff unchanged does not.
+needs a new certificate; a rebase that leaves the diff unchanged does not. The newest
+certificate that covers the PR's current diff decides the status.

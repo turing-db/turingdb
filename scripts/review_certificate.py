@@ -1,17 +1,5 @@
 #!/usr/bin/env python3
-"""Issue and verify the review certificate a pull request needs before it merges.
-
-A certificate is a PR comment recording one review of the PR's diff: the review that ran,
-the diff it covers, and every finding with its category and status. It names the diff by
-its verbatim patch ID. A rebase keeps it valid when it leaves the diff unchanged and
-merging the certified diff onto the new base gives the PR's tree exactly. The
-certificate sets the review-certificate/<base> commit status: success when it covers the
-PR's current diff and every correctness or efficiency finding is fixed or rejected.
-
-issue dispatches the Review Certificate workflow on the default branch, whose publish job
-posts the certificate as github-actions[bot]. The run's title carries the PR number and the
-SHA-256 of the certificate, so verify counts a bot comment only when a dispatched run of
-that workflow on the default branch vouches for its exact content.
+"""Issue, publish and verify the review certificate a pull request needs before it merges.
 
 Usage:
   review_certificate.py target [--pr N] [--head COMMIT]
@@ -21,6 +9,7 @@ Usage:
 """
 
 import argparse
+import functools
 import hashlib
 import json
 import os
@@ -80,6 +69,7 @@ DIFF_OPTIONS = [
     "--dst-prefix=b/",
     "--ignore-submodules=none",
     "--submodule=short",
+    "-O/dev/null",
 ]
 
 
@@ -87,9 +77,14 @@ class CertificateError(Exception):
     pass
 
 
+class EmptyDiff(CertificateError):
+    pass
+
+
 class CommandError(Exception):
     def __init__(self, args, message):
-        super().__init__(f"{' '.join(args)}: {message}")
+        super().__init__(f"{' '.join(args[:2])}: {message}")
+        self.command = args
         match = re.search(r"\(HTTP (\d{3})\)", message)
         self.http_status = int(match[1]) if match else None
 
@@ -132,6 +127,17 @@ def repository():
     return run_text(["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"])
 
 
+@functools.lru_cache(maxsize=None)
+def remote():
+    repo = repository()
+    for line in run_text(["git", "remote", "-v"]).splitlines():
+        name, url = line.split()[:2]
+        if re.search(rf"github\.com[:/]{re.escape(repo)}(\.git)?/?$", url):
+            return name
+
+    return f"https://github.com/{repo}.git"
+
+
 def current_pull_request_number():
     try:
         return int(run_text(["gh", "pr", "view", "--json", "number", "--jq", ".number"]))
@@ -142,7 +148,7 @@ def current_pull_request_number():
 def fetch(ref):
     local_ref = f"{FETCH_REF}/{os.getpid()}"
     run(["git", "fetch", "--quiet", "--no-tags", "--no-recurse-submodules", "--no-write-fetch-head",
-         "origin", f"+{ref}:{local_ref}"])
+         remote(), f"+{ref}:{local_ref}"])
     try:
         return commit_of(local_ref)
     finally:
@@ -157,8 +163,25 @@ def has_commit(commit):
     try:
         fetch(commit)
         return True
+    except CommandError as error:
+        if "not our ref" in str(error):
+            return False
+        raise
+
+
+def pushed_head(pull):
+    head = pull["head"]["sha"]
+    try:
+        if has_commit(head):
+            return head
     except CommandError:
-        return False
+        pass
+
+    ref_head = fetch(f"refs/pull/{pull['number']}/head")
+    if ref_head != head:
+        raise CertificateError(f"refs/pull/{pull['number']}/head is at {ref_head[:10]}, not yet at the PR's head {head[:10]}")
+
+    return head
 
 
 def commit_of(revision):
@@ -181,15 +204,18 @@ def pinned_git_environment():
     if any(line.strip() and not line.lstrip().startswith("#") for line in lines):
         raise CertificateError(f"{path} sets attributes, which change the diff a patch ID covers: empty it first")
 
-    return {**os.environ, "GIT_ATTR_NOSYSTEM": "1"}
+    environment = {key: value for key, value in os.environ.items() if key not in ("GIT_DIFF_OPTS", "GIT_EXTERNAL_DIFF")}
+    environment["GIT_ATTR_NOSYSTEM"] = "1"
+    return environment
 
 
 def patch_id(merge_base, head):
-    diff = run(["git", *DIFF_CONFIG, "diff", *DIFF_OPTIONS, merge_base, head], env=pinned_git_environment())
+    environment = pinned_git_environment()
+    diff = run(["git", *DIFF_CONFIG, "diff", *DIFF_OPTIONS, merge_base, head], env=environment)
     if not diff:
-        raise CertificateError(f"{merge_base[:10]}..{head[:10]} has no diff to certify")
+        raise EmptyDiff(f"{merge_base[:10]}..{head[:10]} has no diff to certify")
 
-    output = run(["git", "patch-id", "--verbatim"], diff).decode().split()
+    output = run(["git", "patch-id", "--verbatim"], diff, env=environment).decode().split()
     if not output:
         raise CertificateError(f"git patch-id found no patch in {merge_base[:10]}..{head[:10]}")
 
@@ -199,16 +225,18 @@ def patch_id(merge_base, head):
 def covers(certified, subject):
     if certified["patchId"] != subject["patchId"]:
         return False
-    elif certified["head"] == subject["head"]:
+    elif certified["head"] == subject["head"] and certified["mergeBase"] == subject["mergeBase"]:
         return True
     elif not has_commit(certified["mergeBase"]) or not has_commit(certified["head"]):
         return False
 
-    merge = subprocess.run(["git", *DIFF_CONFIG, "merge-tree", "--write-tree", f"--merge-base={certified['mergeBase']}",
-                            subject["mergeBase"], certified["head"]],
-                           capture_output=True, env=pinned_git_environment())
-    if merge.returncode != 0:
+    arguments = ["git", *DIFF_CONFIG, "merge-tree", "--write-tree", f"--merge-base={certified['mergeBase']}",
+                 subject["mergeBase"], certified["head"]]
+    merge = subprocess.run(arguments, capture_output=True, env=pinned_git_environment())
+    if merge.returncode == 1:
         return False
+    elif merge.returncode != 0:
+        raise CommandError(arguments, merge.stderr.decode(errors="replace").strip())
 
     return merge.stdout.decode().split()[0] == run_text(["git", "rev-parse", f"{subject['head']}^{{tree}}"])
 
@@ -227,15 +255,15 @@ def subject_of(pull, head):
 
 
 def pull_request_head(repo, pull):
-    pushed_head = fetch(f"refs/pull/{pull['number']}/head")
+    pushed = pushed_head(pull)
     branch = run_text(["git", "branch", "--show-current"])
     head_repository = (pull["head"].get("repo") or {}).get("full_name")
     if not branch or branch != pull["head"]["ref"] or head_repository != repo:
-        return pushed_head
+        return pushed
 
     local_head = commit_of("HEAD")
-    if not is_ancestor(pushed_head, local_head):
-        raise CertificateError(f"HEAD does not contain #{pull['number']}'s head {pushed_head[:10]}: "
+    if not is_ancestor(pushed, local_head):
+        raise CertificateError(f"HEAD does not contain #{pull['number']}'s head {pushed[:10]}: "
                                "pull it first, or pass --head to certify HEAD anyway")
 
     return local_head
@@ -468,20 +496,25 @@ def authentic(repo, pull, data, lookups):
 
 
 def evaluate(repo, pull):
-    head = fetch(f"refs/pull/{pull['number']}/head")
-    subject = subject_of(pull, head)
+    return judge(repo, pull, subject_of(pull, pushed_head(pull)))
+
+
+def judge(repo, pull, subject):
+    head = subject["head"]
     comments = certificate_comments(repo, pull["number"])
     if not comments:
         return ("pending", "No review certificate: run /certify or /converge", None, head)
 
     lookups = {}
     authentic_url = None
+    malformed = None
     for comment in comments:
         try:
             data = parse_certificate(comment["body"])
             validate_certificate(data)
         except CertificateError as error:
-            return ("failure", f"Malformed certificate: {error}", comment["html_url"], head)
+            malformed = malformed or (f"Malformed certificate: {error}", comment["html_url"])
+            continue
 
         if not authentic(repo, pull, data, lookups):
             continue
@@ -490,7 +523,9 @@ def evaluate(repo, pull):
         if covers(data["subject"], subject):
             return verdict(data, comment, head)
 
-    if authentic_url is None:
+    if malformed:
+        return ("failure", *malformed, head)
+    elif authentic_url is None:
         return ("pending", "No authentic certificate: run /certify or /converge", None, head)
 
     return ("pending", "The certificate covers another diff: run /certify or /converge again", authentic_url, head)
@@ -640,7 +675,7 @@ def command_publish(args):
     if parse_certificate(body) != data:
         raise CertificateError("the rendered certificate does not read back as the same data")
 
-    pushed = subject_of(pull, fetch(f"refs/pull/{pull['number']}/head"))
+    pushed = subject_of(pull, pushed_head(pull))
     posted = gh_api(f"repos/{repo}/issues/{pull['number']}/comments", method="POST", payload={"body": body})
     print(f"posted {posted['html_url']}")
 
@@ -666,14 +701,26 @@ def command_verify(args):
     pull = gh_api(f"repos/{repo}/pulls/{args.pr}")
     if pull["state"] != "open":
         print(f"#{args.pr} is {pull['state']}: nothing to verify")
-        return 0
+        return 0 if args.post_status else 1
 
     try:
         check_git_version()
-        state, description, url, head = evaluate(repo, pull)
+        subject = subject_of(pull, pushed_head(pull))
+    except EmptyDiff as error:
+        print(f"#{args.pr}: {error}")
+        return 0 if args.post_status else 1
     except Exception as error:
         if args.post_status:
             post_status(repo, pull, pull["head"]["sha"], "error", f"Could not verify: {error}", run_url(repo))
+        raise
+
+    try:
+        if args.post_status:
+            post_status(repo, pull, subject["head"], "pending", "Checking the review certificate", run_url(repo))
+        state, description, url, head = judge(repo, pull, subject)
+    except Exception as error:
+        if args.post_status:
+            post_status(repo, pull, subject["head"], "error", f"Could not verify: {error}", run_url(repo))
         raise
 
     print(f"#{args.pr} at {head[:10]}: {state}: {description}")
@@ -713,6 +760,8 @@ def main():
         return args.handler(args)
     except (CertificateError, CommandError, OSError, json.JSONDecodeError) as error:
         print(f"review_certificate: {error}", file=sys.stderr)
+        if isinstance(error, CommandError):
+            print(f"review_certificate: the command was {' '.join(error.command)}", file=sys.stderr)
         return 1
 
 

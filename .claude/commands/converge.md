@@ -32,7 +32,10 @@ Record four things now and do not recompute them later.
 - **The target.** `$ARGUMENTS` if it names one. Otherwise the uncommitted working-tree
   change when `git diff --stat` is non-empty, and the current branch against `main` when it
   is not. Every iteration reviews that same target at that same effort level, or the
-  iterations do not compare.
+  iterations do not compare. A PR or a branch other than the current one is checked out
+  first, with `gh pr checkout <n>` or `git checkout <branch>`, since the loop reviews and
+  fixes the checked-out tree. With uncommitted changes in the tree, stop and say so
+  instead.
 - **The review base.** The commit the target's diff starts from: `git rev-parse HEAD` for
   the working-tree change, `git merge-base origin/main HEAD` for the branch, the `mergeBase`
   that `python3 scripts/review_certificate.py target --pr <n>` prints for a PR. The
@@ -131,6 +134,10 @@ Skill(skill: "code-review", args: "<level> review exactly the diff `git diff <re
 ```
 
 A path target has no review base: pass `<level> <path>` instead.
+
+`git diff` leaves out untracked files, such as a new test or a new source a fix added. Before
+each review, run `git add -N` on every untracked file that is not in the phase-0 baseline,
+so the diff shows it.
 
 Not the `code-review:code-review` plugin command — that one reviews a GitHub pull request
 and posts a comment on it. Never pass `--fix`, which would apply fixes before the test
