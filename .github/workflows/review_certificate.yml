@@ -1,22 +1,27 @@
 name: Review Certificate
 
-# The verdict goes out as the review-certificate commit status on the PR head, because the
-# check run of an issue_comment event attaches to main's head. A retarget does not re-check:
-# /stack-merge retargets every PR of a stack to main just before it lands them.
+# pull_request_target runs the base branch's script, which only reads the PR's commits and
+# never runs them. A PR cannot change the check that judges it, and a fork PR's run can post.
+# The verdict is the review-certificate/<base> commit status on the PR head.
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
   issue_comment:
     types: [created, edited, deleted]
 
-concurrency:
-  group: review-certificate-${{ github.event.pull_request.number || github.event.issue.number }}
-  cancel-in-progress: true
-
 jobs:
   verify:
-    if: github.event_name == 'pull_request' || (github.event.issue.pull_request && contains(github.event.comment.body, '<!-- turingdb-review-certificate -->'))
+    if: >-
+      (github.event_name == 'pull_request_target'
+        && (github.event.action != 'edited' || github.event.changes.base))
+      || (github.event.issue.pull_request
+        && (startsWith(github.event.comment.body, '<!-- turingdb-review-certificate -->')
+          || startsWith(github.event.changes.body.from, '<!-- turingdb-review-certificate -->')))
     runs-on: ubuntu-24.04
+
+    concurrency:
+      group: review-certificate-${{ github.event.pull_request.number || github.event.issue.number }}
+      cancel-in-progress: true
 
     permissions:
       contents: read
@@ -28,7 +33,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           filter: blob:none
           sparse-checkout: scripts

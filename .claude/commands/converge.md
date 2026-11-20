@@ -36,7 +36,8 @@ Record four things now and do not recompute them later.
 - **The review base.** The commit the target's diff starts from: `git rev-parse HEAD` for
   the working-tree change, `git merge-base origin/main HEAD` for the branch, the `mergeBase`
   that `python3 scripts/review_certificate.py target --pr <n>` prints for a PR. The
-  certificate needs it to show the review saw the whole PR.
+  certificate needs it to show the review saw the whole PR. A path target has none, and
+  posts no certificate.
 - **The baseline.** The full `git status --porcelain` output. It is what tells apart the
   files the loop touches from the ones that were already dirty, and the commit phase stages
   against it. This tree normally carries untracked scratch turing directories and `.out/`
@@ -311,12 +312,18 @@ correctness fixes are in. No co-author trailer and no footer.
 
 ## Certify
 
-After the commit, post the run's review certificate on the branch's pull request. The
-`Review Certificate` workflow reads it into the `review-certificate` commit status, which
-`main` requires before a PR merges.
+After the commit, post the run's review certificate on the pull request. The `Review
+Certificate` workflow reads it into the `review-certificate/main` commit status, which
+`main` requires before a PR merges. It passes when every correctness and efficiency finding
+is fixed or rejected.
+
+Only a branch or a PR target is certified. A path target reviewed part of the PR, so skip
+the rest of this section and say so in the report. For a branch, run `target`. For a PR,
+run `target --pr <n>` from that PR's branch, since the certificate's head is the commit just
+made:
 
 ```bash
-python3 scripts/review_certificate.py target
+python3 scripts/review_certificate.py target [--pr <n>]
 ```
 
 When the branch has no open PR (the loop branched off `main`, or the PR is not opened yet),
@@ -348,8 +355,11 @@ under its id and with its final status:
 }
 ```
 
+- `category` is `correctness`, `efficiency`, `simplification`, `test-coverage` or `style`,
+  as triage sorted it.
 - `status` is `fixed`, `rejected`, `deferred`, `recorded` (a test-coverage finding) or
-  `open`. A reopened finding carries the status it ended with.
+  `open`. A reopened finding carries the status it ended with. A correctness or efficiency
+  finding that ends deferred or open fails the certificate.
 - `note` gives the test for a fixed correctness finding, the reason for a rejected one, and
   what it would take for a deferred one. A rejected or deferred finding without a note is
   refused.

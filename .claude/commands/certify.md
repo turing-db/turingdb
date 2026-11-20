@@ -6,11 +6,11 @@ allowed-tools: Bash, Read, Write, Glob, Grep, Skill
 
 # Certify
 
-Review exactly the diff a pull request carries, mark every finding rejected or open, and
-post the result on the PR as a review certificate. The `Review Certificate` workflow reads
-the latest certificate into the `review-certificate` commit status, which `main` requires
-before a PR merges. It passes when the certificate covers the PR's current diff and leaves
-no finding open.
+Review exactly the diff a pull request carries, give every finding a category and mark it
+rejected or open, and post the result on the PR as a review certificate. The `Review
+Certificate` workflow reads the latest certificate into the `review-certificate/<base>`
+commit status, which `main` requires before a PR merges. It passes when the certificate
+covers the PR's current diff and no correctness or efficiency finding is open.
 
 /certify fixes nothing. To fix the findings and certify in one run, use /converge.
 
@@ -25,7 +25,9 @@ python3 scripts/review_certificate.py target [--pr <n>]
 
 It prints the PR number, its base branch, the merge base, the head commit and the diff's
 patch ID. On the PR's own branch the head is the local `HEAD`, pushed or not. On any other
-PR it is the PR's head on GitHub. The certificate covers `git diff <mergeBase> <head>`:
+PR it is the PR's head on GitHub. It refuses when the local `HEAD` does not contain the
+PR's pushed head: a teammate pushed, or the branch was rewritten. Pull in the first case.
+In the second, ask the user before certifying, since the push that follows is a force-push. The certificate covers `git diff <mergeBase> <head>`:
 committed code only. Uncommitted changes are neither reviewed nor certified, so say so when
 `git status --porcelain --untracked-files=no` is not empty.
 
@@ -42,7 +44,18 @@ findings as a JSON array. Wait for it.
 
 ## 3. Triage
 
-Read the code at every finding, then give it one status:
+Read the code at every finding, then give it a category:
+
+- **correctness**: wrong output, a crash, lost data, or a check that can be bypassed.
+- **efficiency**: time or memory spent for nothing.
+- **simplification**: reuse, dead code, or a simpler shape for the same behaviour.
+- **test-coverage**: a behaviour no test pins.
+- **style**: a broken CLAUDE.md style or comment rule.
+
+The category is the kind of defect, not its size: a real bug is correctness however small.
+Only correctness and efficiency findings decide the verdict.
+
+Then give it one status:
 
 - **rejected**: a false positive. The note names the evidence in one sentence: the code
   that rules the failure out, a test that passes on the claimed input, or one of
@@ -68,6 +81,7 @@ the review returned them:
   "findings": [
     {
       "id": "F1",
+      "category": "correctness",
       "file": "query/ir/DBLowering.cpp",
       "line": 412,
       "summary": "the review's one-sentence statement of the bug",
@@ -90,5 +104,6 @@ stands. `pending: the certificate covers another diff` means the head is not pus
 
 ## 5. Report
 
-A few plain lines: the comment URL, the verdict, the open findings by id and file, and
-whether the branch still needs a push for the PR to carry the certified diff.
+A few plain lines: the comment URL, the verdict, the open correctness and efficiency
+findings by id and file, and whether the branch still needs a push for the PR to carry the
+certified diff.

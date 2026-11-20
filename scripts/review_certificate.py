@@ -2,10 +2,11 @@
 """Issue and verify the review certificate a pull request needs before it merges.
 
 A certificate is a PR comment recording one review of the PR's diff: the review that ran,
-the diff it covers, and every finding with its status. It names the diff by its stable
-patch ID, so a rebase that leaves the diff unchanged keeps it valid. The latest
-certificate posted by someone with write access sets the review-certificate commit
-status: success when it covers the PR's current diff and leaves no finding open.
+the diff it covers, and every finding with its category and status. It names the diff by
+its verbatim patch ID, so a rebase that leaves the diff unchanged keeps it valid. The
+latest certificate posted by someone with write access sets the review-certificate/<base>
+commit status: success when it covers the PR's current diff and every correctness or
+efficiency finding is fixed or rejected.
 
 Usage:
   review_certificate.py target [--pr N] [--head COMMIT]
@@ -27,7 +28,8 @@ CERTIFICATE_VERSION = 1
 STATUS_CONTEXT = "review-certificate"
 COMMENT_LIMIT = 65536
 STATUS_DESCRIPTION_LIMIT = 140
-MINIMUM_GIT_VERSION = (2, 39)
+MINIMUM_GIT_VERSION = (2, 40)
+EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 LEVELS = ("low", "medium", "high", "xhigh", "max")
 STATUSES = {
@@ -35,8 +37,17 @@ STATUSES = {
     "converge": ("fixed", "rejected", "deferred", "recorded", "open"),
 }
 STATUSES_WITH_REASON = ("rejected", "deferred")
+CATEGORIES = ("correctness", "efficiency", "simplification", "test-coverage", "style")
+BLOCKING_CATEGORIES = ("correctness", "efficiency")
+RESOLVED_STATUSES = ("fixed", "rejected")
 TRUSTED_PERMISSIONS = ("admin", "write")
 
+DIFF_CONFIG = [
+    "-c", "core.quotePath=true",
+    "-c", "core.attributesFile=/dev/null",
+    "-c", "diff.suppressBlankEmpty=false",
+    f"--attr-source={EMPTY_TREE}",
+]
 DIFF_OPTIONS = [
     "--no-color",
     "--no-ext-diff",
@@ -51,6 +62,7 @@ DIFF_OPTIONS = [
     "--src-prefix=a/",
     "--dst-prefix=b/",
     "--ignore-submodules=none",
+    "--submodule=short",
 ]
 
 
@@ -58,11 +70,17 @@ class CertificateError(Exception):
     pass
 
 
-def run(args, input_bytes=None):
-    result = subprocess.run(args, input=input_bytes, capture_output=True)
+class CommandError(Exception):
+    def __init__(self, args, message):
+        super().__init__(f"{' '.join(args)}: {message}")
+        match = re.search(r"\(HTTP (\d{3})\)", message)
+        self.http_status = int(match[1]) if match else None
+
+
+def run(args, input_bytes=None, env=None):
+    result = subprocess.run(args, input=input_bytes, capture_output=True, env=env)
     if result.returncode != 0:
-        message = result.stderr.decode(errors="replace").strip()
-        raise CertificateError(f"{' '.join(args)}: {message}")
+        raise CommandError(args, result.stderr.decode(errors="replace").strip())
 
     return result.stdout
 
@@ -86,7 +104,7 @@ def check_git_version():
     version = run_text(["git", "version"])
     match = re.search(r"(\d+)\.(\d+)", version)
     if not match or (int(match[1]), int(match[2])) < MINIMUM_GIT_VERSION:
-        raise CertificateError(f"{version}: the patch ID of a binary file needs git 2.39 or later")
+        raise CertificateError(f"{version}: pinning the diff's attributes needs git 2.40 or later")
 
 
 def repository():
@@ -100,12 +118,12 @@ def repository():
 def current_pull_request_number():
     try:
         return int(run_text(["gh", "pr", "view", "--json", "number", "--jq", ".number"]))
-    except CertificateError:
+    except CommandError:
         raise CertificateError("the current branch has no open pull request: pass --pr")
 
 
 def fetch(ref):
-    run(["git", "fetch", "--quiet", "--no-tags", "origin", ref])
+    run(["git", "fetch", "--quiet", "--no-tags", "--no-recurse-submodules", "origin", ref])
     return run_text(["git", "rev-parse", "FETCH_HEAD"])
 
 
@@ -119,12 +137,16 @@ def is_ancestor(ancestor, descendant):
 
 
 def patch_id(merge_base, head):
-    diff = run(["git", "-c", "core.quotePath=true", "diff", *DIFF_OPTIONS, merge_base, head])
+    environment = {**os.environ, "GIT_ATTR_NOSYSTEM": "1"}
+    diff = run(["git", *DIFF_CONFIG, "diff", *DIFF_OPTIONS, merge_base, head], env=environment)
     if not diff:
         raise CertificateError(f"{merge_base[:10]}..{head[:10]} has no diff to certify")
 
-    output = run(["git", "-c", "patchid.verbatim=false", "patch-id", "--stable"], diff)
-    return output.decode().split()[0]
+    output = run(["git", "patch-id", "--verbatim"], diff).decode().split()
+    if not output:
+        raise CertificateError(f"git patch-id found no patch in {merge_base[:10]}..{head[:10]}")
+
+    return output[0]
 
 
 def subject_of(pull, head):
@@ -140,12 +162,19 @@ def subject_of(pull, head):
     }
 
 
-def pull_request_head(pull):
+def pull_request_head(repo, pull):
+    pushed_head = fetch(f"refs/pull/{pull['number']}/head")
     branch = run_text(["git", "branch", "--show-current"])
-    if branch and branch == pull["head"]["ref"]:
-        return commit_of("HEAD")
-    else:
-        return fetch(f"refs/pull/{pull['number']}/head")
+    head_repository = (pull["head"].get("repo") or {}).get("full_name")
+    if not branch or branch != pull["head"]["ref"] or head_repository != repo:
+        return pushed_head
+
+    local_head = commit_of("HEAD")
+    if not is_ancestor(pushed_head, local_head):
+        raise CertificateError(f"HEAD does not contain #{pull['number']}'s head {pushed_head[:10]}: "
+                               "pull it first, or pass --head to certify HEAD anyway")
+
+    return local_head
 
 
 def open_pull_request(repo, number):
@@ -174,18 +203,26 @@ def validate_findings(kind, findings):
         seen.add(identifier)
 
         summary = finding.get("summary")
+        category = finding.get("category")
         status = finding.get("status")
         reason = finding.get("note")
         line = finding.get("line")
         has_reason = isinstance(reason, str) and reason.strip() != ""
         if not isinstance(summary, str) or not summary.strip():
             raise CertificateError(f"{identifier} has no summary")
+        elif category not in CATEGORIES:
+            raise CertificateError(f"{identifier}: category must be one of {', '.join(CATEGORIES)}, not {category!r}")
         elif status not in allowed:
             raise CertificateError(f"{identifier}: /{kind} marks a finding {' or '.join(allowed)}, not {status!r}")
         elif status in STATUSES_WITH_REASON and not has_reason:
             raise CertificateError(f"{identifier} is {status} without a note giving the reason")
         elif line is not None and (not isinstance(line, int) or isinstance(line, bool)):
             raise CertificateError(f"{identifier}: line must be an integer")
+
+
+def blocking_findings(findings):
+    return [finding["id"] for finding in findings
+            if finding["category"] in BLOCKING_CATEGORIES and finding["status"] not in RESOLVED_STATUSES]
 
 
 def validate_review(review):
@@ -220,7 +257,7 @@ def validate_certificate(certificate):
 
 
 def parse_certificate(body):
-    match = re.search(r"```json\n(.*?)\n```", body, re.DOTALL)
+    match = re.search(r"```json\r?\n(.*?)\r?\n```", body, re.DOTALL)
     if not match:
         raise CertificateError("the comment holds no certificate data")
 
@@ -239,14 +276,13 @@ def render(certificate):
     subject = certificate["subject"]
     findings = certificate["findings"]
     kind = certificate["kind"]
-    open_count = sum(1 for finding in findings if finding["status"] == "open")
+    blocking = blocking_findings(findings)
 
-    if open_count == 0:
-        headline = "no finding open"
-    elif open_count == 1:
-        headline = "1 finding open"
+    if blocking:
+        headline = ("**Review certificate: fails.** Correctness or efficiency findings not fixed or "
+                    f"rejected: {markdown_cell(', '.join(blocking))}.")
     else:
-        headline = f"{open_count} findings open"
+        headline = "**Review certificate: passes.** No correctness or efficiency finding is open."
 
     review = f"`/{kind} {certificate['level']}`"
     if kind == "converge":
@@ -256,7 +292,7 @@ def render(certificate):
 
     lines = [
         MARKER,
-        f"**Review certificate: {headline}.**",
+        headline,
         "",
         f"{review}.",
         f"Covers `{subject['mergeBase'][:10]}..{subject['head'][:10]}` against `{subject['base']}`, "
@@ -265,7 +301,7 @@ def render(certificate):
     ]
 
     if findings:
-        lines += ["| | Finding | Status |", "|---|---|---|"]
+        lines += ["| | Finding | Category | Status |", "|---|---|---|---|"]
         for finding in findings:
             location = finding.get("file", "")
             if location and finding.get("line") is not None:
@@ -277,7 +313,7 @@ def render(certificate):
             if finding.get("note"):
                 status += f": {markdown_cell(finding['note'])}"
 
-            lines.append(f"| {markdown_cell(finding['id'])} | {text} | {status} |")
+            lines.append(f"| {markdown_cell(finding['id'])} | {text} | {finding['category']} | {status} |")
     else:
         lines.append("The review reported no finding.")
 
@@ -296,7 +332,7 @@ def certificate_comments(repo, number):
     page = 1
     while True:
         batch = gh_api(f"repos/{repo}/issues/{number}/comments?per_page=100&page={page}")
-        comments += [comment for comment in batch if MARKER in (comment.get("body") or "")]
+        comments += [comment for comment in batch if (comment.get("body") or "").startswith(MARKER)]
         if len(batch) < 100:
             break
         page += 1
@@ -312,7 +348,9 @@ def latest_trusted_certificate(repo, number):
         if login not in permissions:
             try:
                 permissions[login] = gh_api(f"repos/{repo}/collaborators/{login}/permission")["permission"]
-            except CertificateError:
+            except CommandError as error:
+                if error.http_status != 404:
+                    raise
                 permissions[login] = "none"
 
         if permissions[login] in TRUSTED_PERMISSIONS:
@@ -323,6 +361,7 @@ def latest_trusted_certificate(repo, number):
 
 def evaluate(repo, pull):
     head = fetch(f"refs/pull/{pull['number']}/head")
+    subject = subject_of(pull, head)
     comment = latest_trusted_certificate(repo, pull["number"])
     if comment is None:
         return ("pending", "No review certificate: run /certify or /converge", None, head)
@@ -331,7 +370,6 @@ def evaluate(repo, pull):
     try:
         certificate = parse_certificate(comment["body"])
         validate_certificate(certificate)
-        subject = subject_of(pull, head)
     except CertificateError as error:
         return ("failure", f"Malformed certificate: {error}", url, head)
 
@@ -339,14 +377,35 @@ def evaluate(repo, pull):
         return ("pending", "The certificate covers another diff: run /certify or /converge again", url, head)
 
     findings = certificate["findings"]
-    open_ids = [finding["id"] for finding in findings if finding["status"] == "open"]
-    if open_ids:
-        return ("failure", f"Findings open: {', '.join(open_ids)}", url, head)
+    blocking = blocking_findings(findings)
+    if blocking:
+        return ("failure", f"Correctness or efficiency findings not fixed or rejected: {', '.join(blocking)}", url, head)
 
     plural = "" if len(findings) == 1 else "s"
-    description = f"/{certificate['kind']} {certificate['level']} by {comment['user']['login']}, "
-    description += f"{len(findings)} finding{plural}, none open"
+    description = f"/{certificate['kind']} {certificate['level']} by {comment['user']['login']}: "
+    description += f"{len(findings)} finding{plural}, no correctness or efficiency finding open"
     return ("success", description, url, head)
+
+
+def run_url(repo):
+    run_id = os.environ.get("GITHUB_RUN_ID")
+    if not run_id:
+        return None
+
+    server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+    return f"{server}/{repo}/actions/runs/{run_id}"
+
+
+def post_status(repo, pull, head, state, description, url):
+    status = {
+        "state": state,
+        "context": f"{STATUS_CONTEXT}/{pull['base']['ref']}",
+        "description": description[:STATUS_DESCRIPTION_LIMIT],
+    }
+    if url:
+        status["target_url"] = url
+
+    gh_api(f"repos/{repo}/statuses/{head}", method="POST", payload=status)
 
 
 def command_target(args):
@@ -354,7 +413,7 @@ def command_target(args):
     repo = repository()
     number = args.pr or current_pull_request_number()
     pull = open_pull_request(repo, number)
-    head = commit_of(args.head) if args.head else pull_request_head(pull)
+    head = commit_of(args.head) if args.head else pull_request_head(repo, pull)
     subject = subject_of(pull, head)
 
     print(json.dumps({"pr": number, **subject}, indent=2))
@@ -421,19 +480,16 @@ def command_verify(args):
         print(f"#{args.pr} is {pull['state']}: nothing to verify")
         return 0
 
-    state, description, url, head = evaluate(repo, pull)
+    try:
+        state, description, url, head = evaluate(repo, pull)
+    except (CertificateError, CommandError) as error:
+        if args.post_status:
+            post_status(repo, pull, pull["head"]["sha"], "error", f"Could not verify: {error}", run_url(repo))
+        raise
+
     print(f"#{args.pr} at {head[:10]}: {state}: {description}")
-
     if args.post_status:
-        if url is None and os.environ.get("GITHUB_RUN_ID"):
-            server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
-            url = f"{server}/{repo}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
-
-        status = {"state": state, "context": STATUS_CONTEXT, "description": description[:STATUS_DESCRIPTION_LIMIT]}
-        if url:
-            status["target_url"] = url
-
-        gh_api(f"repos/{repo}/statuses/{head}", method="POST", payload=status)
+        post_status(repo, pull, head, state, description, url or run_url(repo))
         return 0
     else:
         return 0 if state == "success" else 1
@@ -454,13 +510,13 @@ def main():
 
     verify = commands.add_parser("verify", help="check the pull request's latest certificate")
     verify.add_argument("--pr", type=int, required=True, help="pull request number")
-    verify.add_argument("--post-status", action="store_true", help=f"post the {STATUS_CONTEXT} commit status")
+    verify.add_argument("--post-status", action="store_true", help=f"post the {STATUS_CONTEXT}/<base> commit status")
     verify.set_defaults(handler=command_verify)
 
     args = parser.parse_args()
     try:
         return args.handler(args)
-    except (CertificateError, OSError, json.JSONDecodeError) as error:
+    except (CertificateError, CommandError, OSError, json.JSONDecodeError) as error:
         print(f"review_certificate: {error}", file=sys.stderr)
         return 1
 

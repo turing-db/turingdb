@@ -689,7 +689,9 @@ of near-identical mechanical changes does not need one comment each.
 
 **A PR merges into `main` only with a passing review certificate.** Run `/certify` on the
 PR, or `/converge` on its branch, which posts one after its commit. The `Review Certificate`
-workflow (`scripts/review_certificate.py`) sets the `review-certificate` status from the
-latest certificate posted by someone with write access. It passes when the certificate covers
-the PR's current diff by patch ID and leaves no finding open. Any change to the diff needs a
-new certificate; a rebase that leaves the diff unchanged does not.
+workflow (`scripts/review_certificate.py`) sets the `review-certificate/main` status from
+the latest certificate posted by someone with write access. It passes when the certificate
+covers the PR's current diff by patch ID and every correctness or efficiency finding is fixed
+or rejected. Other categories (simplification, test coverage, style) are shown but do not
+block. Any change to the diff needs a new certificate; a rebase that leaves the diff
+unchanged does not.

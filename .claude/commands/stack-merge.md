@@ -66,9 +66,10 @@ python3 scripts/review_certificate.py verify --pr <n>
 ```
 
 It exits non-zero unless the PR's latest certificate covers its current diff and leaves no
-finding open. Pushing `main` directly bypasses the ruleset's required `review-certificate`
-status, so this check is the gate. Stop and report every PR that fails it, with the line the
-script printed. The fix is /certify or /converge on that PR, never landing it uncertified.
+correctness or efficiency finding open. Pushing `main` directly bypasses the ruleset's
+required `review-certificate/main` status, so this check is the gate. Stop and report every
+PR that fails it, with the line the script printed. The fix is /certify or /converge on
+that PR, never landing it uncertified.
 
 ## 2. Line up the local branches with origin
 
