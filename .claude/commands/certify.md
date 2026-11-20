@@ -15,6 +15,8 @@ diff and no correctness or efficiency finding is open.
 
 /certify fixes nothing. To fix the findings and certify in one run, use /converge.
 
+The script needs git 2.43 or later; on macOS, Homebrew's, since Apple's is older.
+
 `$ARGUMENTS` may carry an effort level (`low`, `medium`, `high`, `xhigh`, `max`) and a PR
 number. Default: `xhigh`, and the PR of the current branch.
 

@@ -21,9 +21,11 @@ Where a step below names a git command, jj mode's version of that step is the on
 
 ## 0. Fix the target and the baseline, once
 
-When `$ARGUMENTS` names a PR or a branch other than the current one, check it out first,
-with `gh pr checkout <n>` or `git checkout <branch>`: the loop reviews and fixes the
-checked-out tree. With uncommitted changes in the tree, stop and say so instead. Then:
+When `$ARGUMENTS` names a PR or a branch other than the current one, note the branch you
+are on, then check the target out, with `gh pr checkout <n>` or `git checkout <branch>`: the
+loop reviews and fixes the checked-out tree. With uncommitted changes in the tree, stop and
+say so instead. The run ends by checking the noted branch out again, and the report says
+so. Then:
 
 ```bash
 git status --porcelain
@@ -112,11 +114,12 @@ marked `CONFLICT` is reported, not resolved: it is the user's commit.
 
 When the target was not `@`, `jj edit` back to the change you started on.
 
-**Certify** needs the git store behind the jj repo and a PR whose head is the target's
-commit. Run every `review_certificate.py` command with `GIT_DIR` set to the store that
-`jj git root` prints, and pass the PR and the commit explicitly:
-`target --pr <n> --head <commit id>`, and the same `pr` and `head` in the input file. No
-PR carrying the target means no certificate: say so in the report.
+**Certify** needs the git store behind the jj repo and a PR whose branch carries the
+target. Run every `review_certificate.py` command with `GIT_DIR` set to the store that
+`jj git root` prints, and pass the PR and the target's new commit explicitly:
+`target --pr <n> --head <commit id>`, and the same `pr` and `head` in the input file. As in
+git mode, the commit is not pushed yet, so the verdict reads pending until it is. No PR for
+the target's branch means no certificate: say so in the report.
 
 **The report** names the target's change id and new commit id in place of a sha and a
 branch, lists any descendant that conflicts, and says `REVIEW.md` is at `build/REVIEW.md`.
@@ -140,7 +143,9 @@ A path target has no review base: pass `<level> <path>` instead.
 each review, run `git add -N` on each new test and source file the loop created, so the
 diff shows it. Never on REVIEW.md or scratch output, which would then be reviewed and later
 committed. A file the loop intent-to-added and then deleted leaves the index with
-`git rm --cached -q <file>`.
+`git rm --cached -q <file>`. For a working-tree target, do the same before the first review
+for the change's own untracked files, the new files the user means as part of it, so the
+review sees what the commit will carry. Ask when it is unclear whether a file belongs.
 
 Not the `code-review:code-review` plugin command — that one reviews a GitHub pull request
 and posts a comment on it. Never pass `--fix`, which would apply fixes before the test
@@ -244,7 +249,7 @@ Apply the stop rules below. When none fires, start the next iteration at step 1.
 Stop after the iteration that first satisfies one of these, and name which one in the final
 report:
 
-- Triage leaves no correctness, simplification or efficiency finding to act on.
+- Triage leaves no correctness, simplification, efficiency or style finding to act on.
 - Every actionable finding this iteration is one an earlier iteration already recorded as
   rejected or deferred.
 - The iteration changed no code.
@@ -331,14 +336,16 @@ correctness fixes are in. No co-author trailer and no footer.
 
 ## Certify
 
-After the commit, post the run's review certificate on the pull request, when the last
-review saw the code just committed: the loop stopped on any rule but the cap. After the cap
-or an abort, the last round's fixes are unreviewed: post no certificate, and say in the
-report that /certify has to review them.
+After the commit, post the run's review certificate on the pull request when the last
+iteration changed no code, so its review saw exactly what is committed. When the last
+iteration fixed anything, style included, or the loop ended at the cap or on an abort, those
+fixes are unreviewed: post no certificate, and say in the report that /certify has to
+review them.
 
 `issue` dispatches the `Review Certificate` workflow, which posts the certificate as
-github-actions[bot], opening with ✅ or ❌, and sets the `review-certificate/main` commit
-status, which `main` requires before a PR merges. It passes when every correctness and
+github-actions[bot], opening with ✅ or ❌, and sets the `review-certificate/<base>` commit
+status; `main` requires `review-certificate/main` before a PR merges. The script needs git
+2.43 or later. It passes when every correctness and
 efficiency finding is fixed or rejected.
 
 Only a branch or a PR target is certified. A path target reviewed part of the PR, so skip

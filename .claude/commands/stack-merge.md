@@ -65,11 +65,11 @@ Then check every PR's review certificate, bottom first, with `--no-ci` too:
 python3 scripts/review_certificate.py verify --pr <n>
 ```
 
-It exits non-zero unless the PR's latest certificate covers its current diff and leaves no
-correctness or efficiency finding open. Pushing `main` directly bypasses the ruleset's
-required `review-certificate/main` status, so this check is the gate. Stop and report every
-PR that fails it, with the line the script printed. The fix is /certify or /converge on
-that PR, never landing it uncertified.
+It needs git 2.43 or later. It exits non-zero unless the newest certificate that covers the
+PR's current diff leaves no correctness or efficiency finding open. Pushing `main` directly
+bypasses the ruleset's required `review-certificate/main` status, so this check is the gate.
+Stop and report every PR that fails it, with the line the script printed. The fix is
+/certify or /converge on that PR, never landing it uncertified.
 
 ## 2. Line up the local branches with origin
 

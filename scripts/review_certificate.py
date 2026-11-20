@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import subprocess
 import sys
 import time
@@ -226,10 +227,14 @@ def patch_id(merge_base, head):
 def covers(certified, subject):
     if certified["head"] == subject["head"] and certified["mergeBase"] == subject["mergeBase"]:
         return True
-    elif certified["patchId"] != subject["patchId"]:
-        return False
     elif not has_commit(certified["mergeBase"]) or not has_commit(certified["head"]):
         return False
+    elif certified["patchId"] != subject["patchId"]:
+        try:
+            if patch_id(certified["mergeBase"], certified["head"]) != subject["patchId"]:
+                return False
+        except EmptyDiff:
+            return False
 
     arguments = ["git", *DIFF_CONFIG, "merge-tree", "--write-tree", f"--merge-base={certified['mergeBase']}",
                  subject["mergeBase"], certified["head"]]
@@ -353,6 +358,10 @@ def validate_certificate(certificate):
         if not re.fullmatch(r"[0-9a-f]{40,64}", str(subject.get(field))):
             raise CertificateError(f"the subject has no {field}")
 
+    base = subject.get("base")
+    if not isinstance(base, str) or not base or re.search(r"[\x00-\x1f`]", base):
+        raise CertificateError("the subject's base must be a branch name on one line, with no backtick")
+
     issuer = certificate.get("issuer")
     if not isinstance(issuer, str) or not issuer:
         raise CertificateError("the certificate names no issuer")
@@ -376,7 +385,7 @@ def markdown_cell(text):
     return " ".join(escaped.split())
 
 
-def render(certificate):
+def render(certificate, test_branch=None):
     subject = certificate["subject"]
     findings = certificate["findings"]
     kind = certificate["kind"]
@@ -393,6 +402,9 @@ def render(certificate):
         iterations = certificate["iterations"]
         plural = "" if iterations == 1 else "s"
         review += f", {iterations} iteration{plural}. Stopped: {markdown_cell(certificate['stopRule'])}"
+
+    if test_branch:
+        headline += ["", f"> [!WARNING]\n> A test dispatch from `{test_branch}` posted this certificate. It does not count."]
 
     lines = [
         MARKER,
@@ -514,7 +526,8 @@ def judge(repo, pull, subject):
             data = parse_certificate(comment["body"])
             validate_certificate(data)
         except CertificateError as error:
-            malformed = malformed or (f"Malformed certificate: {error}", comment["html_url"])
+            if comment is comments[0]:
+                malformed = (f"Malformed certificate: {error}", comment["html_url"])
             continue
 
         if not authentic(repo, pull, data, lookups):
@@ -617,6 +630,7 @@ def command_issue(args):
     certificate["findings"] = review["findings"]
     certificate["issuer"] = issuer
     certificate["issuedAt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    certificate["nonce"] = secrets.token_hex(8)
 
     validate_certificate(certificate)
     render({**certificate, "run": LONGEST_RUN_ID})
@@ -631,7 +645,7 @@ def command_issue(args):
 
     run = wait_for_run(repo, run_title(pull["number"], digest))
     print(f"run {run['html_url']}: {run['conclusion']}")
-    posted = [comment for comment in certificate_comments(repo, pull["number"]) if f'"run": {run["id"]}' in comment["body"]]
+    posted = [comment for comment in certificate_comments(repo, pull["number"]) if run_of(comment) == run["id"]]
     if not posted:
         raise CertificateError(f"the Review Certificate run did not post the certificate: {run['html_url']}")
 
@@ -640,6 +654,13 @@ def command_issue(args):
     state, description, _, pull_head = evaluate(repo, pull)
     print(f"#{pull['number']} at {pull_head[:10]}: {state}: {description}")
     return 0
+
+
+def run_of(comment):
+    try:
+        return parse_certificate(comment["body"]).get("run")
+    except (CertificateError, AttributeError):
+        return None
 
 
 def wait_for_run(repo, title):
@@ -672,20 +693,31 @@ def command_publish(args):
         raise CertificateError(f"{issuer} has no write access")
 
     pull = open_pull_request(repo, args.pr)
+    default_ref = f"refs/heads/{pull['base']['repo']['default_branch']}"
+    dispatched_ref = os.environ.get("GITHUB_REF", "")
+    test_branch = None if dispatched_ref == default_ref else dispatched_ref.removeprefix("refs/heads/")
     data = {**certificate, "run": int(os.environ["GITHUB_RUN_ID"])}
-    body = render(data)
+    body = render(data, test_branch)
     if parse_certificate(body) != data:
         raise CertificateError("the rendered certificate does not read back as the same data")
 
-    pushed = subject_of(pull, pushed_head(pull))
-    replaces_pushed = covers(certificate["subject"], pushed)
     posted = gh_api(f"repos/{repo}/issues/{pull['number']}/comments", method="POST", payload={"body": body})
     print(f"posted {posted['html_url']}")
-
-    if os.environ.get("GITHUB_REF") != f"refs/heads/{pull['base']['repo']['default_branch']}":
+    if test_branch:
         print("dispatched from another branch: verify does not trust this certificate, so the earlier ones stay")
         return 0
 
+    try:
+        remove_superseded(repo, pull, certificate, posted)
+    except (CertificateError, CommandError) as error:
+        print(f"kept the earlier certificates: {error}")
+
+    return 0
+
+
+def remove_superseded(repo, pull, certificate, posted):
+    pushed = subject_of(pull, pushed_head(pull))
+    replaces_pushed = covers(certificate["subject"], pushed)
     for comment in certificate_comments(repo, pull["number"]):
         if comment["id"] >= posted["id"]:
             continue
@@ -693,7 +725,7 @@ def command_publish(args):
         try:
             earlier = parse_certificate(comment["body"])
             validate_certificate(earlier)
-            if earlier["issuer"] == issuer and (replaces_pushed or not covers(earlier["subject"], pushed)):
+            if earlier["issuer"] == certificate["issuer"] and (replaces_pushed or not covers(earlier["subject"], pushed)):
                 gh_api(f"repos/{repo}/issues/comments/{comment['id']}", method="DELETE")
         except (CertificateError, CommandError) as error:
             print(f"kept {comment['html_url']}: {error}")
