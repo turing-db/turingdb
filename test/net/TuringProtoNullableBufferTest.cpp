@@ -233,7 +233,7 @@ void expectEncodesLikeTheWireLayout(NullPattern pattern, size_t rowCount) {
     }
 }
 
-void roundTrip(const Column* column, size_t rowCount, size_t bufferSize, LocalMemory* localMemory, Dataframe* decoded) {
+void roundTrip(const Column* column, size_t rowCount, size_t bufferSize, LocalMemory* localMemory, DataframeManager* dataframeManager, Dataframe* decoded) {
     std::vector<std::string> chunks;
     encodeColumn(column, 0, rowCount, bufferSize, chunks);
 
@@ -247,12 +247,11 @@ void roundTrip(const Column* column, size_t rowCount, size_t bufferSize, LocalMe
     net::proto::ChunkedBuffer<uint64_t> pathBuffer;
     ListBuffer<> listBuffer;
     MapBuffer<> mapBuffer;
-    DataframeManager dataframeManager;
     std::vector<net::proto::DecodedColumnSchema> schemas;
 
     net::proto::TuringProtoInBuf inBuf(LARGE_BUFFER_SIZE);
     net::proto::TuringSink sink(localMemory, &embeddingBuffer, &pathBuffer, &listBuffer, &mapBuffer);
-    net::proto::TuringSinkColumnContainer container(decoded, &dataframeManager);
+    net::proto::TuringSinkColumnContainer container(decoded, dataframeManager);
     net::proto::TuringProtoDecoder<net::proto::TuringSink> decoder(&inBuf, &sink, schemas);
 
     const auto load = [&inBuf](std::string_view bytes) {
@@ -290,8 +289,9 @@ void expectRoundTrips(NullPattern pattern, size_t rowCount) {
         ColumnOptVector<T> column;
         fillColumn<T>(&column, rows);
 
+        DataframeManager dataframeManager;
         Dataframe decoded;
-        roundTrip(&column, rowCount, bufferSize, &localMemory, &decoded);
+        roundTrip(&column, rowCount, bufferSize, &localMemory, &dataframeManager, &decoded);
 
         ASSERT_EQ(decoded.cols().size(), 1u);
         const ColumnOptVector<T>* decodedColumn = decoded.cols().at(0)->as<ColumnOptVector<T>>();
