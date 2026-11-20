@@ -329,17 +329,17 @@ private:
     static bool decodeBuffers(DecodeContext* context,
                               SinkColumnOptVector<T, Sink>* typedColumn,
                               ProtoColumnState* columnState) {
-        std::vector<T>& values = typedColumn->getValues();
+        T* const values = typedColumn->getChunkValues();
         const size_t rowsRemaining = columnState->getNumRows() - context->_rowIndex;
 
         if (rowsRemaining * sizeof(T) > context->_inBuf->readable()) {
             const size_t numRowsRead = context->_inBuf->readable() / sizeof(T);
-            context->_inBuf->readData(values.data() + context->_rowIndex, numRowsRead * sizeof(T));
+            context->_inBuf->readData(values + context->_rowIndex, numRowsRead * sizeof(T));
             context->_rowIndex += numRowsRead;
             return false;
         }
 
-        context->_inBuf->readData(values.data() + context->_rowIndex, rowsRemaining * sizeof(T));
+        context->_inBuf->readData(values + context->_rowIndex, rowsRemaining * sizeof(T));
         typedColumn->setValidity(columnState->getBitMask());
         return true;
     }

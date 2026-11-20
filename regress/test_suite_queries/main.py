@@ -4,17 +4,10 @@ import sys
 
 import pandas as pd
 from turingdb import TuringDB, TuringDBException
+from turingdb.protocol import DTYPE_MAP
 
 SIMPLEDB_GRAPH = "simpledb"
 EMPTY_GRAPH = "empty"
-
-DTYPE_MAP = {
-    "String": "string",
-    "Int64": "Int64",
-    "UInt64": "UInt64",
-    "Double": "float64",
-    "Bool": "boolean",
-}
 
 
 def parse_result_json(json_str: str) -> pd.DataFrame:

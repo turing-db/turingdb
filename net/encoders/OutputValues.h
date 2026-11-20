@@ -34,10 +34,28 @@ template <typename T>
 concept EntityIDLike = std::is_same_v<T, NodeID> || std::is_same_v<T, EdgeID>;
 
 template <typename T>
-concept IsUInt64 = IsID<TypeUtils::unwrap_optional_t<T>>::value
-                || std::unsigned_integral<T>
-                || IsHash<T>::value
-                || OptionalUnsignedInteger<T>;
+concept IsUnsigned = IsID<TypeUtils::unwrap_optional_t<T>>::value
+                  || std::unsigned_integral<T>
+                  || IsHash<T>::value
+                  || OptionalUnsignedInteger<T>;
+
+template <typename T>
+struct UnsignedElementOf {
+    using type = T;
+};
+
+template <IntegralType T, int N>
+struct UnsignedElementOf<ID<T, N>> {
+    using type = T;
+};
+
+template <int N, int Radix>
+struct UnsignedElementOf<TemplateCommitHash<N, Radix>> {
+    using type = typename TemplateCommitHash<N, Radix>::ValueType;
+};
+
+template <typename T>
+using UnsignedElement = typename UnsignedElementOf<TypeUtils::unwrap_optional_t<T>>::type;
 
 template <typename T>
 concept IsInt64 = std::signed_integral<T>
@@ -99,8 +117,8 @@ struct ColumnTypeGenerator {
             _name = fmt::format("Duration");
         } else if constexpr (IsPoint<T>) {
             _name = fmt::format("Point");
-        } else if constexpr (IsUInt64<T>) {
-            _name = fmt::format("UInt64");
+        } else if constexpr (IsUnsigned<T>) {
+            _name = fmt::format("UInt{}", 8 * sizeof(UnsignedElement<T>));
         } else if constexpr (IsInt64<T>) {
             _name = fmt::format("Int64");
         } else if constexpr (IsFloat64<T>) {

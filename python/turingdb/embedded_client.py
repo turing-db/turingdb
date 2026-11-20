@@ -86,19 +86,9 @@ class EmbeddedClient(CypherHelpersMixin):
         self.set_commit(commit)
 
     def query(self, cypher: str, query_parameters: Optional[dict] = None) -> DataFrame:
-        import pandas as pd
+        from .protocol import to_dataframe
 
-        from .protocol import DTYPE_MAP
-
-        raw = self._timed_query(cypher, query_parameters)
-        data = raw["data"]
-        dtypes = raw["dtypes"]
-        return pd.DataFrame(
-            {
-                col: pd.Series(values, dtype=DTYPE_MAP.get(dtypes[col], "object"))
-                for col, values in data.items()
-            }
-        )
+        return to_dataframe(self._timed_query(cypher, query_parameters))
 
     def query_raw(self, cypher: str, query_parameters: Optional[dict] = None) -> dict:
         return self._timed_query(cypher, query_parameters)

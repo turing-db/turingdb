@@ -44,6 +44,7 @@ public:
 
     std::vector<T>& getValues() { return _values; }
     const std::vector<T>& getValues() const { return _values; }
+    T* getChunkValues() { return _values.data(); }
     const ValidityMask& getValidity() const { return _validity; }
 
     void setValidity(const ValidityMask& validity) { _validity = validity; }

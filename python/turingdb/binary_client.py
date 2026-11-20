@@ -17,8 +17,11 @@ class BinaryClient(CypherHelpersMixin):
     transfer encoding — every proto packet is one HTTP chunk.
 
     Returns query results as pandas.DataFrame. The underlying protocol streams
-    one or more chunks per query; chunks are buffered into a single dataframe
-    on the C++ side and returned as a dict of numpy arrays / lists.
+    one or more chunks per query; the C++ side decodes each chunk into one
+    numpy array per number column, or one numpy object array per other
+    column, and returns them as a dict. A nullable number column is a numpy
+    masked array. A double column becomes pandas' masked Float64, and an ID
+    column the masked unsigned dtype of the ID's width.
     """
 
     def __init__(
@@ -135,19 +138,9 @@ class BinaryClient(CypherHelpersMixin):
         self.set_commit(commit)
 
     def query(self, cypher: str, query_parameters: Optional[dict] = None) -> DataFrame:
-        import pandas as pd
+        from .protocol import to_dataframe
 
-        from .protocol import DTYPE_MAP
-
-        raw = self._timed_query(cypher, query_parameters)
-        data = raw["data"]
-        dtypes = raw["dtypes"]
-        return pd.DataFrame(
-            {
-                col: pd.Series(values, dtype=DTYPE_MAP.get(dtypes[col], "object"))
-                for col, values in data.items()
-            }
-        )
+        return to_dataframe(self._timed_query(cypher, query_parameters))
 
     def query_raw(self, cypher: str, query_parameters: Optional[dict] = None) -> dict:
         return self._timed_query(cypher, query_parameters)

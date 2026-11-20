@@ -4,14 +4,14 @@
 #include <memory>
 #include <string>
 
-#include "NanobindUtils.h"
+#include "PyColumnContainer.h"
 #include "PyParameters.h"
+#include "PyResultBuilder.h"
+#include "PySink.h"
 
 #include "LocalMemory.h"
 #include "ParameterMap.h"
 #include "QueryStatus.h"
-#include "dataframe/Dataframe.h"
-#include "dataframe/DataframeManager.h"
 
 #include "TuringException.h"
 
@@ -41,27 +41,27 @@ nb::dict PyTuringClient::query(const std::string& cypher, nb::handle parameters)
         readParameters(parameters, parameterMap);
     }
 
-    db::DataframeManager dataframeManager;
-    db::Dataframe bufferedDataframe;
-    // Owning storage for column names — see allocColumns docs.
-    std::vector<std::string> nameStorage;
-    bool columnsAllocated = false;
-    db::LocalMemory* localMemory = _localMem.get();
+    PyColumnContainer container;
+    PySink sink(&_values);
+    PyResultBuilder builder(&container);
 
-    const auto onData = [&bufferedDataframe, &nameStorage, &columnsAllocated, &dataframeManager, localMemory](const db::Dataframe* dataframe) {
-        if (!columnsAllocated) {
-            allocColumns(dataframe, &bufferedDataframe, &dataframeManager, localMemory, &nameStorage);
-            columnsAllocated = true;
-        }
-        appendDfs(dataframe, &bufferedDataframe);
+    const auto onChunkDecoded = [this, &builder]() {
+        builder.appendChunk();
+        _values.clearValues();
     };
 
-    const db::QueryStatus status = _client->sendQuery(cypher, onData, hasParameters ? &parameterMap : nullptr);
+    db::QueryStatus status;
+    {
+        nb::gil_scoped_release release;
+        status = _client->sendQuery(cypher, &sink, &container, onChunkDecoded, hasParameters ? &parameterMap : nullptr);
+    }
+
     if (!status.isOk()) {
         throw TuringException(std::string(db::QueryStatusDescription::value(status.getStatus())) + ": " + status.getError());
     }
 
-    nb::dict envelope = dataframeToNumpy(&bufferedDataframe);
+    nb::dict envelope;
+    builder.build(envelope);
     envelope["time"] = nb::cast(status.getTotalTime().count());
     return envelope;
 }
