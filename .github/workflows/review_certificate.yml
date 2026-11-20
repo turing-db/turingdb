@@ -1,0 +1,40 @@
+name: Review Certificate
+
+# The verdict goes out as the review-certificate commit status on the PR head, because the
+# check run of an issue_comment event attaches to main's head. A retarget does not re-check:
+# /stack-merge retargets every PR of a stack to main just before it lands them.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created, edited, deleted]
+
+concurrency:
+  group: review-certificate-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    if: github.event_name == 'pull_request' || (github.event.issue.pull_request && contains(github.event.comment.body, '<!-- turingdb-review-certificate -->'))
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      statuses: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: scripts
+
+      - name: Verify the review certificate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: python3 scripts/review_certificate.py verify --pr "$PR_NUMBER" --post-status

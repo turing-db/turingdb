@@ -8,8 +8,8 @@ allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Skill, TodoWrite, Rep
 
 Review the change, pin every correctness finding with a failing test, fix it, review again.
 At most 4 iterations, fewer once the review stops finding anything worth fixing. One commit
-at the end carrying the fixes and the tests. `REVIEW.md` records the whole run and is never
-committed.
+at the end carrying the fixes and the tests, and a review certificate on the branch's PR.
+`REVIEW.md` records the whole run and is never committed.
 
 `$ARGUMENTS` may carry an effort level (`low`, `medium`, `high`, `xhigh`, `max`) and a
 review target (a PR number, a branch, a path, or a jj change id). Default: `xhigh`, and the
@@ -27,12 +27,16 @@ git branch --show-current
 git diff --stat
 ```
 
-Record three things now and do not recompute them later.
+Record four things now and do not recompute them later.
 
 - **The target.** `$ARGUMENTS` if it names one. Otherwise the uncommitted working-tree
   change when `git diff --stat` is non-empty, and the current branch against `main` when it
   is not. Every iteration reviews that same target at that same effort level, or the
   iterations do not compare.
+- **The review base.** The commit the target's diff starts from: `git rev-parse HEAD` for
+  the working-tree change, `git merge-base origin/main HEAD` for the branch, the `mergeBase`
+  that `python3 scripts/review_certificate.py target --pr <n>` prints for a PR. The
+  certificate needs it to show the review saw the whole PR.
 - **The baseline.** The full `git status --porcelain` output. It is what tells apart the
   files the loop touches from the ones that were already dirty, and the commit phase stages
   against it. This tree normally carries untracked scratch turing directories and `.out/`
@@ -62,6 +66,8 @@ jj log -r '@ | @-' --no-graph -T 'change_id.short() ++ " " ++ commit_id.short() 
   survives rewrites, not its commit id.
 - **The baseline** is `jj diff -r <target> --stat`, plus the descendants:
   `jj log -r '<target>::' --no-graph -T 'change_id.short() ++ " " ++ description.first_line() ++ "\n"'`.
+- **The review base** is the target's parent commit:
+  `jj log -r '<target>-' --no-graph -T commit_id`.
 - **Where you started.** The change `@` is on now, so the loop can return to it.
 
 When the target is not `@`, run `jj edit <target>` before the first review, so every fix
@@ -100,6 +106,12 @@ marked `CONFLICT` is reported, not resolved: it is the user's commit.
 
 When the target was not `@`, `jj edit` back to the change you started on.
 
+**Certify** needs the git store behind the jj repo and a PR whose head is the target's
+commit. Run every `review_certificate.py` command with `GIT_DIR` set to that store (the
+colocated `.git`, or `.jj/repo/store/git`), and pass the PR and the commit explicitly:
+`target --pr <n> --head <commit id>`, and the same `pr` and `head` in the input file. No
+PR carrying the target means no certificate: say so in the report.
+
 **The report** names the target's change id and new commit id in place of a sha and a
 branch, lists any descendant that conflicts, and says `REVIEW.md` is at `build/REVIEW.md`.
 
@@ -117,8 +129,8 @@ Skill(skill: "code-review", args: "<level> [target]")
 
 Not the `code-review:code-review` plugin command — that one reviews a GitHub pull request
 and posts a comment on it. Never pass `--fix`, which would apply fixes before the test
-exists, and never `--comment`, which writes to GitHub; converge applies its own fixes and
-touches nothing outside the working tree.
+exists, and never `--comment`, which writes to GitHub; converge applies its own fixes, and
+its one write to GitHub is the certificate at the end.
 
 Let the review run its verification pass and call `ReportFindings` as it always does. Those
 findings, verbatim, are the input to step 2. Do not also print them as chat text.
@@ -297,6 +309,62 @@ The subject is one short area-prefixed line with no body, in the repo's style �
 the null grouping key`. Name the area the fixes share; when they span areas, the one the
 correctness fixes are in. No co-author trailer and no footer.
 
+## Certify
+
+After the commit, post the run's review certificate on the branch's pull request. The
+`Review Certificate` workflow reads it into the `review-certificate` commit status, which
+`main` requires before a PR merges.
+
+```bash
+python3 scripts/review_certificate.py target
+```
+
+When the branch has no open PR (the loop branched off `main`, or the PR is not opened yet),
+skip the rest of this section. The report then says no certificate was posted.
+
+Otherwise write `build/review-certificate.json` with every finding REVIEW.md recorded,
+under its id and with its final status:
+
+```json
+{
+  "pr": 1450,
+  "head": "<git rev-parse HEAD, the commit just made>",
+  "reviewBase": "<the review base from phase 0>",
+  "kind": "converge",
+  "level": "xhigh",
+  "iterations": 3,
+  "stopRule": "triage left nothing to act on",
+  "findings": [
+    {
+      "id": "C1",
+      "category": "correctness",
+      "file": "query/ir/DBLowering.cpp",
+      "line": 412,
+      "summary": "the limit attribute is signed, so a negative literal reaches the verifier",
+      "status": "fixed",
+      "note": "LimitAttrTest.NegativeLimitIsRejected"
+    }
+  ]
+}
+```
+
+- `status` is `fixed`, `rejected`, `deferred`, `recorded` (a test-coverage finding) or
+  `open`. A reopened finding carries the status it ended with.
+- `note` gives the test for a fixed correctness finding, the reason for a rejected one, and
+  what it would take for a deferred one. A rejected or deferred finding without a note is
+  refused.
+- `stopRule` names the rule that ended the loop. When it was the cap, say the last round's
+  fixes are unreviewed.
+
+```bash
+python3 scripts/review_certificate.py issue --input build/review-certificate.json
+```
+
+The script refuses when the review base comes after the PR's merge base: a working-tree
+target on a branch that already had commits reviewed only part of the PR. Post nothing
+then, and say in the report that /certify has to review the whole PR. The commit is not
+pushed, so the verdict it prints is `pending` until the branch is.
+
 ## The report
 
 A few plain lines, concrete numbers, no bullets-for-their-own-sake:
@@ -305,6 +373,8 @@ A few plain lines, concrete numbers, no bullets-for-their-own-sake:
 - findings by category — fixed, rejected, deferred — naming each deferred one.
 - the tests added, and that each failed before its fix and passes after.
 - the commit subject and short sha, and the branch when the loop created one.
+- the certificate's comment URL and the verdict it gives once the branch is pushed, or why
+  no certificate was posted.
 - that `REVIEW.md` is left in the working tree, untracked, for the user to read and delete.
 
 Say plainly what did not converge. A deferred finding, an aborted fix, or a run that ended

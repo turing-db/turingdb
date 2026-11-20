@@ -1,0 +1,94 @@
+---
+description: Review a PR's own diff, triage every finding, and post a review certificate on the PR
+argument-hint: "[effort level] [PR number]"
+allowed-tools: Bash, Read, Write, Glob, Grep, Skill
+---
+
+# Certify
+
+Review exactly the diff a pull request carries, mark every finding rejected or open, and
+post the result on the PR as a review certificate. The `Review Certificate` workflow reads
+the latest certificate into the `review-certificate` commit status, which `main` requires
+before a PR merges. It passes when the certificate covers the PR's current diff and leaves
+no finding open.
+
+/certify fixes nothing. To fix the findings and certify in one run, use /converge.
+
+`$ARGUMENTS` may carry an effort level (`low`, `medium`, `high`, `xhigh`, `max`) and a PR
+number. Default: `xhigh`, and the PR of the current branch.
+
+## 1. Fix the target
+
+```bash
+python3 scripts/review_certificate.py target [--pr <n>]
+```
+
+It prints the PR number, its base branch, the merge base, the head commit and the diff's
+patch ID. On the PR's own branch the head is the local `HEAD`, pushed or not. On any other
+PR it is the PR's head on GitHub. The certificate covers `git diff <mergeBase> <head>`:
+committed code only. Uncommitted changes are neither reviewed nor certified, so say so when
+`git status --porcelain --untracked-files=no` is not empty.
+
+## 2. Review
+
+Invoke the built-in `code-review` skill on that range and nothing else:
+
+```
+Skill(skill: "code-review", args: "<level> PR #<n>: review exactly the diff `git diff <mergeBase> <head>`; ignore the working tree")
+```
+
+Never pass `--fix` or `--comment`. The review runs in the background and returns its
+findings as a JSON array. Wait for it.
+
+## 3. Triage
+
+Read the code at every finding, then give it one status:
+
+- **rejected**: a false positive. The note names the evidence in one sentence: the code
+  that rules the failure out, a test that passes on the claimed input, or one of
+  CLAUDE.md's standing rejections (an analyzer rule turning away valid openCypher,
+  use-later analysis in `DBProgramGenerator`, a comment that narrates the code).
+- **open**: everything else. A real bug is open even when its fix is out of scope.
+
+When in doubt, open. A rejection is shown on the PR next to its reason, and a reviewer will
+read it.
+
+## 4. Post
+
+Write `build/review-certificate.json`, numbering the findings `F1`, `F2`, ... in the order
+the review returned them:
+
+```json
+{
+  "pr": 1450,
+  "head": "<head from step 1>",
+  "reviewBase": "<mergeBase from step 1>",
+  "kind": "certify",
+  "level": "xhigh",
+  "findings": [
+    {
+      "id": "F1",
+      "file": "query/ir/DBLowering.cpp",
+      "line": 412,
+      "summary": "the review's one-sentence statement of the bug",
+      "status": "rejected",
+      "note": "the evidence that makes it a false positive"
+    }
+  ]
+}
+```
+
+Then post it:
+
+```bash
+python3 scripts/review_certificate.py issue --input build/review-certificate.json
+```
+
+The script recomputes the patch ID from `head`, posts the comment, deletes your earlier
+certificates on the PR, and prints the verdict the workflow will reach on the PR as it
+stands. `pending: the certificate covers another diff` means the head is not pushed yet.
+
+## 5. Report
+
+A few plain lines: the comment URL, the verdict, the open findings by id and file, and
+whether the branch still needs a push for the PR to carry the certified diff.

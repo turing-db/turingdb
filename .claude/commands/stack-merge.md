@@ -59,6 +59,17 @@ Stop and report when:
 
 Print the stack bottom first: number, branch, title.
 
+Then check every PR's review certificate, bottom first, with `--no-ci` too:
+
+```bash
+python3 scripts/review_certificate.py verify --pr <n>
+```
+
+It exits non-zero unless the PR's latest certificate covers its current diff and leaves no
+finding open. Pushing `main` directly bypasses the ruleset's required `review-certificate`
+status, so this check is the gate. Stop and report every PR that fails it, with the line the
+script printed. The fix is /certify or /converge on that PR, never landing it uncertified.
+
 ## 2. Line up the local branches with origin
 
 For each branch `b_k`, record `old_k = git rev-parse origin/b_k`. Then:
@@ -142,6 +153,11 @@ git merge-base --is-ancestor origin/main b_1
 
 If `main` moved, go back to step 2 once. If it moves again during the second CI wait, stop
 and report it.
+
+Run step 1's certificate check on every PR again. A rebase changes a PR's patch ID when
+`main` changed the lines around its hunks. Retargeting a PR to `main` widens its diff to
+the whole stack below it, so this check must come before the retargets. A failure stops
+the run. The rebased branches stay pushed.
 
 GitHub refuses to change the base of a PR in a GitHub stack ("Cannot change the base branch
 because the pull request is part of a stack"). If the top PR has a `.stack`, dissolve it
