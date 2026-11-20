@@ -31,6 +31,7 @@ concept ComputesNullableArithmetic = ArithmeticOperator<Op>
  * @brief The arithmetic operators over a nullable result. A null slot holds T {}, so the
  * operator runs over every row and the result's validity is the AND of its operands'.
  * An operator that can raise is checked on the valid rows only, so a null row never raises.
+ * An operator whose row is a libm call (pow, fmod) is computed on the valid rows only.
  */
 template <typename R>
 struct NullableArithmeticExecutor : private NullableOperands {
@@ -60,6 +61,11 @@ struct NullableArithmeticExecutor : private NullableOperands {
         if constexpr (COMPUTES_OVER_VALUES && ChecksItsOperands<Functor>) {
             result->assignValidityOverZeroedNulls(lhsValidity, rhsValidity);
             writeCheckedRows<Op>(values, result->getValidity(), lhsValues, rhsValues, size);
+        } else if constexpr (COMPUTES_OVER_VALUES && ComputesThroughLibraryCall<Functor, Lhs, Rhs>) {
+            result->assignValidityOverZeroedNulls(lhsValidity, rhsValidity);
+            writeValidRows(values, result->getValidity(), size, [&](size_t row) {
+                return static_cast<R>(computeRow(op, lhsValues[row], rhsValues[row]));
+            });
         } else if constexpr (COMPUTES_OVER_VALUES) {
             result->assignValidityOverZeroedNulls(lhsValidity, rhsValidity);
             writeRows(values, result->getValidity(), size, [&](size_t row) {
@@ -96,6 +102,12 @@ private:
                                  const RhsValues& rhs,
                                  size_t size) {
         using Functor = typename Op::Functor;
+        using LhsOperand = std::decay_t<decltype(Op::operand(lhs[0]))>;
+        using RhsOperand = std::decay_t<decltype(Op::operand(rhs[0]))>;
+
+        const auto rowValue = [&](size_t row) {
+            return static_cast<R>(Functor::compute(Op::operand(lhs[row]), Op::operand(rhs[row])));
+        };
 
         for (size_t start = 0; start < size; start += BITS_PER_WORD) {
             const size_t count = std::min(BITS_PER_WORD, size - start);
@@ -113,9 +125,13 @@ private:
                 Functor::throwError(Op::operand(lhs[row]), Op::operand(rhs[row]));
             }
 
-            for (size_t bit = 0; bit < count; bit++) {
-                const R value = static_cast<R>(Functor::compute(Op::operand(lhs[start + bit]), Op::operand(rhs[start + bit])));
-                values[start + bit] = ((valid >> bit) & 1) != 0 ? value : R {};
+            if constexpr (ComputesThroughLibraryCall<Functor, LhsOperand, RhsOperand>) {
+                writeValidWordRows(values, start, valid, count, rowValue);
+            } else {
+                for (size_t bit = 0; bit < count; bit++) {
+                    const R value = rowValue(start + bit);
+                    values[start + bit] = ((valid >> bit) & 1) != 0 ? value : R {};
+                }
             }
         }
     }
