@@ -1,15 +1,15 @@
 ---
 description: Review, test, fix in a loop until it converges, then one commit
 argument-hint: "[effort level and/or review target, e.g. 'high' or 'medium 42']"
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Skill, TodoWrite, ReportFindings
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Skill, TodoWrite, ReportFindings, mcp__linear-server__list_issues, mcp__linear-server__get_issue, mcp__linear-server__save_issue, mcp__linear-server__save_comment
 ---
 
 # Converge
 
 Review the change, pin every correctness finding with a failing test, fix it, review again.
 At most 4 iterations, fewer once the review stops finding anything worth fixing. One commit
-at the end carrying the fixes and the tests. `REVIEW.md` records the whole run and is never
-committed.
+at the end carrying the fixes and the tests, and a review certificate on the branch's PR.
+`REVIEW.md` records the whole run and is never committed.
 
 `$ARGUMENTS` may carry an effort level (`low`, `medium`, `high`, `xhigh`, `max`) and a
 review target (a PR number, a branch, a path, or a jj change id). Default: `xhigh`, and the
@@ -21,18 +21,29 @@ Where a step below names a git command, jj mode's version of that step is the on
 
 ## 0. Fix the target and the baseline, once
 
+When `$ARGUMENTS` names a PR or a branch other than the current one, note the branch you
+are on, then check the target out, with `gh pr checkout <n>` or `git checkout <branch>`: the
+loop reviews and fixes the checked-out tree. With uncommitted changes in the tree, stop and
+say so instead. The run ends by checking the noted branch out again, and the report says
+so. Then:
+
 ```bash
 git status --porcelain
 git branch --show-current
 git diff --stat
 ```
 
-Record three things now and do not recompute them later.
+Record four things now and do not recompute them later.
 
 - **The target.** `$ARGUMENTS` if it names one. Otherwise the uncommitted working-tree
   change when `git diff --stat` is non-empty, and the current branch against `main` when it
   is not. Every iteration reviews that same target at that same effort level, or the
   iterations do not compare.
+- **The review base.** The commit the target's diff starts from: `git rev-parse HEAD` for
+  the working-tree change, `git merge-base origin/main HEAD` for the branch, the `mergeBase`
+  that `python3 scripts/review_certificate.py target --pr <n>` prints for a PR. The
+  certificate needs it to show the review saw the whole PR. A path target has none, and
+  posts no certificate.
 - **The baseline.** The full `git status --porcelain` output. It is what tells apart the
   files the loop touches from the ones that were already dirty, and the commit phase stages
   against it. This tree normally carries untracked scratch turing directories and `.out/`
@@ -47,9 +58,10 @@ and stop.
 In a jj workspace, git is not a way to look at or change the tree. A workspace of another
 repo has no `.git` of its own, or one pointing at the other checkout, so `git status`,
 `git diff` and `git add` read and write *that* checkout's index. Run no git command in jj
-mode, read-only ones included: their output describes a different tree.
+mode, read-only ones included: their output describes a different tree. The one exception
+is the certificate's script, run against the git store as **Certify** below says.
 
-**Phase 0.** Record the same three things from jj:
+**Phase 0.** Record the same four things from jj:
 
 ```bash
 jj root
@@ -62,6 +74,8 @@ jj log -r '@ | @-' --no-graph -T 'change_id.short() ++ " " ++ commit_id.short() 
   survives rewrites, not its commit id.
 - **The baseline** is `jj diff -r <target> --stat`, plus the descendants:
   `jj log -r '<target>::' --no-graph -T 'change_id.short() ++ " " ++ description.first_line() ++ "\n"'`.
+- **The review base** is the target's parent commit:
+  `jj log -r '<target>-' --no-graph -T commit_id`.
 - **Where you started.** The change `@` is on now, so the loop can return to it.
 
 When the target is not `@`, run `jj edit <target>` before the first review, so every fix
@@ -100,6 +114,13 @@ marked `CONFLICT` is reported, not resolved: it is the user's commit.
 
 When the target was not `@`, `jj edit` back to the change you started on.
 
+**Certify** needs the git store behind the jj repo and a PR whose branch carries the
+target. Run every `review_certificate.py` command with `GIT_DIR` set to the store that
+`jj git root` prints, and pass the PR and the target's new commit explicitly:
+`target --pr <n> --head <commit id>`, and the same `pr` and `head` in the input file. As in
+git mode, the commit is not pushed yet, so the verdict reads pending until it is. No PR for
+the target's branch means no certificate: say so in the report.
+
 **The report** names the target's change id and new commit id in place of a sha and a
 branch, lists any descendant that conflicts, and says `REVIEW.md` is at `build/REVIEW.md`.
 
@@ -109,16 +130,27 @@ Six steps, in this order. Keep a todo list with one entry per finding.
 
 ### 1. Review
 
-Invoke the built-in `code-review` skill with the level and target from phase 0:
+Invoke the built-in `code-review` skill with the level and the review base from phase 0,
+so every iteration reviews the whole target, committed or not:
 
 ```
-Skill(skill: "code-review", args: "<level> [target]")
+Skill(skill: "code-review", args: "<level> review exactly the diff `git diff <review base>`: the commits since it and the working tree")
 ```
+
+A path target has no review base: pass `<level> <path>` instead.
+
+`git diff` leaves out untracked files, such as a new test or a new source a fix added. Before
+each review, run `git add -N` on each new test and source file the loop created, so the
+diff shows it. Never on REVIEW.md or scratch output, which would then be reviewed and later
+committed. A file the loop intent-to-added and then deleted leaves the index with
+`git rm --cached -q <file>`. For a working-tree target, do the same before the first review
+for the change's own untracked files, the new files the user means as part of it, so the
+review sees what the commit will carry. Ask when it is unclear whether a file belongs.
 
 Not the `code-review:code-review` plugin command — that one reviews a GitHub pull request
 and posts a comment on it. Never pass `--fix`, which would apply fixes before the test
-exists, and never `--comment`, which writes to GitHub; converge applies its own fixes and
-touches nothing outside the working tree.
+exists, and never `--comment`, which writes to GitHub; converge applies its own fixes, and
+its one write to GitHub is the certificate at the end.
 
 Let the review run its verification pass and call `ReportFindings` as it always does. Those
 findings, verbatim, are the input to step 2. Do not also print them as chat text.
@@ -135,11 +167,19 @@ before deciding:
 - **correctness** — a failing test first, then a fix.
 - **simplification**, reuse, altitude — a fix, no test.
 - **efficiency** — a fix, no test.
+- **style** — a broken CLAUDE.md style or comment rule: a fix, no test.
 - **test coverage** — recorded in REVIEW.md, not acted on. Every correctness finding
   already brings its own test; a bare coverage gap is not what this loop is for.
-- **rejected** — with the reason that made it a false positive.
 
-A finding an earlier iteration recorded as rejected or deferred is not new: keep its
+A false positive is **rejected**, with the reason, and keeps the category it claimed: the
+certificate records a category for every finding.
+
+A real bug that CLAUDE.md's "Triaging review findings" files rather than fixes now, such as
+one that predates the change or whose fix needs a design choice, is **filed**: ticketed in
+Linear as that section says, or added to the open ticket it duplicates. It keeps its
+category, and the loop does not fix it.
+
+A finding an earlier iteration recorded as rejected, filed or deferred is not new: keep its
 earlier status, and move on. A finding recorded as **fixed** that comes back is a failed
 fix: reopen it under its old id and say in the new section whether the test was wrong or
 the fix was.
@@ -214,9 +254,9 @@ Apply the stop rules below. When none fires, start the next iteration at step 1.
 Stop after the iteration that first satisfies one of these, and name which one in the final
 report:
 
-- Triage leaves no correctness, simplification or efficiency finding to act on.
+- Triage leaves no correctness, simplification, efficiency or style finding to act on.
 - Every actionable finding this iteration is one an earlier iteration already recorded as
-  rejected or deferred.
+  rejected, filed or deferred.
 - The iteration changed no code.
 - Four iterations have run.
 
@@ -260,9 +300,12 @@ E1 ...
 ### Test coverage — recorded, not acted on
 ...
 
-### Rejected
-R1 `net/http_common/HTTPWriter.cpp:88` — ... — the test asserting it passes unchanged,
+A false positive stays in its category's section, with its reason and `status: rejected`,
+and a filed finding with `status: filed as TUR-431`:
+
+C2 `net/http_common/HTTPWriter.cpp:88` — ... — the test asserting it passes unchanged,
    so there is no defect.
+   status: rejected
 ```
 
 Keep the entries plain: the file, the defect in one sentence, the input that breaks it, the
@@ -297,14 +340,90 @@ The subject is one short area-prefixed line with no body, in the repo's style �
 the null grouping key`. Name the area the fixes share; when they span areas, the one the
 correctness fixes are in. No co-author trailer and no footer.
 
+## Certify
+
+After the commit, post the run's review certificate on the pull request when the last
+iteration changed no code, so its review saw exactly what is committed. When the last
+iteration fixed anything, style included, or the loop ended at the cap or on an abort, those
+fixes are unreviewed: post no certificate, and say in the report that /certify has to
+review them.
+
+`issue` dispatches the `Review Certificate` workflow, which posts the certificate as
+github-actions[bot], opening with ✅ or ❌, and sets the `review-certificate/<base>` commit
+status; `main` requires `review-certificate/main` before a PR merges. The script needs git
+2.43 or later. It passes when every correctness and efficiency finding is fixed, rejected
+or filed.
+
+Only a branch or a PR target is certified. A path target reviewed part of the PR, so skip
+the rest of this section and say so in the report. For a branch, run `target`. For a PR,
+run `target --pr <n>` from that PR's branch, since the certificate's head is the commit just
+made:
+
+```bash
+python3 scripts/review_certificate.py target [--pr <n>]
+```
+
+When the branch has no open PR (the loop branched off `main`, or the PR is not opened yet),
+skip the rest of this section. The report then says no certificate was posted.
+
+Otherwise write `build/review-certificate.json` with every finding REVIEW.md recorded,
+under its id and with its final status:
+
+```json
+{
+  "pr": 1450,
+  "head": "<git rev-parse HEAD, the commit just made>",
+  "reviewBase": "<the review base from phase 0>",
+  "kind": "converge",
+  "level": "xhigh",
+  "iterations": 3,
+  "stopRule": "triage left nothing to act on",
+  "findings": [
+    {
+      "id": "C1",
+      "category": "correctness",
+      "file": "query/ir/DBLowering.cpp",
+      "line": 412,
+      "summary": "the limit attribute is signed, so a negative literal reaches the verifier",
+      "status": "fixed",
+      "note": "LimitAttrTest.NegativeLimitIsRejected"
+    }
+  ]
+}
+```
+
+- `category` is `correctness`, `efficiency`, `simplification`, `test-coverage` or `style`,
+  as triage sorted it.
+- `status` is `fixed`, `rejected`, `filed`, `deferred`, `recorded` (a test-coverage
+  finding) or `open`. A reopened finding carries the status it ended with. A correctness
+  or efficiency finding that ends deferred or open fails the certificate.
+- `note` gives the test for a fixed correctness finding, the reason for a rejected one, and
+  what it would take for a deferred one. A rejected or deferred finding without a note is
+  refused.
+- `ticket` gives a filed finding's Linear id, `TUR-<number>`, and only a filed finding has
+  one. The script checks the id's shape, not that the ticket exists.
+- `stopRule` names the rule that ended the loop.
+
+```bash
+python3 scripts/review_certificate.py issue --input build/review-certificate.json
+```
+
+The script refuses when the review base comes after the PR's merge base: a working-tree
+target on a branch that already had commits reviewed only part of the PR. Post nothing
+then, and say in the report that /certify has to review the whole PR. The commit is not
+pushed, so the verdict it prints is `pending` until the branch is.
+
 ## The report
 
 A few plain lines, concrete numbers, no bullets-for-their-own-sake:
 
 - how many iterations ran and which stop rule ended the loop.
-- findings by category — fixed, rejected, deferred — naming each deferred one.
+- findings by category — fixed, rejected, filed, deferred — naming each deferred one and
+  each ticket filed.
 - the tests added, and that each failed before its fix and passes after.
 - the commit subject and short sha, and the branch when the loop created one.
+- the certificate's comment URL and the verdict it gives once the branch is pushed, or why
+  no certificate was posted.
 - that `REVIEW.md` is left in the working tree, untracked, for the user to read and delete.
 
 Say plainly what did not converge. A deferred finding, an aborted fix, or a run that ended
