@@ -324,9 +324,10 @@ or because the last iteration changed no code. After the cap or an abort, the la
 fixes are unreviewed: post no certificate, and say in the report that /certify has to
 review them.
 
-The `Review Certificate` workflow reads the certificate into the `review-certificate/main`
-commit status, which `main` requires before a PR merges. It passes when every correctness
-and efficiency finding is fixed or rejected.
+`issue` dispatches the `Review Certificate` workflow, which posts the certificate as
+github-actions[bot], opening with ✅ or ❌, and sets the `review-certificate/main` commit
+status, which `main` requires before a PR merges. It passes when every correctness and
+efficiency finding is fixed or rejected.
 
 Only a branch or a PR target is certified. A path target reviewed part of the PR, so skip
 the rest of this section and say so in the report. For a branch, run `target`. For a PR,

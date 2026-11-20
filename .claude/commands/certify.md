@@ -7,10 +7,11 @@ allowed-tools: Bash, Read, Write, Glob, Grep, Skill
 # Certify
 
 Review exactly the diff a pull request carries, give every finding a category and mark it
-rejected or open, and post the result on the PR as a review certificate. The `Review
-Certificate` workflow reads the latest certificate into the `review-certificate/<base>`
-commit status, which `main` requires before a PR merges. It passes when the certificate
-covers the PR's current diff and no correctness or efficiency finding is open.
+rejected or open, and have the `Review Certificate` workflow post the result on the PR as
+github-actions[bot]. The comment opens with ✅ when no correctness or efficiency finding is
+open and ❌ otherwise. The workflow sets the `review-certificate/<base>` commit status, which
+`main` requires before a PR merges. It passes when the certificate covers the PR's current
+diff and no correctness or efficiency finding is open.
 
 /certify fixes nothing. To fix the findings and certify in one run, use /converge.
 
@@ -98,9 +99,12 @@ Then post it:
 python3 scripts/review_certificate.py issue --input build/review-certificate.json
 ```
 
-The script recomputes the patch ID from `head`, posts the comment, deletes your earlier
-certificates on the PR, and prints the verdict the workflow will reach on the PR as it
-stands. `pending: the certificate covers another diff` means the head is not pushed yet.
+The script recomputes the patch ID from `head` and dispatches the `Review Certificate`
+workflow on `main` with the certificate. That run posts the comment as github-actions[bot],
+deletes your earlier certificates on the PR, and sets the status. The script waits for the
+run, then prints its URL, the comment's URL and the verdict on the PR as it stands.
+`pending: the certificate covers another diff` means the head is not pushed yet. Only a
+user with write access can dispatch it.
 
 ## 5. Report
 

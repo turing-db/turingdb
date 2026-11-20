@@ -5,22 +5,29 @@ A certificate is a PR comment recording one review of the PR's diff: the review 
 the diff it covers, and every finding with its category and status. It names the diff by
 its verbatim patch ID. A rebase keeps it valid when it leaves the diff unchanged and
 merging the certified diff onto the new base gives the PR's tree exactly. The
-latest certificate posted by someone with write access sets the review-certificate/<base>
-commit status: success when it covers the PR's current diff and every correctness or
-efficiency finding is fixed or rejected.
+certificate sets the review-certificate/<base> commit status: success when it covers the
+PR's current diff and every correctness or efficiency finding is fixed or rejected.
+
+issue dispatches the Review Certificate workflow on the default branch, whose publish job
+posts the certificate as github-actions[bot]. The run's title carries the PR number and the
+SHA-256 of the certificate, so verify counts a bot comment only when a dispatched run of
+that workflow on the default branch vouches for its exact content.
 
 Usage:
   review_certificate.py target [--pr N] [--head COMMIT]
-  review_certificate.py issue --input FILE
+  review_certificate.py issue --input FILE [--ref REF]
+  review_certificate.py publish --pr N --digest SHA256   (in the workflow, certificate in $CERTIFICATE)
   review_certificate.py verify --pr N [--post-status]
 """
 
 import argparse
+import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 
 MARKER = "<!-- turingdb-review-certificate -->"
@@ -28,6 +35,11 @@ CERTIFICATE_TYPE = "turingdb-review-certificate"
 CERTIFICATE_VERSION = 1
 STATUS_CONTEXT = "review-certificate"
 COMMENT_LIMIT = 65536
+DISPATCH_LIMIT = 65000
+RUN_WAIT_SECONDS = 900
+BOT_LOGIN = "github-actions[bot]"
+WORKFLOW_FILE = "review_certificate.yml"
+WORKFLOW_PATH = f".github/workflows/{WORKFLOW_FILE}"
 STATUS_DESCRIPTION_LIMIT = 140
 MINIMUM_GIT_VERSION = (2, 40)
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
@@ -312,6 +324,10 @@ def validate_certificate(certificate):
         if not re.fullmatch(r"[0-9a-f]{40,64}", str(subject.get(field))):
             raise CertificateError(f"the subject has no {field}")
 
+    issuer = certificate.get("issuer")
+    if not isinstance(issuer, str) or not issuer:
+        raise CertificateError("the certificate names no issuer")
+
     validate_review(certificate)
 
 
@@ -338,10 +354,10 @@ def render(certificate):
     blocking = blocking_findings(findings)
 
     if blocking:
-        headline = ("**Review certificate: fails.** Correctness or efficiency findings not fixed or "
-                    f"rejected: {markdown_cell(', '.join(blocking))}.")
+        headline = ["# ❌ Review certificate: fails", "",
+                    f"Correctness or efficiency findings not fixed or rejected: {markdown_cell(', '.join(blocking))}."]
     else:
-        headline = "**Review certificate: passes.** No correctness or efficiency finding is open."
+        headline = ["# ✅ Review certificate: passes", "", "No correctness or efficiency finding is open."]
 
     review = f"`/{kind} {certificate['level']}`"
     if kind == "converge":
@@ -351,9 +367,9 @@ def render(certificate):
 
     lines = [
         MARKER,
-        headline,
+        *headline,
         "",
-        f"{review}.",
+        f"{review}, issued by {markdown_cell(certificate['issuer'])}.",
         f"Covers `{subject['mergeBase'][:10]}..{subject['head'][:10]}` against `{subject['base']}`, "
         f"patch ID `{subject['patchId'][:12]}`.",
         "",
@@ -391,7 +407,8 @@ def certificate_comments(repo, number):
     page = 1
     while True:
         batch = gh_api(f"repos/{repo}/issues/{number}/comments?per_page=100&page={page}")
-        comments += [comment for comment in batch if (comment.get("body") or "").startswith(MARKER)]
+        comments += [comment for comment in batch
+                     if comment["user"]["login"] == BOT_LOGIN and (comment.get("body") or "").startswith(MARKER)]
         if len(batch) < 100:
             break
         page += 1
@@ -400,57 +417,83 @@ def certificate_comments(repo, number):
     return comments
 
 
-def trusted(repo, comments):
-    permissions = {}
-    trusted_comments = []
-    for comment in comments:
-        login = comment["user"]["login"]
-        if login not in permissions:
-            try:
-                permissions[login] = gh_api(f"repos/{repo}/collaborators/{login}/permission")["permission"]
-            except CommandError as error:
-                if error.http_status != 404:
-                    raise
-                permissions[login] = "none"
-
-        if permissions[login] in TRUSTED_PERMISSIONS:
-            trusted_comments.append(comment)
-
-    return trusted_comments
+def canonical(certificate):
+    return json.dumps(certificate, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
-def comment_covers(comment, subject):
-    try:
-        certificate = parse_certificate(comment["body"])
-        validate_certificate(certificate)
-    except CertificateError:
+def digest_of(certificate):
+    return hashlib.sha256(canonical(certificate).encode()).hexdigest()
+
+
+def run_title(number, digest):
+    return f"Certify #{number} {digest}"
+
+
+def permission(repo, login, lookups):
+    if login not in lookups:
+        try:
+            lookups[login] = gh_api(f"repos/{repo}/collaborators/{login}/permission")["permission"]
+        except CommandError as error:
+            if error.http_status != 404:
+                raise
+            lookups[login] = "none"
+
+    return lookups[login]
+
+
+def without_run(data):
+    return {key: value for key, value in data.items() if key != "run"}
+
+
+def authentic(repo, pull, data, lookups):
+    run_id = data.get("run")
+    if not isinstance(run_id, int) or isinstance(run_id, bool):
         return False
 
-    return covers(certificate["subject"], subject)
+    try:
+        run = gh_api(f"repos/{repo}/actions/runs/{run_id}")
+    except CommandError as error:
+        if error.http_status != 404:
+            raise
+        return False
+
+    certificate = without_run(data)
+    is_dispatch_on_default_branch = (run.get("path") == WORKFLOW_PATH and run.get("event") == "workflow_dispatch"
+                                     and run.get("head_branch") == pull["base"]["repo"]["default_branch"])
+    vouches_for_content = run.get("display_title") == run_title(pull["number"], digest_of(certificate))
+    issuer = certificate["issuer"]
+    issued_by_writer = ((run.get("triggering_actor") or {}).get("login") == issuer
+                        and permission(repo, issuer, lookups) in TRUSTED_PERMISSIONS)
+    return is_dispatch_on_default_branch and vouches_for_content and issued_by_writer
 
 
 def evaluate(repo, pull):
     head = fetch(f"refs/pull/{pull['number']}/head")
     subject = subject_of(pull, head)
     comments = certificate_comments(repo, pull["number"])
-    trusted_comments = trusted(repo, comments)
     if not comments:
         return ("pending", "No review certificate: run /certify or /converge", None, head)
-    elif not trusted_comments:
-        return ("pending", "No certificate from a user with write access: one has to run /certify or /converge", None, head)
 
-    for comment in trusted_comments:
+    lookups = {}
+    authentic_url = None
+    for comment in comments:
         try:
-            certificate = parse_certificate(comment["body"])
-            validate_certificate(certificate)
+            data = parse_certificate(comment["body"])
+            validate_certificate(data)
         except CertificateError as error:
             return ("failure", f"Malformed certificate: {error}", comment["html_url"], head)
 
-        if covers(certificate["subject"], subject):
-            return verdict(certificate, comment, head)
+        if not authentic(repo, pull, data, lookups):
+            continue
 
-    return ("pending", "The certificate covers another diff: run /certify or /converge again",
-            trusted_comments[0]["html_url"], head)
+        authentic_url = authentic_url or comment["html_url"]
+        if covers(data["subject"], subject):
+            return verdict(data, comment, head)
+
+    if authentic_url is None:
+        return ("pending", "No authentic certificate: run /certify or /converge", None, head)
+
+    return ("pending", "The certificate covers another diff: run /certify or /converge again", authentic_url, head)
 
 
 def verdict(certificate, comment, head):
@@ -461,7 +504,7 @@ def verdict(certificate, comment, head):
         return ("failure", f"Correctness or efficiency findings not fixed or rejected: {', '.join(blocking)}", url, head)
 
     plural = "" if len(findings) == 1 else "s"
-    description = f"/{certificate['kind']} {certificate['level']} by {comment['user']['login']}: "
+    description = f"/{certificate['kind']} {certificate['level']} by {certificate['issuer']}: "
     description += f"{len(findings)} finding{plural}, no correctness or efficiency finding open"
     return ("success", description, url, head)
 
@@ -523,7 +566,6 @@ def command_issue(args):
                                f"{subject['mergeBase'][:10]}..{review_base[:10]} of #{pull['number']}: "
                                "run /certify on the whole pull request")
 
-    pushed = subject_of(pull, fetch(f"refs/pull/{pull['number']}/head"))
     issuer = gh_api("user")["login"]
     certificate = {
         "type": CERTIFICATE_TYPE,
@@ -540,22 +582,83 @@ def command_issue(args):
     certificate["issuer"] = issuer
     certificate["issuedAt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    body = render(certificate)
-    if parse_certificate(body) != certificate:
-        raise CertificateError("the rendered certificate does not read back as the same data")
+    validate_certificate(certificate)
+    render({**certificate, "run": 0})
+    payload = canonical(certificate)
+    if len(payload) > DISPATCH_LIMIT:
+        raise CertificateError(f"the certificate is {len(payload)} characters, over the {DISPATCH_LIMIT} a dispatch carries")
 
-    comments_path = f"repos/{repo}/issues/{pull['number']}/comments"
-    posted = gh_api(comments_path, method="POST", payload={"body": body})
-    replaces_pushed = covers(subject, pushed)
+    digest = digest_of(certificate)
+    ref = args.ref or pull["base"]["repo"]["default_branch"]
+    inputs = {"pr": str(pull["number"]), "digest": digest, "certificate": payload}
+    gh_api(f"repos/{repo}/actions/workflows/{WORKFLOW_FILE}/dispatches", method="POST", payload={"ref": ref, "inputs": inputs})
+
+    run = wait_for_run(repo, run_title(pull["number"], digest))
+    print(f"run {run['html_url']}: {run['conclusion']}")
+    if run["conclusion"] != "success":
+        raise CertificateError(f"the Review Certificate run did not post the certificate: {run['html_url']}")
+
     for comment in certificate_comments(repo, pull["number"]):
-        is_older_own = comment["user"]["login"] == issuer and comment["id"] < posted["id"]
-        if is_older_own and (replaces_pushed or not comment_covers(comment, pushed)):
-            gh_api(f"repos/{repo}/issues/comments/{comment['id']}", method="DELETE")
+        if f'"run": {run["id"]}' in comment["body"]:
+            print(f"posted {comment['html_url']}")
 
     state, description, _, pull_head = evaluate(repo, pull)
-    print(f"posted {posted['html_url']}")
     print(f"#{pull['number']} at {pull_head[:10]}: {state}: {description}")
     return 0
+
+
+def wait_for_run(repo, title):
+    deadline = time.monotonic() + RUN_WAIT_SECONDS
+    while time.monotonic() < deadline:
+        runs = gh_api(f"repos/{repo}/actions/workflows/{WORKFLOW_FILE}/runs?event=workflow_dispatch&per_page=30")
+        matching = [run for run in runs["workflow_runs"] if run["display_title"] == title]
+        if matching and matching[0]["status"] == "completed":
+            return matching[0]
+
+        time.sleep(5)
+
+    raise CertificateError(f"no run titled {title!r} finished within {RUN_WAIT_SECONDS} s")
+
+
+def command_publish(args):
+    check_git_version()
+    repo = repository()
+    certificate = json.loads(os.environ["CERTIFICATE"])
+    if not isinstance(certificate, dict) or digest_of(certificate) != args.digest:
+        raise CertificateError("the certificate does not match its digest")
+
+    validate_certificate(certificate)
+    issuer = certificate["issuer"]
+    if issuer != os.environ.get("GITHUB_TRIGGERING_ACTOR"):
+        raise CertificateError(f"the certificate names {issuer} as its issuer, but someone else dispatched it")
+    elif permission(repo, issuer, {}) not in TRUSTED_PERMISSIONS:
+        raise CertificateError(f"{issuer} has no write access")
+
+    pull = open_pull_request(repo, args.pr)
+    data = {**certificate, "run": int(os.environ["GITHUB_RUN_ID"])}
+    body = render(data)
+    if parse_certificate(body) != data:
+        raise CertificateError("the rendered certificate does not read back as the same data")
+
+    pushed = subject_of(pull, fetch(f"refs/pull/{pull['number']}/head"))
+    posted = gh_api(f"repos/{repo}/issues/{pull['number']}/comments", method="POST", payload={"body": body})
+    print(f"posted {posted['html_url']}")
+
+    replaces_pushed = covers(certificate["subject"], pushed)
+    for comment in certificate_comments(repo, pull["number"]):
+        if comment["id"] >= posted["id"]:
+            continue
+
+        try:
+            earlier = parse_certificate(comment["body"])
+            validate_certificate(earlier)
+        except CertificateError:
+            continue
+
+        if earlier["issuer"] == issuer and (replaces_pushed or not covers(earlier["subject"], pushed)):
+            gh_api(f"repos/{repo}/issues/comments/{comment['id']}", method="DELETE")
+
+    return command_verify(argparse.Namespace(pr=args.pr, post_status=True))
 
 
 def command_verify(args):
@@ -590,9 +693,15 @@ def main():
     target.add_argument("--head", help="commit to certify, default: HEAD on the PR's branch, else the PR head")
     target.set_defaults(handler=command_target)
 
-    issue = commands.add_parser("issue", help="post a certificate on the pull request")
+    issue = commands.add_parser("issue", help="have the Review Certificate workflow post a certificate")
     issue.add_argument("--input", required=True, help="JSON file holding the review and its findings")
+    issue.add_argument("--ref", help="branch whose workflow posts it, default: the default branch, the only one verify trusts")
     issue.set_defaults(handler=command_issue)
+
+    publish = commands.add_parser("publish", help="post a dispatched certificate, in the workflow")
+    publish.add_argument("--pr", type=int, required=True, help="pull request number")
+    publish.add_argument("--digest", required=True, help="SHA-256 of the certificate's canonical JSON")
+    publish.set_defaults(handler=command_publish)
 
     verify = commands.add_parser("verify", help="check the pull request's latest certificate")
     verify.add_argument("--pr", type=int, required=True, help="pull request number")
