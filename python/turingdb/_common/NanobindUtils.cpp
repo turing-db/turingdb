@@ -2,13 +2,15 @@
 
 #include <stdint.h>
 #include <limits>
+#include <optional>
 #include <span>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "GraphPath.h"
 #include "LocalMemory.h"
-#include "PyTimeTypes.h"
+#include "PyValueConversion.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/DataframeManager.h"
 #include "dataframe/NamedColumn.h"
@@ -33,51 +35,6 @@
 #include "TuringException.h"
 
 namespace pybindings {
-
-void allocColumns(const db::Dataframe* incomingDf,
-                  db::Dataframe* bufferedDf,
-                  db::DataframeManager* dfMan,
-                  db::LocalMemory* localMem,
-                  std::vector<std::string>* nameStorage) {
-    const auto& srcCols = incomingDf->cols();
-    nameStorage->reserve(srcCols.size());
-    for (const db::NamedColumn* namedCol : srcCols) {
-        const db::Column* srcCol = namedCol->getColumn();
-        db::Column* newCol = localMem->allocSame(srcCol);
-        db::NamedColumn* newNamedCol = db::NamedColumn::create(dfMan, newCol, dfMan->allocTag());
-        // Copy the name into our own storage; the source view points into the
-        // chunk buffer which is reused for subsequent chunks.
-        nameStorage->emplace_back(namedCol->getName());
-        newNamedCol->rename(nameStorage->back());
-        bufferedDf->addColumn(newNamedCol);
-
-        // We just need to copy the value over at alloc time for constants
-        if (srcCol->getContainerKind() == db::ContainerKind::code<db::ColumnConst>()) {
-            newCol->assign(srcCol);
-        }
-    }
-}
-
-void appendDfs(const db::Dataframe* src, db::Dataframe* dst) {
-    const auto& srcCols = src->cols();
-    const auto& dstCols = dst->cols();
-
-    // A chunk of constants alone grows no column, so the running total has to be carried
-    // rather than read back off the buffered columns.
-    dst->setDeclaredRowCount(dst->getDeclaredRowCount() + src->getLogicalRowCount());
-
-    for (size_t i = 0; i < srcCols.size(); ++i) {
-        db::Column* dstCol = dstCols[i]->getColumn();
-
-        // ColumnConsts are copied once - at column alloc time
-        if (dstCol->getContainerKind() == db::ContainerKind::code<db::ColumnConst>()) {
-            continue;
-        }
-
-        const db::Column* srcCol = srcCols[i]->getColumn();
-        db::appendColumnRows(srcCol, dstCol, 0, srcCol->size());
-    }
-}
 
 void allocChunkColumns(std::span<const std::string_view> names,
                        std::span<const db::Column* const> chunks,
@@ -120,14 +77,19 @@ void appendChunkColumns(std::span<const db::Column* const> chunks,
     }
 }
 
-template <typename T>
-int64_t temporalMicroseconds(T value) {
-    return value.getMicroseconds();
-}
-
 nb::object embeddingToNdarray(std::span<const float> s) {
     std::vector<float> buf(s.begin(), s.end());
     return wrapVectorAsNdarray(std::move(buf));
+}
+
+nb::object maskedArray(const nb::object& values, std::vector<uint8_t>& nullMask) {
+    const nb::object mask = wrapVectorAsNdarrayOf<bool>(std::move(nullMask));
+    const nb::object maskedArrayType = nb::module_::import_("numpy.ma").attr("MaskedArray");
+
+    return maskedArrayType(values,
+                           nb::arg("mask") = mask,
+                           nb::arg("copy") = false,
+                           nb::arg("shrink") = false);
 }
 
 nb::str toPyString(std::string_view text) {
@@ -145,140 +107,6 @@ void setRuntimeError(std::string_view message) {
 }
 
 namespace {
-
-// Converts a list or map value (or a single list element / map entry) to plain Python
-// objects — scalars, a list of floats for an embedding, nested lists, and dicts for maps.
-// Deliberately plain objects, not ndarrays, so the result compares equal to the JSON-parsed
-// expectation. Nesting recurses through view() -> element()/entry() -> operator(); keeping
-// them as members of one struct lets them call each other without a forward declaration.
-struct ValueToPyObject {
-    mutable PyTimeTypes _times;
-    mutable nb::object _point;
-
-    nb::object duration(db::Duration value) const {
-        return _times.getTimedelta()(nb::arg("microseconds") = value.getMicroseconds());
-    }
-
-    nb::object dateTime(db::DateTime value) const {
-        return _times.getEpoch() + duration(db::Duration {value.getMicroseconds()});
-    }
-
-    nb::object point(const db::Point& value) const {
-        if (!_point.is_valid()) {
-            _point = nb::module_::import_("turingdb.point").attr("Point");
-        }
-
-        const db::PointCRS crs = value.getCRS();
-        const nb::object z = db::Point::getDimension(crs) == 3 ? nb::cast(value.getZ()) : nb::none();
-
-        return _point(db::Point::getSRID(crs), value.getX(), value.getY(), z);
-    }
-
-    nb::object view(const db::ListView& listView) const {
-        nb::list out;
-        for (const db::CellView element : listView.elements()) {
-            out.append(this->element(element));
-        }
-        return out;
-    }
-
-    nb::object element(const db::CellView element) const {
-        return db::CellTagDispatcher {element.getTag()}.execute(*this, element);
-    }
-
-    nb::object view(const db::MapView& mapView) const {
-        nb::dict out;
-        for (const db::MapEntryView entry : mapView.entries()) {
-            out[toPyString(entry.getKey())] = this->entry(entry);
-        }
-        return out;
-    }
-
-    nb::object entry(const db::MapEntryView entry) const {
-        return element(entry.getValue());
-    }
-
-    template <typename T>
-    nb::object operator()(const db::CellView element) const {
-        if constexpr (std::is_same_v<T, db::types::Embedding::Primitive>) {
-            nb::list floats;
-            for (const float value : element.getAs<T>()) {
-                floats.append(nb::cast(value));
-            }
-            return floats;
-        } else if constexpr (std::is_same_v<T, db::ListView>) {
-            return view(element.getAs<T>());
-        } else if constexpr (std::is_same_v<T, db::MapView>) {
-            return view(element.getAs<T>());
-        } else if constexpr (std::is_same_v<T, db::PropertyNull>) {
-            return nb::none();
-        } else if constexpr (std::is_same_v<T, db::types::Duration::Primitive>) {
-            return duration(element.getAs<T>());
-        } else if constexpr (std::is_same_v<T, db::types::DateTime::Primitive>) {
-            return dateTime(element.getAs<T>());
-        } else if constexpr (std::is_same_v<T, db::types::Point::Primitive>) {
-            return point(element.getAs<T>());
-        } else if constexpr (std::is_same_v<T, db::ValueType>) {
-            return toPyString(db::ValueTypeName::value(element.getAs<T>()));
-        } else if constexpr (std::is_same_v<T, db::PathView>) {
-            nb::list ids;
-            for (const uint64_t id : element.getAs<T>().getIDs()) {
-                ids.append(nb::cast(id));
-            }
-            return ids;
-        } else {
-            return toPy(element.getAs<T>());
-        }
-    }
-
-};
-
-template <typename T>
-nb::object toPyObject(const T& value, const ValueToPyObject& nested) {
-    if constexpr (db::IsEmbedding<T>) {
-        return embeddingToNdarray(value);
-    } else if constexpr (db::IsPath<T>) {
-        if (value.isNull()) {
-            return nb::none();
-        }
-
-        nb::list ids;
-        for (const uint64_t id : value.getIDs()) {
-            ids.append(nb::cast(id));
-        }
-        return ids;
-    } else if constexpr (db::IsListView<T> || db::IsMap<T>) {
-        return nested.view(value);
-    } else if constexpr (db::IsCell<T>) {
-        return nested.element(value);
-    } else if constexpr (db::IsNull<T>) {
-        return nb::none();
-    } else if constexpr (db::IsValueType<T>) {
-        return toPyString(db::ValueTypeName::value(value));
-    } else if constexpr (db::IsPoint<T>) {
-        return nested.point(value);
-    } else {
-        return toPy(value);
-    }
-}
-
-// A row's element in a numpy array, or its Python object where its type has no array form.
-template <typename Row>
-auto toPyElement(const Row& row, const ValueToPyObject& nested) {
-    if constexpr (std::is_arithmetic_v<Row>) {
-        return row;
-    } else if constexpr (db::IsDateTime<Row> || db::IsDuration<Row>) {
-        return temporalMicroseconds(row);
-    } else if constexpr (std::is_same_v<Row, db::CustomBool>) {
-        return static_cast<uint8_t>(row._boolean);
-    } else if constexpr (db::IDLike<Row> && !db::EntityIDLike<Row>) {
-        return static_cast<uint64_t>(row.getValue());
-    } else if constexpr (db::Hash<Row>) {
-        return row.get();
-    } else {
-        return toPyObject(row, nested);
-    }
-}
 
 // A null datetime or duration is numpy's NaT, so a nullable one keeps an array.
 template <typename Column>
@@ -302,6 +130,26 @@ auto toPyRowElement(const Column* column, size_t row, const ValueToPyObject& nes
     }
 }
 
+// A NaN is a value, so a null double is masked rather than read as NaN
+template <typename Value>
+nb::object nullableFloatArray(db::ColumnOptVector<Value>* column) {
+    std::vector<uint8_t> nullMask(column->size());
+    for (size_t row = 0; row < nullMask.size(); row++) {
+        nullMask[row] = !column->isValid(row);
+    }
+
+    return maskedArray(wrapVectorAsNdarray(std::move(column->getValues())), nullMask);
+}
+
+template <typename Value>
+nb::object nullableFloatArray(const db::ColumnConst<std::optional<Value>>* column, size_t rowCount) {
+    const bool isNull = !column->isValid(0);
+    std::vector<Value> values(rowCount, isNull ? Value {} : column->getValue(0));
+    std::vector<uint8_t> nullMask(rowCount, isNull);
+
+    return maskedArray(wrapVectorAsNdarray(std::move(values)), nullMask);
+}
+
 nb::object repeatElement(const nb::object& element, size_t rowCount) {
     nb::list rows;
     for (size_t row = 0; row < rowCount; row++) {
@@ -313,19 +161,6 @@ nb::object repeatElement(const nb::object& element, size_t rowCount) {
 template <typename T>
 nb::object repeatElement(const T& element, size_t rowCount) {
     return repeatValueAsNdarray(element, rowCount);
-}
-
-// pandas 2 reads bare integers given a timedelta64[us] dtype as nanoseconds,
-// so an array of microseconds carries its unit itself.
-template <typename Row>
-nb::object withTemporalUnit(const nb::object& array) {
-    if constexpr (db::IsDateTime<Row>) {
-        return array.attr("view")("datetime64[us]");
-    } else if constexpr (db::IsDuration<Row>) {
-        return array.attr("view")("timedelta64[us]");
-    } else {
-        return array;
-    }
 }
 
 }
@@ -352,9 +187,16 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
             using Row = typename Column::ValueType;
             using Element = decltype(toPyRowElement(column, 0, listVisitor));
 
+            constexpr bool isConst = std::is_same_v<Column, db::ColumnConst<Row>>;
+            constexpr bool isNullableFloat = Column::IS_NULLABLE && std::is_floating_point_v<typename Column::UnwrappedType>;
+
             db::ColumnTypeGenerator {dtypeName}(column);
 
-            if constexpr (std::is_same_v<Column, db::ColumnConst<Row>>) {
+            if constexpr (isNullableFloat && isConst) {
+                value = nullableFloatArray(column, rowCount);
+            } else if constexpr (isNullableFloat) {
+                value = nullableFloatArray(static_cast<Column*>(col));
+            } else if constexpr (isConst) {
                 value = repeatElement(toPyRowElement(column, 0, listVisitor), rowCount);
             } else if constexpr (std::is_arithmetic_v<Row>) {
                 value = wrapVectorAsNdarray(std::move(static_cast<Column*>(col)->getRaw()));

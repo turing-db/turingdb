@@ -8,6 +8,7 @@
 #include <nanobind/nanobind.h>
 
 #include "TuringClient.h"
+#include "PyValueStore.h"
 
 namespace db {
 class LocalMemory;
@@ -43,6 +44,9 @@ public:
 private:
     std::unique_ptr<db::LocalMemory> _localMem;
     std::unique_ptr<net::proto::TuringClient> _client;
+
+    // The values of the result chunk being decoded, dropped once it is read into Python
+    PyValueStore _values;
 };
 
 }

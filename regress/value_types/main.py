@@ -43,8 +43,6 @@ def plain(value):
         return plain(value.item())
     elif value is None or value is pd.NA or value is pd.NaT:
         return None
-    elif isinstance(value, float) and math.isnan(value):
-        return None
     elif isinstance(value, pd.Timestamp):
         return value.to_pydatetime()
     elif isinstance(value, pd.Timedelta):
@@ -56,6 +54,10 @@ def plain(value):
 def entity_then_its_id(rows: list) -> None:
     assert rows[0][0] is not None and rows[0][0] == rows[0][1], rows
     assert rows[1] == [None, None], rows
+
+
+def nan_apart_from_null(rows: list) -> None:
+    assert rows[0] == [None] and math.isnan(rows[1][0]) and rows[2] == [1.5], rows
 
 
 def path_of_ids(rows: list) -> None:
@@ -110,6 +112,9 @@ def cases(change: int) -> list[dict]:
         {"name": "a nullable Double constant",
          "query": "RETURN toFloat('2.5') AS parsed, toFloat('x') AS unparsed",
          "dtypes": ["Double", "Double"], "rows": [[2.5, None]]},
+        {"name": "a Double column holding NaN and null",
+         "query": "UNWIND [1, 2, 3] AS x RETURN CASE WHEN x = 1 THEN null WHEN x = 2 THEN sqrt(-1.0) ELSE x * 0.5 END AS d",
+         "dtypes": ["Double"], "check": nan_apart_from_null},
 
         {"name": "a nullable String column",
          "query": "MATCH (n:T) RETURN n.s AS s ORDER BY n.name",
@@ -220,7 +225,7 @@ def cases(change: int) -> list[dict]:
          "dtypes": ["UInt64", "String"], "check": one_named("R")},
         {"name": "a property type ID and a value type",
          "query": "CALL db.propertyTypes()",
-         "dtypes": ["UInt64", "String", "String"], "check": property_types},
+         "dtypes": ["UInt16", "String", "String"], "check": property_types},
         {"name": "a change ID",
          "query": "CHANGE LIST",
          "dtypes": ["UInt64"], "rows": [[change]]},

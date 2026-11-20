@@ -8,7 +8,6 @@
 #include <string_view>
 #include <type_traits>
 #include <utility>
-#include <vector>
 
 #include "PathView.h"
 
@@ -44,7 +43,7 @@ concept OptionalVectorColumn = requires(Column column, const Column constColumn,
 
 template <typename Column, typename T>
 concept OptionalBufferColumn = requires(Column column, const DynamicLargeBitMask<uint64_t>& validity) {
-    { column.getValues() } -> std::same_as<std::vector<T>&>;
+    { column.getChunkValues() } -> std::same_as<T*>;
     { column.setValidity(validity) };
 };
 

@@ -5,6 +5,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 #include <nanobind/nanobind.h>
@@ -80,15 +81,31 @@ PyObj toPy(const std::optional<T>& v) {
 // source. The capsule's deleter destroys the heap vector once Python is done,
 // freeing the buffer in one shot. The source vector ends up empty, so the
 // column it came from must be considered drained after this call.
-template <typename T>
-nb::object wrapVectorAsNdarray(std::vector<T>&& src) {
+//
+// numpy reads each T as an Element, for a T that only names its Element: a
+// DateTime as its int64 microseconds, a LabelID as its uint64.
+template <typename Element, typename T>
+nb::object wrapVectorAsNdarrayOf(std::vector<T>&& src) {
+    static_assert(sizeof(Element) == sizeof(T) && std::is_trivially_copyable_v<T>,
+                  "numpy reads the bytes of each value as its element");
+
     auto* vec = new std::vector<T>(std::move(src));
     nb::capsule owner(vec, [](void* p) noexcept {
         delete static_cast<std::vector<T>*>(p);
     });
     size_t shape[1] = {vec->size()};
-    return nb::cast(nb::ndarray<nb::numpy, T, nb::ndim<1>>(vec->data(), 1, shape, owner));
+    Element* elements = reinterpret_cast<Element*>(vec->data());
+    return nb::cast(nb::ndarray<nb::numpy, Element, nb::ndim<1>>(elements, 1, shape, owner));
 }
+
+template <typename T>
+nb::object wrapVectorAsNdarray(std::vector<T>&& src) {
+    return wrapVectorAsNdarrayOf<T>(std::move(src));
+}
+
+// A numpy masked array over values, True in nullMask where a row is null. numpy
+// takes over the buffer of nullMask, which is left empty.
+nb::object maskedArray(const nb::object& values, std::vector<uint8_t>& nullMask);
 
 // Materializes a ColumnConst — a single value that logically applies to every
 // row — as a fully-expanded numpy array of length `n`. Pandas/numpy have no
@@ -99,28 +116,15 @@ nb::object repeatValueAsNdarray(const T& v, size_t n) {
     return wrapVectorAsNdarray(std::move(buf));
 }
 
-// Allocates a destination column for every column in incomingDf and registers
-// them with bufferedDf. ColumnConst sources have their value copied here once,
-// since constants don't get appended to row-by-row.
+// Allocates a destination column for every chunk and registers them with
+// bufferedDf. names is either empty or holds one name per chunk, and a chunk a
+// query leaves unnamed gets none.
 //
 // The `nameStorage` parameter is owning storage for column names — the
 // ColumnTagManager (`ColumnTagManager.h:33`) only stores string_views, so we
 // need to keep the underlying bytes alive ourselves. The caller reserves
 // nameStorage to exactly the column count so subsequent push_backs can't
 // trigger reallocation and invalidate the views.
-void allocColumns(const db::Dataframe* incomingDf,
-                  db::Dataframe* bufferedDf,
-                  db::DataframeManager* dfMan,
-                  db::LocalMemory* localMem,
-                  std::vector<std::string>* nameStorage);
-
-// Appends every column of src onto the corresponding column of dst, skipping
-// ColumnConst columns (already handled by allocColumns).
-void appendDfs(const db::Dataframe* src, db::Dataframe* dst);
-
-// The chunk siblings of allocColumns and appendDfs, for a result arriving through
-// an NLOutputSink rather than a dataframe. names is either empty or holds one name
-// per chunk, and a chunk a query leaves unnamed gets none.
 void allocChunkColumns(std::span<const std::string_view> names,
                        std::span<const db::Column* const> chunks,
                        db::Dataframe* bufferedDf,
@@ -144,12 +148,13 @@ nb::object embeddingToNdarray(std::span<const float> s);
 // `{"data": {col: ndarray|list}, "dtypes": {col: type_name}}` envelope. The
 // dtype names are the engine's type names ("Int64", "UInt64", "Double", "Bool",
 // "String"), which the Python wrapper maps through DTYPE_MAP; ID
-// types report their underlying integer ("UInt64" for NodeID/EdgeID/etc.)
+// types report their underlying integer ("UInt64" for NodeID, "UInt16" for PropertyTypeID)
 // while embeddings and uncommon scalar types report their C++ name and fall
 // back to object dtype on the Python side. Anonymous columns get a synthetic
 // `$<tag>` name so duplicates don't collide. ColumnVector cases for plain
 // numerics drain the source vectors (zero-copy via wrapVectorAsNdarray), so
-// the dataframe is single-use after this returns.
+// the dataframe is single-use after this returns. A nullable double column is
+// a numpy masked array, so a null stays apart from a NaN.
 nb::dict dataframeToNumpy(db::Dataframe* df);
 
 }

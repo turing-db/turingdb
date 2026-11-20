@@ -235,6 +235,7 @@ public:
 
     std::vector<T>& getValues() { return _data; }
     const std::vector<T>& getValues() const { return _data; }
+    T* getChunkValues() { return _data.data(); }
 
     ValidityMask* getValidity() { return hasMask() ? &_mask : nullptr; }
     const ValidityMask* getValidity() const { return hasMask() ? &_mask : nullptr; }
