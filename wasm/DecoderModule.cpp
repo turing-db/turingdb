@@ -361,14 +361,16 @@ public:
     }
 
     val getNestedBytes() {
-        const std::span<const char> bytes = _sink.getNestedBytes();
+        wasm::WasmValueStore* values = _sink.getValues();
+        const std::span<const char> bytes = values->getNestedBytes();
         return copyToUint8Array(bytes.data(), bytes.size());
     }
 
     // The strings referenced by index from the list bytes, in the layout of a STRING
     // vector column.
     val getNestedStrings() {
-        const std::span<const std::string_view> strings = _sink.getNestedStrings();
+        const wasm::WasmValueStore* values = _sink.getValues();
+        const std::span<const std::string_view> strings = values->getNestedStrings();
         const auto getItem = [strings](size_t index) -> const std::string_view* { return &strings[index]; };
 
         return exportItems<db::types::String::Primitive>(_exportBuffers, ColumnInternalKind::STRING, ColumnKind::VECTOR, strings.size(), getItem);

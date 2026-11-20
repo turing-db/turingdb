@@ -55,6 +55,8 @@ struct VectorColumnDecoder<db::types::String::Primitive, Sink> {
                        Sink* sink,
                        SinkColumnVector<T, Sink>* typedColumn,
                        ProtoColumnState* columnState) {
+        SinkValueStore<Sink>* const values = sink->getValues();
+
         if (context->_rowIndex == 0) {
             typedColumn->reserve(columnState->getNumRows());
         }
@@ -68,8 +70,8 @@ struct VectorColumnDecoder<db::types::String::Primitive, Sink> {
             WireSize stringSize = 0;
             context->_inBuf->readData(&stringSize, sizeof(stringSize));
 
-            char* data = sink->allocString(stringSize);
-            const T view = sink->getStringView(data, stringSize);
+            char* data = values->allocString(stringSize);
+            const T view = values->getStringView(data, stringSize);
 
             typedColumn->emplace_back(view);
             if (!readVarLenPayload(context, data, stringSize)) {
@@ -89,6 +91,8 @@ struct VectorColumnDecoder<SinkListView<Sink>, Sink> {
                        Sink* sink,
                        SinkColumnVector<T, Sink>* typedColumn,
                        ProtoColumnState* columnState) {
+        SinkValueStore<Sink>* const values = sink->getValues();
+
         size_t numRows = columnState->getNumRows();
         if (context->_rowIndex == 0 && typedColumn->size() == 0) {
             typedColumn->reserve(numRows);
@@ -109,7 +113,7 @@ struct VectorColumnDecoder<SinkListView<Sink>, Sink> {
                 context->_inBuf->readData(&elementCount, sizeof(elementCount));
                 context->_inBuf->readData(&listByteSize, sizeof(listByteSize));
 
-                typedColumn->emplace_back(sink->beginList(elementCount, listByteSize));
+                typedColumn->emplace_back(values->beginList(elementCount, listByteSize));
             }
 
             // Stream this row's list (and any nested children) straight into the reserved space.
@@ -133,6 +137,8 @@ struct VectorColumnDecoder<SinkMapView<Sink>, Sink> {
                        Sink* sink,
                        SinkColumnVector<T, Sink>* typedColumn,
                        ProtoColumnState* columnState) {
+        SinkValueStore<Sink>* const values = sink->getValues();
+
         size_t numRows = columnState->getNumRows();
         if (context->_rowIndex == 0 && typedColumn->size() == 0) {
             typedColumn->reserve(numRows);
@@ -152,7 +158,7 @@ struct VectorColumnDecoder<SinkMapView<Sink>, Sink> {
                 context->_inBuf->readData(&entryCount, sizeof(entryCount));
                 context->_inBuf->readData(&mapByteSize, sizeof(mapByteSize));
 
-                typedColumn->emplace_back(sink->beginMap(entryCount, mapByteSize));
+                typedColumn->emplace_back(values->beginMap(entryCount, mapByteSize));
             }
 
             //we are in the middle of processing a map and should drain the container stack
@@ -176,6 +182,8 @@ struct VectorColumnDecoder<SinkCellView<Sink>, Sink> {
                        Sink* sink,
                        SinkColumnVector<T, Sink>* typedColumn,
                        ProtoColumnState* columnState) {
+        SinkValueStore<Sink>* const values = sink->getValues();
+
         // A CellView column has one element per column row, wire-encoded as
         // [listByteSize] followed by the elements. Each element is streamed onto the list
         // buffer and its view stored in the corresponding row.
@@ -190,7 +198,7 @@ struct VectorColumnDecoder<SinkCellView<Sink>, Sink> {
             WireSize listByteSize = 0;
             context->_inBuf->readData(&listByteSize, sizeof(listByteSize));
 
-            sink->beginList(columnState->getNumRows(), listByteSize);
+            values->beginList(columnState->getNumRows(), listByteSize);
             typedColumn->resize(columnState->getNumRows());
             context->_rowIndex = 1;
         }
@@ -249,6 +257,8 @@ struct VectorColumnDecoder<db::types::Embedding::Primitive, Sink> {
                        Sink* sink,
                        SinkColumnVector<T, Sink>* typedColumn,
                        ProtoColumnState* columnState) {
+        SinkValueStore<Sink>* const values = sink->getValues();
+
         if (context->_rowIndex == 0) {
             typedColumn->reserve(columnState->getNumRows());
         }
@@ -263,8 +273,8 @@ struct VectorColumnDecoder<db::types::Embedding::Primitive, Sink> {
             context->_inBuf->readData(&embeddingSize, sizeof(embeddingSize));
             const size_t numFloats = checkedElementCount<float>(embeddingSize, "embedding");
 
-            auto* data = sink->allocEmbedding(numFloats);
-            const std::span<const float> span = sink->getEmbeddingView(data, numFloats);
+            auto* data = values->allocEmbedding(numFloats);
+            const std::span<const float> span = values->getEmbeddingView(data, numFloats);
 
             typedColumn->emplace_back(span);
             if (!readVarLenPayload(context, reinterpret_cast<char*>(data), embeddingSize)) {
@@ -343,6 +353,8 @@ struct OptionalVectorColumnDecoder<SinkListView<Sink>, Sink> {
                        Sink* sink,
                        SinkColumnOptVector<T, Sink>* typedColumn,
                        ProtoColumnState* columnState) {
+        SinkValueStore<Sink>* const values = sink->getValues();
+
         const size_t numRows = columnState->getNumRows();
         const ProtoColumnState::BitMask& mask = columnState->getBitMask();
 
@@ -363,7 +375,7 @@ struct OptionalVectorColumnDecoder<SinkListView<Sink>, Sink> {
                     continue;
                 }
 
-                typedColumn->set(context->_rowIndex, sink->beginList(elementCount, listByteSize));
+                typedColumn->set(context->_rowIndex, values->beginList(elementCount, listByteSize));
             }
 
             auto onTopLevelElement = [](size_t, const SinkCellView<Sink>&) {};
@@ -386,6 +398,8 @@ struct OptionalVectorColumnDecoder<SinkMapView<Sink>, Sink> {
                        Sink* sink,
                        SinkColumnOptVector<T, Sink>* typedColumn,
                        ProtoColumnState* columnState) {
+        SinkValueStore<Sink>* const values = sink->getValues();
+
         const size_t numRows = columnState->getNumRows();
         const ProtoColumnState::BitMask& mask = columnState->getBitMask();
 
@@ -406,7 +420,7 @@ struct OptionalVectorColumnDecoder<SinkMapView<Sink>, Sink> {
                     continue;
                 }
 
-                typedColumn->set(context->_rowIndex, sink->beginMap(entryCount, mapByteSize));
+                typedColumn->set(context->_rowIndex, values->beginMap(entryCount, mapByteSize));
             }
 
             auto onTopLevelElement = [](size_t, const SinkCellView<Sink>&) {};
@@ -429,6 +443,8 @@ struct OptionalVectorColumnDecoder<db::types::String::Primitive, Sink> {
                        Sink* sink,
                        SinkColumnOptVector<T, Sink>* typedColumn,
                        ProtoColumnState* columnState) {
+        SinkValueStore<Sink>* const values = sink->getValues();
+
         for (size_t i = 0; context->_rowIndex + i < columnState->getNumRows(); ++i) {
             if (context->_inBuf->readable() < sizeof(WireSize)) {
                 context->_rowIndex += i;
@@ -446,8 +462,8 @@ struct OptionalVectorColumnDecoder<db::types::String::Primitive, Sink> {
             WireSize stringSize = 0;
             context->_inBuf->readData(&stringSize, sizeof(stringSize));
 
-            char* data = sink->allocString(stringSize);
-            const T view = sink->getStringView(data, stringSize);
+            char* data = values->allocString(stringSize);
+            const T view = values->getStringView(data, stringSize);
 
             typedColumn->set(row, view);
             if (!readVarLenPayload(context, data, stringSize)) {
@@ -467,6 +483,8 @@ struct OptionalVectorColumnDecoder<db::types::Embedding::Primitive, Sink> {
                        Sink* sink,
                        SinkColumnOptVector<T, Sink>* typedColumn,
                        ProtoColumnState* columnState) {
+        SinkValueStore<Sink>* const values = sink->getValues();
+
         for (size_t i = 0; context->_rowIndex + i < columnState->getNumRows(); ++i) {
             if (context->_inBuf->readable() < sizeof(WireSize)) {
                 context->_rowIndex += i;
@@ -485,8 +503,8 @@ struct OptionalVectorColumnDecoder<db::types::Embedding::Primitive, Sink> {
             context->_inBuf->readData(&embeddingSize, sizeof(embeddingSize));
             const size_t numFloats = checkedElementCount<float>(embeddingSize, "embedding");
 
-            auto* data = sink->allocEmbedding(numFloats);
-            const std::span<const float> span = sink->getEmbeddingView(data, numFloats);
+            auto* data = values->allocEmbedding(numFloats);
+            const std::span<const float> span = values->getEmbeddingView(data, numFloats);
 
             typedColumn->set(row, span);
             if (!readVarLenPayload(context, reinterpret_cast<char*>(data), embeddingSize)) {
@@ -523,6 +541,8 @@ struct ConstColumnDecoder<db::types::String::Primitive, Sink> {
 
     template <ConstColumnOf<T, Sink> Column>
     static bool decode(DecodeContext* context, Sink* sink, Column* typedColumn) {
+        SinkValueStore<Sink>* const values = sink->getValues();
+
         if (context->_inBuf->readable() < sizeof(WireSize)) {
             return false;
         }
@@ -530,8 +550,8 @@ struct ConstColumnDecoder<db::types::String::Primitive, Sink> {
         WireSize stringSize = 0;
         context->_inBuf->readData(&stringSize, sizeof(stringSize));
 
-        char* data = sink->allocString(stringSize);
-        const T view = sink->getStringView(data, stringSize);
+        char* data = values->allocString(stringSize);
+        const T view = values->getStringView(data, stringSize);
 
         typedColumn->set(view);
         if (!readVarLenPayload(context, data, stringSize)) {
@@ -552,6 +572,8 @@ struct ConstColumnDecoder<db::types::Embedding::Primitive, Sink> {
 
     template <ConstColumnOf<T, Sink> Column>
     static bool decode(DecodeContext* context, Sink* sink, Column* typedColumn) {
+        SinkValueStore<Sink>* const values = sink->getValues();
+
         if (context->_inBuf->readable() < sizeof(WireSize)) {
             return false;
         }
@@ -560,8 +582,8 @@ struct ConstColumnDecoder<db::types::Embedding::Primitive, Sink> {
         context->_inBuf->readData(&embeddingSize, sizeof(embeddingSize));
         const size_t numFloats = checkedElementCount<float>(embeddingSize, "embedding");
 
-        auto* data = sink->allocEmbedding(numFloats);
-        const std::span<const float> span = sink->getEmbeddingView(data, numFloats);
+        auto* data = values->allocEmbedding(numFloats);
+        const std::span<const float> span = values->getEmbeddingView(data, numFloats);
 
         typedColumn->set(span);
         if (!readVarLenPayload(context, reinterpret_cast<char*>(data), embeddingSize)) {
@@ -580,6 +602,8 @@ struct ConstColumnDecoder<SinkListView<Sink>, Sink> {
 
     template <ConstColumnOf<T, Sink> Column>
     static bool decode(DecodeContext* context, Sink* sink, Column* typedColumn) {
+        SinkValueStore<Sink>* const values = sink->getValues();
+
         // Const columns have no row dimension, so _constListStarted carries the "list
         // started" state (the driver clears it before this column). Set means we have read
         // the header, reserved the space, and set the (initially unfilled) ListView on the
@@ -594,7 +618,7 @@ struct ConstColumnDecoder<SinkListView<Sink>, Sink> {
             context->_inBuf->readData(&elementCount, sizeof(elementCount));
             context->_inBuf->readData(&listByteSize, sizeof(listByteSize));
 
-            typedColumn->set(sink->beginList(elementCount, listByteSize));
+            typedColumn->set(values->beginList(elementCount, listByteSize));
             context->_constListStarted = true;
         }
         auto onTopLevelElement = [](size_t, const SinkCellView<Sink>&) {};
@@ -608,6 +632,8 @@ struct ConstColumnDecoder<SinkCellView<Sink>, Sink> {
 
     template <ConstColumnOf<T, Sink> Column>
     static bool decode(DecodeContext* context, Sink* sink, Column* typedColumn) {
+        SinkValueStore<Sink>* const values = sink->getValues();
+
         // A constant CellView is a single element, wire-encoded as [listByteSize] + one
         // element. Stream it onto the list buffer and set the column to its view.
 
@@ -619,7 +645,7 @@ struct ConstColumnDecoder<SinkCellView<Sink>, Sink> {
             WireSize listByteSize = 0;
             context->_inBuf->readData(&listByteSize, sizeof(listByteSize));
 
-            sink->beginList(1, listByteSize);
+            values->beginList(1, listByteSize);
             context->_constListStarted = true;
         }
 
@@ -638,6 +664,8 @@ struct ConstColumnDecoder<SinkMapView<Sink>, Sink> {
 
     template <ConstColumnOf<T, Sink> Column>
     static bool decode(DecodeContext* context, Sink* sink, Column* typedColumn) {
+        SinkValueStore<Sink>* const values = sink->getValues();
+
         // Const columns have no row dimension, so _constListStarted carries the "map
         // started" state (the driver clears it before this column). Set means we have read
         // the header, reserved the space, and set the (initially unfilled) MapView on the
@@ -652,7 +680,7 @@ struct ConstColumnDecoder<SinkMapView<Sink>, Sink> {
             context->_inBuf->readData(&entryCount, sizeof(entryCount));
             context->_inBuf->readData(&mapByteSize, sizeof(mapByteSize));
 
-            typedColumn->set(sink->beginMap(entryCount, mapByteSize));
+            typedColumn->set(values->beginMap(entryCount, mapByteSize));
             context->_constListStarted = true;
         }
 

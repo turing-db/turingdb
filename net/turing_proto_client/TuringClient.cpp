@@ -17,15 +17,14 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <vector>
 
 #include <spdlog/fmt/fmt.h>
 
 #include "HTTPUtils.h"
-#include "TuringProtoDecoder.h"
 #include "TuringProtoHeaders.h"
 #include "TuringResponseHead.h"
 #include "TuringException.h"
+#include "TuringResponseConsumer.h"
 #include "TuringSink.h"
 #include "TuringSinkColumnContainer.h"
 #include "dataframe/Dataframe.h"
@@ -482,6 +481,25 @@ void TuringClient::recvCrlf() {
 db::QueryStatus TuringClient::sendQuery(const std::string& query,
                                         const db::QueryCallbacks::OnOutputData& callback,
                                         const db::ParameterMap* parameters) {
+    _values.clearValues();
+    _localMem->clear();
+
+    db::DataframeManager dataframeManager;
+    db::Dataframe dataframe;
+    TuringSink sink(_localMem, &_values);
+    TuringSinkColumnContainer container(&dataframe, &dataframeManager);
+
+    const auto onChunkDecoded = [&callback, &dataframe]() {
+        callback(&dataframe);
+        dataframe.clear();
+    };
+
+    return sendQuery(query, &sink, &container, onChunkDecoded, parameters);
+}
+
+db::QueryStatus TuringClient::runQuery(const std::string& query,
+                                       TuringResponseConsumer* consumer,
+                                       const db::ParameterMap* parameters) {
     if (_graphName.length() > MAX_WIRE_SIZE) {
         throw TuringException(fmt::format("The graph name is {} bytes, more than the {} bytes the binary protocol allows",
                                           _graphName.length(),
@@ -495,7 +513,7 @@ db::QueryStatus TuringClient::sendQuery(const std::string& query,
     db::QueryStatus status;
     try {
         sendRequest(query);
-        receiveResponse(callback, status);
+        receiveResponse(consumer, status);
     } catch (...) {
         disconnect();
         throw;
@@ -504,24 +522,9 @@ db::QueryStatus TuringClient::sendQuery(const std::string& query,
     return status;
 }
 
-void TuringClient::receiveResponse(const db::QueryCallbacks::OnOutputData& callback, db::QueryStatus& queryStatus) {
+void TuringClient::receiveResponse(TuringResponseConsumer* consumer, db::QueryStatus& queryStatus) {
     recvHttpResponseHeaders();
 
-    _embeddingBuffer.clear();
-    _pathBuffer.clear();
-    _stringBuffer.clear();
-    _listBuffer.clear();
-    _mapBuffer.clear();
-    _localMem->clear();
-
-    db::DataframeManager dfMan;
-    std::vector<DecodedColumnSchema> columnSchemas;
-    db::Dataframe df;
-    TuringSink sink(_localMem, &_embeddingBuffer, &_pathBuffer, &_listBuffer, &_mapBuffer);
-    TuringSinkColumnContainer dataframeContainer(&df, &dfMan);
-    TuringProtoDecoder<TuringSink> decoder(&_inBuf, &sink, columnSchemas);
-
-    bool callbackFired = false;
     bool sawTerminalPacket = false;
     std::optional<std::string> errorMessage;
     std::optional<std::string> protocolError;
@@ -550,29 +553,19 @@ void TuringClient::receiveResponse(const db::QueryCallbacks::OnOutputData& callb
 
         switch (responseHeader._type) {
             case MessageTypes::CHUNK_HEADER:
-                decoder.decodeIncomingChunkHeader(&dataframeContainer);
+                consumer->onChunkHeader();
             break;
 
             case MessageTypes::CHUNK:
-                decoder.decodeIncomingChunk(&dataframeContainer);
+                consumer->onChunk();
             break;
 
             case MessageTypes::END_CHUNK:
-                decoder.decodeChunkFooter(&dataframeContainer);
-                callbackFired = true;
-                callback(&df);
-                df.clear();
-                for (auto& schema : columnSchemas) {
-                    schema.getColumnState().reset();
-                }
-                decoder.reset();
+                consumer->onEndChunk();
             break;
 
             case MessageTypes::END: {
-                if (!callbackFired) {
-                    df.setDeclaredRowCount(0);
-                    callback(&df);
-                }
+                consumer->onEnd();
 
                 if (responseHeader._dataLen != sizeof(db::QueryCallbacks::ExecTimeMilliseconds)) {
                     throw TuringException("Invalid END packet payload size");

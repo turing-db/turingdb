@@ -8,19 +8,17 @@
 #include <string>
 #include <vector>
 
-#include "ChunkedBuffer.h"
 #include "HTTPUtils.h"
-#include "TuringProtoDecoder.h"
 #include "TuringProtoInBuf.h"
 #include "TuringProtoHeaders.h"
 #include "TuringProtoRequestBody.h"
+#include "TuringResponseDecoder.h"
 #include "QueryCallbacks.h"
 #include "QueryStatus.h"
 #include "TuringSink.h"
+#include "TuringValueStore.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/DataframeManager.h"
-#include "list/ListBuffer.h"
-#include "map/MapBuffer.h"
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 
@@ -67,6 +65,8 @@ public:
 
     void send();
     void recv();
+
+    // The dataframe is valid during the callback; the values it views, until the next sendQuery
     db::QueryStatus sendQuery(const std::string& query,
                               const db::QueryCallbacks::OnOutputData& callback,
                               const db::ParameterMap* parameters = nullptr);
@@ -90,7 +90,6 @@ public:
     std::string_view getRemotePort() const { return _remotePort; }
     std::string_view getGraphName() const { return _graphName; }
 
-    net::proto::ChunkedBuffer<float>& getEmbeddingBuffer() { return _embeddingBuffer; }
     db::CommitHash getCommitHash() const { return _commitHash; }
     db::ChangeID getChangeID() const { return _changeID; }
 
@@ -139,11 +138,7 @@ private:
 
     // Proto packet payload for the current chunk; passed to TuringProtoDecoder unmodified.
     net::proto::TuringProtoInBuf _inBuf;
-    net::proto::ChunkedBuffer<float> _embeddingBuffer;
-    net::proto::ChunkedBuffer<uint64_t> _pathBuffer;
-    net::proto::ChunkedBuffer<char> _stringBuffer;
-    db::ListBuffer<> _listBuffer;
-    db::MapBuffer<> _mapBuffer;
+    net::proto::TuringValueStore _values;
     net::proto::TuringSink _sink;
 
     // Decoded-response state, persisted across recv() resumptions for the in-flight query
@@ -151,16 +146,14 @@ private:
     // with an empty dataframe; recreating _dfMan also frees the columns it owned from the
     // previous query (it deletes them in its destructor), instead of accumulating one set
     // of columns per query for the client's lifetime.
-    std::vector<DecodedColumnSchema> _columnSchemas;
     std::unique_ptr<db::DataframeManager> _dfMan;
     std::unique_ptr<db::Dataframe> _df;
     std::unique_ptr<TuringSinkColumnContainer> _dataframeContainer;
-    TuringProtoDecoder<TuringSink> _decoder;
+    std::unique_ptr<TuringResponseDecoder<TuringSink>> _responseDecoder;
 
     // Per-query output callback and accumulated result.
     db::QueryCallbacks::OnOutputData _callback;
     db::QueryStatus _res;
-    bool _callbackFired {false};
     bool _sawTerminalPacket {false};
     std::optional<std::string> _errorMessage;
     std::optional<std::string> _protocolError;
@@ -190,7 +183,7 @@ private:
 
     // Decodes the current chunk's ProtoHeader (from _protoHeaderBuf, payload in _inBuf)
     // and dispatches the packet (CHUNK_HEADER, CHUNK, END_CHUNK, END, ERROR, ...) into the
-    // decoder and per-query result state.
+    // response decoder and per-query result state.
     void processProtoPacket();
     // Decodes the chunk size line from _chunkFramingBuf.
     RecvState processChunkSize();

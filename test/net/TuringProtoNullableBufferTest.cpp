@@ -8,7 +8,6 @@
 #include <string_view>
 #include <vector>
 
-#include "ChunkedBuffer.h"
 #include "TuringProtoDecoder.h"
 #include "TuringProtoEncoder.h"
 #include "TuringProtoHeaders.h"
@@ -16,13 +15,12 @@
 #include "TuringProtoOutBuf.h"
 #include "TuringSink.h"
 #include "TuringSinkColumnContainer.h"
+#include "TuringValueStore.h"
 #include "LocalMemory.h"
 #include "columns/ColumnOptVector.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/DataframeManager.h"
 #include "dataframe/NamedColumn.h"
-#include "list/ListBuffer.h"
-#include "map/MapBuffer.h"
 #include "metadata/PropertyType.h"
 
 using namespace db;
@@ -233,7 +231,7 @@ void expectEncodesLikeTheWireLayout(NullPattern pattern, size_t rowCount) {
     }
 }
 
-void roundTrip(const Column* column, size_t rowCount, size_t bufferSize, LocalMemory* localMemory, DataframeManager* dataframeManager, Dataframe* decoded) {
+void roundTrip(const Column* column, size_t rowCount, size_t bufferSize, LocalMemory* localMemory, net::proto::TuringValueStore* values, DataframeManager* dataframeManager, Dataframe* decoded) {
     std::vector<std::string> chunks;
     encodeColumn(column, 0, rowCount, bufferSize, chunks);
 
@@ -243,14 +241,10 @@ void roundTrip(const Column* column, size_t rowCount, size_t bufferSize, LocalMe
     net::proto::TuringProtoEncoder headerEncoder(&headerBuf);
     headerEncoder.writeColumnHeaders(names, columns);
 
-    net::proto::ChunkedBuffer<float> embeddingBuffer;
-    net::proto::ChunkedBuffer<uint64_t> pathBuffer;
-    ListBuffer<> listBuffer;
-    MapBuffer<> mapBuffer;
     std::vector<net::proto::DecodedColumnSchema> schemas;
 
     net::proto::TuringProtoInBuf inBuf(LARGE_BUFFER_SIZE);
-    net::proto::TuringSink sink(localMemory, &embeddingBuffer, &pathBuffer, &listBuffer, &mapBuffer);
+    net::proto::TuringSink sink(localMemory, values);
     net::proto::TuringSinkColumnContainer container(decoded, dataframeManager);
     net::proto::TuringProtoDecoder<net::proto::TuringSink> decoder(&inBuf, &sink, schemas);
 
@@ -286,12 +280,13 @@ void expectRoundTrips(NullPattern pattern, size_t rowCount) {
         SCOPED_TRACE(::testing::Message() << "bufferSize=" << bufferSize);
 
         LocalMemory localMemory;
+        net::proto::TuringValueStore values;
         ColumnOptVector<T> column;
         fillColumn<T>(&column, rows);
 
         DataframeManager dataframeManager;
         Dataframe decoded;
-        roundTrip(&column, rowCount, bufferSize, &localMemory, &dataframeManager, &decoded);
+        roundTrip(&column, rowCount, bufferSize, &localMemory, &values, &dataframeManager, &decoded);
 
         ASSERT_EQ(decoded.cols().size(), 1u);
         const ColumnOptVector<T>* decodedColumn = decoded.cols().at(0)->as<ColumnOptVector<T>>();

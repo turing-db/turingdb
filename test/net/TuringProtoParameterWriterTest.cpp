@@ -7,7 +7,6 @@
 #include <string_view>
 #include <vector>
 
-#include "ChunkedBuffer.h"
 #include "DecodeContext.h"
 #include "Decoders.h"
 #include "LocalMemory.h"
@@ -17,9 +16,8 @@
 #include "TuringProtoOutBuf.h"
 #include "TuringProtoParameterWriter.h"
 #include "TuringSink.h"
+#include "TuringValueStore.h"
 #include "columns/ColumnConst.h"
-#include "list/ListBuffer.h"
-#include "map/MapBuffer.h"
 
 using namespace db;
 using namespace net::proto;
@@ -51,7 +49,7 @@ protected:
         DecodeContext context;
         context._inBuf = &inBuf;
 
-        TuringSink sink(&_localMemory, &_embeddingBuffer, &_pathBuffer, &_listBuffer, &_mapBuffer);
+        TuringSink sink(&_localMemory, &_values);
         ColumnConst<MapView>* column = _localMemory.alloc<ColumnConst<MapView>>();
 
         ASSERT_TRUE((ConstColumnDecoder<MapView, TuringSink>::decode(&context, &sink, column)));
@@ -62,10 +60,7 @@ protected:
 
     TuringProtoOutBuf _outBuf {BUFFER_CAPACITY};
     LocalMemory _localMemory;
-    ChunkedBuffer<float> _embeddingBuffer;
-    ChunkedBuffer<uint64_t> _pathBuffer;
-    ListBuffer<> _listBuffer;
-    MapBuffer<> _mapBuffer;
+    TuringValueStore _values;
 };
 
 TEST_F(TuringProtoParameterWriterTest, scalarsKeepTheirTypesUnderSortedNames) {

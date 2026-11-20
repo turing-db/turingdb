@@ -48,6 +48,7 @@ if (EMSCRIPTEN)
     add_executable(turing_wasm_decoder
         DecoderModule.cpp
         WasmSink.cpp
+        WasmValueStore.cpp
         Column.cpp
         ColumnContainer.cpp
         ${TURINGDB_ROOT}/net/decoders/DecodedColumnSchema.cpp
@@ -106,7 +107,9 @@ else()
     # DecoderModule.cpp is the only source that needs emscripten (embind), so everything
     # else still compiles with the host compiler and SmokeTest runs as an ordinary binary.
     # That gives the shared column code coverage in ctest, which the decoder cannot have.
-    target_sources(turing_db_wasm_s PRIVATE WasmSink.cpp)
+    target_sources(turing_db_wasm_s PRIVATE
+        WasmSink.cpp
+        WasmValueStore.cpp)
     target_link_libraries(turing_db_wasm_s PUBLIC turing_db_proto_common_s turing_common_s)
 
     add_test(NAME test_wasm_columns COMMAND turing_db_wasm_smoke)
