@@ -52,9 +52,10 @@ and stop.
 In a jj workspace, git is not a way to look at or change the tree. A workspace of another
 repo has no `.git` of its own, or one pointing at the other checkout, so `git status`,
 `git diff` and `git add` read and write *that* checkout's index. Run no git command in jj
-mode, read-only ones included: their output describes a different tree.
+mode, read-only ones included: their output describes a different tree. The one exception
+is the certificate's script, run against the git store as **Certify** below says.
 
-**Phase 0.** Record the same three things from jj:
+**Phase 0.** Record the same four things from jj:
 
 ```bash
 jj root
@@ -108,8 +109,8 @@ marked `CONFLICT` is reported, not resolved: it is the user's commit.
 When the target was not `@`, `jj edit` back to the change you started on.
 
 **Certify** needs the git store behind the jj repo and a PR whose head is the target's
-commit. Run every `review_certificate.py` command with `GIT_DIR` set to that store (the
-colocated `.git`, or `.jj/repo/store/git`), and pass the PR and the commit explicitly:
+commit. Run every `review_certificate.py` command with `GIT_DIR` set to the store that
+`jj git root` prints, and pass the PR and the commit explicitly:
 `target --pr <n> --head <commit id>`, and the same `pr` and `head` in the input file. No
 PR carrying the target means no certificate: say so in the report.
 
@@ -122,11 +123,14 @@ Six steps, in this order. Keep a todo list with one entry per finding.
 
 ### 1. Review
 
-Invoke the built-in `code-review` skill with the level and target from phase 0:
+Invoke the built-in `code-review` skill with the level and the review base from phase 0,
+so every iteration reviews the whole target, committed or not:
 
 ```
-Skill(skill: "code-review", args: "<level> [target]")
+Skill(skill: "code-review", args: "<level> review exactly the diff `git diff <review base>`: the commits since it and the working tree")
 ```
+
+A path target has no review base: pass `<level> <path>` instead.
 
 Not the `code-review:code-review` plugin command — that one reviews a GitHub pull request
 and posts a comment on it. Never pass `--fix`, which would apply fixes before the test
@@ -150,7 +154,9 @@ before deciding:
 - **efficiency** — a fix, no test.
 - **test coverage** — recorded in REVIEW.md, not acted on. Every correctness finding
   already brings its own test; a bare coverage gap is not what this loop is for.
-- **rejected** — with the reason that made it a false positive.
+
+A false positive is **rejected**, with the reason, and keeps the category it claimed: the
+certificate records a category for every finding.
 
 A finding an earlier iteration recorded as rejected or deferred is not new: keep its
 earlier status, and move on. A finding recorded as **fixed** that comes back is a failed
@@ -312,10 +318,15 @@ correctness fixes are in. No co-author trailer and no footer.
 
 ## Certify
 
-After the commit, post the run's review certificate on the pull request. The `Review
-Certificate` workflow reads it into the `review-certificate/main` commit status, which
-`main` requires before a PR merges. It passes when every correctness and efficiency finding
-is fixed or rejected.
+After the commit, post the run's review certificate on the pull request, when the last
+review saw the code just committed: the loop stopped because triage left nothing to act on,
+or because the last iteration changed no code. After the cap or an abort, the last round's
+fixes are unreviewed: post no certificate, and say in the report that /certify has to
+review them.
+
+The `Review Certificate` workflow reads the certificate into the `review-certificate/main`
+commit status, which `main` requires before a PR merges. It passes when every correctness
+and efficiency finding is fixed or rejected.
 
 Only a branch or a PR target is certified. A path target reviewed part of the PR, so skip
 the rest of this section and say so in the report. For a branch, run `target`. For a PR,

@@ -17,7 +17,7 @@ jobs:
       || (github.event.issue.pull_request
         && (startsWith(github.event.comment.body, '<!-- turingdb-review-certificate -->')
           || startsWith(github.event.changes.body.from, '<!-- turingdb-review-certificate -->')))
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
 
     concurrency:
       group: review-certificate-${{ github.event.pull_request.number || github.event.issue.number }}

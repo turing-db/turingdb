@@ -3,7 +3,8 @@
 
 A certificate is a PR comment recording one review of the PR's diff: the review that ran,
 the diff it covers, and every finding with its category and status. It names the diff by
-its verbatim patch ID, so a rebase that leaves the diff unchanged keeps it valid. The
+its verbatim patch ID. A rebase keeps it valid when it leaves the diff unchanged and
+merging the certified diff onto the new base gives the PR's tree exactly. The
 latest certificate posted by someone with write access sets the review-certificate/<base>
 commit status: success when it covers the PR's current diff and every correctness or
 efficiency finding is fixed or rejected.
@@ -30,6 +31,7 @@ COMMENT_LIMIT = 65536
 STATUS_DESCRIPTION_LIMIT = 140
 MINIMUM_GIT_VERSION = (2, 40)
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+FETCH_REF = "refs/review-certificate/fetch"
 
 LEVELS = ("low", "medium", "high", "xhigh", "max")
 STATUSES = {
@@ -46,6 +48,9 @@ DIFF_CONFIG = [
     "-c", "core.quotePath=true",
     "-c", "core.attributesFile=/dev/null",
     "-c", "diff.suppressBlankEmpty=false",
+    "-c", "core.bigFileThreshold=512m",
+    "-c", "merge.renames=false",
+    "-c", "merge.renormalize=false",
     f"--attr-source={EMPTY_TREE}",
 ]
 DIFF_OPTIONS = [
@@ -123,8 +128,25 @@ def current_pull_request_number():
 
 
 def fetch(ref):
-    run(["git", "fetch", "--quiet", "--no-tags", "--no-recurse-submodules", "origin", ref])
-    return run_text(["git", "rev-parse", "FETCH_HEAD"])
+    local_ref = f"{FETCH_REF}/{os.getpid()}"
+    run(["git", "fetch", "--quiet", "--no-tags", "--no-recurse-submodules", "--no-write-fetch-head",
+         "origin", f"+{ref}:{local_ref}"])
+    try:
+        return commit_of(local_ref)
+    finally:
+        run(["git", "update-ref", "-d", local_ref])
+
+
+def has_commit(commit):
+    present = subprocess.run(["git", "cat-file", "-e", f"{commit}^{{commit}}"], capture_output=True)
+    if present.returncode == 0:
+        return True
+
+    try:
+        fetch(commit)
+        return True
+    except CommandError:
+        return False
 
 
 def commit_of(revision):
@@ -136,9 +158,22 @@ def is_ancestor(ancestor, descendant):
     return result.returncode == 0
 
 
+def pinned_git_environment():
+    path = run_text(["git", "rev-parse", "--git-path", "info/attributes"])
+    try:
+        with open(path) as file:
+            lines = file.read().splitlines()
+    except FileNotFoundError:
+        lines = []
+
+    if any(line.strip() and not line.lstrip().startswith("#") for line in lines):
+        raise CertificateError(f"{path} sets attributes, which change the diff a patch ID covers: empty it first")
+
+    return {**os.environ, "GIT_ATTR_NOSYSTEM": "1"}
+
+
 def patch_id(merge_base, head):
-    environment = {**os.environ, "GIT_ATTR_NOSYSTEM": "1"}
-    diff = run(["git", *DIFF_CONFIG, "diff", *DIFF_OPTIONS, merge_base, head], env=environment)
+    diff = run(["git", *DIFF_CONFIG, "diff", *DIFF_OPTIONS, merge_base, head], env=pinned_git_environment())
     if not diff:
         raise CertificateError(f"{merge_base[:10]}..{head[:10]} has no diff to certify")
 
@@ -147,6 +182,23 @@ def patch_id(merge_base, head):
         raise CertificateError(f"git patch-id found no patch in {merge_base[:10]}..{head[:10]}")
 
     return output[0]
+
+
+def covers(certified, subject):
+    if certified["patchId"] != subject["patchId"]:
+        return False
+    elif certified["head"] == subject["head"]:
+        return True
+    elif not has_commit(certified["mergeBase"]) or not has_commit(certified["head"]):
+        return False
+
+    merge = subprocess.run(["git", *DIFF_CONFIG, "merge-tree", "--write-tree", f"--merge-base={certified['mergeBase']}",
+                            subject["mergeBase"], certified["head"]],
+                           capture_output=True, env=pinned_git_environment())
+    if merge.returncode != 0:
+        return False
+
+    return merge.stdout.decode().split()[0] == run_text(["git", "rev-parse", f"{subject['head']}^{{tree}}"])
 
 
 def subject_of(pull, head):
@@ -203,6 +255,7 @@ def validate_findings(kind, findings):
         seen.add(identifier)
 
         summary = finding.get("summary")
+        location = finding.get("file")
         category = finding.get("category")
         status = finding.get("status")
         reason = finding.get("note")
@@ -210,6 +263,8 @@ def validate_findings(kind, findings):
         has_reason = isinstance(reason, str) and reason.strip() != ""
         if not isinstance(summary, str) or not summary.strip():
             raise CertificateError(f"{identifier} has no summary")
+        elif location is not None and (not isinstance(location, str) or re.search(r"[\x00-\x1f`]", location)):
+            raise CertificateError(f"{identifier}: file must be a path on one line, with no backtick")
         elif category not in CATEGORIES:
             raise CertificateError(f"{identifier}: category must be one of {', '.join(CATEGORIES)}, not {category!r}")
         elif status not in allowed:
@@ -227,7 +282,7 @@ def blocking_findings(findings):
 
 def validate_review(review):
     kind = review.get("kind")
-    if kind not in STATUSES:
+    if not isinstance(kind, str) or kind not in STATUSES:
         raise CertificateError(f"kind must be one of {', '.join(STATUSES)}, not {kind!r}")
     elif review.get("level") not in LEVELS:
         raise CertificateError(f"level must be one of {', '.join(LEVELS)}, not {review.get('level')!r}")
@@ -250,19 +305,23 @@ def validate_certificate(certificate):
         raise CertificateError(f"not a {CERTIFICATE_TYPE} version {CERTIFICATE_VERSION}")
 
     subject = certificate.get("subject")
-    if not isinstance(subject, dict) or not re.fullmatch(r"[0-9a-f]{40,64}", str(subject.get("patchId"))):
-        raise CertificateError("the subject has no patch ID")
+    if not isinstance(subject, dict):
+        raise CertificateError("the certificate has no subject")
+
+    for field in ("patchId", "mergeBase", "head"):
+        if not re.fullmatch(r"[0-9a-f]{40,64}", str(subject.get(field))):
+            raise CertificateError(f"the subject has no {field}")
 
     validate_review(certificate)
 
 
 def parse_certificate(body):
-    match = re.search(r"```json\r?\n(.*?)\r?\n```", body, re.DOTALL)
-    if not match:
+    blocks = re.findall(r"```json\r?\n(.*?)\r?\n```", body, re.DOTALL)
+    if not blocks:
         raise CertificateError("the comment holds no certificate data")
 
     try:
-        return json.loads(match[1])
+        return json.loads(blocks[-1])
     except json.JSONDecodeError as error:
         raise CertificateError(f"the certificate data is not JSON: {error}")
 
@@ -307,7 +366,7 @@ def render(certificate):
             if location and finding.get("line") is not None:
                 location += f":{finding['line']}"
 
-            text = f"`{location}` " if location else ""
+            text = f"`{markdown_cell(location)}` " if location else ""
             text += markdown_cell(finding["summary"])
             status = finding["status"]
             if finding.get("note"):
@@ -337,13 +396,14 @@ def certificate_comments(repo, number):
             break
         page += 1
 
-    comments.sort(key=lambda comment: comment["created_at"], reverse=True)
+    comments.sort(key=lambda comment: (comment["created_at"], comment["id"]), reverse=True)
     return comments
 
 
-def latest_trusted_certificate(repo, number):
+def trusted(repo, comments):
     permissions = {}
-    for comment in certificate_comments(repo, number):
+    trusted_comments = []
+    for comment in comments:
         login = comment["user"]["login"]
         if login not in permissions:
             try:
@@ -354,28 +414,47 @@ def latest_trusted_certificate(repo, number):
                 permissions[login] = "none"
 
         if permissions[login] in TRUSTED_PERMISSIONS:
-            return comment
+            trusted_comments.append(comment)
 
-    return None
+    return trusted_comments
+
+
+def comment_covers(comment, subject):
+    try:
+        certificate = parse_certificate(comment["body"])
+        validate_certificate(certificate)
+    except CertificateError:
+        return False
+
+    return covers(certificate["subject"], subject)
 
 
 def evaluate(repo, pull):
     head = fetch(f"refs/pull/{pull['number']}/head")
     subject = subject_of(pull, head)
-    comment = latest_trusted_certificate(repo, pull["number"])
-    if comment is None:
+    comments = certificate_comments(repo, pull["number"])
+    trusted_comments = trusted(repo, comments)
+    if not comments:
         return ("pending", "No review certificate: run /certify or /converge", None, head)
+    elif not trusted_comments:
+        return ("pending", "No certificate from a user with write access: one has to run /certify or /converge", None, head)
 
+    for comment in trusted_comments:
+        try:
+            certificate = parse_certificate(comment["body"])
+            validate_certificate(certificate)
+        except CertificateError as error:
+            return ("failure", f"Malformed certificate: {error}", comment["html_url"], head)
+
+        if covers(certificate["subject"], subject):
+            return verdict(certificate, comment, head)
+
+    return ("pending", "The certificate covers another diff: run /certify or /converge again",
+            trusted_comments[0]["html_url"], head)
+
+
+def verdict(certificate, comment, head):
     url = comment["html_url"]
-    try:
-        certificate = parse_certificate(comment["body"])
-        validate_certificate(certificate)
-    except CertificateError as error:
-        return ("failure", f"Malformed certificate: {error}", url, head)
-
-    if certificate["subject"]["patchId"] != subject["patchId"]:
-        return ("pending", "The certificate covers another diff: run /certify or /converge again", url, head)
-
     findings = certificate["findings"]
     blocking = blocking_findings(findings)
     if blocking:
@@ -444,6 +523,7 @@ def command_issue(args):
                                f"{subject['mergeBase'][:10]}..{review_base[:10]} of #{pull['number']}: "
                                "run /certify on the whole pull request")
 
+    pushed = subject_of(pull, fetch(f"refs/pull/{pull['number']}/head"))
     issuer = gh_api("user")["login"]
     certificate = {
         "type": CERTIFICATE_TYPE,
@@ -460,10 +540,16 @@ def command_issue(args):
     certificate["issuer"] = issuer
     certificate["issuedAt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    body = render(certificate)
+    if parse_certificate(body) != certificate:
+        raise CertificateError("the rendered certificate does not read back as the same data")
+
     comments_path = f"repos/{repo}/issues/{pull['number']}/comments"
-    posted = gh_api(comments_path, method="POST", payload={"body": render(certificate)})
+    posted = gh_api(comments_path, method="POST", payload={"body": body})
+    replaces_pushed = covers(subject, pushed)
     for comment in certificate_comments(repo, pull["number"]):
-        if comment["user"]["login"] == issuer and comment["id"] != posted["id"]:
+        is_older_own = comment["user"]["login"] == issuer and comment["id"] < posted["id"]
+        if is_older_own and (replaces_pushed or not comment_covers(comment, pushed)):
             gh_api(f"repos/{repo}/issues/comments/{comment['id']}", method="DELETE")
 
     state, description, _, pull_head = evaluate(repo, pull)
@@ -473,7 +559,6 @@ def command_issue(args):
 
 
 def command_verify(args):
-    check_git_version()
     repo = repository()
     pull = gh_api(f"repos/{repo}/pulls/{args.pr}")
     if pull["state"] != "open":
@@ -481,8 +566,9 @@ def command_verify(args):
         return 0
 
     try:
+        check_git_version()
         state, description, url, head = evaluate(repo, pull)
-    except (CertificateError, CommandError) as error:
+    except Exception as error:
         if args.post_status:
             post_status(repo, pull, pull["head"]["sha"], "error", f"Could not verify: {error}", run_url(repo))
         raise

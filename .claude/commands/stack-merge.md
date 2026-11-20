@@ -155,6 +155,15 @@ git merge-base --is-ancestor origin/main b_1
 If `main` moved, go back to step 2 once. If it moves again during the second CI wait, stop
 and report it.
 
+Check that every local branch is the head its PR shows, since the certificate check reads
+the head on GitHub and the push lands the local branches:
+
+```bash
+test "$(git rev-parse b_k)" = "$(gh pr view <n_k> --json headRefOid -q .headRefOid)"
+```
+
+A mismatch means someone pushed to the branch during the run. Stop and report it.
+
 Run step 1's certificate check on every PR again. A rebase changes a PR's patch ID when
 `main` changed the lines around its hunks. Retargeting a PR to `main` widens its diff to
 the whole stack below it, so this check must come before the retargets. A failure stops
