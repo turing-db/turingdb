@@ -4,9 +4,9 @@ run-name: >-
     && format('Certify #{0} {1}', inputs.pr, inputs.digest)
     || format('Verify #{0}', github.event.pull_request.number || github.event.issue.number) }}
 
-# Both jobs run the default branch's script, which only reads the PR's commits and never
-# runs them. publish posts a certificate as github-actions[bot]; the run's title vouches for
-# its content. verify sets the review-certificate/<base> commit status on the PR head.
+# verify runs the default branch's script, which reads the PR's commits and never runs them,
+# and sets the review-certificate/<base> status. publish posts a certificate as
+# github-actions[bot]; verify trusts it only from a dispatch on the default branch.
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, edited]
@@ -60,10 +60,12 @@ jobs:
     needs: publish
     if: >-
       ${{ !cancelled() && (
-        (github.event_name == 'workflow_dispatch' && needs.publish.result == 'success')
+        (github.event_name == 'workflow_dispatch' && needs.publish.result == 'success'
+          && github.ref_name == github.event.repository.default_branch)
         || (github.event_name == 'pull_request_target'
           && (github.event.action != 'edited' || github.event.changes.base))
         || (github.event_name == 'issue_comment' && github.event.issue.pull_request
+          && github.event.comment.user.login == 'github-actions[bot]'
           && (startsWith(github.event.comment.body, '<!-- turingdb-review-certificate -->')
             || startsWith(github.event.changes.body.from, '<!-- turingdb-review-certificate -->')))) }}
     runs-on: ubuntu-latest
@@ -83,7 +85,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || github.event.repository.default_branch }}
+          ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
           filter: blob:none
           sparse-checkout: scripts

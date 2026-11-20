@@ -31,7 +31,7 @@ BOT_LOGIN = "github-actions[bot]"
 WORKFLOW_FILE = "review_certificate.yml"
 WORKFLOW_PATH = f".github/workflows/{WORKFLOW_FILE}"
 STATUS_DESCRIPTION_LIMIT = 140
-MINIMUM_GIT_VERSION = (2, 40)
+MINIMUM_GIT_VERSION = (2, 43)
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 FETCH_REF = "refs/review-certificate/fetch"
 
@@ -117,7 +117,7 @@ def check_git_version():
     version = run_text(["git", "version"])
     match = re.search(r"(\d+)\.(\d+)", version)
     if not match or (int(match[1]), int(match[2])) < MINIMUM_GIT_VERSION:
-        raise CertificateError(f"{version}: pinning the diff's attributes needs git 2.40 or later")
+        raise CertificateError(f"{version}: --attr-source needs git 2.43 or later, where merge-tree takes it")
 
 
 def repository():
@@ -224,10 +224,10 @@ def patch_id(merge_base, head):
 
 
 def covers(certified, subject):
-    if certified["patchId"] != subject["patchId"]:
-        return False
-    elif certified["head"] == subject["head"] and certified["mergeBase"] == subject["mergeBase"]:
+    if certified["head"] == subject["head"] and certified["mergeBase"] == subject["mergeBase"]:
         return True
+    elif certified["patchId"] != subject["patchId"]:
+        return False
     elif not has_commit(certified["mergeBase"]) or not has_commit(certified["head"]):
         return False
 
@@ -407,7 +407,7 @@ def render(certificate):
     if findings:
         lines += ["| | Finding | Category | Status |", "|---|---|---|---|"]
         for finding in findings:
-            location = finding.get("file", "").replace("|", "\\|")
+            location = (finding.get("file") or "").replace("|", "\\|")
             if location and finding.get("line") is not None:
                 location += f":{finding['line']}"
 
@@ -664,7 +664,9 @@ def command_publish(args):
 
     validate_certificate(certificate)
     issuer = certificate["issuer"]
-    if issuer != os.environ.get("GITHUB_ACTOR"):
+    if os.environ.get("GITHUB_RUN_ATTEMPT", "1") != "1":
+        raise CertificateError("a re-run would post this run's certificate again: dispatch a new one")
+    elif issuer != os.environ.get("GITHUB_ACTOR"):
         raise CertificateError(f"the certificate names {issuer} as its issuer, but someone else dispatched it")
     elif permission(repo, issuer, {}) not in TRUSTED_PERMISSIONS:
         raise CertificateError(f"{issuer} has no write access")
@@ -676,10 +678,14 @@ def command_publish(args):
         raise CertificateError("the rendered certificate does not read back as the same data")
 
     pushed = subject_of(pull, pushed_head(pull))
+    replaces_pushed = covers(certificate["subject"], pushed)
     posted = gh_api(f"repos/{repo}/issues/{pull['number']}/comments", method="POST", payload={"body": body})
     print(f"posted {posted['html_url']}")
 
-    replaces_pushed = covers(certificate["subject"], pushed)
+    if os.environ.get("GITHUB_REF") != f"refs/heads/{pull['base']['repo']['default_branch']}":
+        print("dispatched from another branch: verify does not trust this certificate, so the earlier ones stay")
+        return 0
+
     for comment in certificate_comments(repo, pull["number"]):
         if comment["id"] >= posted["id"]:
             continue
@@ -687,11 +693,10 @@ def command_publish(args):
         try:
             earlier = parse_certificate(comment["body"])
             validate_certificate(earlier)
-        except CertificateError:
-            continue
-
-        if earlier["issuer"] == issuer and (replaces_pushed or not covers(earlier["subject"], pushed)):
-            gh_api(f"repos/{repo}/issues/comments/{comment['id']}", method="DELETE")
+            if earlier["issuer"] == issuer and (replaces_pushed or not covers(earlier["subject"], pushed)):
+                gh_api(f"repos/{repo}/issues/comments/{comment['id']}", method="DELETE")
+        except (CertificateError, CommandError) as error:
+            print(f"kept {comment['html_url']}: {error}")
 
     return 0
 
@@ -707,8 +712,10 @@ def command_verify(args):
         check_git_version()
         subject = subject_of(pull, pushed_head(pull))
     except EmptyDiff as error:
-        print(f"#{args.pr}: {error}")
-        return 0 if args.post_status else 1
+        print(f"#{args.pr}: {error}: nothing lands, so nothing needs a certificate")
+        if args.post_status:
+            post_status(repo, pull, pull["head"]["sha"], "success", "The diff is empty: nothing to certify", run_url(repo))
+        return 0
     except Exception as error:
         if args.post_status:
             post_status(repo, pull, pull["head"]["sha"], "error", f"Could not verify: {error}", run_url(repo))

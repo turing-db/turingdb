@@ -696,4 +696,6 @@ for its exact content. It passes when the certificate covers the PR's current di
 ID and every correctness or efficiency finding is fixed or rejected. Other categories
 (simplification, test coverage, style) are shown but do not block. Any change to the diff
 needs a new certificate; a rebase that leaves the diff unchanged does not. The newest
-certificate that covers the PR's current diff decides the status.
+certificate that covers the PR's current diff decides the status. Writers are trusted:
+anyone with write access can dispatch a certificate or set the status, so the check guards
+against mistakes and outside contributors, not against a writer.

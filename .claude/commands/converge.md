@@ -139,7 +139,8 @@ A path target has no review base: pass `<level> <path>` instead.
 `git diff` leaves out untracked files, such as a new test or a new source a fix added. Before
 each review, run `git add -N` on each new test and source file the loop created, so the
 diff shows it. Never on REVIEW.md or scratch output, which would then be reviewed and later
-committed.
+committed. A file the loop intent-to-added and then deleted leaves the index with
+`git rm --cached -q <file>`.
 
 Not the `code-review:code-review` plugin command — that one reviews a GitHub pull request
 and posts a comment on it. Never pass `--fix`, which would apply fixes before the test
@@ -161,6 +162,7 @@ before deciding:
 - **correctness** — a failing test first, then a fix.
 - **simplification**, reuse, altitude — a fix, no test.
 - **efficiency** — a fix, no test.
+- **style** — a broken CLAUDE.md style or comment rule: a fix, no test.
 - **test coverage** — recorded in REVIEW.md, not acted on. Every correctness finding
   already brings its own test; a bare coverage gap is not what this loop is for.
 
@@ -330,10 +332,9 @@ correctness fixes are in. No co-author trailer and no footer.
 ## Certify
 
 After the commit, post the run's review certificate on the pull request, when the last
-review saw the code just committed: the loop stopped because triage left nothing to act on,
-or because the last iteration changed no code. After the cap or an abort, the last round's
-fixes are unreviewed: post no certificate, and say in the report that /certify has to
-review them.
+review saw the code just committed: the loop stopped on any rule but the cap. After the cap
+or an abort, the last round's fixes are unreviewed: post no certificate, and say in the
+report that /certify has to review them.
 
 `issue` dispatches the `Review Certificate` workflow, which posts the certificate as
 github-actions[bot], opening with ✅ or ❌, and sets the `review-certificate/main` commit
