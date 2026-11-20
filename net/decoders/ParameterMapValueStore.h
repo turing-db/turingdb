@@ -1,0 +1,93 @@
+#pragma once
+
+#include <stddef.h>
+#include <stdint.h>
+#include <deque>
+#include <span>
+#include <string>
+#include <string_view>
+#include <variant>
+
+#include "ParameterValue.h"
+#include "CellView.h"
+#include "PathView.h"
+#include "list/ListView.h"
+#include "map/MapView.h"
+
+namespace db {
+class ParameterMap;
+}
+
+namespace net::proto {
+
+// Builds a ParameterMap from one map value of the nested container format. The map is filled
+// in place: a key waits in its frame until its value arrives, and a string's bytes are read
+// straight into the ParameterValue that holds it.
+class ParameterMapValueStore {
+public:
+    explicit ParameterMapValueStore(db::ParameterMap* parameters);
+    ~ParameterMapValueStore();
+
+    float* allocEmbedding(size_t numFloats);
+    static std::span<const float> getEmbeddingView(float* data, size_t numFloats) { return {data, numFloats}; }
+
+    uint64_t* allocPathIDs(size_t idCount);
+    static db::PathView getPathView(uint64_t* ids, size_t idCount) { return db::PathView {ids, idCount}; }
+
+    char* allocString(size_t size);
+    static std::string_view getStringView(char* data, size_t size) { return {data, size}; }
+
+    db::ListView beginList(size_t elementCount, size_t byteSize);
+    db::CellView beginNestedList(size_t elementCount, size_t byteSize);
+
+    db::CellView writeListValue(std::string_view value);
+    db::CellView writeListValue(std::span<const float> value);
+    db::CellView writeListValue(db::PathView value);
+    db::CellView writeCellBytes(const char* bytes, size_t byteSize);
+
+    db::MapView beginMap(size_t entryCount, size_t byteSize);
+    db::CellView beginNestedMap(size_t entryCount, size_t byteSize);
+
+    void writeMapKey(std::string_view key);
+
+    template <typename T>
+    void writeMapValue(const T& value);
+
+    void writeMapValueBytes(const char* bytes, size_t byteSize);
+
+    bool topMapExpectsValue() const { return _frames.back()._keyPending; }
+
+    bool hasOpenContainer() const { return !_frames.empty(); }
+    bool topContainerIsMap() const;
+    bool topContainerComplete() const;
+    void popContainer() { _frames.pop_back(); }
+    size_t openContainerCount() const { return _frames.size(); }
+    size_t topLevelValuesWritten() const { return _frames.front()._written; }
+
+    void reset() { _frames.clear(); }
+
+private:
+    struct ParameterFrame {
+        std::variant<db::ParameterMap*, db::ParameterValue::Map*, db::ParameterValue::List*> _container;
+        size_t _expected {0};
+        size_t _written {0};
+        std::string _pendingKey;
+        bool _keyPending {false};
+    };
+
+    db::ParameterMap* _parameters {nullptr};
+
+    // A deque never moves its frames when one is pushed, so a key whose bytes are still being
+    // read into _pendingKey stays where the decoder was told to write it.
+    std::deque<ParameterFrame> _frames;
+
+    db::ParameterValue& nextSlot();
+    void completeValue();
+};
+
+template <typename T>
+void ParameterMapValueStore::writeMapValue(const T& value) {
+    completeValue();
+}
+
+}

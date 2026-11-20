@@ -15,8 +15,8 @@
 namespace net::proto {
 
 /**
- * @brief Reads one value off the wire and appends it to the container on top of the sink's
- * stack, dispatched on the value's tag via @ref db::CellTagDispatcher.
+ * @brief Reads one value off the wire and appends it to the container on top of the value
+ * store's stack, dispatched on the value's tag via @ref db::CellTagDispatcher.
  *
  * The tag is glanced (not yet consumed) by the caller; this visitor consumes the tag
  * together with its value once enough is buffered. Returns true if the value was fully
@@ -31,7 +31,7 @@ namespace net::proto {
 template <ProtoDecodeSink Sink, NestedContainerKind Kind>
 struct NestedValueReadVisitor {
     DecodeContext* _context {nullptr};
-    Sink* _sink {nullptr};
+    SinkValueStore<Sink>* _values {nullptr};
     // Optional: if set, receives the view of each value appended to the container (used by
     // the CellView columns, which store one view per row).
     SinkCellView<Sink>* _outView {nullptr};
@@ -49,8 +49,8 @@ struct NestedValueReadVisitor {
             WireSize numBytes = 0;
             _context->_inBuf->readData(&numBytes, sizeof(numBytes));
 
-            char* dest = _sink->allocString(numBytes);
-            const T view = _sink->getStringView(dest, numBytes);
+            char* dest = _values->allocString(numBytes);
+            const T view = _values->getStringView(dest, numBytes);
             writeValue(view);
 
             return readVarLenPayload(_context, dest, numBytes);
@@ -64,8 +64,8 @@ struct NestedValueReadVisitor {
             _context->_inBuf->readData(&numBytes, sizeof(numBytes));
 
             const size_t numFloats = checkedElementCount<float>(numBytes, "embedding");
-            float* dest = _sink->allocEmbedding(numFloats);
-            const T view = _sink->getEmbeddingView(dest, numFloats);
+            float* dest = _values->allocEmbedding(numFloats);
+            const T view = _values->getEmbeddingView(dest, numFloats);
             writeValue(view);
 
             return readVarLenPayload(_context, reinterpret_cast<char*>(dest), numBytes);
@@ -79,8 +79,8 @@ struct NestedValueReadVisitor {
             _context->_inBuf->readData(&numBytes, sizeof(numBytes));
 
             const size_t idCount = checkedElementCount<uint64_t>(numBytes, "path");
-            uint64_t* dest = _sink->allocPathIDs(idCount);
-            const T view = _sink->getPathView(dest, idCount);
+            uint64_t* dest = _values->allocPathIDs(idCount);
+            const T view = _values->getPathView(dest, idCount);
             writeValue(view);
 
             return readVarLenPayload(_context, reinterpret_cast<char*>(dest), numBytes);
@@ -95,7 +95,7 @@ struct NestedValueReadVisitor {
             _context->_inBuf->readData(&numElements, sizeof(numElements));
             _context->_inBuf->readData(&numBytes, sizeof(numBytes));
 
-            captureOutView(_sink->beginNestedList(numElements, numBytes));
+            captureOutView(_values->beginNestedList(numElements, numBytes));
 
             return true;
         } else if constexpr (std::is_same_v<T, db::MapView>) {
@@ -109,7 +109,7 @@ struct NestedValueReadVisitor {
             _context->_inBuf->readData(&numEntries, sizeof(numEntries));
             _context->_inBuf->readData(&numBytes, sizeof(numBytes));
 
-            captureOutView(_sink->beginNestedMap(numEntries, numBytes));
+            captureOutView(_values->beginNestedMap(numEntries, numBytes));
 
             return true;
         } else {
@@ -133,18 +133,18 @@ private:
     template <typename T>
     void writeValue(const T& value) const {
         if constexpr (Kind == NestedContainerKind::List) {
-            captureOutView(_sink->writeListValue(value));
+            captureOutView(_values->writeListValue(value));
         } else {
-            _sink->writeMapValue(value);
+            _values->writeMapValue(value);
         }
     }
 
     // The same, for a [tag][value] pair lifted straight off the wire.
     void writeValueBytes(const char* bytes, size_t numBytes) const {
         if constexpr (Kind == NestedContainerKind::List) {
-            captureOutView(_sink->writeCellBytes(bytes, numBytes));
+            captureOutView(_values->writeCellBytes(bytes, numBytes));
         } else {
-            _sink->writeMapValueBytes(bytes, numBytes);
+            _values->writeMapValueBytes(bytes, numBytes);
         }
     }
 
@@ -160,12 +160,12 @@ private:
  * @brief Reads one map entry's [keyLen][keyBytes] and parks the key on the open map, so the
  * value that follows fills the entry it opened.
  *
- * The key is handed to the sink before its bytes are streamed, exactly as a list's string
- * element is: that way a buffer running dry mid-key leaves the map already expecting a
+ * The key is handed to the value store before its bytes are streamed, exactly as a list's
+ * string element is: that way a buffer running dry mid-key leaves the map already expecting a
  * value, and the resumed pass reads the value rather than the key again.
  */
 template <ProtoDecodeSink Sink>
-inline bool readMapKey(DecodeContext* context, Sink* sink) {
+inline bool readMapKey(DecodeContext* context, SinkValueStore<Sink>* values) {
     if (context->_inBuf->readable() < sizeof(WireSize)) {
         return false;
     }
@@ -173,8 +173,8 @@ inline bool readMapKey(DecodeContext* context, Sink* sink) {
     WireSize keyLen = 0;
     context->_inBuf->readData(&keyLen, sizeof(keyLen));
 
-    char* dest = sink->allocString(keyLen);
-    sink->writeMapKey(sink->getStringView(dest, keyLen));
+    char* dest = values->allocString(keyLen);
+    values->writeMapKey(values->getStringView(dest, keyLen));
 
     return readVarLenPayload(context, dest, keyLen);
 }
@@ -189,16 +189,16 @@ inline bool readMapKey(DecodeContext* context, Sink* sink) {
  * it: the pass never comes when the payload's final bytes leave the read buffer empty.
  */
 template <ProtoDecodeSink Sink>
-inline void closeCompletedContainers(Sink* sink) {
-    while (sink->hasOpenContainer() && sink->topContainerComplete()) {
-        sink->popContainer();
+inline void closeCompletedContainers(SinkValueStore<Sink>* values) {
+    while (values->hasOpenContainer() && values->topContainerComplete()) {
+        values->popContainer();
     }
 }
 
 /**
- * @brief Drains the sink's open-container stack, reading values off the wire until the stack
- * empties (the whole top-level value is decoded) or the read buffer runs dry (returns false;
- * the stack and @ref _bufferState carry the resume point).
+ * @brief Drains the value store's open-container stack, reading values off the wire until the
+ * stack empties (the whole top-level value is decoded) or the read buffer runs dry (returns
+ * false; the stack and @ref _bufferState carry the resume point).
  *
  * For each top-level element completed (one written through the column's own cursor, i.e. stack
  * depth 1 — nested values live deeper and are not column rows), @param onTopLevelElement is
@@ -211,18 +211,20 @@ template <ProtoDecodeSink Sink, typename OnTopLevelElement>
 inline bool drainContainerStack(DecodeContext* context,
                                 Sink* sink,
                                 const OnTopLevelElement& onTopLevelElement) {
-    SinkCellView<Sink> elementView;
-    const NestedValueReadVisitor<Sink, NestedContainerKind::List> listVisitor {context, sink, &elementView};
-    const NestedValueReadVisitor<Sink, NestedContainerKind::Map> mapVisitor {context, sink};
+    SinkValueStore<Sink>* const values = sink->getValues();
 
-    while (sink->hasOpenContainer()) {
-        if (sink->topContainerComplete()) {
-            sink->popContainer();
+    SinkCellView<Sink> elementView;
+    const NestedValueReadVisitor<Sink, NestedContainerKind::List> listVisitor {context, values, &elementView};
+    const NestedValueReadVisitor<Sink, NestedContainerKind::Map> mapVisitor {context, values};
+
+    while (values->hasOpenContainer()) {
+        if (values->topContainerComplete()) {
+            values->popContainer();
             continue;
         }
 
-        if (sink->topContainerIsMap()) {
-            if (!sink->topMapExpectsValue() && !readMapKey(context, sink)) {
+        if (values->topContainerIsMap()) {
+            if (!values->topMapExpectsValue() && !readMapKey<Sink>(context, values)) {
                 return false;
             }
 
@@ -239,8 +241,8 @@ inline bool drainContainerStack(DecodeContext* context,
                 // The value's bytes are still streaming, but its view is recorded, so every
                 // container it completed can close. There is nothing left to drain once they
                 // all have — the payload finishes through _bufferState on its own.
-                closeCompletedContainers(sink);
-                return !sink->hasOpenContainer();
+                closeCompletedContainers<Sink>(values);
+                return !values->hasOpenContainer();
             }
 
             continue;
@@ -254,20 +256,20 @@ inline bool drainContainerStack(DecodeContext* context,
             // memcpy [tag][value] in one go.
             memcpy(&tag, context->_inBuf->readPtr(), sizeof(tag));
 
-            const bool topLevel = (sink->openContainerCount() == 1);
-            const size_t elementIndex = sink->topLevelValuesWritten();
+            const bool topLevel = (values->openContainerCount() == 1);
+            const size_t elementIndex = values->topLevelValuesWritten();
 
             const bool elementComplete = db::CellTagDispatcher {tag}.execute(listVisitor, db::CellView {});
 
             // In the special case of list element view where each element corresponds to a
             // container column row - onTopLevelElement is used to write the value into the
             // column
-            if (topLevel && sink->topLevelValuesWritten() > elementIndex) {
+            if (topLevel && values->topLevelValuesWritten() > elementIndex) {
                 onTopLevelElement(elementIndex, elementView);
             }
             if (!elementComplete) {
-                closeCompletedContainers(sink);
-                return !sink->hasOpenContainer();
+                closeCompletedContainers<Sink>(values);
+                return !values->hasOpenContainer();
             }
         }
     }

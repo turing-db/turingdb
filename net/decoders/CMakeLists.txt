@@ -2,9 +2,11 @@ add_library(turing_db_decoders_s STATIC
 	DecodedColumnSchema.cpp
 	NestedContainerCursor.cpp
 	ParameterMapSink.cpp
+	ParameterMapValueStore.cpp
 	TuringProtoParameterReader.cpp
 	TuringSink.cpp
-	TuringSinkColumnContainer.cpp)
+	TuringSinkColumnContainer.cpp
+	TuringValueStore.cpp)
 
 target_include_directories(turing_db_decoders_s
 	PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

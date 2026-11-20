@@ -3,7 +3,8 @@ add_library(turing_net_test_proto_s STATIC ProtoTestUtils.cpp)
 target_link_libraries(turing_net_test_proto_s
     PUBLIC  turing_query_result_formatter_s
             turing_db_proto_client_s
-            turing_db_net_encoders)
+            turing_db_net_encoders
+    PRIVATE GTest::gtest)
 target_include_directories(turing_net_test_proto_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_net_http_parser HTTPParserTest.cpp)
@@ -27,6 +28,15 @@ add_turing_test(test_net_turing_client TuringClientTest.cpp)
 add_turing_test(test_net_turing_client_timeout TuringClientTimeoutTest.cpp)
 
 add_turing_test(test_net_turing_async_client_connect TuringAsyncClientConnectTest.cpp)
+
+add_turing_test(test_net_value_store_after_thrown_query ValueStoreAfterThrownQueryTest.cpp)
+target_sources(test_net_value_store_after_thrown_query PRIVATE ProtoServerTest.cpp TruncatingProxy.cpp)
+
+add_turing_test(test_net_turing_client_caller_store TuringClientCallerStoreTest.cpp)
+target_sources(test_net_turing_client_caller_store PRIVATE ProtoServerTest.cpp)
+
+add_turing_test(test_net_turing_async_client_queries TuringAsyncClientQueriesTest.cpp)
+target_sources(test_net_turing_async_client_queries PRIVATE ProtoServerTest.cpp)
 
 add_turing_test(test_net_turing_proto_endtoend TuringProtoEndToEndTest.cpp)
 

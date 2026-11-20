@@ -7,10 +7,6 @@
 
 #include "RawBuffer.h"
 
-namespace net::proto {
-class TuringSink;
-}
-
 namespace db {
 
 template <typename E, typename V, size_t N = 4096>
@@ -25,7 +21,6 @@ public:
 
 private:
     friend class StringBuffer;
-    friend class net::proto::TuringSink;
 
     RawBuffer<E, N> _buf;
 

@@ -55,62 +55,74 @@ concept OptionalConstColumn = ConstColumn<Column, T>
     { column.setOptional(std::move(value)) };
 };
 
-// The whole contract the decode layer places on a sink family: the column aliases
-// (probed with one representative element type), the family's container handle types, the
-// string/embedding allocator, the container builder surface, and the column container the
-// decoded columns land in.
+// The value functions the decode layer calls on a sink's value store: the string,
+// embedding and path allocator, and the container builder surface.
+template <typename ValueStore, typename ListView, typename CellView, typename MapView>
+concept ProtoDecodeValueStore = requires(ValueStore values,
+                                         size_t count,
+                                         char* bytes,
+                                         float* floats,
+                                         uint64_t* pathIDs,
+                                         uint64_t scalarValue,
+                                         std::string_view stringValue,
+                                         std::span<const float> embeddingValue,
+                                         db::PathView pathValue) {
+    { values.allocString(count) } -> std::same_as<char*>;
+    { values.getStringView(bytes, count) } -> std::same_as<std::string_view>;
+    { values.allocEmbedding(count) } -> std::same_as<float*>;
+    { values.getEmbeddingView(floats, count) } -> std::same_as<std::span<const float>>;
+    { values.allocPathIDs(count) } -> std::same_as<uint64_t*>;
+    { values.getPathView(pathIDs, count) } -> std::same_as<db::PathView>;
+
+    { values.beginList(count, count) } -> std::same_as<ListView>;
+    { values.beginNestedList(count, count) } -> std::same_as<CellView>;
+    { values.writeListValue(stringValue) } -> std::same_as<CellView>;
+    { values.writeListValue(embeddingValue) } -> std::same_as<CellView>;
+    { values.writeListValue(pathValue) } -> std::same_as<CellView>;
+    { values.writeCellBytes(bytes, count) } -> std::same_as<CellView>;
+
+    { values.beginMap(count, count) } -> std::same_as<MapView>;
+    { values.beginNestedMap(count, count) } -> std::same_as<CellView>;
+    { values.writeMapKey(stringValue) };
+    { values.writeMapValue(scalarValue) };
+    { values.writeMapValue(stringValue) };
+    { values.writeMapValue(embeddingValue) };
+    { values.writeMapValue(pathValue) };
+    { values.writeMapValueBytes(bytes, count) };
+    { values.topMapExpectsValue() } -> std::convertible_to<bool>;
+
+    // The open-container stack: one stack for both kinds, since a map can hold a list and
+    // a list a map, so which container is innermost has to be unambiguous.
+    { values.hasOpenContainer() } -> std::convertible_to<bool>;
+    { values.topContainerIsMap() } -> std::convertible_to<bool>;
+    { values.topContainerComplete() } -> std::convertible_to<bool>;
+    { values.popContainer() };
+    { values.openContainerCount() } -> std::convertible_to<size_t>;
+    { values.topLevelValuesWritten() } -> std::convertible_to<size_t>;
+    { values.reset() };
+};
+
+// The whole contract the decode layer places on a sink family:
+// - the column aliases (probed with one representative element type)
+// - the family's container handle types
+// - the column container the decoded columns land in
+// - the value store the values are written to
 template <typename Sink>
 concept ProtoDecodeSink = VectorColumn<typename Sink::template ColumnVector<uint64_t>, uint64_t>
 && OptionalVectorColumn<typename Sink::template ColumnOptVector<uint64_t>, uint64_t>
 && ConstColumn<typename Sink::template ColumnConst<uint64_t>, uint64_t>
 && OptionalConstColumn<typename Sink::template ColumnOptConst<uint64_t>, uint64_t>
+&& ProtoDecodeValueStore<typename Sink::ValueStore,
+                         typename Sink::ListView,
+                         typename Sink::CellView,
+                         typename Sink::MapView>
 && requires(Sink sink,
             typename Sink::ColumnContainer container,
             typename Sink::Column* column,
             size_t count,
-            char* bytes,
-            float* floats,
-            uint64_t* pathIDs,
-            uint64_t scalarValue,
-            std::string_view stringValue,
-            std::span<const float> embeddingValue,
-            db::PathView pathValue,
             std::string_view columnName) {
     { sink.template alloc<typename Sink::template ColumnVector<uint64_t>>() } -> std::same_as<typename Sink::Column*>;
-
-    { sink.allocString(count) } -> std::same_as<char*>;
-    { sink.getStringView(bytes, count) } -> std::same_as<std::string_view>;
-    { sink.allocEmbedding(count) } -> std::same_as<float*>;
-    { sink.getEmbeddingView(floats, count) } -> std::same_as<std::span<const float>>;
-    { sink.allocPathIDs(count) } -> std::same_as<uint64_t*>;
-    { sink.getPathView(pathIDs, count) } -> std::same_as<db::PathView>;
-
-    { sink.beginList(count, count) } -> std::same_as<typename Sink::ListView>;
-    { sink.beginNestedList(count, count) } -> std::same_as<typename Sink::CellView>;
-    { sink.writeListValue(stringValue) } -> std::same_as<typename Sink::CellView>;
-    { sink.writeListValue(embeddingValue) } -> std::same_as<typename Sink::CellView>;
-    { sink.writeListValue(pathValue) } -> std::same_as<typename Sink::CellView>;
-    { sink.writeCellBytes(bytes, count) } -> std::same_as<typename Sink::CellView>;
-
-    { sink.beginMap(count, count) } -> std::same_as<typename Sink::MapView>;
-    { sink.beginNestedMap(count, count) } -> std::same_as<typename Sink::CellView>;
-    { sink.writeMapKey(stringValue) };
-    { sink.writeMapValue(scalarValue) };
-    { sink.writeMapValue(stringValue) };
-    { sink.writeMapValue(embeddingValue) };
-    { sink.writeMapValue(pathValue) };
-    { sink.writeMapValueBytes(bytes, count) };
-    { sink.topMapExpectsValue() } -> std::convertible_to<bool>;
-
-    // The open-container stack: one stack for both kinds, since a map can hold a list and
-    // a list a map, so which container is innermost has to be unambiguous.
-    { sink.hasOpenContainer() } -> std::convertible_to<bool>;
-    { sink.topContainerIsMap() } -> std::convertible_to<bool>;
-    { sink.topContainerComplete() } -> std::convertible_to<bool>;
-    { sink.popContainer() };
-    { sink.openContainerCount() } -> std::convertible_to<size_t>;
-    { sink.topLevelValuesWritten() } -> std::convertible_to<size_t>;
-    { sink.reset() };
+    { sink.getValues() } -> std::same_as<typename Sink::ValueStore*>;
 
     { container.size() } -> std::convertible_to<size_t>;
     { container[count] } -> std::same_as<typename Sink::Column*>;
@@ -136,6 +148,9 @@ using SinkColumn = typename Sink::Column;
 
 template <ProtoDecodeSink Sink>
 using SinkColumnContainer = typename Sink::ColumnContainer;
+
+template <ProtoDecodeSink Sink>
+using SinkValueStore = typename Sink::ValueStore;
 
 template <ProtoDecodeSink Sink>
 using SinkListView = typename Sink::ListView;

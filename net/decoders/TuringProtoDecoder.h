@@ -237,7 +237,7 @@ TuringProtoDecoder<Sink>::TuringProtoDecoder(TuringProtoInBuf* inBuf,
 template <ProtoDecodeSink Sink>
 void TuringProtoDecoder<Sink>::reset() {
     _context.reset();
-    _sink->reset();
+    _sink->getValues()->reset();
 }
 
 template <ProtoDecodeSink Sink>

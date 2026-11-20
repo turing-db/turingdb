@@ -7,13 +7,12 @@
 #include <string>
 #include <string_view>
 
-#include "ChunkedBuffer.h"
 #include "LocalMemory.h"
 #include "TuringProtoInBuf.h"
 #include "TuringProtoHeaders.h"
 #include "TuringProtoRequestBody.h"
-#include "list/ListBuffer.h"
-#include "map/MapBuffer.h"
+#include "TuringResponseDecoder.h"
+#include "TuringValueStore.h"
 #include "QueryCallbacks.h"
 #include "QueryStatus.h"
 #include "versioning/ChangeID.h"
@@ -45,9 +44,22 @@ public:
     void connect();
     void disconnect();
 
+    // The dataframe is valid during the callback; the values it views, until the next sendQuery
     db::QueryStatus sendQuery(const std::string& query,
                               const db::QueryCallbacks::OnOutputData& callback,
                               const db::ParameterMap* parameters = nullptr);
+
+    // Decodes the result into the columns of any sink, calling onChunkDecoded once each
+    // result chunk is in them.
+    template <ProtoDecodeSink Sink>
+    db::QueryStatus sendQuery(const std::string& query,
+                              Sink* sink,
+                              SinkColumnContainer<Sink>* container,
+                              const typename TuringResponseDecoder<Sink>::OnChunkDecoded& onChunkDecoded,
+                              const db::ParameterMap* parameters = nullptr) {
+        TuringResponseDecoder<Sink> decoder(&_inBuf, sink, container, onChunkDecoded);
+        return runQuery(query, &decoder, parameters);
+    }
 
     void setRemoteAddress(const std::string& remoteAddress) { _remoteAddress = remoteAddress; }
     void setRemotePort(const std::string& remotePort) { _remotePort = remotePort; }
@@ -65,9 +77,6 @@ public:
     std::string_view getRemotePort() const { return _remotePort; }
     std::string_view getGraphName() const { return _graphName; }
 
-    net::proto::ChunkedBuffer<float>& getEmbeddingBuffer() { return _embeddingBuffer; }
-    net::proto::ChunkedBuffer<char>& getStringBuffer() { return _stringBuffer; }
-    db::QueryListBuffer& getListBuffer() { return _listBuffer; }
     db::CommitHash getCommitHash() const { return _commitHash; }
     db::ChangeID getChangeID() const { return _changeID; }
 
@@ -97,12 +106,8 @@ private:
     // Proto packet payload for the current chunk; passed to TuringProtoDecoder unmodified.
     net::proto::TuringProtoInBuf _inBuf;
 
-    // Owning buffers that provide stable references to outputted dataframes
-    net::proto::ChunkedBuffer<float> _embeddingBuffer;
-    net::proto::ChunkedBuffer<uint64_t> _pathBuffer;
-    net::proto::ChunkedBuffer<char> _stringBuffer;
-    db::ListBuffer<> _listBuffer;
-    db::MapBuffer<> _mapBuffer;
+    // Owns the values the outputted dataframes point into
+    net::proto::TuringValueStore _values;
 
     net::proto::TuringProtoRequestBody _requestBody;
 
@@ -110,8 +115,11 @@ private:
     void applySocketTimeout();
     [[noreturn]] void throwSocketError(std::string_view action);
 
+    db::QueryStatus runQuery(const std::string& query,
+                             TuringResponseConsumer* consumer,
+                             const db::ParameterMap* parameters);
     void sendRequest(const std::string& query);
-    void receiveResponse(const db::QueryCallbacks::OnOutputData& callback, db::QueryStatus& queryStatus);
+    void receiveResponse(TuringResponseConsumer* consumer, db::QueryStatus& queryStatus);
     void recvHttpResponseHeaders();
     size_t recvChunkSizeLine();
     void recvChunkBody(size_t chunkSize, net::proto::ProtoHeader* outHeader);

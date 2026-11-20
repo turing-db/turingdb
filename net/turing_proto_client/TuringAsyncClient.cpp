@@ -17,8 +17,8 @@
 #include <spdlog/fmt/fmt.h>
 
 #include "HTTPUtils.h"
-#include "TuringProtoDecoder.h"
 #include "TuringProtoHeaders.h"
+#include "TuringResponseDecoder.h"
 #include "TuringResponseHead.h"
 #include "TuringException.h"
 #include "TuringSink.h"
@@ -111,13 +111,10 @@ TuringAsyncClient::TuringAsyncClient(const std::string& remoteAddress,
     _remotePort(remotePort),
     _localMem(localMem),
     _inBuf(bufferCapacity),
-    _sink(_localMem, &_embeddingBuffer, &_pathBuffer, &_listBuffer, &_mapBuffer),
-    _dfMan(std::make_unique<db::DataframeManager>()),
-    _df(std::make_unique<db::Dataframe>()),
-    _dataframeContainer(std::make_unique<TuringSinkColumnContainer>(_df.get(), _dfMan.get())),
-    _decoder(&_inBuf, &_sink, _columnSchemas)
+    _sink(_localMem, &_values)
 {
     _sendBuffer.reserve(256);
+    reset();
 }
 
 TuringAsyncClient::~TuringAsyncClient() {
@@ -382,29 +379,19 @@ void TuringAsyncClient::processProtoPacket() {
 
     switch (responseHeader._type) {
         case MessageTypes::CHUNK_HEADER:
-            _decoder.decodeIncomingChunkHeader(_dataframeContainer.get());
+            _responseDecoder->onChunkHeader();
         break;
 
         case MessageTypes::CHUNK:
-            _decoder.decodeIncomingChunk(_dataframeContainer.get());
+            _responseDecoder->onChunk();
         break;
 
         case MessageTypes::END_CHUNK:
-            _decoder.decodeChunkFooter(_dataframeContainer.get());
-            _callbackFired = true;
-            _callback(_df.get());
-            _df->clear();
-            for (auto& schema : _columnSchemas) {
-                schema.getColumnState().reset();
-            }
-            _decoder.reset();
+            _responseDecoder->onEndChunk();
         break;
 
         case MessageTypes::END: {
-            if (!_callbackFired) {
-                _df->setDeclaredRowCount(0);
-                _callback(_df.get());
-            }
+            _responseDecoder->onEnd();
 
             if (responseHeader._dataLen != sizeof(db::QueryCallbacks::ExecTimeMilliseconds)) {
                 throw TuringException("Invalid END packet payload size");
@@ -670,24 +657,27 @@ void TuringAsyncClient::reset() {
 
     // Proto payload and decoded-response state. _df/_dfMan are rebuilt from scratch so each
     // query starts with an empty dataframe; recreating _dfMan frees the columns it owned for
-    // the previous query. The decoder references _inBuf, _sink and _columnSchemas, which all
-    // live for the client's lifetime, so it is reset in place (which also resets the sink).
+    // the previous query. Destroying the previous response decoder closes the containers a
+    // response cut short left open, so the values can be cleared.
     _inBuf.reset();
-    _embeddingBuffer.clear();
-    _pathBuffer.clear();
-    _stringBuffer.clear();
-    _listBuffer.clear();
-    _mapBuffer.clear();
-    _columnSchemas.clear();
-    _decoder.reset();
+    _responseDecoder.reset();
+    _values.clearValues();
     _dfMan = std::make_unique<db::DataframeManager>();
     _df = std::make_unique<db::Dataframe>();
     _dataframeContainer = std::make_unique<TuringSinkColumnContainer>(_df.get(), _dfMan.get());
 
+    const auto onChunkDecoded = [this]() {
+        _callback(_df.get());
+        _df->clear();
+    };
+    _responseDecoder = std::make_unique<TuringResponseDecoder<TuringSink>>(&_inBuf,
+                                                                           &_sink,
+                                                                           _dataframeContainer.get(),
+                                                                           onChunkDecoded);
+
     // Per-query callback and accumulated result.
     _callback = db::QueryCallbacks::OnOutputData();
     _res = db::QueryStatus();
-    _callbackFired = false;
     _sawTerminalPacket = false;
     _errorMessage.reset();
     _protocolError.reset();

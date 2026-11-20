@@ -8,7 +8,6 @@
 #include <string_view>
 #include <vector>
 
-#include "ChunkedBuffer.h"
 #include "GraphPath.h"
 #include "LocalMemory.h"
 #include "TuringException.h"
@@ -18,13 +17,12 @@
 #include "TuringProtoOutBuf.h"
 #include "TuringSink.h"
 #include "TuringSinkColumnContainer.h"
+#include "TuringValueStore.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnVector.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/DataframeManager.h"
 #include "dataframe/NamedColumn.h"
-#include "list/ListBuffer.h"
-#include "map/MapBuffer.h"
 #include "metadata/PropertyType.h"
 
 using namespace db;
@@ -83,16 +81,13 @@ protected:
         encoder.writeChunkFooter(rowCount);
         const std::string footer(outBuf.data(), outBuf.size());
 
-        net::proto::ChunkedBuffer<float> embeddingBuffer;
-        net::proto::ChunkedBuffer<uint64_t> pathBuffer;
-        ListBuffer<> listBuffer;
-        MapBuffer<> mapBuffer;
+        net::proto::TuringValueStore values;
         DataframeManager decodedManager;
         Dataframe decoded;
         std::vector<net::proto::DecodedColumnSchema> schemas;
 
         net::proto::TuringProtoInBuf inBuf(BUFFER_CAPACITY);
-        net::proto::TuringSink sink(&_memory, &embeddingBuffer, &pathBuffer, &listBuffer, &mapBuffer);
+        net::proto::TuringSink sink(&_memory, &values);
         net::proto::TuringSinkColumnContainer container(&decoded, &decodedManager);
         net::proto::TuringProtoDecoder<net::proto::TuringSink> decoder(&inBuf, &sink, schemas);
 
