@@ -1,13 +1,13 @@
 ---
 description: Review a PR's own diff, triage every finding, and post a review certificate on the PR
 argument-hint: "[effort level] [PR number]"
-allowed-tools: Bash, Read, Write, Glob, Grep, Skill, Agent
+allowed-tools: Bash, Read, Write, Glob, Grep, Skill, Agent, mcp__linear-server__list_issues, mcp__linear-server__get_issue, mcp__linear-server__save_issue, mcp__linear-server__save_comment
 ---
 
 # Certify
 
 Review exactly the diff a pull request carries, give every finding a category and mark it
-rejected or open, and have the `Review Certificate` workflow post the result on the PR as
+rejected, filed or open, and have the `Review Certificate` workflow post the result on the PR as
 github-actions[bot]. The comment opens with ✅ when no correctness or efficiency finding is
 open and ❌ otherwise. The workflow sets the `review-certificate/<base>` commit status, which
 `main` requires before a PR merges. It passes when the certificate covers the PR's current
@@ -64,7 +64,11 @@ Then give it one status:
   that rules the failure out, a test that passes on the claimed input, or one of
   CLAUDE.md's standing rejections (an analyzer rule turning away valid openCypher,
   use-later analysis in `DBProgramGenerator`, a comment that narrates the code).
-- **open**: everything else. A real bug is open even when its fix is out of scope.
+- **filed**: a real bug that CLAUDE.md's "Triaging review findings" files rather than fixes
+  now, such as one that predates the change or whose fix needs a design choice. File it in
+  Linear as that section says, or find the open ticket it duplicates, and give its id in
+  `ticket`. The script checks that the id reads `TUR-<number>`, not that the ticket exists.
+- **open**: everything else, including a real bug this PR has to fix.
 
 When in doubt, open. A rejection is shown on the PR next to its reason, and a reviewer will
 read it.
@@ -90,6 +94,15 @@ the review returned them:
       "summary": "the review's one-sentence statement of the bug",
       "status": "rejected",
       "note": "the evidence that makes it a false positive"
+    },
+    {
+      "id": "F2",
+      "category": "correctness",
+      "file": "storage/DataPart.cpp",
+      "line": 88,
+      "summary": "a bug that predates the change",
+      "status": "filed",
+      "ticket": "TUR-431"
     }
   ]
 }
@@ -113,5 +126,5 @@ user with write access can dispatch it.
 ## 5. Report
 
 A few plain lines: the comment URL, the verdict, the open correctness and efficiency
-findings by id and file, and whether the branch still needs a push for the PR to carry the
+findings by id and file, the tickets filed, and whether the branch still needs a push for the PR to carry the
 certified diff.

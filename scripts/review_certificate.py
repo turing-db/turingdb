@@ -38,13 +38,15 @@ FETCH_REF = "refs/review-certificate/fetch"
 
 LEVELS = ("low", "medium", "high", "xhigh", "max")
 STATUSES = {
-    "certify": ("rejected", "open"),
-    "converge": ("fixed", "rejected", "deferred", "recorded", "open"),
+    "certify": ("rejected", "filed", "open"),
+    "converge": ("fixed", "rejected", "filed", "deferred", "recorded", "open"),
 }
 STATUSES_WITH_REASON = ("rejected", "deferred")
 CATEGORIES = ("correctness", "efficiency", "simplification", "test-coverage", "style")
 BLOCKING_CATEGORIES = ("correctness", "efficiency")
-RESOLVED_STATUSES = ("fixed", "rejected")
+RESOLVED_STATUSES = ("fixed", "rejected", "filed")
+TICKET_PATTERN = re.compile(r"TUR-[1-9][0-9]*")
+TICKET_URL = "https://linear.app/turingdb/issue/{}"
 TRUSTED_PERMISSIONS = ("admin", "write")
 
 DIFF_CONFIG = [
@@ -305,6 +307,7 @@ def validate_findings(kind, findings):
         category = finding.get("category")
         status = finding.get("status")
         reason = finding.get("note")
+        ticket = finding.get("ticket")
         line = finding.get("line")
         has_reason = isinstance(reason, str) and reason.strip() != ""
         if not isinstance(summary, str) or not summary.strip():
@@ -317,6 +320,10 @@ def validate_findings(kind, findings):
             raise CertificateError(f"{identifier}: /{kind} marks a finding {' or '.join(allowed)}, not {status!r}")
         elif status in STATUSES_WITH_REASON and not has_reason:
             raise CertificateError(f"{identifier} is {status} without a note giving the reason")
+        elif status == "filed" and not (isinstance(ticket, str) and TICKET_PATTERN.fullmatch(ticket)):
+            raise CertificateError(f"{identifier} is filed, so its ticket must be a Linear id such as TUR-123, not {ticket!r}")
+        elif status != "filed" and ticket is not None:
+            raise CertificateError(f"{identifier} is {status}: only a filed finding has a ticket")
         elif line is not None and (not isinstance(line, int) or isinstance(line, bool)):
             raise CertificateError(f"{identifier}: line must be an integer")
 
@@ -393,7 +400,7 @@ def render(certificate, test_branch=None):
 
     if blocking:
         headline = ["# ❌ Review certificate: fails", "",
-                    f"Correctness or efficiency findings not fixed or rejected: {markdown_cell(', '.join(blocking))}."]
+                    f"Correctness or efficiency findings not fixed, rejected or filed: {markdown_cell(', '.join(blocking))}."]
     else:
         headline = ["# ✅ Review certificate: passes", "", "No correctness or efficiency finding is open."]
 
@@ -426,6 +433,8 @@ def render(certificate, test_branch=None):
             text = f"`{location}` " if location else ""
             text += markdown_cell(finding["summary"])
             status = finding["status"]
+            if status == "filed":
+                status += f" as [{finding['ticket']}]({TICKET_URL.format(finding['ticket'])})"
             if finding.get("note"):
                 status += f": {markdown_cell(finding['note'])}"
 
@@ -550,7 +559,7 @@ def verdict(certificate, comment, head):
     findings = certificate["findings"]
     blocking = blocking_findings(findings)
     if blocking:
-        return ("failure", f"Correctness or efficiency findings not fixed or rejected: {', '.join(blocking)}", url, head)
+        return ("failure", f"Correctness or efficiency findings not fixed, rejected or filed: {', '.join(blocking)}", url, head)
 
     plural = "" if len(findings) == 1 else "s"
     description = f"/{certificate['kind']} {certificate['level']} by {certificate['issuer']}: "

@@ -1,7 +1,7 @@
 ---
 description: Review, test, fix in a loop until it converges, then one commit
 argument-hint: "[effort level and/or review target, e.g. 'high' or 'medium 42']"
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Skill, TodoWrite, ReportFindings
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Skill, TodoWrite, ReportFindings, mcp__linear-server__list_issues, mcp__linear-server__get_issue, mcp__linear-server__save_issue, mcp__linear-server__save_comment
 ---
 
 # Converge
@@ -174,7 +174,12 @@ before deciding:
 A false positive is **rejected**, with the reason, and keeps the category it claimed: the
 certificate records a category for every finding.
 
-A finding an earlier iteration recorded as rejected or deferred is not new: keep its
+A real bug that CLAUDE.md's "Triaging review findings" files rather than fixes now, such as
+one that predates the change or whose fix needs a design choice, is **filed**: ticketed in
+Linear as that section says, or added to the open ticket it duplicates. It keeps its
+category, and the loop does not fix it.
+
+A finding an earlier iteration recorded as rejected, filed or deferred is not new: keep its
 earlier status, and move on. A finding recorded as **fixed** that comes back is a failed
 fix: reopen it under its old id and say in the new section whether the test was wrong or
 the fix was.
@@ -251,7 +256,7 @@ report:
 
 - Triage leaves no correctness, simplification, efficiency or style finding to act on.
 - Every actionable finding this iteration is one an earlier iteration already recorded as
-  rejected or deferred.
+  rejected, filed or deferred.
 - The iteration changed no code.
 - Four iterations have run.
 
@@ -295,7 +300,8 @@ E1 ...
 ### Test coverage — recorded, not acted on
 ...
 
-A false positive stays in its category's section, with its reason and `status: rejected`:
+A false positive stays in its category's section, with its reason and `status: rejected`,
+and a filed finding with `status: filed as TUR-431`:
 
 C2 `net/http_common/HTTPWriter.cpp:88` — ... — the test asserting it passes unchanged,
    so there is no defect.
@@ -345,8 +351,8 @@ review them.
 `issue` dispatches the `Review Certificate` workflow, which posts the certificate as
 github-actions[bot], opening with ✅ or ❌, and sets the `review-certificate/<base>` commit
 status; `main` requires `review-certificate/main` before a PR merges. The script needs git
-2.43 or later. It passes when every correctness and
-efficiency finding is fixed or rejected.
+2.43 or later. It passes when every correctness and efficiency finding is fixed, rejected
+or filed.
 
 Only a branch or a PR target is certified. A path target reviewed part of the PR, so skip
 the rest of this section and say so in the report. For a branch, run `target`. For a PR,
@@ -388,12 +394,14 @@ under its id and with its final status:
 
 - `category` is `correctness`, `efficiency`, `simplification`, `test-coverage` or `style`,
   as triage sorted it.
-- `status` is `fixed`, `rejected`, `deferred`, `recorded` (a test-coverage finding) or
-  `open`. A reopened finding carries the status it ended with. A correctness or efficiency
-  finding that ends deferred or open fails the certificate.
+- `status` is `fixed`, `rejected`, `filed`, `deferred`, `recorded` (a test-coverage
+  finding) or `open`. A reopened finding carries the status it ended with. A correctness
+  or efficiency finding that ends deferred or open fails the certificate.
 - `note` gives the test for a fixed correctness finding, the reason for a rejected one, and
   what it would take for a deferred one. A rejected or deferred finding without a note is
   refused.
+- `ticket` gives a filed finding's Linear id, `TUR-<number>`, and only a filed finding has
+  one. The script checks the id's shape, not that the ticket exists.
 - `stopRule` names the rule that ended the loop.
 
 ```bash
@@ -410,7 +418,8 @@ pushed, so the verdict it prints is `pending` until the branch is.
 A few plain lines, concrete numbers, no bullets-for-their-own-sake:
 
 - how many iterations ran and which stop rule ended the loop.
-- findings by category — fixed, rejected, deferred — naming each deferred one.
+- findings by category — fixed, rejected, filed, deferred — naming each deferred one and
+  each ticket filed.
 - the tests added, and that each failed before its fix and passes after.
 - the commit subject and short sha, and the branch when the loop created one.
 - the certificate's comment URL and the verdict it gives once the branch is pushed, or why
