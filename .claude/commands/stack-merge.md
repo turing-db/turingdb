@@ -162,7 +162,9 @@ the head on GitHub and the push lands the local branches:
 test "$(git rev-parse b_k)" = "$(gh pr view <n_k> --json headRefOid -q .headRefOid)"
 ```
 
-A mismatch means someone pushed to the branch during the run. Stop and report it.
+GitHub updates a PR's head a few seconds after a push, so retry a mismatch for up to a
+minute. One that persists means someone pushed to the branch during the run. Stop and
+report it.
 
 Run step 1's certificate check on every PR again. A rebase changes a PR's patch ID when
 `main` changed the lines around its hunks. Retargeting a PR to `main` widens its diff to

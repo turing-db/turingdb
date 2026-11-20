@@ -28,41 +28,6 @@ on:
         type: string
 
 jobs:
-  verify:
-    if: >-
-      (github.event_name == 'pull_request_target'
-        && (github.event.action != 'edited' || github.event.changes.base))
-      || (github.event_name == 'issue_comment' && github.event.issue.pull_request
-        && (startsWith(github.event.comment.body, '<!-- turingdb-review-certificate -->')
-          || startsWith(github.event.changes.body.from, '<!-- turingdb-review-certificate -->')))
-    runs-on: ubuntu-latest
-
-    concurrency:
-      group: review-certificate-${{ github.event.pull_request.number || github.event.issue.number }}
-      cancel-in-progress: true
-
-    permissions:
-      actions: read
-      contents: read
-      issues: read
-      pull-requests: read
-      statuses: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          fetch-depth: 0
-          filter: blob:none
-          sparse-checkout: scripts
-
-      - name: Verify the review certificate
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
-        run: python3 scripts/review_certificate.py verify --pr "$PR_NUMBER" --post-status
-
   publish:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -72,7 +37,6 @@ jobs:
       contents: read
       issues: write
       pull-requests: read
-      statuses: write
 
     steps:
       - name: Checkout
@@ -89,3 +53,43 @@ jobs:
           DIGEST: ${{ inputs.digest }}
           CERTIFICATE: ${{ inputs.certificate }}
         run: python3 scripts/review_certificate.py publish --pr "$PR_NUMBER" --digest "$DIGEST"
+
+  # Every status write goes through this job and its group, so the run that started last,
+  # and so read the comments last, posts last.
+  verify:
+    needs: publish
+    if: >-
+      ${{ !cancelled() && (
+        (github.event_name == 'workflow_dispatch' && needs.publish.result == 'success')
+        || (github.event_name == 'pull_request_target'
+          && (github.event.action != 'edited' || github.event.changes.base))
+        || (github.event_name == 'issue_comment' && github.event.issue.pull_request
+          && (startsWith(github.event.comment.body, '<!-- turingdb-review-certificate -->')
+            || startsWith(github.event.changes.body.from, '<!-- turingdb-review-certificate -->')))) }}
+    runs-on: ubuntu-latest
+
+    concurrency:
+      group: review-certificate-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
+      cancel-in-progress: true
+
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
+      statuses: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || github.event.repository.default_branch }}
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: scripts
+
+      - name: Verify the review certificate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
+        run: python3 scripts/review_certificate.py verify --pr "$PR_NUMBER" --post-status

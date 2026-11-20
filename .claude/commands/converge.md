@@ -21,6 +21,10 @@ Where a step below names a git command, jj mode's version of that step is the on
 
 ## 0. Fix the target and the baseline, once
 
+When `$ARGUMENTS` names a PR or a branch other than the current one, check it out first,
+with `gh pr checkout <n>` or `git checkout <branch>`: the loop reviews and fixes the
+checked-out tree. With uncommitted changes in the tree, stop and say so instead. Then:
+
 ```bash
 git status --porcelain
 git branch --show-current
@@ -32,10 +36,7 @@ Record four things now and do not recompute them later.
 - **The target.** `$ARGUMENTS` if it names one. Otherwise the uncommitted working-tree
   change when `git diff --stat` is non-empty, and the current branch against `main` when it
   is not. Every iteration reviews that same target at that same effort level, or the
-  iterations do not compare. A PR or a branch other than the current one is checked out
-  first, with `gh pr checkout <n>` or `git checkout <branch>`, since the loop reviews and
-  fixes the checked-out tree. With uncommitted changes in the tree, stop and say so
-  instead.
+  iterations do not compare.
 - **The review base.** The commit the target's diff starts from: `git rev-parse HEAD` for
   the working-tree change, `git merge-base origin/main HEAD` for the branch, the `mergeBase`
   that `python3 scripts/review_certificate.py target --pr <n>` prints for a PR. The
@@ -136,8 +137,9 @@ Skill(skill: "code-review", args: "<level> review exactly the diff `git diff <re
 A path target has no review base: pass `<level> <path>` instead.
 
 `git diff` leaves out untracked files, such as a new test or a new source a fix added. Before
-each review, run `git add -N` on every untracked file that is not in the phase-0 baseline,
-so the diff shows it.
+each review, run `git add -N` on each new test and source file the loop created, so the
+diff shows it. Never on REVIEW.md or scratch output, which would then be reviewed and later
+committed.
 
 Not the `code-review:code-review` plugin command — that one reviews a GitHub pull request
 and posts a comment on it. Never pass `--fix`, which would apply fixes before the test
@@ -286,9 +288,11 @@ E1 ...
 ### Test coverage — recorded, not acted on
 ...
 
-### Rejected
-R1 `net/http_common/HTTPWriter.cpp:88` — ... — the test asserting it passes unchanged,
+A false positive stays in its category's section, with its reason and `status: rejected`:
+
+C2 `net/http_common/HTTPWriter.cpp:88` — ... — the test asserting it passes unchanged,
    so there is no defect.
+   status: rejected
 ```
 
 Keep the entries plain: the file, the defect in one sentence, the input that breaks it, the
@@ -382,8 +386,7 @@ under its id and with its final status:
 - `note` gives the test for a fixed correctness finding, the reason for a rejected one, and
   what it would take for a deferred one. A rejected or deferred finding without a note is
   refused.
-- `stopRule` names the rule that ended the loop. When it was the cap, say the last round's
-  fixes are unreviewed.
+- `stopRule` names the rule that ended the loop.
 
 ```bash
 python3 scripts/review_certificate.py issue --input build/review-certificate.json

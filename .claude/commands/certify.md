@@ -1,7 +1,7 @@
 ---
 description: Review a PR's own diff, triage every finding, and post a review certificate on the PR
 argument-hint: "[effort level] [PR number]"
-allowed-tools: Bash, Read, Write, Glob, Grep, Skill
+allowed-tools: Bash, Read, Write, Glob, Grep, Skill, Agent
 ---
 
 # Certify

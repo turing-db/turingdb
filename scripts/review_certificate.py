@@ -24,7 +24,8 @@ CERTIFICATE_TYPE = "turingdb-review-certificate"
 CERTIFICATE_VERSION = 1
 STATUS_CONTEXT = "review-certificate"
 COMMENT_LIMIT = 65536
-DISPATCH_LIMIT = 65000
+DISPATCH_LIMIT = 65535
+LONGEST_RUN_ID = 10 ** 15
 RUN_WAIT_SECONDS = 900
 BOT_LOGIN = "github-actions[bot]"
 WORKFLOW_FILE = "review_certificate.yml"
@@ -406,11 +407,11 @@ def render(certificate):
     if findings:
         lines += ["| | Finding | Category | Status |", "|---|---|---|---|"]
         for finding in findings:
-            location = finding.get("file", "")
+            location = finding.get("file", "").replace("|", "\\|")
             if location and finding.get("line") is not None:
                 location += f":{finding['line']}"
 
-            text = f"`{markdown_cell(location)}` " if location else ""
+            text = f"`{location}` " if location else ""
             text += markdown_cell(finding["summary"])
             status = finding["status"]
             if finding.get("note"):
@@ -420,7 +421,7 @@ def render(certificate):
     else:
         lines.append("The review reported no finding.")
 
-    data = json.dumps(certificate, indent=2, ensure_ascii=False).replace("`", "\\u0060")
+    data = json.dumps(certificate, indent=2, ensure_ascii=False).replace("`", "\\u0060").replace("<", "\\u003c")
     lines += ["", "<details><summary>Certificate data</summary>", "", "```json", data, "```", "", "</details>"]
 
     body = "\n".join(lines) + "\n"
@@ -490,7 +491,7 @@ def authentic(repo, pull, data, lookups):
                                      and run.get("head_branch") == pull["base"]["repo"]["default_branch"])
     vouches_for_content = run.get("display_title") == run_title(pull["number"], digest_of(certificate))
     issuer = certificate["issuer"]
-    issued_by_writer = ((run.get("triggering_actor") or {}).get("login") == issuer
+    issued_by_writer = ((run.get("actor") or {}).get("login") == issuer
                         and permission(repo, issuer, lookups) in TRUSTED_PERMISSIONS)
     return is_dispatch_on_default_branch and vouches_for_content and issued_by_writer
 
@@ -618,24 +619,23 @@ def command_issue(args):
     certificate["issuedAt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     validate_certificate(certificate)
-    render({**certificate, "run": 0})
-    payload = canonical(certificate)
-    if len(payload) > DISPATCH_LIMIT:
-        raise CertificateError(f"the certificate is {len(payload)} characters, over the {DISPATCH_LIMIT} a dispatch carries")
-
+    render({**certificate, "run": LONGEST_RUN_ID})
     digest = digest_of(certificate)
+    inputs = {"pr": str(pull["number"]), "digest": digest, "certificate": canonical(certificate)}
+    size = len(json.dumps(inputs))
+    if size > DISPATCH_LIMIT:
+        raise CertificateError(f"the certificate's dispatch is {size} characters, over the {DISPATCH_LIMIT} GitHub takes")
+
     ref = args.ref or pull["base"]["repo"]["default_branch"]
-    inputs = {"pr": str(pull["number"]), "digest": digest, "certificate": payload}
     gh_api(f"repos/{repo}/actions/workflows/{WORKFLOW_FILE}/dispatches", method="POST", payload={"ref": ref, "inputs": inputs})
 
     run = wait_for_run(repo, run_title(pull["number"], digest))
     print(f"run {run['html_url']}: {run['conclusion']}")
-    if run["conclusion"] != "success":
+    posted = [comment for comment in certificate_comments(repo, pull["number"]) if f'"run": {run["id"]}' in comment["body"]]
+    if not posted:
         raise CertificateError(f"the Review Certificate run did not post the certificate: {run['html_url']}")
 
-    for comment in certificate_comments(repo, pull["number"]):
-        if f'"run": {run["id"]}' in comment["body"]:
-            print(f"posted {comment['html_url']}")
+    print(f"posted {posted[0]['html_url']}")
 
     state, description, _, pull_head = evaluate(repo, pull)
     print(f"#{pull['number']} at {pull_head[:10]}: {state}: {description}")
@@ -664,7 +664,7 @@ def command_publish(args):
 
     validate_certificate(certificate)
     issuer = certificate["issuer"]
-    if issuer != os.environ.get("GITHUB_TRIGGERING_ACTOR"):
+    if issuer != os.environ.get("GITHUB_ACTOR"):
         raise CertificateError(f"the certificate names {issuer} as its issuer, but someone else dispatched it")
     elif permission(repo, issuer, {}) not in TRUSTED_PERMISSIONS:
         raise CertificateError(f"{issuer} has no write access")
@@ -693,7 +693,7 @@ def command_publish(args):
         if earlier["issuer"] == issuer and (replaces_pushed or not covers(earlier["subject"], pushed)):
             gh_api(f"repos/{repo}/issues/comments/{comment['id']}", method="DELETE")
 
-    return command_verify(argparse.Namespace(pr=args.pr, post_status=True))
+    return 0
 
 
 def command_verify(args):
@@ -745,7 +745,7 @@ def main():
     issue.add_argument("--ref", help="branch whose workflow posts it, default: the default branch, the only one verify trusts")
     issue.set_defaults(handler=command_issue)
 
-    publish = commands.add_parser("publish", help="post a dispatched certificate, in the workflow")
+    publish = commands.add_parser("publish", help="post a dispatched certificate, in the workflow; verify then sets the status")
     publish.add_argument("--pr", type=int, required=True, help="pull request number")
     publish.add_argument("--digest", required=True, help="SHA-256 of the certificate's canonical JSON")
     publish.set_defaults(handler=command_publish)
