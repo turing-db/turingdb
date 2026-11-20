@@ -96,6 +96,9 @@ add_ir_tests(test_query_ir_untyped_null_function_argument UntypedNullFunctionArg
 add_ir_tests(test_query_ir_nullable_row_mover_mask NullableRowMoverMaskTest.cpp)
 target_include_directories(test_query_ir_nullable_row_mover_mask PRIVATE ${CMAKE_SOURCE_DIR}/test/storage)
 
+add_ir_tests(test_query_ir_nullable_unary_predicate NullableUnaryPredicateTest.cpp)
+target_include_directories(test_query_ir_nullable_unary_predicate PRIVATE ${CMAKE_SOURCE_DIR}/test/storage)
+
 add_ir_tests(test_query_ir_owned_nullable_append OwnedNullableAppendTest.cpp)
 target_include_directories(test_query_ir_owned_nullable_append PRIVATE ${CMAKE_SOURCE_DIR}/test/storage)
 

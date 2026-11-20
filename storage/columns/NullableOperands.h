@@ -101,12 +101,12 @@ struct NullableOperands {
         }
     }
 
-    // Writes rowValue(row) into every valid row and T {} into every null row
+    // Writes rowValue(row, valid) into every row, valid telling whether the row holds a value
     template <typename T, typename RowValue>
-    static void writeRows(T* values, const ValidityMask* validity, size_t size, RowValue rowValue) {
+    static void writeRowsByValidity(T* values, const ValidityMask* validity, size_t size, RowValue rowValue) {
         if (validity == nullptr) {
             for (size_t row = 0; row < size; row++) {
-                values[row] = rowValue(row);
+                values[row] = rowValue(row, true);
             }
             return;
         }
@@ -117,10 +117,18 @@ struct NullableOperands {
             const size_t count = std::min(BITS_PER_WORD, size - start);
 
             for (size_t bit = 0; bit < count; bit++) {
-                const T value = rowValue(start + bit);
-                values[start + bit] = ((valid >> bit) & 1) != 0 ? value : T {};
+                values[start + bit] = rowValue(start + bit, ((valid >> bit) & 1) != 0);
             }
         }
+    }
+
+    // Writes rowValue(row) into every valid row and T {} into every null row
+    template <typename T, typename RowValue>
+    static void writeRows(T* values, const ValidityMask* validity, size_t size, RowValue rowValue) {
+        writeRowsByValidity(values, validity, size, [&rowValue](size_t row, bool valid) {
+            const T value = rowValue(row);
+            return valid ? value : T {};
+        });
     }
 
     static ValidityWord validWord(const ValidityMask* validity, size_t word) {

@@ -4,6 +4,8 @@
 #include "ColumnVector.h"
 #include "ColumnConst.h"
 #include "ColumnOperand.h"
+#include "NullableOperands.h"
+#include "NullablePredicates.h"
 
 #include "TypeUtils.h"
 #include "metadata/PropertyType.h"
@@ -44,15 +46,19 @@ template <typename Op>
 struct UnaryPredicateExecutor {
     template <typename ResColumn, typename ArgColumn>
     static void apply(ResColumn* res, const ArgColumn* arg) {
-        const size_t size = arg->size();
-        resizeForRowWrites(res, size);
+        if constexpr (IS_NULLABLE_VECTOR<ResColumn> && IS_NULLABLE_VECTOR<ArgColumn>) {
+            NullablePredicateExecutor::apply<Op>(res, arg);
+        } else {
+            const size_t size = arg->size();
+            resizeForRowWrites(res, size);
 
-        auto op = Op {};
-        for (size_t i = 0; i < size; i++) {
-            writeRow(res, i, op(operandRow(arg, i)));
+            auto op = Op {};
+            for (size_t i = 0; i < size; i++) {
+                writeRow(res, i, op(operandRow(arg, i)));
+            }
+
+            finishRowWrites(res);
         }
-
-        finishRowWrites(res);
     }
 
     // Required for RETURN NOT TRUE, etc.
@@ -69,6 +75,8 @@ struct UnaryPredicateExecutor {
  */
 template <typename F>
 struct UnaryPredicate {
+    using Functor = F;
+
     template<typename T>
         requires TypeUtils::is_optional_v<T>
     inline std::optional<CustomBool> operator()(T&& a) {
