@@ -2401,13 +2401,8 @@ bool caseTestNever(const Column* condition, size_t row) {
 }
 
 void applyIsNotTrueOnOptBooleans(Column* result, const Column* operand) {
-    const ColumnOptVector<CustomBool>* typedOperand = static_cast<const ColumnOptVector<CustomBool>*>(operand);
-    std::vector<CustomBool>& resultRaw = static_cast<ColumnVector<CustomBool>*>(result)->getRaw();
-
-    resultRaw.resize(typedOperand->size());
-    for (size_t row = 0; row < resultRaw.size(); row++) {
-        resultRaw[row] = CustomBool {!(typedOperand->isValid(row) && typedOperand->getValue(row))};
-    }
+    NullablePredicateExecutor::isNotTrue(static_cast<ColumnVector<CustomBool>*>(result),
+                                         static_cast<const ColumnOptVector<CustomBool>*>(operand));
 }
 
 void applyIsNotTrueOnTaggedCells(Column* result, const Column* operand) {
@@ -2437,16 +2432,8 @@ void applyNullTestOnVector(Column* result, const Column* operand) {
 
 template <typename Element, bool TESTS_NULL>
 void applyNullTestOnOptVector(Column* result, const Column* operand) {
-    const ColumnOptVector<Element>* typedOperand = static_cast<const ColumnOptVector<Element>*>(operand);
-    std::vector<CustomBool>& resultRaw = static_cast<ColumnVector<CustomBool>*>(result)->getRaw();
-
-    const size_t rowCount = typedOperand->size();
-    resultRaw.resize(rowCount);
-
-    for (size_t row = 0; row < rowCount; row++) {
-        const bool holds = typedOperand->isValid(row) && holdsAValue(typedOperand->getValue(row));
-        resultRaw[row] = CustomBool {holds != TESTS_NULL};
-    }
+    NullablePredicateExecutor::testNull<TESTS_NULL>(static_cast<ColumnVector<CustomBool>*>(result),
+                                                    static_cast<const ColumnOptVector<Element>*>(operand));
 }
 
 template <typename ElementType, bool TESTS_NULL>
