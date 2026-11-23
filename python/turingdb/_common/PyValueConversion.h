@@ -1,17 +1,21 @@
 #pragma once
 
 #include <stdint.h>
+#include <span>
 #include <string_view>
 #include <type_traits>
 #include <unordered_map>
+#include <vector>
 
 #include <nanobind/nanobind.h>
 
 #include "NanobindUtils.h"
+#include "PyPathBlocks.h"
 #include "PyTimeTypes.h"
 #include "CellView.h"
 #include "CellUtils.h"
 #include "GraphPath.h"
+#include "PathView.h"
 #include "OutputValues.h"
 #include "list/ListView.h"
 #include "map/MapEntryView.h"
@@ -27,7 +31,8 @@ int64_t temporalMicroseconds(T value) {
 }
 
 // Converts a list or map value (or a single list element / map entry) to plain Python
-// objects — scalars, a list of floats for an embedding, nested lists, and dicts for maps.
+// objects — scalars, a list of floats for an embedding, a GraphPath for a path, nested
+// lists, and dicts for maps.
 // Deliberately plain objects, not ndarrays, so the result compares equal to the JSON-parsed
 // expectation. Nesting recurses through view() -> element()/entry() -> operator(); keeping
 // them as members of one struct lets them call each other without a forward declaration.
@@ -39,10 +44,15 @@ struct ValueToPyObject {
     // outlive the converter. A dict does not hash a str again once it has its hash.
     mutable std::unordered_map<std::string_view, nb::str> _mapKeys;
 
+    mutable PyPathBlocks _paths;
+
+    void adoptPathIDs(std::vector<std::vector<uint64_t>>& blocks) { _paths.adopt(blocks); }
+
     nb::object duration(db::Duration value) const;
     nb::object dateTime(db::DateTime value) const;
     nb::object point(const db::Point& value) const;
     const nb::str& mapKey(std::string_view key) const;
+    nb::object path(std::span<const uint64_t> ids) const { return _paths.makePath(ids); }
 
     nb::object view(const db::ListView& listView) const;
     nb::object element(const db::CellView element) const;
@@ -72,11 +82,7 @@ struct ValueToPyObject {
         } else if constexpr (std::is_same_v<T, db::ValueType>) {
             return toPyString(db::ValueTypeName::value(element.getAs<T>()));
         } else if constexpr (std::is_same_v<T, db::PathView>) {
-            nb::list ids;
-            for (const uint64_t id : element.getAs<T>().getIDs()) {
-                ids.append(nb::cast(id));
-            }
-            return ids;
+            return path(element.getAs<T>().getIDs());
         } else {
             return toPy(element.getAs<T>());
         }
@@ -88,16 +94,8 @@ template <typename T>
 nb::object toPyObject(const T& value, const ValueToPyObject& nested) {
     if constexpr (db::IsEmbedding<T>) {
         return embeddingToNdarray(value);
-    } else if constexpr (db::IsPath<T>) {
-        if (value.isNull()) {
-            return nb::none();
-        }
-
-        nb::list ids;
-        for (const uint64_t id : value.getIDs()) {
-            ids.append(nb::cast(id));
-        }
-        return ids;
+    } else if constexpr (db::IsPath<T> || std::is_same_v<T, db::PathView>) {
+        return nested.path(value.getIDs());
     } else if constexpr (db::IsListView<T> || db::IsMap<T>) {
         return nested.view(value);
     } else if constexpr (db::IsCell<T>) {

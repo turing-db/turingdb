@@ -17,6 +17,7 @@
 #include "PyColumnContainer.h"
 #include "PyObjectColumn.h"
 #include "PySink.h"
+#include "PyValueStore.h"
 #include "PyValueConversion.h"
 #include "TuringProtoDecoder.h"
 #include "TuringProtoDecoderConcepts.h"
@@ -291,8 +292,9 @@ struct BuildColumnFn {
 
 }
 
-PyResultBuilder::PyResultBuilder(PyColumnContainer* container)
-    : _container(container)
+PyResultBuilder::PyResultBuilder(PyColumnContainer* container, PyValueStore* values)
+    : _container(container),
+    _values(values)
 {
 }
 
@@ -321,7 +323,11 @@ void PyResultBuilder::appendChunk() {
     }
 
     nb::gil_scoped_acquire acquire;
-    const ValueToPyObject converter;
+    ValueToPyObject converter;
+
+    std::vector<std::vector<uint64_t>> pathBlocks;
+    _values->takePathIDs(pathBlocks);
+    converter.adoptPathIDs(pathBlocks);
 
     allocObjectColumns();
 

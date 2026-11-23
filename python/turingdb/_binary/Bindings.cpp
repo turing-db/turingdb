@@ -7,6 +7,7 @@
 #include "PyTuringClient.h"
 
 #include "NanobindUtils.h"
+#include "PyGraphPath.h"
 #include "TuringException.h"
 
 namespace nb = nanobind;
@@ -15,6 +16,8 @@ NB_MODULE(_turingproto, m) {
     using pybindings::PyTuringClient;
 
     m.doc() = "TuringDB Binary Protocol Python bindings (nanobind)";
+
+    pybindings::PyGraphPath::define(m);
 
     nb::class_<PyTuringClient>(m, "TuringProtoClient")
         .def(nb::init<const std::string&, const std::string&>(),

@@ -231,14 +231,13 @@ struct VectorColumnDecoder<db::GraphPath, Sink> {
                 return false;
             }
 
-            db::GraphPath& path = (*typedColumn)[context->_rowIndex + i];
-            readPathNodeCount(context, path);
+            const size_t nodeCount = readPathNodeCount(context);
+            const std::span<uint64_t> ids = allocPathRow(sink, typedColumn, context->_rowIndex + i, nodeCount);
 
-            if (path.isNull()) {
+            if (ids.empty()) {
                 continue;
             }
 
-            const std::span<uint64_t> ids = path.getIDs();
             if (!readVarLenPayload(context, reinterpret_cast<char*>(ids.data()), ids.size_bytes())) {
                 context->_rowIndex += i + 1;
                 return false;
@@ -246,6 +245,32 @@ struct VectorColumnDecoder<db::GraphPath, Sink> {
         }
 
         return true;
+    }
+
+private:
+    static std::span<uint64_t> allocPathRow(Sink* sink,
+                                            SinkColumnVector<T, Sink>* typedColumn,
+                                            size_t row,
+                                            size_t nodeCount) {
+        const size_t idCount = db::GraphPath::idCountOf(nodeCount);
+
+        if constexpr (PathViewColumn<SinkColumnVector<T, Sink>>) {
+            if (idCount == 0) {
+                typedColumn->setPath(row, db::PathView {});
+                return {};
+            }
+
+            SinkValueStore<Sink>* const values = sink->getValues();
+            uint64_t* const ids = values->allocPathIDs(idCount);
+            typedColumn->setPath(row, values->getPathView(ids, idCount));
+
+            return {ids, idCount};
+        } else {
+            db::GraphPath& path = (*typedColumn)[row];
+            path.setNodeCount(nodeCount);
+
+            return path.getIDs();
+        }
     }
 };
 
@@ -700,7 +725,7 @@ struct ConstColumnDecoder<db::GraphPath, Sink> {
         }
 
         db::GraphPath path;
-        readPathNodeCount(context, path);
+        path.setNodeCount(readPathNodeCount(context));
 
         if (path.isNull()) {
             typedColumn->set(std::move(path));

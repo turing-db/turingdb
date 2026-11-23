@@ -1,3 +1,3 @@
-from ._turingproto import TuringProtoClient
+from ._turingproto import GraphPath, TuringProtoClient
 
-__all__ = ["TuringProtoClient"]
+__all__ = ["GraphPath", "TuringProtoClient"]

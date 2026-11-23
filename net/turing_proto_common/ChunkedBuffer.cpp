@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <utility>
 
 using namespace net::proto;
 
@@ -50,6 +51,15 @@ ChunkedBuffer<T>::refType ChunkedBuffer<T>::getView(T* data, size_t count) {
 
 template <typename T>
 void ChunkedBuffer<T>::clear() {
+    _chunks.clear();
+}
+
+template <typename T>
+void ChunkedBuffer<T>::takeChunks(std::vector<std::vector<T>>& chunks) {
+    for (std::vector<T>& chunk : _chunks) {
+        chunks.push_back(std::move(chunk));
+    }
+
     _chunks.clear();
 }
 

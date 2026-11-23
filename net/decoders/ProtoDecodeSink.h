@@ -47,6 +47,12 @@ concept OptionalBufferColumn = requires(Column column, const DynamicLargeBitMask
     { column.setValidity(validity) };
 };
 
+// A path column whose rows view IDs the value store holds, rather than own their IDs
+template <typename Column>
+concept PathViewColumn = requires(Column column, size_t row, db::PathView path) {
+    { column.setPath(row, path) };
+};
+
 template <typename Column, typename T>
 concept OptionalConstColumn = ConstColumn<Column, T>
 && requires(Column column, const std::optional<T>& constValue, std::optional<T> value) {

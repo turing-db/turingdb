@@ -4,7 +4,9 @@
 #include <stdint.h>
 #include <span>
 #include <string_view>
+#include <vector>
 
+#include "ChunkedBuffer.h"
 #include "TuringValueStore.h"
 #include "CellView.h"
 #include "PathView.h"
@@ -13,8 +15,9 @@
 
 namespace pybindings {
 
-// The value store of the Python sink. Its values are written to a TuringValueStore and
-// dropped with clearValues.
+// The value store of the Python sink. Strings, lists and maps are written to a
+// TuringValueStore and dropped with clearValues. Path IDs are written to blocks of their
+// own, which the result builder takes once a chunk is decoded.
 class PyValueStore {
 public:
     PyValueStore();
@@ -26,8 +29,11 @@ public:
     float* allocEmbedding(size_t floatCount) { return _values.allocEmbedding(floatCount); }
     std::span<const float> getEmbeddingView(float* data, size_t floatCount) { return _values.getEmbeddingView(data, floatCount); }
 
-    uint64_t* allocPathIDs(size_t idCount) { return _values.allocPathIDs(idCount); }
-    db::PathView getPathView(uint64_t* ids, size_t idCount) { return _values.getPathView(ids, idCount); }
+    uint64_t* allocPathIDs(size_t idCount) { return _pathIDs.alloc(idCount); }
+    db::PathView getPathView(uint64_t* ids, size_t idCount) { return db::PathView {_pathIDs.getView(ids, idCount)}; }
+
+    // Moves the blocks holding the path IDs written so far to the end of blocks
+    void takePathIDs(std::vector<std::vector<uint64_t>>& blocks) { _pathIDs.takeChunks(blocks); }
 
     db::ListView beginList(size_t elementCount, size_t byteSize) { return _values.beginList(elementCount, byteSize); }
     db::CellView beginNestedList(size_t elementCount, size_t byteSize) { return _values.beginNestedList(elementCount, byteSize); }
@@ -58,6 +64,7 @@ public:
 
 private:
     net::proto::TuringValueStore _values;
+    net::proto::ChunkedBuffer<uint64_t> _pathIDs;
 };
 
 }
