@@ -73,6 +73,19 @@ def one_named(name: str):
     return check
 
 
+def nested_like_their_column(frame: pd.DataFrame) -> None:
+    columns = {"dt": frame["dt"][0], "du": frame["du"][0], "e": frame["e"][0]}
+    for nested in (dict(zip(columns, frame["l"][0])), frame["m"][0]):
+        for name, row in columns.items():
+            element = nested[name]
+            assert type(element) is type(row), (name, element, row)
+            if isinstance(row, np.ndarray):
+                assert element.dtype == row.dtype and np.array_equal(element, row), (name, element, row)
+            else:
+                assert element == row and element.unit == row.unit, (name, element, row)
+        assert nested["dt"].tz == columns["dt"].tz, (nested["dt"], columns["dt"])
+
+
 def property_types(rows: list) -> None:
     assert all(isinstance(row[0], int) for row in rows), rows
     assert {row[1]: row[2] for row in rows} == PROPERTY_VALUE_TYPES, rows
@@ -161,6 +174,11 @@ def cases(change: int) -> list[dict]:
         {"name": "a nullable Duration constant",
          "query": "RETURN duration(5) AS five, duration(toInteger('x')) AS unparsed",
          "dtypes": ["Duration", "Duration"], "rows": [[datetime.timedelta(microseconds=5), None]]},
+
+        {"name": "a DateTime, a Duration and an Embedding in a List and a Map as in their column",
+         "query": "MATCH (n:T {name: 'a'}) RETURN n.dt AS dt, n.du AS du, n.e AS e, [n.dt, n.du, n.e] AS l, "
+                  "{dt: n.dt, du: n.du, e: n.e} AS m",
+         "dtypes": ["DateTime", "Duration", "Embedding", "List", "Map"], "frame_check": nested_like_their_column},
 
         {"name": "a nullable Point column",
          "query": "MATCH (n:T) RETURN n.p AS p ORDER BY n.name",
@@ -251,6 +269,9 @@ def failure(db: turingdb.TuringDB, case: dict) -> str | None:
 
         if "check" in case:
             case["check"](rows)
+
+        if "frame_check" in case:
+            case["frame_check"](frame)
     except AssertionError as e:
         return f"rows {e}"
     except Exception as e:
