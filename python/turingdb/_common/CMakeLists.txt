@@ -12,6 +12,7 @@ target_sources(turing_py_nanobind_utils INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/NanobindUtils.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/PyGraphPath.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/PyOwnerBlocks.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/PyPandasTimes.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/PyParameters.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/PyTimeTypes.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/PyValueConversion.cpp)

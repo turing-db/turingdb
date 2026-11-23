@@ -7,11 +7,11 @@
 using namespace pybindings;
 
 nb::object ValueToPyObject::duration(db::Duration value) const {
-    return _times.getTimedelta()(nb::arg("microseconds") = value.getMicroseconds());
+    return _times.makeTimedelta(value.getMicroseconds());
 }
 
 nb::object ValueToPyObject::dateTime(db::DateTime value) const {
-    return _times.getEpoch() + duration(db::Duration {value.getMicroseconds()});
+    return _times.makeTimestamp(value.getMicroseconds());
 }
 
 nb::object ValueToPyObject::point(const db::Point& value) const {

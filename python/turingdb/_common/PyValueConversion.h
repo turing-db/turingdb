@@ -11,7 +11,7 @@
 
 #include "NanobindUtils.h"
 #include "PyOwnerBlocks.h"
-#include "PyTimeTypes.h"
+#include "PyPandasTimes.h"
 #include "CellView.h"
 #include "CellUtils.h"
 #include "GraphPath.h"
@@ -31,11 +31,13 @@ int64_t temporalMicroseconds(T value) {
 }
 
 // Converts a list or map value (or a single list element / map entry) to Python objects —
-// scalars, a numpy float32 array for an embedding, a GraphPath for a path, lists, and dicts
-// for maps. Nesting recurses through view() -> element()/entry() -> operator(); keeping
-// them as members of one struct lets them call each other without a forward declaration.
+// scalars, a numpy float32 array for an embedding, a GraphPath for a path, a pd.Timestamp
+// for a date, a pd.Timedelta for a duration, lists, and dicts for maps, each the type a row
+// of a column of that value has. Nesting recurses through view() -> element()/entry() ->
+// operator(); keeping them as members of one struct lets them call each other without a
+// forward declaration.
 struct ValueToPyObject {
-    mutable PyTimeTypes _times;
+    mutable PyPandasTimes _times;
     mutable nb::object _point;
 
     // One str per distinct map key, keyed by the bytes the key views, so the bytes must
