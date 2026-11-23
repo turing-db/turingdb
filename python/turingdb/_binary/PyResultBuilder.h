@@ -21,9 +21,10 @@ public:
     PyResultBuilder(PyColumnContainer* container, PyValueStore* values);
     ~PyResultBuilder();
 
-    // Takes the chunk the columns hold, and the path IDs of the value store, which its
-    // GraphPath objects view. The sink drops the chunk's strings, lists and maps once it
-    // returns. Runs without the GIL, and takes it only to read a column as objects.
+    // Takes the chunk the columns hold, and the path IDs and embeddings of the value store,
+    // which its GraphPath objects and embedding arrays view. The sink drops the chunk's
+    // strings, lists and maps once it returns. Runs without the GIL, and takes it only to
+    // read a column as objects.
     void appendChunk();
 
     void build(nb::dict& envelope);

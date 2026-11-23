@@ -19,8 +19,8 @@ namespace pybindings {
 // The decode sink of the Python client. A fixed-width column grows across the chunks of a
 // response, to be handed to numpy as it is. Strings, embeddings, paths, lists and maps are
 // written into the value store a chunk at a time, read into Python objects once the chunk
-// is decoded, and dropped with clearValues. The path IDs are kept, as the GraphPath objects
-// view them.
+// is decoded, and dropped with clearValues. The path IDs and embeddings are kept, as the
+// GraphPath objects and embedding arrays view them.
 class PySink {
 public:
     using ColumnContainer = PyColumnContainer;

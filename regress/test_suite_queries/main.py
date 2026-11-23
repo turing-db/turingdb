@@ -2,6 +2,7 @@ import json
 import os
 import sys
 
+import numpy as np
 import pandas as pd
 from turingdb import TuringDB, TuringDBException
 from turingdb.protocol import DTYPE_MAP
@@ -36,6 +37,27 @@ def parse_result_json(json_str: str) -> pd.DataFrame:
         )
         df = pd.concat([df, df_chunk], ignore_index=True)
 
+    return df
+
+
+def plain(value):
+    """A value inside a list or map as the JSON parse of a resultJson gives it: an embedding
+    as a list of floats."""
+    if isinstance(value, list):
+        return [plain(element) for element in value]
+    elif isinstance(value, dict):
+        return {key: plain(element) for key, element in value.items()}
+    elif isinstance(value, np.ndarray):
+        return value.tolist()
+
+    return value
+
+
+def plain_containers(df: pd.DataFrame) -> pd.DataFrame:
+    """The DataFrame with the values inside its lists and maps made plain."""
+    for column in df.columns:
+        if df[column].dtype == object:
+            df[column] = df[column].map(lambda value: plain(value) if isinstance(value, (list, dict)) else value)
     return df
 
 
@@ -218,7 +240,7 @@ def main() -> None:
                         print(f"    actual:   {e}")
                         failed += 1
             else:
-                actual_df = client.query(query)
+                actual_df = plain_containers(client.query(query))
                 expected_df = parse_result_json(expected_json_str)
 
                 if actual_df.equals(expected_df):

@@ -329,6 +329,10 @@ void PyResultBuilder::appendChunk() {
     _values->takePathIDs(pathBlocks);
     converter.adoptPathIDs(pathBlocks);
 
+    std::vector<std::vector<float>> embeddingBlocks;
+    _values->takeEmbeddings(embeddingBlocks);
+    converter.adoptEmbeddings(embeddingBlocks);
+
     allocObjectColumns();
 
     for (size_t index = 0; index < columnCount; index++) {
