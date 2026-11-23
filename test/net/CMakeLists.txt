@@ -81,6 +81,9 @@ add_turing_test(test_net_request_body_after_refusal RequestBodyAfterRefusalTest.
 add_turing_test(test_net_client_parameters_after_refusal ClientParametersAfterRefusalTest.cpp)
 target_sources(test_net_client_parameters_after_refusal PRIVATE ProtoServerTest.cpp)
 
+add_turing_test(test_net_aborted_response AbortedResponseTest.cpp)
+target_sources(test_net_aborted_response PRIVATE ProtoServerTest.cpp)
+
 if (TURINGDB_BUILD_WASM)
     add_turing_test(test_net_wasm_optional_column_decode WasmOptionalColumnDecodeTest.cpp)
     target_link_libraries(test_net_wasm_optional_column_decode PRIVATE turing_db_wasm_s)
