@@ -37,26 +37,6 @@ std::unique_ptr<db::TuringServer> g_server;
 std::unique_ptr<net::proto::TuringClient> g_client;
 std::string g_rootDirectory;
 
-uint16_t reserveFreePort() {
-    const int socket = ::socket(AF_INET, SOCK_STREAM, 0);
-    bioassert(socket >= 0, "Could not create a socket to reserve a port");
-
-    sockaddr_in address {};
-    address.sin_family = AF_INET;
-    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    address.sin_port = 0;
-
-    const int bound = ::bind(socket, reinterpret_cast<const sockaddr*>(&address), sizeof(address));
-    bioassert(bound == 0, "Could not bind a socket to reserve a port");
-
-    sockaddr_in boundAddress {};
-    socklen_t boundAddressLen = sizeof(boundAddress);
-    ::getsockname(socket, reinterpret_cast<sockaddr*>(&boundAddress), &boundAddressLen);
-    ::close(socket);
-
-    return ntohs(boundAddress.sin_port);
-}
-
 bool waitUntilListening(uint16_t port) {
     for (int attempt = 0; attempt < 200; attempt++) {
         const int socket = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -91,16 +71,15 @@ void initOnce() {
     db::SystemAccessor system = g_env->getSystemManager().accessUnique();
     db::SimpleGraph::createSimpleGraph(system.getGraph("default"));
 
-    const uint16_t port = reserveFreePort();
-
     db::DBServerConfig serverConfig;
     serverConfig.setAddress("127.0.0.1");
-    serverConfig.setPort(port);
+    serverConfig.setPort(0);
     serverConfig.setWorkerCount(1);
     serverConfig.setMaxConnections(16);
 
     g_server = std::make_unique<db::TuringServer>(serverConfig, g_env->getDB());
     g_server->start();
+    const uint16_t port = g_server->getPort();
 
     bioassert(waitUntilListening(port), "The in-process proto server never started listening");
 

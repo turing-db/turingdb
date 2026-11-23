@@ -42,7 +42,7 @@ public:
     void setName(const char* name) { _name = name; }
 
     std::string_view getAddress() const { return {_actualAddress.data()}; };
-    uint32_t getPort() const { return _port; };
+    uint32_t getPort() const { return _actualPort; };
 
 private:
     const char* _name {"server"};
@@ -54,6 +54,7 @@ private:
     utils::ServerSocket _serverSocket {0};
     utils::EpollInstance _epollInstance {0};
     utils::StringAddress _actualAddress {};
+    uint32_t _actualPort {0};
     int _shutdownPipe[2] {-1, -1};
     std::unique_ptr<TCPConnectionStorage> _connections;
     TCPConnection* _serverConnection {nullptr};

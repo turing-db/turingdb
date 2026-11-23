@@ -14,7 +14,8 @@ using namespace turing::test;
 
 TEST(TuringAsyncClientConnectTest, aRefusedConnectionIsAConnectError) {
     LocalMemory localMem;
-    const std::string port = std::to_string(reserveFreePort());
+    const RefusedPort refusedPort;
+    const std::string port = std::to_string(refusedPort.getPort());
     net::proto::TuringAsyncClient client("127.0.0.1", port, &localMem);
 
     std::string message;

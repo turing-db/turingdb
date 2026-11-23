@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdint.h>
 #include <string>
 #include <memory>
 #include <thread>
@@ -18,6 +19,8 @@ public:
     void start();
     void stop();
     void wait();
+
+    uint32_t getPort() const;
 
 private:
     std::string _address;

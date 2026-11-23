@@ -64,16 +64,15 @@ protected:
         }
         SimpleGraph::createSimpleGraph(graph);
 
-        _port = reserveFreePort();
-
         DBServerConfig serverConfig;
         serverConfig.setAddress("127.0.0.1");
-        serverConfig.setPort(_port);
+        serverConfig.setPort(0);
         serverConfig.setWorkerCount(1);
         serverConfig.setMaxConnections(16);
 
         _server = std::make_unique<TuringServer>(serverConfig, _env->getDB());
         _server->start();
+        _port = _server->getPort();
 
         ASSERT_TRUE(waitUntilListening(_port, std::chrono::milliseconds(2000)));
     }

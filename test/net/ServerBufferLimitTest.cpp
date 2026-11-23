@@ -3,7 +3,6 @@
 #include <memory>
 
 #include "DBServerConfig.h"
-#include "RemoteTestUtils.h"
 #include "TuringException.h"
 #include "TuringProtoHeaders.h"
 #include "TuringServer.h"
@@ -27,7 +26,7 @@ protected:
 TEST_F(ServerBufferLimitTest, refusesToStartWithABufferAboveTheMaximum) {
     DBServerConfig config;
     config.setAddress("127.0.0.1");
-    config.setPort(reserveFreePort());
+    config.setPort(0);
     config.setWorkerCount(1);
     config.setProtoBufferCapacity(net::proto::MAX_PAYLOAD_SIZE + 1);
 

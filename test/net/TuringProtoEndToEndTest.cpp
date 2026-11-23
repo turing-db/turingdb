@@ -59,16 +59,16 @@ EndToEndResult runEndToEnd(const std::string& outDir,
     seedJobSystem.init();
     seeder(graph, &seedJobSystem);
 
-    const uint16_t port = reserveFreePort();
     db::DBServerConfig serverConfig;
     serverConfig.setAddress("127.0.0.1");
-    serverConfig.setPort(port);
+    serverConfig.setPort(0);
     serverConfig.setWorkerCount(1);
     serverConfig.setMaxConnections(16);
     serverConfig.setProtoBufferCapacity(bufferCapacity);
 
     db::TuringServer server(serverConfig, env->getDB());
     server.start();
+    const uint16_t port = server.getPort();
 
     EndToEndResult result;
     bool serverStarted = true;

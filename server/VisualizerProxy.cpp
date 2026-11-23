@@ -12,6 +12,8 @@
 #include "HTTP.h"
 #include "HTTPWriter.h"
 
+#include "BioAssert.h"
+
 using namespace db;
 
 namespace {
@@ -209,7 +211,7 @@ void VisualizerProxy::start() {
 
     _serverThread = std::thread(serverFunc);
 
-    spdlog::info("Visualizer available at http://{}:{}", _address, _proxyPort);
+    spdlog::info("Visualizer available at http://{}:{}", _address, _server->getPort());
 }
 
 void VisualizerProxy::wait() {
@@ -224,4 +226,9 @@ void VisualizerProxy::stop() {
     if (_serverThread.joinable()) {
         _serverThread.join();
     }
+}
+
+uint32_t VisualizerProxy::getPort() const {
+    bioassert(_server, "The visualizer reports its port only once started");
+    return _server->getPort();
 }
