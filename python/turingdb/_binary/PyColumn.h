@@ -7,6 +7,8 @@
 #include <utility>
 #include <vector>
 
+#include "GraphPath.h"
+#include "PathView.h"
 #include "ProtoDecodeSink.h"
 #include "TuringProtoEncoder.h"
 #include "TuringProtoHeaders.h"
@@ -90,6 +92,33 @@ public:
 private:
     std::vector<T> _rows;
     size_t _chunkStart {0};
+};
+
+// A path column's rows view IDs the decoder writes into the value store, whose blocks the
+// result builder hands to Python with no copy. A null path views no ID.
+template <>
+class PyColumnVector<db::GraphPath> : public PyColumn {
+public:
+    using ValueType = db::GraphPath;
+    using DbColumn = db::ColumnVector<db::GraphPath>;
+
+    PyColumnVector()
+        : PyColumn(internalTypeOf<db::GraphPath>(), net::proto::ColumnKind::VECTOR)
+    {
+    }
+
+    size_t size() const { return _rows.size(); }
+
+    const db::PathView& operator[](size_t row) const { return _rows[row]; }
+
+    void resize(size_t rowCount) { _rows.resize(rowCount); }
+
+    void setPath(size_t row, db::PathView path) { _rows[row] = path; }
+
+    void clear() { _rows.clear(); }
+
+private:
+    std::vector<db::PathView> _rows;
 };
 
 // A nullable column, with the null mask pandas reads: 1 for a null row. Its chunks are
@@ -192,6 +221,7 @@ static_assert(net::proto::VectorColumn<PyColumnVector<uint64_t>, uint64_t>);
 static_assert(net::proto::OptionalVectorColumn<PyColumnOptVector<uint64_t>, uint64_t>);
 static_assert(net::proto::OptionalBufferColumn<PyColumnOptVector<uint64_t>, uint64_t>);
 static_assert(net::proto::ConstColumn<PyColumnConst<uint64_t>, uint64_t>);
+static_assert(net::proto::PathViewColumn<PyColumnVector<db::GraphPath>>);
 static_assert(net::proto::OptionalConstColumn<PyColumnConst<std::optional<uint64_t>>, uint64_t>);
 
 }

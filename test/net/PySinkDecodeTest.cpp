@@ -2,8 +2,10 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <algorithm>
 #include <functional>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -11,6 +13,7 @@
 #include "ProtoServerTest.h"
 #include "PySink.h"
 #include "PyValueStore.h"
+#include "GraphPath.h"
 #include "QueryStatus.h"
 #include "TuringClient.h"
 #include "list/ListView.h"
@@ -213,6 +216,54 @@ TEST_F(PySinkDecodeTest, readsStringsListsAndMapsSplitAcrossPackets) {
         ASSERT_EQ(strings[row], "value_" + std::to_string(row));
         ASSERT_EQ(lists[row], (std::vector<int64_t> {value, value + 1}));
         ASSERT_EQ(maps[row], value);
+    }
+}
+
+TEST_F(PySinkDecodeTest, keepsPathIDsInBlocksTheValueStoreHandsOver) {
+    const std::string query = "MATCH p = (a)-->(b) UNWIND range(0, 9999) AS x "
+                              "RETURN p, CASE WHEN x % 2 = 0 THEN p END AS q";
+
+    std::vector<std::vector<uint64_t>> paths;
+    size_t nullCount = 0;
+    const auto onChunkDecoded = [this, &paths, &nullCount]() {
+        ASSERT_EQ(_container.size(), 2u);
+
+        std::vector<std::vector<uint64_t>> blocks;
+        _values.takePathIDs(blocks);
+
+        for (size_t index = 0; index < 2; index++) {
+            PyColumn* column = _container[index];
+            ASSERT_EQ(column->getKind(), net::proto::ColumnKind::VECTOR);
+            ASSERT_EQ(column->getInternalType(), net::proto::ColumnInternalKind::GRAPH_PATH);
+
+            PyColumnVector<GraphPath>* pathColumn = static_cast<PyColumnVector<GraphPath>*>(column);
+            for (size_t row = 0; row < pathColumn->size(); row++) {
+                const std::span<const uint64_t> ids = (*pathColumn)[row].getIDs();
+                if (ids.empty()) {
+                    nullCount++;
+                    continue;
+                }
+
+                const auto holdsPath = [&ids](const std::vector<uint64_t>& block) {
+                    return ids.data() >= block.data() && ids.data() + ids.size() <= block.data() + block.size();
+                };
+                ASSERT_TRUE(std::any_of(blocks.begin(), blocks.end(), holdsPath)) << row;
+
+                paths.emplace_back(ids.begin(), ids.end());
+            }
+            pathColumn->clear();
+        }
+    };
+
+    const QueryStatus status = run(query, onChunkDecoded);
+    ASSERT_TRUE(status.isOk()) << status.getError();
+    EXPECT_GT(_chunkCount, 2u);
+
+    ASSERT_EQ(paths.size() + nullCount, 2 * (paths.size() - nullCount));
+    ASSERT_EQ(paths.size() % 15000, 0u);
+
+    for (const std::vector<uint64_t>& path : paths) {
+        ASSERT_EQ(path.size(), 3u);
     }
 }
 

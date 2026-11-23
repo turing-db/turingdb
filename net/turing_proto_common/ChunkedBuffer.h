@@ -40,6 +40,9 @@ public:
     refType getView(T* data, size_t count);
     void clear();
 
+    // Moves every chunk to the end of chunks, leaving the buffer empty
+    void takeChunks(std::vector<std::vector<T>>& chunks);
+
 private:
     static constexpr size_t CHUNK_CAPACITY = 256 * 1024;
 

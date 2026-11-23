@@ -5,14 +5,13 @@
 #include <string>
 
 #include "DecodeContext.h"
-#include "GraphPath.h"
 #include "TuringException.h"
 #include "TuringProtoHeaders.h"
 #include "TuringProtoInBuf.h"
 
 namespace net::proto {
 
-inline void readPathNodeCount(DecodeContext* context, db::GraphPath& path) {
+inline size_t readPathNodeCount(DecodeContext* context) {
     WireSize nodeCount = 0;
     context->_inBuf->readData(&nodeCount, sizeof(nodeCount));
 
@@ -21,7 +20,7 @@ inline void readPathNodeCount(DecodeContext* context, db::GraphPath& path) {
         throw TuringException("Invalid path node count " + std::to_string(nodeCount));
     }
 
-    path.setNodeCount(nodeCount);
+    return nodeCount;
 }
 
 template <typename T>

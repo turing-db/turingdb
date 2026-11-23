@@ -47,6 +47,8 @@ def plain(value):
         return value.to_pydatetime()
     elif isinstance(value, pd.Timedelta):
         return value.to_pytimedelta()
+    elif isinstance(value, turingdb.GraphPath):
+        return {"nodes": plain(value.nodes), "edges": plain(value.edges)}
 
     return value
 
@@ -61,7 +63,7 @@ def nan_apart_from_null(rows: list) -> None:
 
 
 def path_of_ids(rows: list) -> None:
-    assert len(rows) == 1 and rows[0][0] == rows[0][1:], rows
+    assert len(rows) == 1 and rows[0][0] == {"nodes": [rows[0][1], rows[0][3]], "edges": [rows[0][2]]}, rows
 
 
 def one_named(name: str):

@@ -6,6 +6,7 @@
 
 #include "PyTuringEmbedded.h"
 #include "NanobindUtils.h"
+#include "PyGraphPath.h"
 #include "TuringException.h"
 
 namespace nb = nanobind;
@@ -14,6 +15,8 @@ NB_MODULE(_turingembedded, m) {
     using pybindings::PyTuringEmbedded;
 
     m.doc() = "TuringDB in-process Python bindings (nanobind)";
+
+    pybindings::PyGraphPath::importFrom("turingdb._binary._turingproto");
 
     nb::class_<PyTuringEmbedded>(m, "PyTuringEmbedded")
         .def(nb::init<>())

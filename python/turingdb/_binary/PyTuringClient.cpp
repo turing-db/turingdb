@@ -43,7 +43,7 @@ nb::dict PyTuringClient::query(const std::string& cypher, nb::handle parameters)
 
     PyColumnContainer container;
     PySink sink(&_values);
-    PyResultBuilder builder(&container);
+    PyResultBuilder builder(&container, &_values);
 
     const auto onChunkDecoded = [this, &builder]() {
         builder.appendChunk();
