@@ -137,12 +137,6 @@ void appendChunkColumns(std::span<const db::Column* const> chunks,
                         size_t rowCount,
                         db::Dataframe* dst);
 
-// Each embedding is a variable-length float vector, so the natural
-// representation is one numpy array per row. The enclosing column ends up as a
-// Python list of 1D float arrays rather than a single 2D array — embedding
-// dimensions can differ row-to-row.
-nb::object embeddingToNdarray(std::span<const float> s);
-
 // Top-level dispatcher: walks every column of the dataframe and picks the
 // right converter based on the column's runtime kind. The output is a
 // `{"data": {col: ndarray|list}, "dtypes": {col: type_name}}` envelope. The

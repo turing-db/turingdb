@@ -16,8 +16,8 @@
 namespace pybindings {
 
 // The value store of the Python sink. Strings, lists and maps are written to a
-// TuringValueStore and dropped with clearValues. Path IDs are written to blocks of their
-// own, which the result builder takes once a chunk is decoded.
+// TuringValueStore and dropped with clearValues. Embeddings and path IDs are written to
+// blocks of their own, which the result builder takes once a chunk is decoded.
 class PyValueStore {
 public:
     PyValueStore();
@@ -26,8 +26,11 @@ public:
     char* allocString(size_t size) { return _values.allocString(size); }
     static std::string_view getStringView(char* data, size_t size) { return net::proto::TuringValueStore::getStringView(data, size); }
 
-    float* allocEmbedding(size_t floatCount) { return _values.allocEmbedding(floatCount); }
-    std::span<const float> getEmbeddingView(float* data, size_t floatCount) { return _values.getEmbeddingView(data, floatCount); }
+    float* allocEmbedding(size_t floatCount) { return _embeddings.alloc(floatCount); }
+    std::span<const float> getEmbeddingView(float* data, size_t floatCount) { return _embeddings.getView(data, floatCount); }
+
+    // Moves the blocks holding the embeddings written so far to the end of blocks
+    void takeEmbeddings(std::vector<std::vector<float>>& blocks) { _embeddings.takeChunks(blocks); }
 
     uint64_t* allocPathIDs(size_t idCount) { return _pathIDs.alloc(idCount); }
     db::PathView getPathView(uint64_t* ids, size_t idCount) { return db::PathView {_pathIDs.getView(ids, idCount)}; }
@@ -64,6 +67,7 @@ public:
 
 private:
     net::proto::TuringValueStore _values;
+    net::proto::ChunkedBuffer<float> _embeddings;
     net::proto::ChunkedBuffer<uint64_t> _pathIDs;
 };
 

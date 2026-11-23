@@ -2,6 +2,8 @@
 
 #include <span>
 
+#include "PyGraphPath.h"
+
 using namespace pybindings;
 
 nb::object ValueToPyObject::duration(db::Duration value) const {
@@ -21,6 +23,25 @@ nb::object ValueToPyObject::point(const db::Point& value) const {
     const nb::object z = db::Point::getDimension(crs) == 3 ? nb::cast(value.getZ()) : nb::none();
 
     return _point(db::Point::getSRID(crs), value.getX(), value.getY(), z);
+}
+
+nb::object ValueToPyObject::path(std::span<const uint64_t> ids) const {
+    if (ids.empty()) {
+        return nb::none();
+    }
+
+    size_t offset = 0;
+    const PyOwnerBlocks<uint64_t>::Block& block = _pathIDs.place(ids, offset);
+
+    return PyGraphPath::create(block._array, block._data, offset, (ids.size() + 1) / 2);
+}
+
+nb::object ValueToPyObject::embedding(std::span<const float> values) const {
+    size_t offset = 0;
+    const PyOwnerBlocks<float>::Block& block = _embeddings.place(values, offset);
+
+    const nb::slice range(offset, offset + values.size());
+    return block._array[range];
 }
 
 const nb::str& ValueToPyObject::mapKey(std::string_view key) const {

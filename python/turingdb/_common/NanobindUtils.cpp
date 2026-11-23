@@ -77,11 +77,6 @@ void appendChunkColumns(std::span<const db::Column* const> chunks,
     }
 }
 
-nb::object embeddingToNdarray(std::span<const float> s) {
-    std::vector<float> buf(s.begin(), s.end());
-    return wrapVectorAsNdarray(std::move(buf));
-}
-
 nb::object maskedArray(const nb::object& values, std::vector<uint8_t>& nullMask) {
     const nb::object mask = wrapVectorAsNdarrayOf<bool>(std::move(nullMask));
     const nb::object maskedArrayType = nb::module_::import_("numpy.ma").attr("MaskedArray");

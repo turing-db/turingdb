@@ -267,6 +267,70 @@ TEST_F(PySinkDecodeTest, keepsPathIDsInBlocksTheValueStoreHandsOver) {
     }
 }
 
+TEST_F(PySinkDecodeTest, keepsEmbeddingsInBlocksTheValueStoreHandsOver) {
+    const std::string query = "UNWIND range(0, " + std::to_string(ROW_COUNT - 1) + ") AS x "
+                              "RETURN CASE WHEN x % 2 = 0 THEN (1.0, 2.0) END AS e, "
+                              "[(3.0, 4.0), x] AS l, {k: (5.0, 6.0), x: x} AS m";
+
+    using Embedding = types::Embedding::Primitive;
+
+    size_t embeddingCount = 0;
+    size_t nullCount = 0;
+    const auto onChunkDecoded = [this, &embeddingCount, &nullCount]() {
+        ASSERT_EQ(_container.size(), 3u);
+        ASSERT_EQ(_container[0]->getKind(), net::proto::ColumnKind::OPTIONAL_VECTOR);
+        ASSERT_EQ(_container[1]->getKind(), net::proto::ColumnKind::VECTOR);
+        ASSERT_EQ(_container[2]->getKind(), net::proto::ColumnKind::VECTOR);
+
+        std::vector<std::vector<float>> blocks;
+        _values.takeEmbeddings(blocks);
+
+        const auto check = [&blocks, &embeddingCount](const Embedding& embedding, float first) {
+            const auto holdsEmbedding = [&embedding](const std::vector<float>& block) {
+                return embedding.data() >= block.data() && embedding.data() + embedding.size() <= block.data() + block.size();
+            };
+            ASSERT_TRUE(std::any_of(blocks.begin(), blocks.end(), holdsEmbedding));
+            ASSERT_EQ(std::vector<float>(embedding.begin(), embedding.end()), (std::vector<float> {first, first + 1.0f}));
+
+            embeddingCount++;
+        };
+
+        PyColumnOptVector<Embedding>* column = static_cast<PyColumnOptVector<Embedding>*>(_container[0]);
+        const Embedding* const values = column->getChunkValues();
+        for (size_t row = 0; row < column->size(); row++) {
+            if (column->isValid(row)) {
+                check(values[row], 1.0f);
+            } else {
+                nullCount++;
+            }
+        }
+        column->clear();
+
+        PyColumnVector<ListView>* lists = static_cast<PyColumnVector<ListView>*>(_container[1]);
+        for (size_t row = 0; row < lists->size(); row++) {
+            check((*lists)[row].elements()[0].getAs<Embedding>(), 3.0f);
+        }
+        lists->clear();
+
+        PyColumnVector<MapView>* maps = static_cast<PyColumnVector<MapView>*>(_container[2]);
+        for (size_t row = 0; row < maps->size(); row++) {
+            for (const MapEntryView entry : (*maps)[row].entries()) {
+                if (entry.getKey() == "k") {
+                    check(entry.getValue().getAs<Embedding>(), 5.0f);
+                }
+            }
+        }
+        maps->clear();
+    };
+
+    const QueryStatus status = run(query, onChunkDecoded);
+    ASSERT_TRUE(status.isOk()) << status.getError();
+    EXPECT_GT(_chunkCount, 2u);
+
+    EXPECT_EQ(nullCount, ROW_COUNT / 2);
+    EXPECT_EQ(embeddingCount, ROW_COUNT / 2 + 2 * ROW_COUNT);
+}
+
 TEST_F(PySinkDecodeTest, readsAStringLongerThanManyPackets) {
     const std::string longText(5 * SERVER_BUFFER_CAPACITY + 17, 'z');
     const std::string query = "UNWIND range(0, 9) AS x RETURN '" + longText + "' + toString(x) AS s";
