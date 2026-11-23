@@ -119,31 +119,41 @@ void receiveChunkedResponse(int socket, std::string& received, size_t& position,
 
 }
 
-uint16_t reserveFreePort() {
-    const int sock = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (sock < 0) {
-        throw FatalException("Failed to create socket while reserving a test port");
+RefusedPort::RefusedPort()
+    : RefusedPort(0)
+{
+}
+
+RefusedPort::RefusedPort(uint16_t port)
+{
+    _socket = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (_socket < 0) {
+        throw FatalException("Could not create the socket that holds a refused port");
     }
 
-    sockaddr_in addr {};
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    addr.sin_port = 0;
+    sockaddr_in address {};
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address.sin_port = htons(port);
 
-    if (::bind(sock, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)) != 0) {
-        ::close(sock);
-        throw FatalException("Failed to bind test socket while reserving a test port");
+    if (::bind(_socket, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0) {
+        const int error = errno;
+        ::close(_socket);
+        throw FatalException("Could not bind port " + std::to_string(port) + ": " + strerror(error));
     }
 
-    sockaddr_in boundAddr {};
-    socklen_t boundAddrLen = sizeof(boundAddr);
-    if (::getsockname(sock, reinterpret_cast<sockaddr*>(&boundAddr), &boundAddrLen) != 0) {
-        ::close(sock);
-        throw FatalException("Failed to read back reserved test port");
+    sockaddr_in boundAddress {};
+    socklen_t boundAddressLength = sizeof(boundAddress);
+    if (::getsockname(_socket, reinterpret_cast<sockaddr*>(&boundAddress), &boundAddressLength) != 0) {
+        ::close(_socket);
+        throw FatalException("Could not read the port of a refused port's socket");
     }
 
-    ::close(sock);
-    return ntohs(boundAddr.sin_port);
+    _port = ntohs(boundAddress.sin_port);
+}
+
+RefusedPort::~RefusedPort() {
+    ::close(_socket);
 }
 
 bool waitUntilListening(uint16_t port, std::chrono::milliseconds timeout) {

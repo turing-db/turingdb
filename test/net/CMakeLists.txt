@@ -67,6 +67,8 @@ add_turing_test(test_net_protocol_error_response ProtocolErrorResponseTest.cpp)
 
 add_turing_test(test_net_server_buffer_limit ServerBufferLimitTest.cpp)
 
+add_turing_test(test_net_tcp_server_bound_port TCPServerBoundPortTest.cpp)
+
 add_turing_test(test_net_schema_id_cells_over_the_wire SchemaIDCellsOverTheWireTest.cpp)
 target_sources(test_net_schema_id_cells_over_the_wire PRIVATE ProtoServerTest.cpp)
 

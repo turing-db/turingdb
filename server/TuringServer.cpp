@@ -11,6 +11,8 @@
 #include "TuringProtoServerProcessor.h"
 #include "TuringProtoWriter.h"
 
+#include "BioAssert.h"
+
 using namespace db;
 
 namespace {
@@ -84,4 +86,9 @@ void TuringServer::wait() {
 
 void TuringServer::stop() {
     _server->terminate();
+}
+
+uint32_t TuringServer::getPort() const {
+    bioassert(_server, "The server reports its port only once started");
+    return _server->getPort();
 }

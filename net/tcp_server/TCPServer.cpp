@@ -120,6 +120,7 @@ void TCPServer::initialize() {
     }
 
     _actualAddress = utils::getStringAddress(actualAddr.sin_addr.s_addr);
+    _actualPort = ntohs(actualAddr.sin_port);
     _running.store(true);
 }
 

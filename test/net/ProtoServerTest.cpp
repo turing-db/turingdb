@@ -32,15 +32,14 @@ void ProtoServerTest::initialize() {
 
     SimpleGraph::createSimpleGraph(graph);
 
-    _port = reserveFreePort();
-
     _serverConfig.setAddress("127.0.0.1");
-    _serverConfig.setPort(_port);
+    _serverConfig.setPort(0);
     _serverConfig.setWorkerCount(1);
     _serverConfig.setMaxConnections(16);
 
     _server = std::make_unique<TuringServer>(_serverConfig, _env->getDB());
     _server->start();
+    _port = _server->getPort();
 
     ASSERT_TRUE(waitUntilListening(_port, std::chrono::milliseconds(2000)));
 }

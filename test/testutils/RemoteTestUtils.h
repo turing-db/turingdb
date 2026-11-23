@@ -7,11 +7,23 @@
 
 namespace turing::test {
 
-// Reserve an ephemeral loopback port and immediately release it. The caller
-// is responsible for binding it again before another process grabs it; there
-// is a small TOCTOU window. Used by tests that spin up a real TuringServer
-// to avoid hard-coded port collisions across parallel test runs.
-[[nodiscard]] uint16_t reserveFreePort();
+// A loopback port held by a socket that is bound but does not listen: a connection to it is
+// refused, and no other process can take the port while this object lives.
+class RefusedPort {
+public:
+    RefusedPort();
+    explicit RefusedPort(uint16_t port);
+    ~RefusedPort();
+
+    RefusedPort(const RefusedPort&) = delete;
+    RefusedPort& operator=(const RefusedPort&) = delete;
+
+    uint16_t getPort() const { return _port; }
+
+private:
+    int _socket {-1};
+    uint16_t _port {0};
+};
 
 // TuringServer::start() returns before the accept loop is guaranteed to be
 // reachable. Poll-connect to the port until either a connect() succeeds or

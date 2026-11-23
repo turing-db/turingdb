@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdint.h>
 #include <memory>
 #include <thread>
 
@@ -21,6 +22,8 @@ public:
 
     void wait();
     void stop();
+
+    uint32_t getPort() const;
 
 private:
     const DBServerConfig& _config;

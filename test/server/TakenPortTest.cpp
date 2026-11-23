@@ -76,7 +76,8 @@ TEST_F(TakenPortTest, theServerDoesNotStartOnATakenPort) {
 }
 
 TEST_F(TakenPortTest, theVisualizerDoesNotStartOnATakenPort) {
-    VisualizerProxy proxy("127.0.0.1", _heldPort, reserveFreePort());
+    const RefusedPort databasePort;
+    VisualizerProxy proxy("127.0.0.1", _heldPort, databasePort.getPort());
 
     expectStartError([&proxy] { proxy.start(); },
                      "Could not start the visualizer on 127.0.0.1:" + std::to_string(_heldPort)
@@ -84,25 +85,27 @@ TEST_F(TakenPortTest, theVisualizerDoesNotStartOnATakenPort) {
 }
 
 TEST_F(TakenPortTest, aStartedServerClosesItsPortWhenDestroyed) {
-    const uint16_t port = reserveFreePort();
-
     DBServerConfig config;
     config.setAddress("127.0.0.1");
-    config.setPort(port);
+    config.setPort(0);
 
     auto server = std::make_unique<TuringServer>(config, _env->getDB());
     server->start();
+    const uint16_t port = server->getPort();
     server.reset();
 
-    EXPECT_FALSE(waitUntilListening(port, std::chrono::milliseconds(200)));
+    const RefusedPort closedPort(port);
+    EXPECT_FALSE(waitUntilListening(closedPort.getPort(), std::chrono::milliseconds(200)));
 }
 
 TEST_F(TakenPortTest, aStartedVisualizerClosesItsPortWhenDestroyed) {
-    const uint16_t port = reserveFreePort();
+    const RefusedPort databasePort;
 
-    auto proxy = std::make_unique<VisualizerProxy>("127.0.0.1", port, reserveFreePort());
+    auto proxy = std::make_unique<VisualizerProxy>("127.0.0.1", 0, databasePort.getPort());
     proxy->start();
+    const uint16_t port = proxy->getPort();
     proxy.reset();
 
-    EXPECT_FALSE(waitUntilListening(port, std::chrono::milliseconds(200)));
+    const RefusedPort closedPort(port);
+    EXPECT_FALSE(waitUntilListening(closedPort.getPort(), std::chrono::milliseconds(200)));
 }
