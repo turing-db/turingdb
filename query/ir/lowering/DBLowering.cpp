@@ -18,6 +18,7 @@
 
 #include "NLOps.h"
 #include "DBLoweringChunkTypes.h"
+#include "DBLoweringRowFlow.h"
 
 #include "DBColumnElement.h"
 #include "IRConstantColumn.h"
@@ -938,22 +939,6 @@ bool opensSourceLoop(mlir::Operation* operation) {
                      mlir::db::ScanMaterialized>(operation);
 }
 
-// A body whose own dataflow cannot keep the input rows paired with what it makes of them
-// runs one input row at a time, whatever it ends on
-bool runsPerRow(mlir::Operation* operation) {
-    if (mlir::db::CallSubquery call = mlir::dyn_cast<mlir::db::CallSubquery>(operation)) {
-        return !call.getCarriesScope();
-    } else if (mlir::db::ExistsSubquery exists = mlir::dyn_cast<mlir::db::ExistsSubquery>(operation)) {
-        return !exists.getCarriesScope();
-    } else if (mlir::db::CountSubquery count = mlir::dyn_cast<mlir::db::CountSubquery>(operation)) {
-        return !count.getCarriesScope();
-    } else if (mlir::db::CollectSubquery collect = mlir::dyn_cast<mlir::db::CollectSubquery>(operation)) {
-        return !collect.getCarriesScope();
-    }
-
-    return false;
-}
-
 // The columns an op holding a body hands it through its block arguments, empty for an op
 // holding none
 mlir::OperandRange subqueryInputColumns(mlir::Operation* operation) {
@@ -1035,29 +1020,6 @@ bool dropsRows(mlir::Operation* operation) {
                      mlir::db::Skip,
                      mlir::db::Limit,
                      mlir::db::RemoveDuplicates>(operation);
-}
-
-bool isFirstOf(const mlir::MutableOperandRange& operands, mlir::OpOperand& operand) {
-    return !operands.empty() && &operands[0] == &operand;
-}
-
-// A walk's end set is one relation every seed shares, consumed in full before the walk
-// runs, and a scan's bound values and a cut's bound count hold one value for the run, read
-// when it starts: no column of the rows in flight, though a pass binds it ahead of the
-// function
-bool readsAheadOfTheRows(mlir::OpOperand& operand) {
-    mlir::Operation* const owner = operand.getOwner();
-    if (mlir::isa<mlir::db::ConstScanNodes, mlir::db::ConstScanEdges, mlir::db::ScanNodesByPropertyValue>(owner)) {
-        return true;
-    } else if (mlir::db::Limit limit = mlir::dyn_cast<mlir::db::Limit>(owner)) {
-        return isFirstOf(limit.getBoundCountMutable(), operand);
-    } else if (mlir::db::Skip skip = mlir::dyn_cast<mlir::db::Skip>(owner)) {
-        return isFirstOf(skip.getBoundCountMutable(), operand);
-    } else if (mlir::db::ExplorePaths exploration = mlir::dyn_cast<mlir::db::ExplorePaths>(owner)) {
-        return isFirstOf(exploration.getEndNodesMutable(), operand);
-    }
-
-    return false;
 }
 
 // Hands every row it reads on as at least one row, and writes nothing. An optional match
