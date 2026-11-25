@@ -175,14 +175,6 @@ LogicalResult verifyStringEnd(Operation* op, Value string, Value length, Value r
     return verifyStringResult(op, result);
 }
 
-LogicalResult verifyEdgeTypesNotEmpty(Operation* operation, ArrayAttr edgeTypes) {
-    if (edgeTypes.empty()) {
-        return operation->emitOpError("requires at least one edge type");
-    }
-
-    return success();
-}
-
 // The keyword that introduces each factor region in the textual form
 // `db.cross_product factor { ... } factor { ... }`.
 const char* const factorKeyword = "factor";
@@ -1148,32 +1140,6 @@ OpFoldResult EntityIDOf::fold(FoldAdaptor adaptor) {
     }
 
     return {};
-}
-
-LogicalResult CheckLabelConstraint::verify() {
-    const ArrayAttr alternatives = getAlternatives();
-    const bool hasEmptyAlternative = llvm::any_of(alternatives, [](Attribute alternative) {
-        return cast<ArrayAttr>(alternative).empty();
-    });
-
-    if (alternatives.empty() || hasEmptyAlternative) {
-        return emitOpError("requires at least one label in every alternative");
-    }
-
-    return success();
-}
-
-ArrayAttr CheckLabelConstraint::getConjunction() {
-    const ArrayAttr alternatives = getAlternatives();
-    if (alternatives.size() != 1) {
-        return nullptr;
-    }
-
-    return cast<ArrayAttr>(alternatives[0]);
-}
-
-LogicalResult CheckEdgeTypeConstraint::verify() {
-    return verifyEdgeTypesNotEmpty(getOperation(), getEdgeTypes());
 }
 
 void Output::build(OpBuilder& builder, OperationState& state, ValueRange columns) {
@@ -2499,22 +2465,6 @@ Speculation::Speculatability ModOp::getSpeculatability() {
 
 Speculation::Speculatability PowOp::getSpeculatability() {
     return speculatableOverNumbers(getOperation());
-}
-
-double GetNodeLabelSet::getRowCost() {
-    return STORAGE_READ_ROW_COST;
-}
-
-double GetEdgeTypes::getRowCost() {
-    return STORAGE_READ_ROW_COST;
-}
-
-double GetNodeProperties::getRowCost() {
-    return STORAGE_READ_ROW_COST;
-}
-
-double GetEdgeProperties::getRowCost() {
-    return STORAGE_READ_ROW_COST;
 }
 
 double StartsWithOp::getRowCost() {
