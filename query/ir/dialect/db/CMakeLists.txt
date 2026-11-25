@@ -34,6 +34,7 @@ set_source_files_properties(
 
 # Compiles .cpp files; needs the codegen first, hence the DEPENDS clause
 add_mlir_library(turing_db_ir_dbdialect_s
+  DBCarriedColumns.cpp
   DBColumnElement.cpp
   DBCrossProducts.cpp
   DBDialect.cpp
