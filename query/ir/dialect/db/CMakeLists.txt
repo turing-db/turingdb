@@ -45,6 +45,7 @@ add_mlir_library(turing_db_ir_dbdialect_s
   DBFilterUtils.cpp
   DBHeldTags.cpp
   DBInterfaces.cpp
+  DBJoinPasses.cpp
   DBKnownLabels.cpp
   DBLabelAndTypePasses.cpp
   DBLineageClimbs.cpp
