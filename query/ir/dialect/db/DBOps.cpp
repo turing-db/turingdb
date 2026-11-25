@@ -11,6 +11,7 @@
 
 #include "DBColumnElement.h"
 #include "DBHeldTags.h"
+#include "DBColumnChecks.h"
 #include "DBRowCosts.h"
 #include "IRConstantColumn.h"
 #include "IRLiteralList.h"
@@ -37,10 +38,6 @@ using namespace mlir::db;
 namespace storage = mlir::storage;
 
 namespace {
-
-Type columnElement(Value column) {
-    return ::db::declaredColumnElement(column);
-}
 
 // A selection whose result names an element holds the one its values select into. A result
 // of none leaves it to lowering, and so does a value of none, which a pass can put in place
@@ -83,16 +80,6 @@ Speculation::Speculatability speculatableWhenReadingPoints(Operation* op) {
     });
 
     return speculatableWhen(readsPoints);
-}
-
-// A tagged cell, or a column whose type lowering resolves, may hold a value of any type. The
-// null literal is a nullable none.
-bool mayHoldAnyType(Value operand) {
-    const ColumnType column = cast<ColumnType>(operand.getType());
-    const Type element = columnElement(operand);
-    const bool unresolved = isa<NoneType>(column.getType()) && isa<NoneType>(element);
-
-    return unresolved || isa<storage::AnyType>(element);
 }
 
 bool writesAMapPerRow(Value column) {
@@ -240,18 +227,6 @@ void collectBranchYields(Value value, MutableArrayRef<Region> branches, llvm::Sm
     }
 }
 
-bool holdsOnlyKeyedValues(Value column) {
-    return ::db::holdsOnlyNullOr(column, {::db::CellTag::MapView, ::db::CellTag::NodeID, ::db::CellTag::EdgeID});
-}
-
-bool holdsOnlyLists(Value column) {
-    return ::db::holdsOnlyNullOr(column, {::db::CellTag::ListView});
-}
-
-bool holdsOnlyIntegers(Value column) {
-    return ::db::holdsOnlyNullOr(column, {::db::CellTag::Int, ::db::CellTag::UInt});
-}
-
 // What a filter reads as a mask: a boolean column, a boolean literal, one whose values may be
 // null, a property read whose type lowering resolves, or the untyped null an expression over a
 // property no row carries evaluates to
@@ -276,22 +251,6 @@ bool isMaskColumn(Type type) {
     return isa<storage::BoolType>(value) || isa<NoneType>(value) || value.isInteger(1);
 }
 
-// Whether @param type is a column of @param Element, nullable or not, or of a cell typed at
-// run time
-template <typename Element>
-bool isColumnOf(Type type) {
-    const auto column = dyn_cast<ColumnType>(type);
-    if (!column) {
-        return false;
-    }
-
-    const Type element = column.getType();
-    const auto nullable = dyn_cast<storage::NullableType>(element);
-    const Type value = nullable ? nullable.getValueType() : element;
-
-    return isa<Element, storage::AnyType, NoneType>(value);
-}
-
 // A point function reads columns of points into a column of @param Result
 template <typename Result>
 LogicalResult verifyPointFunction(Operation* op, Value result, StringRef resultName) {
@@ -306,20 +265,6 @@ LogicalResult verifyPointFunction(Operation* op, Value result, StringRef resultN
     const ColumnType resultColumn = dyn_cast<ColumnType>(result.getType());
     if (!resultColumn || !isa<Result>(resultColumn.getType())) {
         return op->emitOpError("result must be a column of ") << resultName;
-    }
-
-    return success();
-}
-
-bool isIntegerColumn(Value column) {
-    return isa<ColumnType>(column.getType())
-        && isa<IntegerType, storage::AnyType, NoneType>(::db::declaredColumnElement(column));
-}
-
-LogicalResult verifyStringResult(Operation* op, Value result) {
-    const ColumnType resultColumn = dyn_cast<ColumnType>(result.getType());
-    if (!resultColumn || !isa<storage::StringType>(resultColumn.getType())) {
-        return op->emitOpError("result must be a column of strings");
     }
 
     return success();
