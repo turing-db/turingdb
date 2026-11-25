@@ -8,13 +8,12 @@
 #include <functional>
 #include <limits>
 #include <numeric>
-#include <queue>
 #include <span>
 #include <string>
 #include <string_view>
 #include <type_traits>
-#include <unordered_map>
 #include <unordered_set>
+#include <set>
 
 #include <spdlog/fmt/bundled/format.h>
 #include <llvm/Support/MathExtras.h>
@@ -70,6 +69,8 @@
 #include "list/PathTrie.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
+#include "columns/ColumnOperand.h"
+#include "columns/BinaryPredicates.h"
 
 #include "reader/GraphReader.h"
 #include "versioning/CommitWriteBuffer.h"
@@ -79,9 +80,6 @@
 
 #include "CSVParser.h"
 
-#include "SystemAccessor.h"
-#include "SystemManager.h"
-#include "TuringConfig.h"
 #include "VecLibAccessor.h"
 #include "VectorDatabase.h"
 #include "VectorSearchQuery.h"
@@ -101,8 +99,8 @@
 #include "NLWriteProperties.h"
 #include "NLWrittenValues.h"
 #include "NLPropertyFunctions.h"
-#include "NLMergeWorkingSet.h"
 #include "NLOutputSink.h"
+#include "NLColumnKernels.h"
 
 #include "LocalMemory.h"
 #include "IRException.h"
@@ -113,17 +111,6 @@
 using namespace db;
 
 namespace {
-
-template <typename T>
-void resetForRowWrites(ColumnVector<T>* column, size_t size) {
-    resizeForRowWrites(column, size);
-}
-
-template <typename T>
-void resetForRowWrites(ColumnOptVector<T>* column, size_t size) {
-    column->clear();
-    resizeForRowWrites(column, size);
-}
 
 // The step row an untagged mark, tally or collect answers for: the position its row chunk
 // holds, or the single row of the step when it has none
@@ -1600,24 +1587,6 @@ void resolveCSVFieldIndices(const NLLoadCSVLoopData& loopData,
     }
 }
 
-// Gather rows of a carried column by applying indices
-template <typename ElementType>
-void gatherColumn(const Column* input,
-                  const ColumnVector<size_t>* indices,
-                  Column* output) {
-    const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
-    ColumnVector<ElementType>* typedOutput = static_cast<ColumnVector<ElementType>*>(output);
-
-    typedOutput->resize(indices->size());
-    const auto& indicesRaw = indices->getRaw();
-    auto& typedInputRaw = typedInput->getRaw();
-    auto& typedOutputRaw = typedOutput->getRaw();
-
-    for (size_t row = 0; row < indicesRaw.size(); row++) {
-        typedOutputRaw[row] = typedInputRaw[indicesRaw[row]];
-    }
-}
-
 template <typename Element>
 void gatherOptColumn(const Column* input,
                      const ColumnVector<size_t>* indices,
@@ -2227,14 +2196,6 @@ void appendOwnedOptColumn(const Column* input, Column* buffer, NLValueStore& val
     values.ownRows(typedBuffer, firstRow);
 }
 
-void appendCollectedChunk(const NLSortCollectData::Append& append, NLValueStore& values) {
-    if (append._appendOwned) {
-        append._appendOwned(append._input, append._buffer, values);
-    } else {
-        append._append(append._input, append._buffer);
-    }
-}
-
 template <typename Primitive>
 bool sortsBefore(const Primitive& lhs, const Primitive& rhs) {
     return lhs < rhs;
@@ -2739,22 +2700,6 @@ template <typename Element>
 void caseWriteOwnNullCell(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
     std::vector<Element>& results = static_cast<ColumnVector<Element>*>(result)->getRaw();
     results[resultRow] = static_cast<const ColumnVector<Element>*>(value)->getRaw()[valueRow];
-}
-
-void writeCell(Column* result,
-               size_t resultRow,
-               const NLCellWrite& write,
-               const Column* value,
-               size_t valueRow,
-               NLStepBuffers* stepBuffers,
-               NLValueStore& values) {
-    if (write._write) {
-        write._write(result, resultRow, value, valueRow);
-        return;
-    }
-
-    ListBuffer<>::ListItemVariant item = write._taggedRead(value, valueRow, stepBuffers);
-    static_cast<ColumnVector<CellView>*>(result)->getRaw()[resultRow] = values.ownCell(item);
 }
 
 template <typename Element>
@@ -7738,6 +7683,329 @@ void shortestPathSearch(NLExecutionContext* context, NLShortestPathLoopData* loo
     runBody(context, loopData->getStmts());
 }
 
+// Runs the hop predicate of one step of an nl.explore_paths over a batch of frames: the
+// candidates and the frame's repetition so far are copied a chunk at a time into the columns
+// the hop statements read, and the survivors are compacted to the front of the batch. A chunk
+// may start and end mid-frame. The hop_labels filter, when there is one, cuts the batch first.
+class NLHopFilter : public PathHopFilter {
+public:
+    NLHopFilter(NLExecutionContext* context, const NLExploreStep* step, PathHopFilter* labelFilter)
+        : _context(context),
+        _step(step),
+        _labelFilter(labelFilter)
+    {
+        _indices.reserve(context->getChunkSize());
+    }
+
+    ~NLHopFilter() override {
+    }
+
+    size_t filter(std::span<PathHopFrame> frames, std::span<NodeID> candidateNodes, std::span<EdgeID> candidateEdges) override {
+        if (_labelFilter) {
+            const size_t labelled = _labelFilter->filter(frames, candidateNodes, candidateEdges);
+            candidateNodes = candidateNodes.first(labelled);
+            candidateEdges = candidateEdges.first(labelled);
+        }
+
+        const size_t chunkSize = _context->getChunkSize();
+        const std::span<ColumnNodeIDs* const> nodes = _step->getHopNodes();
+        const std::span<ColumnEdgeIDs* const> edges = _step->getHopEdges();
+        const size_t position = _step->getHopPosition();
+        ColumnNodeIDs* sources = nodes[position];
+        ColumnEdgeIDs* hopEdges = edges[position];
+        ColumnNodeIDs* ends = nodes[position + 1];
+        const Column* mask = _step->getHopMask();
+        const NLMaskSurvivorFunction survivors = _step->getHopSurvivors();
+        const NLStmtContainer* stmts = _step->getHopStmts();
+        const std::span<const NLHopImport> imports = _step->getHopImports();
+
+        _frameEnds.clear();
+        size_t frameEnd = 0;
+        for (PathHopFrame& frame : frames) {
+            frameEnd += frame._candidateCount;
+            _frameEnds.push_back(frameEnd);
+            frame._candidateCount = 0;
+        }
+
+        std::vector<size_t>& seedRows = _seedRows.getRaw();
+        size_t fillFrame = 0;
+        size_t survivorFrame = 0;
+        size_t kept = 0;
+        for (size_t begin = 0; begin < candidateNodes.size(); begin += chunkSize) {
+            const size_t count = std::min(chunkSize, candidateNodes.size() - begin);
+            const size_t end = begin + count;
+
+            sources->resize(count);
+            seedRows.resize(count);
+            for (size_t earlier = 0; earlier < position; earlier++) {
+                if (nodes[earlier]) {
+                    nodes[earlier]->resize(count);
+                }
+
+                if (edges[earlier]) {
+                    edges[earlier]->resize(count);
+                }
+            }
+
+            for (size_t segmentBegin = begin; segmentBegin < end;) {
+                const size_t segmentEnd = std::min(end, _frameEnds[fillFrame]);
+                const PathHopFrame& frame = frames[fillFrame];
+                const size_t segmentOffset = segmentBegin - begin;
+                const size_t segmentSize = segmentEnd - segmentBegin;
+                std::fill_n(sources->begin() + segmentOffset, segmentSize, frame._source);
+                std::fill_n(seedRows.begin() + segmentOffset, segmentSize, frame._seedRow);
+
+                for (size_t earlier = 0; earlier < position; earlier++) {
+                    if (nodes[earlier]) {
+                        std::fill_n(nodes[earlier]->begin() + segmentOffset, segmentSize, frame._repetitionNodes[earlier]);
+                    }
+
+                    if (edges[earlier]) {
+                        std::fill_n(edges[earlier]->begin() + segmentOffset, segmentSize, frame._repetitionEdges[earlier]);
+                    }
+                }
+
+                if (segmentEnd == _frameEnds[fillFrame]) {
+                    fillFrame++;
+                }
+                segmentBegin = segmentEnd;
+            }
+
+            hopEdges->resize(count);
+            std::copy_n(candidateEdges.begin() + begin, count, hopEdges->begin());
+
+            ends->resize(count);
+            std::copy_n(candidateNodes.begin() + begin, count, ends->begin());
+
+            for (const NLHopImport& import : imports) {
+                import._gather(import._source, &_seedRows, import._chunk);
+            }
+
+            runBody(_context, stmts);
+
+            _indices.getRaw().clear();
+            survivors(mask, &_indices);
+
+            for (const size_t survivor : _indices.getRaw()) {
+                const size_t candidatePosition = begin + survivor;
+                while (candidatePosition >= _frameEnds[survivorFrame]) {
+                    survivorFrame++;
+                }
+
+                frames[survivorFrame]._candidateCount++;
+                candidateNodes[kept] = candidateNodes[candidatePosition];
+                candidateEdges[kept] = candidateEdges[candidatePosition];
+                kept++;
+            }
+        }
+
+        return kept;
+    }
+
+    bool readsRepetition() const override {
+        const std::span<ColumnNodeIDs* const> nodes = _step->getHopNodes();
+        const std::span<ColumnEdgeIDs* const> edges = _step->getHopEdges();
+        const size_t position = _step->getHopPosition();
+
+        const auto isRead = [](const Column* column) { return column != nullptr; };
+
+        return std::any_of(nodes.begin(), nodes.begin() + position, isRead)
+            || std::any_of(edges.begin(), edges.begin() + position, isRead);
+    }
+
+private:
+    NLExecutionContext* _context {nullptr};
+    const NLExploreStep* _step {nullptr};
+    PathHopFilter* _labelFilter {nullptr};
+    ColumnVector<size_t> _indices;
+    ColumnVector<size_t> _seedRows;
+    std::vector<size_t> _frameEnds;
+};
+
+// The direction and edge types every step of the body follows together: what a walk can reach
+// over them bounds what the body reaches, so the pruning indexes are built over them
+PathExplorationDir combinedDirection(const NLExplorePathsLoopData* loopData) {
+    const NLExploreStep* firstStep = loopData->getStep(0);
+    const PathExplorationDir first = firstStep->getDirection();
+    const size_t stepCount = loopData->getStepCount();
+
+    for (size_t step = 1; step < stepCount; step++) {
+        const NLExploreStep* exploreStep = loopData->getStep(step);
+        if (exploreStep->getDirection() != first) {
+            return PathExplorationDir::BOTH;
+        }
+    }
+
+    return first;
+}
+
+// Empty when a step follows every type
+void combinedEdgeTypes(const NLExplorePathsLoopData* loopData, std::vector<EdgeTypeID>& edgeTypes) {
+    edgeTypes.clear();
+
+    const size_t stepCount = loopData->getStepCount();
+    for (size_t step = 0; step < stepCount; step++) {
+        const NLExploreStep* exploreStep = loopData->getStep(step);
+        if (!exploreStep->filtersByType()) {
+            edgeTypes.clear();
+            return;
+        }
+
+        const std::span<const EdgeTypeID> stepTypes = exploreStep->getEdgeTypes();
+        edgeTypes.insert(edgeTypes.end(), stepTypes.begin(), stepTypes.end());
+    }
+
+    std::sort(edgeTypes.begin(), edgeTypes.end());
+    edgeTypes.erase(std::unique(edgeTypes.begin(), edgeTypes.end()), edgeTypes.end());
+}
+
+// The hop bounds of the loop count repetitions of the body, the walk's count its edges
+uint64_t edgesOfRepetitions(uint64_t repetitions, size_t stepCount) {
+    return llvm::SaturatingMultiply<uint64_t>(repetitions, stepCount);
+}
+
+// The body the walk repeats, as a sample expands it. A filter reading the repetition sees
+// none in the sample, so its step is sampled unfiltered.
+void sampledBodyOf(std::span<const PathStep> walkedBody, std::vector<PathStep>& body) {
+    body.assign(walkedBody.begin(), walkedBody.end());
+    for (PathStep& bodyStep : body) {
+        const bool readsRepetition = bodyStep._hopFilter && bodyStep._hopFilter->readsRepetition();
+        if (readsRepetition) {
+            bodyStep._hopFilter = nullptr;
+        }
+    }
+}
+
+// The distance index of an end-constrained exploration is built at most once per loop, the
+// first time the seeds seen over all its chunks make the enumeration costlier than the
+// index; null until then
+const PathDistanceIndex* pruningIndexFor(const GraphView& view,
+                                         NLExplorePathsLoopData* loopData,
+                                         uint64_t maxHops,
+                                         const PathDistanceIndex::SeedExpansion& expansion) {
+    PathDistanceIndex* index = loopData->getDistanceIndex();
+    if (index->isBuilt()) {
+        return index;
+    }
+
+    std::vector<EdgeTypeID> edgeTypes;
+    combinedEdgeTypes(loopData, edgeTypes);
+
+    const PathExplorationDir direction = combinedDirection(loopData);
+    const PartDirectory parts(view);
+    const double walkChecks = PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, loopData->getSeedsSeen(), maxHops);
+    const bool built = index->buildWithin(view, loopData->getEndLabels(), direction, edgeTypes, maxHops, walkChecks);
+
+    return built ? index : nullptr;
+}
+
+// The target index of an end set is the whole walk's: one search from every node of the set,
+// built once the seeds seen imply more enumeration than that search costs
+const PathTargetIndex* endSetTargetIndexFor(const GraphView& view,
+                                            NLExplorePathsLoopData* loopData,
+                                            std::span<const NodeID> endNodes,
+                                            uint64_t maxHops,
+                                            const PathDistanceIndex::SeedExpansion& expansion) {
+    PathTargetIndex* index = loopData->getTargetIndex();
+    if (index->isBuilt()) {
+        return index;
+    }
+
+    std::vector<EdgeTypeID> edgeTypes;
+    combinedEdgeTypes(loopData, edgeTypes);
+
+    const PathExplorationDir direction = combinedDirection(loopData);
+    const bool worthBuilding = PathTargetIndex::isWorthBuildingSet(view, direction, edgeTypes, expansion, loopData->getSeedsSeen(), endNodes.size(), maxHops);
+    if (!worthBuilding) {
+        return nullptr;
+    }
+
+    index->buildSet(view, endNodes, direction, edgeTypes, maxHops);
+
+    return index;
+}
+
+// The target index of a bound end is a chunk's own: its distinct targets, batched 64 per
+// word, when the enumeration they imply is costlier than the batches; null otherwise
+const PathTargetIndex* targetIndexFor(const GraphView& view,
+                                      NLExplorePathsLoopData* loopData,
+                                      uint64_t maxHops,
+                                      const PathDistanceIndex::SeedExpansion& expansion) {
+    const std::vector<NodeID>& endNodes = loopData->getEndNodes()->getRaw();
+
+    std::vector<NodeID> targets(endNodes.begin(), endNodes.end());
+    std::sort(targets.begin(), targets.end());
+    targets.erase(std::unique(targets.begin(), targets.end()), targets.end());
+
+    std::vector<EdgeTypeID> edgeTypes;
+    combinedEdgeTypes(loopData, edgeTypes);
+
+    const PathExplorationDir direction = combinedDirection(loopData);
+    const bool worthBuilding = PathTargetIndex::isWorthBuilding(view, direction, edgeTypes, expansion, endNodes.size(), targets.size(), maxHops);
+    if (!worthBuilding) {
+        return nullptr;
+    }
+
+    PathTargetIndex* index = loopData->getTargetIndex();
+    index->build(view, targets, direction, edgeTypes, maxHops);
+
+    return index;
+}
+
+// A walk to an end set emits the same rows from either end when no path is read and no hop
+// test sees which way the hop was taken
+bool emitsTheSameFromEitherEnd(const NLExplorePathsLoopData* loopData, std::span<const PathStep> walkedBody) {
+    const bool hasHopFilter = std::ranges::any_of(walkedBody, [](const PathStep& step) { return step._hopFilter != nullptr; });
+
+    return !loopData->getPaths() && !hasHopFilter;
+}
+
+void runFromTheEndSet(NLExecutionContext* context,
+                      NLExplorePathsLoopData* loopData,
+                      ReversedPathExplorator::Body body,
+                      std::span<const NodeID> endNodes,
+                      uint64_t minHops,
+                      uint64_t maxHops,
+                      bool walksPendingEdges,
+                      const PathDistanceIndex::SeedExpansion& fromEnds) {
+    const GraphView& view = *context->getView();
+    const LabelSet* endLabels = loopData->filtersByEndLabels() ? &loopData->getEndLabels() : nullptr;
+
+    ReversedPathExplorator explorator(view,
+                                      loopData->getInput(),
+                                      endNodes,
+                                      endLabels,
+                                      body,
+                                      minHops,
+                                      maxHops);
+    explorator.setIndices(loopData->getIndices());
+    explorator.setTargets(loopData->getTargets());
+    const bool distinctEnds = loopData->isDistinctEnds();
+    explorator.setDistinctEnds(distinctEnds);
+
+    if (context->getWriteBuffer()) {
+        const PendingAdjacency& pendingAdjacency = context->getPendingAdjacency();
+        explorator.setPendingAdjacency(&pendingAdjacency, pendingAdjacency.getEdgeIDBound());
+    }
+
+    std::vector<EdgeTypeID> edgeTypes;
+    combinedEdgeTypes(loopData, edgeTypes);
+
+    // The seeds are what this walk heads for, so they are the set its index is searched from
+    PathTargetIndex seedIndex;
+    const std::span<const NodeID> seedNodes = explorator.getSeedNodes();
+    const PathExplorationDir reversed = reverseOf(combinedDirection(loopData));
+    const bool indexesSeeds = !distinctEnds
+                           && !walksPendingEdges
+                           && PathTargetIndex::isWorthBuildingSet(view, reversed, edgeTypes, fromEnds, endNodes.size(), seedNodes.size(), maxHops);
+    if (indexesSeeds) {
+        seedIndex.buildSet(view, seedNodes, reversed, edgeTypes, maxHops);
+        explorator.setTargetIndex(&seedIndex);
+    }
+
+    runEdgeLoopSteps(context, loopData, &explorator, nullptr, loopData->getSources());
+}
+
 }
 
 NLExecutor::NLExecutor(const GraphView* view,
@@ -9092,333 +9360,6 @@ void NLExecutor::runEachRowLoop(NLExecutionContext* context, NLFunctionData* dat
 
         runBody(context, loopBody);
     }
-}
-
-namespace {
-
-// Runs the hop predicate of one step of an nl.explore_paths over a batch of frames: the
-// candidates and the frame's repetition so far are copied a chunk at a time into the columns
-// the hop statements read, and the survivors are compacted to the front of the batch. A chunk
-// may start and end mid-frame. The hop_labels filter, when there is one, cuts the batch first.
-class NLHopFilter : public PathHopFilter {
-public:
-    NLHopFilter(NLExecutionContext* context, const NLExploreStep* step, PathHopFilter* labelFilter)
-        : _context(context),
-        _step(step),
-        _labelFilter(labelFilter)
-    {
-        _indices.reserve(context->getChunkSize());
-    }
-
-    ~NLHopFilter() override {
-    }
-
-    size_t filter(std::span<PathHopFrame> frames, std::span<NodeID> candidateNodes, std::span<EdgeID> candidateEdges) override {
-        if (_labelFilter) {
-            const size_t labelled = _labelFilter->filter(frames, candidateNodes, candidateEdges);
-            candidateNodes = candidateNodes.first(labelled);
-            candidateEdges = candidateEdges.first(labelled);
-        }
-
-        const size_t chunkSize = _context->getChunkSize();
-        const std::span<ColumnNodeIDs* const> nodes = _step->getHopNodes();
-        const std::span<ColumnEdgeIDs* const> edges = _step->getHopEdges();
-        const size_t position = _step->getHopPosition();
-        ColumnNodeIDs* sources = nodes[position];
-        ColumnEdgeIDs* hopEdges = edges[position];
-        ColumnNodeIDs* ends = nodes[position + 1];
-        const Column* mask = _step->getHopMask();
-        const NLMaskSurvivorFunction survivors = _step->getHopSurvivors();
-        const NLStmtContainer* stmts = _step->getHopStmts();
-        const std::span<const NLHopImport> imports = _step->getHopImports();
-
-        _frameEnds.clear();
-        size_t frameEnd = 0;
-        for (PathHopFrame& frame : frames) {
-            frameEnd += frame._candidateCount;
-            _frameEnds.push_back(frameEnd);
-            frame._candidateCount = 0;
-        }
-
-        std::vector<size_t>& seedRows = _seedRows.getRaw();
-        size_t fillFrame = 0;
-        size_t survivorFrame = 0;
-        size_t kept = 0;
-        for (size_t begin = 0; begin < candidateNodes.size(); begin += chunkSize) {
-            const size_t count = std::min(chunkSize, candidateNodes.size() - begin);
-            const size_t end = begin + count;
-
-            sources->resize(count);
-            seedRows.resize(count);
-            for (size_t earlier = 0; earlier < position; earlier++) {
-                if (nodes[earlier]) {
-                    nodes[earlier]->resize(count);
-                }
-
-                if (edges[earlier]) {
-                    edges[earlier]->resize(count);
-                }
-            }
-
-            for (size_t segmentBegin = begin; segmentBegin < end;) {
-                const size_t segmentEnd = std::min(end, _frameEnds[fillFrame]);
-                const PathHopFrame& frame = frames[fillFrame];
-                const size_t segmentOffset = segmentBegin - begin;
-                const size_t segmentSize = segmentEnd - segmentBegin;
-                std::fill_n(sources->begin() + segmentOffset, segmentSize, frame._source);
-                std::fill_n(seedRows.begin() + segmentOffset, segmentSize, frame._seedRow);
-
-                for (size_t earlier = 0; earlier < position; earlier++) {
-                    if (nodes[earlier]) {
-                        std::fill_n(nodes[earlier]->begin() + segmentOffset, segmentSize, frame._repetitionNodes[earlier]);
-                    }
-
-                    if (edges[earlier]) {
-                        std::fill_n(edges[earlier]->begin() + segmentOffset, segmentSize, frame._repetitionEdges[earlier]);
-                    }
-                }
-
-                if (segmentEnd == _frameEnds[fillFrame]) {
-                    fillFrame++;
-                }
-                segmentBegin = segmentEnd;
-            }
-
-            hopEdges->resize(count);
-            std::copy_n(candidateEdges.begin() + begin, count, hopEdges->begin());
-
-            ends->resize(count);
-            std::copy_n(candidateNodes.begin() + begin, count, ends->begin());
-
-            for (const NLHopImport& import : imports) {
-                import._gather(import._source, &_seedRows, import._chunk);
-            }
-
-            runBody(_context, stmts);
-
-            _indices.getRaw().clear();
-            survivors(mask, &_indices);
-
-            for (const size_t survivor : _indices.getRaw()) {
-                const size_t candidatePosition = begin + survivor;
-                while (candidatePosition >= _frameEnds[survivorFrame]) {
-                    survivorFrame++;
-                }
-
-                frames[survivorFrame]._candidateCount++;
-                candidateNodes[kept] = candidateNodes[candidatePosition];
-                candidateEdges[kept] = candidateEdges[candidatePosition];
-                kept++;
-            }
-        }
-
-        return kept;
-    }
-
-    bool readsRepetition() const override {
-        const std::span<ColumnNodeIDs* const> nodes = _step->getHopNodes();
-        const std::span<ColumnEdgeIDs* const> edges = _step->getHopEdges();
-        const size_t position = _step->getHopPosition();
-
-        const auto isRead = [](const Column* column) { return column != nullptr; };
-
-        return std::any_of(nodes.begin(), nodes.begin() + position, isRead)
-            || std::any_of(edges.begin(), edges.begin() + position, isRead);
-    }
-
-private:
-    NLExecutionContext* _context {nullptr};
-    const NLExploreStep* _step {nullptr};
-    PathHopFilter* _labelFilter {nullptr};
-    ColumnVector<size_t> _indices;
-    ColumnVector<size_t> _seedRows;
-    std::vector<size_t> _frameEnds;
-};
-
-// The direction and edge types every step of the body follows together: what a walk can reach
-// over them bounds what the body reaches, so the pruning indexes are built over them
-PathExplorationDir combinedDirection(const NLExplorePathsLoopData* loopData) {
-    const NLExploreStep* firstStep = loopData->getStep(0);
-    const PathExplorationDir first = firstStep->getDirection();
-    const size_t stepCount = loopData->getStepCount();
-
-    for (size_t step = 1; step < stepCount; step++) {
-        const NLExploreStep* exploreStep = loopData->getStep(step);
-        if (exploreStep->getDirection() != first) {
-            return PathExplorationDir::BOTH;
-        }
-    }
-
-    return first;
-}
-
-// Empty when a step follows every type
-void combinedEdgeTypes(const NLExplorePathsLoopData* loopData, std::vector<EdgeTypeID>& edgeTypes) {
-    edgeTypes.clear();
-
-    const size_t stepCount = loopData->getStepCount();
-    for (size_t step = 0; step < stepCount; step++) {
-        const NLExploreStep* exploreStep = loopData->getStep(step);
-        if (!exploreStep->filtersByType()) {
-            edgeTypes.clear();
-            return;
-        }
-
-        const std::span<const EdgeTypeID> stepTypes = exploreStep->getEdgeTypes();
-        edgeTypes.insert(edgeTypes.end(), stepTypes.begin(), stepTypes.end());
-    }
-
-    std::sort(edgeTypes.begin(), edgeTypes.end());
-    edgeTypes.erase(std::unique(edgeTypes.begin(), edgeTypes.end()), edgeTypes.end());
-}
-
-// The hop bounds of the loop count repetitions of the body, the walk's count its edges
-uint64_t edgesOfRepetitions(uint64_t repetitions, size_t stepCount) {
-    return llvm::SaturatingMultiply<uint64_t>(repetitions, stepCount);
-}
-
-// The body the walk repeats, as a sample expands it. A filter reading the repetition sees
-// none in the sample, so its step is sampled unfiltered.
-void sampledBodyOf(std::span<const PathStep> walkedBody, std::vector<PathStep>& body) {
-    body.assign(walkedBody.begin(), walkedBody.end());
-    for (PathStep& bodyStep : body) {
-        const bool readsRepetition = bodyStep._hopFilter && bodyStep._hopFilter->readsRepetition();
-        if (readsRepetition) {
-            bodyStep._hopFilter = nullptr;
-        }
-    }
-}
-
-// The distance index of an end-constrained exploration is built at most once per loop, the
-// first time the seeds seen over all its chunks make the enumeration costlier than the
-// index; null until then
-const PathDistanceIndex* pruningIndexFor(const GraphView& view,
-                                         NLExplorePathsLoopData* loopData,
-                                         uint64_t maxHops,
-                                         const PathDistanceIndex::SeedExpansion& expansion) {
-    PathDistanceIndex* index = loopData->getDistanceIndex();
-    if (index->isBuilt()) {
-        return index;
-    }
-
-    std::vector<EdgeTypeID> edgeTypes;
-    combinedEdgeTypes(loopData, edgeTypes);
-
-    const PathExplorationDir direction = combinedDirection(loopData);
-    const PartDirectory parts(view);
-    const double walkChecks = PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, loopData->getSeedsSeen(), maxHops);
-    const bool built = index->buildWithin(view, loopData->getEndLabels(), direction, edgeTypes, maxHops, walkChecks);
-
-    return built ? index : nullptr;
-}
-
-// The target index of an end set is the whole walk's: one search from every node of the set,
-// built once the seeds seen imply more enumeration than that search costs
-const PathTargetIndex* endSetTargetIndexFor(const GraphView& view,
-                                            NLExplorePathsLoopData* loopData,
-                                            std::span<const NodeID> endNodes,
-                                            uint64_t maxHops,
-                                            const PathDistanceIndex::SeedExpansion& expansion) {
-    PathTargetIndex* index = loopData->getTargetIndex();
-    if (index->isBuilt()) {
-        return index;
-    }
-
-    std::vector<EdgeTypeID> edgeTypes;
-    combinedEdgeTypes(loopData, edgeTypes);
-
-    const PathExplorationDir direction = combinedDirection(loopData);
-    const bool worthBuilding = PathTargetIndex::isWorthBuildingSet(view, direction, edgeTypes, expansion, loopData->getSeedsSeen(), endNodes.size(), maxHops);
-    if (!worthBuilding) {
-        return nullptr;
-    }
-
-    index->buildSet(view, endNodes, direction, edgeTypes, maxHops);
-
-    return index;
-}
-
-// The target index of a bound end is a chunk's own: its distinct targets, batched 64 per
-// word, when the enumeration they imply is costlier than the batches; null otherwise
-const PathTargetIndex* targetIndexFor(const GraphView& view,
-                                      NLExplorePathsLoopData* loopData,
-                                      uint64_t maxHops,
-                                      const PathDistanceIndex::SeedExpansion& expansion) {
-    const std::vector<NodeID>& endNodes = loopData->getEndNodes()->getRaw();
-
-    std::vector<NodeID> targets(endNodes.begin(), endNodes.end());
-    std::sort(targets.begin(), targets.end());
-    targets.erase(std::unique(targets.begin(), targets.end()), targets.end());
-
-    std::vector<EdgeTypeID> edgeTypes;
-    combinedEdgeTypes(loopData, edgeTypes);
-
-    const PathExplorationDir direction = combinedDirection(loopData);
-    const bool worthBuilding = PathTargetIndex::isWorthBuilding(view, direction, edgeTypes, expansion, endNodes.size(), targets.size(), maxHops);
-    if (!worthBuilding) {
-        return nullptr;
-    }
-
-    PathTargetIndex* index = loopData->getTargetIndex();
-    index->build(view, targets, direction, edgeTypes, maxHops);
-
-    return index;
-}
-
-// A walk to an end set emits the same rows from either end when no path is read and no hop
-// test sees which way the hop was taken
-bool emitsTheSameFromEitherEnd(const NLExplorePathsLoopData* loopData, std::span<const PathStep> walkedBody) {
-    const bool hasHopFilter = std::ranges::any_of(walkedBody, [](const PathStep& step) { return step._hopFilter != nullptr; });
-
-    return !loopData->getPaths() && !hasHopFilter;
-}
-
-void runFromTheEndSet(NLExecutionContext* context,
-                      NLExplorePathsLoopData* loopData,
-                      ReversedPathExplorator::Body body,
-                      std::span<const NodeID> endNodes,
-                      uint64_t minHops,
-                      uint64_t maxHops,
-                      bool walksPendingEdges,
-                      const PathDistanceIndex::SeedExpansion& fromEnds) {
-    const GraphView& view = *context->getView();
-    const LabelSet* endLabels = loopData->filtersByEndLabels() ? &loopData->getEndLabels() : nullptr;
-
-    ReversedPathExplorator explorator(view,
-                                      loopData->getInput(),
-                                      endNodes,
-                                      endLabels,
-                                      body,
-                                      minHops,
-                                      maxHops);
-    explorator.setIndices(loopData->getIndices());
-    explorator.setTargets(loopData->getTargets());
-    const bool distinctEnds = loopData->isDistinctEnds();
-    explorator.setDistinctEnds(distinctEnds);
-
-    if (context->getWriteBuffer()) {
-        const PendingAdjacency& pendingAdjacency = context->getPendingAdjacency();
-        explorator.setPendingAdjacency(&pendingAdjacency, pendingAdjacency.getEdgeIDBound());
-    }
-
-    std::vector<EdgeTypeID> edgeTypes;
-    combinedEdgeTypes(loopData, edgeTypes);
-
-    // The seeds are what this walk heads for, so they are the set its index is searched from
-    PathTargetIndex seedIndex;
-    const std::span<const NodeID> seedNodes = explorator.getSeedNodes();
-    const PathExplorationDir reversed = reverseOf(combinedDirection(loopData));
-    const bool indexesSeeds = !distinctEnds
-                           && !walksPendingEdges
-                           && PathTargetIndex::isWorthBuildingSet(view, reversed, edgeTypes, fromEnds, endNodes.size(), seedNodes.size(), maxHops);
-    if (indexesSeeds) {
-        seedIndex.buildSet(view, seedNodes, reversed, edgeTypes, maxHops);
-        explorator.setTargetIndex(&seedIndex);
-    }
-
-    runEdgeLoopSteps(context, loopData, &explorator, nullptr, loopData->getSources());
-}
-
 }
 
 void NLExecutor::runNodeSetReset(NLExecutionContext* context, NLFunctionData* data) {
