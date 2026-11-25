@@ -5,6 +5,7 @@ set(cg_sources
   DBPassPipeline.cpp
   DBProgramGenerator.cpp
   DBProgramGeneratorAggregates.cpp
+  DBProgramGeneratorBranches.cpp
   DBProgramGeneratorExplain.cpp
   DBProgramGeneratorInFlightColumns.cpp
   DBProgramGeneratorMatch.cpp
