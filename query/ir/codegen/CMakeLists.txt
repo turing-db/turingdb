@@ -1,5 +1,6 @@
 set(cg_sources
   DBBoundColumns.cpp
+  DBClauseItems.cpp
   DBHiddenColumnNames.cpp
   DBPassPipeline.cpp
   DBProgramGenerator.cpp
