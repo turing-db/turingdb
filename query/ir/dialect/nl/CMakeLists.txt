@@ -19,6 +19,7 @@ mlir_tablegen(NLTypes.cpp.inc    -gen-typedef-defs      -dialect nl --typedefs-d
 add_public_tablegen_target(NLDialectIncGen)
 
 set_source_files_properties(
+  NLChunkTypes.cpp
   NLDialect.cpp
   NLOps.cpp
   NLTypes.cpp
@@ -27,6 +28,7 @@ set_source_files_properties(
 
 # Compiles .cpp files; needs the codegen first, hence the DEPENDS clause
 add_mlir_library(turing_db_ir_nldialect_s
+  NLChunkTypes.cpp
   NLDialect.cpp
   NLOps.cpp
   NLTypes.cpp

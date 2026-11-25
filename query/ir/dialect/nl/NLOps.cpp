@@ -1,4 +1,5 @@
 #include "NLOps.h"
+
 #include "NLDialect.h"
 
 #include <array>
@@ -25,6 +26,7 @@
 #include "PropertyScanLiteral.h"
 #include "BoundEntityIDs.h"
 #include "BoundValueFormat.h"
+#include "NLChunkTypes.h"
 
 using namespace mlir;
 using namespace mlir::nl;
@@ -36,41 +38,8 @@ namespace storage = mlir::storage;
 
 namespace {
 
-Type getNodeIDChunkType(MLIRContext* context) {
-    return ChunkType::get(context, storage::NodeIDType::get(context));
-}
-
-Type valueElementOf(Type chunkType) {
-    const Type element = llvm::cast<ChunkType>(chunkType).getElementType();
-    const auto nullable = llvm::dyn_cast<storage::NullableType>(element);
-
-    return nullable ? nullable.getValueType() : element;
-}
-
-Type getEdgeIDChunkType(MLIRContext* context) {
-    return ChunkType::get(context, storage::EdgeIDType::get(context));
-}
-
-Type getEdgeTypeIDChunkType(MLIRContext* context) {
-    return ChunkType::get(context, storage::EdgeTypeIDType::get(context));
-}
-
 Type getNullableChunkType(MLIRContext* context, Type valueType) {
     return ChunkType::get(context, storage::NullableType::get(context, valueType));
-}
-
-// Whether a key read can be answered over this chunk: a chunk of maps, or one of tagged
-// cells, which a read of a nested container hands back and whose row says what it holds
-bool holdsAMapPerRow(Type chunkType) {
-    const auto chunk = dyn_cast<ChunkType>(chunkType);
-    if (!chunk) {
-        return false;
-    }
-
-    const auto nullable = dyn_cast<storage::NullableType>(chunk.getElementType());
-    const Type read = nullable ? nullable.getValueType() : chunk.getElementType();
-
-    return isa<storage::MapType, storage::AnyType>(read);
 }
 
 bool writesAMapPerRow(Type chunkType) {
@@ -107,24 +76,6 @@ Type aggregateValueType(Type chunkType) {
 // nl.aggregate_result use it to reconcile their kind with the accumulator's reset.
 Aggregate producingAggregate(Value state) {
     return state.getDefiningOp<Aggregate>();
-}
-
-// Out- and in-edge fetches expose the same row of chunks - source node IDs,
-// edge IDs, edge type IDs and target node IDs - followed by one filtered chunk
-// per carried column, so a loop body written for one direction works unchanged
-// for the other.
-Type getEdgeIteratorType(MLIRContext* context, TypeRange carriedChunkTypes) {
-    const Type sources = getNodeIDChunkType(context);
-    const Type edgeIDs = getEdgeIDChunkType(context);
-    const Type edgeTypeIDs = getEdgeTypeIDChunkType(context);
-    const Type targets = getNodeIDChunkType(context);
-
-    // The four fixed edge chunks, then the carry set comes back with the same
-    // chunk types, mirroring db.get_out_edges' filtered_columns.
-    llvm::SmallVector<Type> chunkTypes {sources, edgeIDs, edgeTypeIDs, targets};
-    chunkTypes.append(carriedChunkTypes.begin(), carriedChunkTypes.end());
-
-    return IteratorType::get(context, chunkTypes);
 }
 
 // A path exploration exposes the seed node IDs, the end node IDs and the path handles,
@@ -223,27 +174,6 @@ bool holdsNullableBooleans(Value chunk) {
     return nullableType && nullableType.getValueType().isInteger(1);
 }
 
-bool isReadAsCellChunk(Type chunkType) {
-    return isReadAsCells(cast<ChunkType>(chunkType).getElementType());
-}
-
-LogicalResult verifyReadAsCells(Operation* op, TypeRange chunkTypes) {
-    if (!llvm::all_of(chunkTypes, isReadAsCellChunk)) {
-        return op->emitOpError("reads a cell per row out of a chunk of entities, paths, lists, maps, tagged cells "
-                               "or nullable values, never out of a plain value chunk");
-    }
-
-    return success();
-}
-
-LogicalResult verifyCellWrites(Operation* op, Type writtenChunkType, TypeRange chunkTypes) {
-    if (!isa<storage::AnyType>(valueElementOf(writtenChunkType))) {
-        return success();
-    }
-
-    return verifyReadAsCells(op, chunkTypes);
-}
-
 template <typename FoldOp>
 LogicalResult verifyAccumulatorWrites(FoldOp fold) {
     Block& bodyBlock = fold.getBody().front();
@@ -285,6 +215,7 @@ LogicalResult verifySearchedValue(Operation* op, llvm::StringRef name, Value bou
 
     return success();
 }
+
 }
 
 // A node scan always produces one chunk of node IDs per step
@@ -1857,4 +1788,3 @@ LogicalResult CollectUpdate::verify() {
 
     return success();
 }
-
