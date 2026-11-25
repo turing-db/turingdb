@@ -1,5 +1,4 @@
 #include "DBOps.h"
-#include "DBDialect.h"
 
 #include <optional>
 
@@ -12,6 +11,7 @@
 
 #include "DBColumnElement.h"
 #include "DBHeldTags.h"
+#include "DBRowCosts.h"
 #include "IRConstantColumn.h"
 #include "IRLiteralList.h"
 #include "IRRange.h"
@@ -37,12 +37,6 @@ using namespace mlir::db;
 namespace storage = mlir::storage;
 
 namespace {
-
-constexpr double STORAGE_READ_ROW_COST = 10.0;
-constexpr double STRING_TEST_ROW_COST = 3.0;
-constexpr double MEMBERSHIP_TEST_ROW_COST = 5.0;
-constexpr double CONTAINER_BUILD_ROW_COST = 15.0;
-constexpr double VECTOR_FUNCTION_ROW_COST = 40.0;
 
 Type columnElement(Value column) {
     return ::db::declaredColumnElement(column);
