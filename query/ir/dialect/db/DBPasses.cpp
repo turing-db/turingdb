@@ -46,6 +46,7 @@
 #include "PathHopArguments.h"
 #include "NullLiteralType.h"
 #include "DBOps.h"
+#include "DBPassUtils.h"
 #include "DBPassWorklist.h"
 #include "DBRowCone.h"
 #include "DBStagePlanner.h"
@@ -107,14 +108,6 @@ namespace mlir::db {
 
 namespace {
 
-const DBPassContext defaultPassContext;
-
-void eraseIfUnused(Operation* op) {
-    if (op && op->use_empty()) {
-        op->erase();
-    }
-}
-
 // A bound value is run-invariant: ops that cannot raise compute it from parameters and
 // literals alone, so it holds the same value wherever it is computed
 void computeBoundValuesAhead(Operation* lookup) {
@@ -123,55 +116,6 @@ void computeBoundValuesAhead(Operation* lookup) {
 
     bioassert(mlir::succeeded(moved), "The bound values of a lookup are computed ahead of it");
 }
-
-bool isNodeSource(Operation* op) {
-    return isa<ScanNodes, ScanNodesByLabel, ConstScanNodes, ScanNodesByPropertyValue>(op);
-}
-
-bool isEdgeHop(Operation* op) {
-    return isa<GetOutEdges,
-               GetInEdges,
-               GetEdges,
-               GetOutEdgesByType,
-               GetInEdgesByType,
-               GetOutEdgesByLabel,
-               GetInEdgesByLabel,
-               GetOutEdgesByTypeAndLabel,
-               GetInEdgesByTypeAndLabel>(op);
-}
-
-bool isEdgeScan(Operation* op) {
-    return isa<ScanEdges,
-               ScanEdgesByType,
-               ScanOutEdgesByLabelSrc,
-               ScanInEdgesByLabelTgt,
-               ScanOutEdgesByLabelTgt,
-               ScanInEdgesByLabelSrc,
-               ScanOutEdgesByLabelSrcTgt,
-               ScanInEdgesByLabelSrcTgt>(op);
-}
-
-bool isReverseHop(Operation* op) {
-    return isa<GetInEdges, GetInEdgesByType, GetInEdgesByLabel, GetInEdgesByTypeAndLabel>(op);
-}
-
-// The result of a hop holding the node it walks from, and the one holding the node it reaches
-size_t hopInputResult(Operation* hop) {
-    return isReverseHop(hop) ? 3 : 0;
-}
-
-size_t hopReachedResult(Operation* hop) {
-    return isReverseHop(hop) ? 0 : 3;
-}
-
-constexpr size_t hopFixedResultCount = 4;
-
-constexpr size_t EDGE_IDS_RESULT = 1;
-constexpr size_t EDGE_TYPES_RESULT = 2;
-constexpr size_t EDGE_TARGETS_RESULT = 3;
-
-// srcids, tgtids and paths; the carry set follows
-constexpr size_t pathFixedResultCount = 3;
 
 // The columns a cross_product factor yields, in result order.
 Operation::operand_range factorYieldColumns(mlir::Region& factor) {
@@ -194,43 +138,6 @@ using ColumnEquality = std::pair<Value, Value>;
 
 void collectConjuncts(Value mask, llvm::SmallVectorImpl<Value>& conjuncts);
 bool isUntypedNullMask(Value mask);
-
-bool isNodeColumn(Value column) {
-    const ColumnType type = dyn_cast<ColumnType>(column.getType());
-    return type && isa<storage::NodeIDType>(type.getType());
-}
-
-bool isEdgeColumn(Value column) {
-    const ColumnType type = dyn_cast<ColumnType>(column.getType());
-    return type && isa<storage::EdgeIDType>(type.getType());
-}
-
-// The node or edge type a column holds: its own element, or the element of the list of nodes
-// or edges a list index, head() or last() reads one entry of. Null for any other column.
-Type entityElementOf(Value column) {
-    const ColumnType type = dyn_cast<ColumnType>(column.getType());
-    if (!type) {
-        return Type();
-    } else if (storage::isEntityIDType(type.getType())) {
-        return type.getType();
-    }
-
-    Operation* const read = column.getDefiningOp();
-    if (!isa_and_nonnull<ListIndex, Head, Last>(read)) {
-        return Type();
-    }
-
-    const storage::ListType list = dyn_cast<storage::ListType>(::db::declaredColumnElement(read->getOperand(0)));
-    if (!list || !storage::isEntityIDType(list.getElementType())) {
-        return Type();
-    }
-
-    return list.getElementType();
-}
-
-bool isEntityColumn(Value column) {
-    return static_cast<bool>(entityElementOf(column));
-}
 
 // Every equality of two node columns the filter requires: it keeps only the rows where they
 // agree, so below it anything reading one of them reads the other just as well. A filter
@@ -414,19 +321,6 @@ private:
         }
     }
 };
-
-MaskCone collectMaskCone(Value mask) {
-    MaskCone cone;
-
-    const auto movesOntoOtherRows = [](Operation* op) {
-        return computesFromTheRow(op) && !raisesOnSomeRows(op);
-    };
-
-    llvm::SmallPtrSet<Operation*, 8> visited;
-    collectConePostOrder(mask, movesOntoOtherRows, visited, cone);
-
-    return cone;
-}
 
 // A filter whose mask reads the columns one op makes, such as an edge and its type, and where
 // its mask should be rebuilt: right after that op, over the anchor of each input of the cone,
@@ -649,30 +543,6 @@ bool matchSoleScanSource(FilterOp filter, ScanSource& source) {
     }
 
     return true;
-}
-
-Value checkLabels(Value nodes, ArrayAttr labels, Location loc, mlir::OpBuilder& builder) {
-    MLIRContext* const context = builder.getContext();
-    const Type labelSetType = ColumnType::get(context, storage::LabelSetIDType::get(context));
-    const Type boolType = ColumnType::get(context, storage::BoolType::get(context));
-
-    GetNodeLabelSet labelSet = builder.create<GetNodeLabelSet>(loc, labelSetType, nodes);
-    CheckLabelConstraint check = builder.create<CheckLabelConstraint>(loc,
-                                                                      boolType,
-                                                                      labelSet.getResult(),
-                                                                      builder.getArrayAttr({labels}));
-
-    return check.getResult();
-}
-
-// Cuts the columns to the rows whose first column holds a node carrying every label
-void keepLabelledRows(llvm::SmallVectorImpl<Value>& columns, ArrayAttr labels, Location loc, mlir::OpBuilder& builder) {
-    const Value mask = checkLabels(columns.front(), labels, loc, builder);
-
-    const ValueRange columnRange(columns);
-    FilterOp labelFilter = builder.create<FilterOp>(loc, columnRange.getTypes(), mask, columnRange);
-
-    columns.assign(labelFilter.getResults().begin(), labelFilter.getResults().end());
 }
 
 // The node or edge column a side of an id comparison names, compared as itself or through id()
@@ -1466,13 +1336,8 @@ struct FuseUnwindEquality : public impl::FuseUnwindEqualityBase<FuseUnwindEquali
     }
 };
 
-bool isHop(Operation* op);
-Value climbFilters(Value column);
-void eraseIfUnused(Operation* op, mlir::RewriterBase& rewriter);
 Value appendCarriedColumn(Operation* op, Value column, mlir::RewriterBase& rewriter);
 BlockArgument carryIntoRegion(Region& region, Value column, mlir::RewriterBase& rewriter);
-Value seedColumnOf(ExplorePaths exploration, Value column);
-Type boolColumnType(mlir::MLIRContext* context);
 
 // What an unwound list is when it is a run of a range: the range, the one slice taken of it
 // in its own order - db.tail being the slice from 1 - and whether the run is reversed. The
@@ -1735,19 +1600,6 @@ struct UnnestUnwindComprehension : public impl::UnnestUnwindComprehensionBase<Un
     }
 };
 
-// The ops computing one value per row out of the row's columns, through a region of their
-// own included, which compute the same values over any run of the rows.
-bool computesAValuePerRow(Operation* op) {
-    if (op->hasTrait<OpTrait::ConstantLike>()) {
-        return false;
-    }
-
-    return op->hasTrait<OpTrait::ConstantThroughOperands>()
-        || computesPerRow(op)
-        || isa<Range, MakeList, MakeMap, ListSlice, DynamicMapKey, MakePath, ExpandPath, PathLength,
-               CollectSubquery, CountSubquery, ExistsSubquery, PatternComprehension>(op);
-}
-
 // The ops computing an unwind's source that nothing else reads, in block order, and the
 // columns of the rows they read from outside them.
 struct UnwindSourceCone {
@@ -1877,52 +1729,6 @@ struct SinkUnwindSource : public impl::SinkUnwindSourceBase<SinkUnwindSource> {
         });
     }
 };
-
-void cloneRowCone(llvm::ArrayRef<Operation*> ops, mlir::IRMapping& mapping, mlir::RewriterBase& rewriter) {
-    for (Operation* const op : ops) {
-        rewriter.clone(*op, mapping);
-    }
-}
-
-void eraseUnusedRowCone(llvm::ArrayRef<Operation*> ops, mlir::RewriterBase& rewriter) {
-    for (Operation* const op : llvm::reverse(ops)) {
-        eraseIfUnused(op, rewriter);
-    }
-}
-
-// Moves the ops after @param anchor in its block that compute @param values to just before
-// @param anchor. The values are constants, which a WITH after @param anchor may bind, and the
-// ops computing a constant read only constants.
-void hoistDefinitionsAhead(llvm::ArrayRef<Value> values, Operation* anchor, mlir::RewriterBase& rewriter) {
-    Block* const block = anchor->getBlock();
-
-    llvm::SmallVector<Value> pending(values.begin(), values.end());
-    llvm::SmallPtrSet<Operation*, 8> visited;
-    llvm::SmallVector<Operation*> hoisted;
-    while (!pending.empty()) {
-        const Value value = pending.pop_back_val();
-        Operation* const def = value.getDefiningOp();
-        const bool computedAfter = def && def->getBlock() == block && anchor->isBeforeInBlock(def);
-        if (!computedAfter || !visited.insert(def).second) {
-            continue;
-        }
-
-        hoisted.push_back(def);
-        llvm::append_range(pending, def->getOperands());
-
-        llvm::SetVector<Value> readFromAbove;
-        mlir::getUsedValuesDefinedAbove(def->getRegions(), readFromAbove);
-        llvm::append_range(pending, readFromAbove);
-    }
-
-    llvm::sort(hoisted, [](Operation* lhs, Operation* rhs) {
-        return lhs->isBeforeInBlock(rhs);
-    });
-
-    for (Operation* const op : hoisted) {
-        rewriter.moveOpBefore(op, anchor);
-    }
-}
 
 size_t leftFactorWidth(CrossProduct product) {
     return factorYieldColumns(product.getLeftFactor()).size();
@@ -2681,31 +2487,6 @@ void eraseUnusedConjunction(Value mask, mlir::RewriterBase& rewriter) {
         pending.push_back(conjunction.getRhs().getDefiningOp());
         erased.insert(op);
         rewriter.eraseOp(conjunction);
-    }
-}
-
-// Erases @param root if nothing reads it, then each row computation it read that nothing
-// else reads. A handle the caller holds to an op of that cone may be freed afterwards.
-void eraseUnusedRowConeOf(Operation* root, mlir::RewriterBase& rewriter) {
-    llvm::SmallVector<Operation*> dead {root};
-    llvm::SmallPtrSet<Operation*, 8> erased;
-    while (!dead.empty()) {
-        Operation* const op = dead.pop_back_val();
-        if (erased.contains(op) || !op->use_empty()) {
-            continue;
-        }
-
-        llvm::SmallVector<Operation*> operandDefs;
-        for (const Value operand : op->getOperands()) {
-            Operation* const def = operand.getDefiningOp();
-            if (def && computesFromTheRow(def)) {
-                operandDefs.push_back(def);
-            }
-        }
-
-        erased.insert(op);
-        rewriter.eraseOp(op);
-        dead.append(operandDefs.begin(), operandDefs.end());
     }
 }
 
@@ -3760,12 +3541,6 @@ void keepWeakestAlternatives(llvm::ArrayRef<Attribute> alternatives, llvm::Small
     }
 }
 
-void eraseIfUnused(Operation* op, mlir::RewriterBase& rewriter) {
-    if (op && op->use_empty()) {
-        rewriter.eraseOp(op);
-    }
-}
-
 // A WHERE spelling a boolean of labels reaches here as one check per label, joined by AND and
 // OR. Two checks over the same nodes are one check, whichever of the two joins them.
 struct LabelCheckPair {
@@ -4662,65 +4437,6 @@ Operation* createEndpointLabelledHop(Operation* hop, ArrayAttr labels, mlir::OpB
     }
 }
 
-void hopTypes(Operation* hop, llvm::SmallVectorImpl<Type>& types) {
-    for (size_t index = 0; index < hopFixedResultCount; index++) {
-        types.push_back(hop->getResult(index).getType());
-    }
-}
-
-template <typename HopOp, typename ByTypeOp, typename ByLabelOp, typename ByTypeAndLabelOp>
-Operation* createHop(Location loc,
-                     TypeRange types,
-                     Value from,
-                     ArrayAttr edgeTypes,
-                     ArrayAttr labels,
-                     ValueRange carried,
-                     mlir::OpBuilder& builder) {
-    const bool asksLabels = labels && !labels.empty();
-
-    if (edgeTypes && asksLabels) {
-        return builder.create<ByTypeAndLabelOp>(loc, types, from, edgeTypes, labels, carried).getOperation();
-    } else if (edgeTypes) {
-        return builder.create<ByTypeOp>(loc, types, from, edgeTypes, carried).getOperation();
-    } else if (asksLabels) {
-        return builder.create<ByLabelOp>(loc, types, from, labels, carried).getOperation();
-    } else {
-        return builder.create<HopOp>(loc, types, from, carried).getOperation();
-    }
-}
-
-// The hop over @param hop's edges walked the other way, from @param from, asking the node it
-// reaches for @param labels. The labels @param hop asked of its own reached node are dropped,
-// since that node is now the one walked from; get_edges walks both ways and asks for none.
-Operation* createReversedHop(Operation* hop, Value from, ArrayAttr labels, ValueRange carried, mlir::OpBuilder& builder) {
-    const Location loc = hop->getLoc();
-    const ArrayAttr edgeTypes = hop->getAttrOfType<ArrayAttr>("edge_types");
-
-    llvm::SmallVector<Type> types;
-    hopTypes(hop, types);
-    llvm::append_range(types, carried.getTypes());
-
-    if (isa<GetEdges>(hop)) {
-        return builder.create<GetEdges>(loc, types, from, carried).getOperation();
-    } else if (isReverseHop(hop)) {
-        return createHop<GetOutEdges, GetOutEdgesByType, GetOutEdgesByLabel, GetOutEdgesByTypeAndLabel>(loc,
-                                                                                                         types,
-                                                                                                         from,
-                                                                                                         edgeTypes,
-                                                                                                         labels,
-                                                                                                         carried,
-                                                                                                         builder);
-    } else {
-        return createHop<GetInEdges, GetInEdgesByType, GetInEdgesByLabel, GetInEdgesByTypeAndLabel>(loc,
-                                                                                                     types,
-                                                                                                     from,
-                                                                                                     edgeTypes,
-                                                                                                     labels,
-                                                                                                     carried,
-                                                                                                     builder);
-    }
-}
-
 void fuseEdgesByEndpointLabel(EndpointLabelledHop& labelledHop, mlir::RewriterBase& rewriter) {
     Operation* const hop = labelledHop._hop;
 
@@ -4984,10 +4700,6 @@ struct FuseExploreEndConstraint : public impl::FuseExploreEndConstraintBase<Fuse
         runFilterWorklist<EndConstrainedExploration>(getOperation(), matchEndConstrainedExploration, fuseExploreEndConstraint);
     }
 };
-
-Type boolColumnType(mlir::MLIRContext* context) {
-    return ColumnType::get(context, storage::BoolType::get(context));
-}
 
 // A conjunct of a hop region's yield that only asks the hop's end node for labels
 CheckLabelConstraint endLabelCheckOf(Value conjunct, BlockArgument end) {
@@ -5536,12 +5248,6 @@ bool matchEndBoundExploration(FilterOp filter, EndBoundExploration& bound) {
     });
 }
 
-IntegerAttr unsignedAttribute(uint64_t value, mlir::OpBuilder& builder) {
-    const IntegerType type = IntegerType::get(builder.getContext(), 64, IntegerType::Unsigned);
-
-    return IntegerAttr::get(type, value);
-}
-
 void fuseExploreEndNodes(EndBoundExploration& bound, mlir::RewriterBase& rewriter) {
     ExplorePaths exploration = bound._exploration;
     const std::optional<uint64_t> endColumn = bound._endColumn;
@@ -5762,15 +5468,6 @@ Value hoistFactorColumn(CrossProduct product, size_t resultIndex, Block* head, m
     }
 
     return hoisted;
-}
-
-void takeHopRegions(ExplorePaths from, ExplorePaths to) {
-    MutableArrayRef<Region> fromHops = from.getHops();
-    MutableArrayRef<Region> toHops = to.getHops();
-
-    for (size_t step = 0; step < fromHops.size(); step++) {
-        toHops[step].takeBody(fromHops[step]);
-    }
 }
 
 void fuseExploreEndFactor(const FactorEndExploration& match, mlir::OpBuilder& builder) {
@@ -6251,37 +5948,8 @@ struct ExploreListPredicate {
     llvm::SmallVector<Value> _imports;
 };
 
-Value climbFilters(Value column) {
-    while (FilterOp filter = column.getDefiningOp<FilterOp>()) {
-        column = filter.getColumnsToFilter()[cast<OpResult>(column).getResultNumber()];
-    }
-
-    return column;
-}
-
 bool keepsTheWalkedRows(Operation& op) {
     return isa<FilterOp, ExpandPath, ListPredicate>(op) || computesPerRow(&op);
-}
-
-// The operand of the exploration a column of its rows repeats for every path of a seed, or
-// null for a column the walk binds
-Value seedColumnOf(ExplorePaths exploration, Value column) {
-    const Value climbed = climbFilters(column);
-    if (climbed.getDefiningOp() != exploration.getOperation()) {
-        return {};
-    }
-
-    const size_t resultIndex = cast<OpResult>(climbed).getResultNumber();
-    constexpr size_t TARGET_RESULT_INDEX = 1;
-    const bool holdsTheSeed = resultIndex == 0 || (resultIndex == TARGET_RESULT_INDEX && exploration.getEndsOnSeed());
-
-    if (holdsTheSeed) {
-        return exploration.getInputNodes();
-    } else if (resultIndex >= pathFixedResultCount) {
-        return exploration.getColumnsToFilter()[resultIndex - pathFixedResultCount];
-    } else {
-        return {};
-    }
 }
 
 // Whether the body reads only the element, constants and carried columns holding one value per
@@ -11057,10 +10725,6 @@ struct FuseFetchNodes : public impl::FuseFetchNodesBase<FuseFetchNodes> {
         runFilterWorklist<FetchNodesChain>(getOperation(), matchFetchNodes, fuseFetchNodes);
     }
 };
-
-bool isHop(Operation* op) {
-    return isa<GetOutEdges, GetInEdges, GetEdges>(op);
-}
 
 // A pattern hop or walk: the origin of the node it starts from and of the node it reaches
 struct PatternStep {
