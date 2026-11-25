@@ -44,6 +44,7 @@ set_source_files_properties(
   DBSpeculation.cpp
   DBSubqueryOps.cpp
   DBTypes.cpp
+  DBWriteOps.cpp
   PROPERTIES COMPILE_FLAGS "-Wno-uninitialized -Wno-ambiguous-reversed-operator"
 )
 
@@ -81,6 +82,7 @@ add_mlir_library(turing_db_ir_dbdialect_s
   DBSourceOps.cpp
   DBSpeculation.cpp
   DBSubqueryOps.cpp
+  DBWriteOps.cpp
   DBTypes.cpp
   DBPassUtils.cpp
   DBPathPasses.cpp
