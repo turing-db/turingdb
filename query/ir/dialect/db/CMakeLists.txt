@@ -31,6 +31,7 @@ set_source_files_properties(
   DBExpressionOps.cpp
   DBFunctionOps.cpp
   DBHopOps.cpp
+  DBJoinOps.cpp
   DBListOps.cpp
   DBOps.cpp
   DBPathOps.cpp
@@ -67,6 +68,7 @@ add_mlir_library(turing_db_ir_dbdialect_s
   DBExpressionOps.cpp
   DBFunctionOps.cpp
   DBHopOps.cpp
+  DBJoinOps.cpp
   DBListOps.cpp
   DBPathOps.cpp
   DBPropertyOps.cpp
