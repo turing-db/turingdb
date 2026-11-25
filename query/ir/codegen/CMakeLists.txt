@@ -17,6 +17,7 @@ set(cg_sources
   DBProgramGeneratorSegments.cpp
   DBProgramGeneratorSources.cpp
   DBProgramGeneratorSubqueries.cpp
+  DBProgramGeneratorSubqueryExpressions.cpp
   DBProgramGeneratorWrites.cpp
   DBSystemProgramGenerator.cpp
 )
