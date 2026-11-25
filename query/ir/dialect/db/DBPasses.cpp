@@ -45,6 +45,7 @@
 #include "BoundEntityIDs.h"
 #include "PathHopArguments.h"
 #include "DBOps.h"
+#include "DBCarriedColumns.h"
 #include "DBCrossProducts.h"
 #include "DBFilterUtils.h"
 #include "DBPassUtils.h"
@@ -1308,9 +1309,6 @@ struct FuseUnwindEquality : public impl::FuseUnwindEqualityBase<FuseUnwindEquali
         }
     }
 };
-
-Value appendCarriedColumn(Operation* op, Value column, mlir::RewriterBase& rewriter);
-BlockArgument carryIntoRegion(Region& region, Value column, mlir::RewriterBase& rewriter);
 
 // What an unwound list is when it is a run of a range: the range, the one slice taken of it
 // in its own order - db.tail being the slice from 1 - and whether the run is reversed. The
@@ -4536,36 +4534,6 @@ struct SinkMakePath : public impl::SinkMakePathBase<SinkMakePath> {
     }
 };
 
-OptionalYield patternYield(OptionalMatch optional) {
-    return cast<OptionalYield>(optional.getPattern().front().getTerminator());
-}
-
-// Rebuilds an optional match over the columns its yield names, which a pass has just added
-// to or dropped some of. The old results keptResults lists stand, in order, for the first
-// new ones.
-OptionalMatch rebuildOptionalMatch(OptionalMatch optional, llvm::ArrayRef<size_t> keptResults, mlir::OpBuilder& builder) {
-    OptionalYield yield = patternYield(optional);
-
-    llvm::SmallVector<Type> resultTypes;
-    for (const Value column : yield.getColumns()) {
-        resultTypes.push_back(column.getType());
-    }
-
-    builder.setInsertionPoint(optional);
-    OptionalMatch rebuilt = builder.create<OptionalMatch>(optional.getLoc(), resultTypes, optional.getInputColumns());
-    rebuilt->setAttrs(optional->getAttrDictionary());
-    rebuilt.getPattern().takeBody(optional.getPattern());
-
-    const ResultRange results = optional->getResults();
-    for (size_t index = 0; index < keptResults.size(); index++) {
-        results[keptResults[index]].replaceAllUsesWith(rebuilt->getResult(index));
-    }
-
-    optional.erase();
-
-    return rebuilt;
-}
-
 // A missed row pads a pattern variable with null, and size(), nodes(), relationships() and
 // length() of a null are null too. So the pattern computes them before the padding, which
 // then carries their result instead of the list or path.
@@ -5986,12 +5954,6 @@ bool aggregatesDistinctly(llvm::ArrayRef<int64_t> kinds) {
     return true;
 }
 
-size_t collectValueCount(Collect collect) {
-    const size_t aggregateCount = collect.getKinds().value_or(llvm::ArrayRef<int64_t> {}).size();
-
-    return collect.getColumns().size() - collect.getKeyCount() - aggregateCount;
-}
-
 // Every list a collect builds dedupes its values, and every aggregate beside them ignores a
 // repeated row
 bool collectsDistinctly(Collect collect) {
@@ -6158,12 +6120,6 @@ struct CountPathRows : public impl::CountPathRowsBase<CountPathRows> {
     }
 };
 
-bool matchCarrySet(Operation* op, CarrySet& carrySet) {
-    ColumnCarrierOpInterface carrier = dyn_cast<ColumnCarrierOpInterface>(op);
-
-    return carrier && carrier.getCarrySet(carrySet);
-}
-
 bool carriesIntoItsRegions(Operation* op) {
     ColumnCarrierOpInterface carrier = dyn_cast<ColumnCarrierOpInterface>(op);
     if (!carrier) {
@@ -6178,16 +6134,6 @@ bool carriesIntoItsRegions(Operation* op) {
     }
 
     return !carried.empty();
-}
-
-// The operands a trim drops in pairs with results: the carry set, and a grouping op's
-// aggregate inputs with the aggregates they reduce to
-MutableOperandRange trimmedOperandsOf(Operation* op) {
-    if (isa<GroupAggregate, Collect>(op)) {
-        return MutableOperandRange(op);
-    }
-
-    return cast<ColumnCarrierOpInterface>(op).getCarrySetMutable();
 }
 
 // The columns a trim drops in pairs, each operand with the result it comes back as. A dedup
@@ -6295,150 +6241,6 @@ void selectKeptCarriedColumns(Operation* op, const CarrySet& carrySet, llvm::Sma
     }
 }
 
-void setOrEraseIndices(OperationState& state, StringAttr name, llvm::ArrayRef<int64_t> indices, mlir::OpBuilder& builder) {
-    if (indices.empty()) {
-        state.attributes.erase(name);
-    } else {
-        state.attributes.set(name, builder.getDenseI64ArrayAttr(indices));
-    }
-}
-
-void renumberSortKeys(Sort sort, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
-    llvm::SmallVector<int64_t> keyColumns;
-    for (const int64_t keyColumn : sort.getKeyColumns()) {
-        const auto keptIt = llvm::find(kept, static_cast<size_t>(keyColumn));
-        bioassert(keptIt != kept.end(), "Sort key column {} is not in the trimmed carry set", keyColumn);
-
-        keyColumns.push_back(static_cast<int64_t>(keptIt - kept.begin()));
-    }
-
-    state.attributes.set(sort.getKeyColumnsAttrName(), builder.getDenseI64ArrayAttr(keyColumns));
-}
-
-void trimGroupAggregateKinds(GroupAggregate groupAggregate, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
-    const size_t keyCount = groupAggregate.getKeyCount();
-    const llvm::ArrayRef<int64_t> kinds = groupAggregate.getKinds();
-
-    llvm::SmallVector<int64_t> keptKinds;
-    for (const size_t columnIndex : kept) {
-        if (columnIndex >= keyCount) {
-            keptKinds.push_back(kinds[columnIndex - keyCount]);
-        }
-    }
-
-    state.attributes.set(groupAggregate.getKindsAttrName(), builder.getDenseI64ArrayAttr(keptKinds));
-}
-
-void trimCollectAttributes(Collect collect, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
-    const size_t keyCount = collect.getKeyCount();
-    const size_t valueEnd = keyCount + collectValueCount(collect);
-    const llvm::ArrayRef<int64_t> kinds = collect.getKinds().value_or(llvm::ArrayRef<int64_t> {});
-
-    llvm::SmallVector<int64_t> keptKinds;
-    llvm::SmallVector<int64_t> keptValues;
-    for (const size_t columnIndex : kept) {
-        if (columnIndex >= valueEnd) {
-            keptKinds.push_back(kinds[columnIndex - valueEnd]);
-        } else if (columnIndex >= keyCount) {
-            keptValues.push_back(static_cast<int64_t>(columnIndex - keyCount));
-        }
-    }
-
-    llvm::SmallVector<int64_t> distinctValues;
-    for (const int64_t valueIndex : collect.getDistinctValues().value_or(llvm::ArrayRef<int64_t> {})) {
-        const auto keptIt = llvm::find(keptValues, valueIndex);
-        if (keptIt != keptValues.end()) {
-            distinctValues.push_back(static_cast<int64_t>(keptIt - keptValues.begin()));
-        }
-    }
-
-    setOrEraseIndices(state, collect.getKindsAttrName(), keptKinds, builder);
-    setOrEraseIndices(state, collect.getDistinctValuesAttrName(), distinctValues, builder);
-}
-
-void renumberEndColumn(ExplorePaths exploration, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
-    const std::optional<uint64_t> endColumn = exploration.getEndColumn();
-    if (!endColumn) {
-        return;
-    }
-
-    const auto keptIt = llvm::find(kept, static_cast<size_t>(*endColumn));
-    bioassert(keptIt != kept.end(), "End column {} is not in the trimmed carry set", *endColumn);
-
-    state.attributes.set(exploration.getEndColumnAttrName(), unsignedAttribute(static_cast<uint64_t>(keptIt - kept.begin()), builder));
-}
-
-void trimAttributes(Operation* op, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
-    if (Sort sort = dyn_cast<Sort>(op)) {
-        renumberSortKeys(sort, kept, state, builder);
-    } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op)) {
-        renumberEndColumn(exploration, kept, state, builder);
-    } else if (GroupAggregate groupAggregate = dyn_cast<GroupAggregate>(op)) {
-        trimGroupAggregateKinds(groupAggregate, kept, state, builder);
-    } else if (Collect collect = dyn_cast<Collect>(op)) {
-        trimCollectAttributes(collect, kept, state, builder);
-    }
-}
-
-Operation* rebuildOp(Operation* op, OperationState& state, mlir::OpBuilder& builder) {
-    const unsigned regionCount = op->getNumRegions();
-    for (unsigned regionIndex = 0; regionIndex < regionCount; regionIndex++) {
-        state.addRegion();
-    }
-
-    builder.setInsertionPoint(op);
-    Operation* const rebuilt = builder.create(state);
-
-    for (unsigned regionIndex = 0; regionIndex < regionCount; regionIndex++) {
-        rebuilt->getRegion(regionIndex).takeBody(op->getRegion(regionIndex));
-    }
-
-    return rebuilt;
-}
-
-void trimCarrySet(Operation* op, const CarrySet& carrySet, llvm::ArrayRef<size_t> kept, mlir::OpBuilder& builder) {
-    const Operation::operand_range operands = op->getOperands();
-    const Operation::result_range results = op->getResults();
-
-    llvm::SmallVector<Value> keptOperands;
-    llvm::SmallVector<Type> trimmedTypes;
-    llvm::append_range(trimmedTypes, results.take_front(carrySet._resultOffset).getTypes());
-
-    for (const size_t carriedIndex : kept) {
-        keptOperands.push_back(operands[carrySet._operandOffset + carriedIndex]);
-        trimmedTypes.push_back(results[carrySet._resultOffset + carriedIndex].getType());
-    }
-
-    OperationState state(op->getLoc(), op->getName());
-    state.addOperands(operands);
-    state.addTypes(trimmedTypes);
-    state.addAttributes(op->getAttrs());
-    trimAttributes(op, kept, state, builder);
-
-    Operation* const trimmed = rebuildOp(op, state, builder);
-    trimmedOperandsOf(trimmed).assign(keptOperands);
-
-    for (size_t resultIndex = 0; resultIndex < carrySet._resultOffset; resultIndex++) {
-        results[resultIndex].replaceAllUsesWith(trimmed->getResult(resultIndex));
-    }
-
-    for (size_t keptIndex = 0; keptIndex < kept.size(); keptIndex++) {
-        Value carried = results[carrySet._resultOffset + kept[keptIndex]];
-        carried.replaceAllUsesWith(trimmed->getResult(carrySet._resultOffset + keptIndex));
-    }
-}
-
-void eraseUnkeptYields(Yield yield, const llvm::SmallBitVector& keep, size_t firstIndex) {
-    llvm::BitVector erased(yield.getNumOperands());
-    for (size_t columnIndex = 0; columnIndex < erased.size(); columnIndex++) {
-        if (!keep[firstIndex + columnIndex]) {
-            erased.set(columnIndex);
-        }
-    }
-
-    yield->eraseOperands(erased);
-}
-
 // The results a two-factor op has to keep: the ones something reads, the ones the op
 // itself matches on, and - since lowering sizes each side by a column of it - one
 // row-carrying column per factor. False when that is every result, so the caller leaves
@@ -6470,15 +6272,6 @@ bool selectKeptFactorColumns(Operation* op, llvm::SmallBitVector& keep) {
     return !keep.all();
 }
 
-void keptResultTypes(Operation* op, const llvm::SmallBitVector& keep, llvm::SmallVectorImpl<Type>& types) {
-    const Operation::result_range results = op->getResults();
-    for (size_t resultIndex = 0; resultIndex < results.size(); resultIndex++) {
-        if (keep[resultIndex]) {
-            types.push_back(results[resultIndex].getType());
-        }
-    }
-}
-
 // Where a factor's key column lands once that factor's unkept columns are gone: the kept
 // columns of the factor ahead of it. firstIndex is where the factor's columns start among
 // the op's results.
@@ -6491,31 +6284,6 @@ size_t trimmedKeyColumn(const llvm::SmallBitVector& keep, size_t firstIndex, siz
     }
 
     return trimmed;
-}
-
-// Hands the two factors to the op built in its place, drops the columns their yields no
-// longer name, and rewires every kept result. Shared by the cross product and the hash
-// join, which differ only in the op the caller built.
-void replaceWithTrimmedFactors(Operation* op,
-                               Operation* trimmed,
-                               const llvm::SmallBitVector& keep,
-                               size_t leftCount) {
-    Yield leftYield = factorYield(op, 0);
-    Yield rightYield = factorYield(op, 1);
-
-    trimmed->getRegion(0).takeBody(op->getRegion(0));
-    trimmed->getRegion(1).takeBody(op->getRegion(1));
-
-    eraseUnkeptYields(leftYield, keep, 0);
-    eraseUnkeptYields(rightYield, keep, leftCount);
-
-    const Operation::result_range results = op->getResults();
-    size_t trimmedIndex = 0;
-    for (size_t resultIndex = 0; resultIndex < results.size(); resultIndex++) {
-        if (keep[resultIndex]) {
-            results[resultIndex].replaceAllUsesWith(trimmed->getResult(trimmedIndex++));
-        }
-    }
 }
 
 // A product's results are the columns its two factors yield; a result nobody reads leaves
@@ -6707,87 +6475,6 @@ void trimRegionCarrySet(Operation* op) {
     }
 
     carriedOperands.assign(keptColumns);
-}
-
-bool matchRegionCarrySet(Region& region, RegionCarrySet& carrySet) {
-    ColumnCarrierOpInterface carrier = dyn_cast_or_null<ColumnCarrierOpInterface>(region.getParentOp());
-
-    return carrier && carrier.getRegionCarrySet(region, carrySet);
-}
-
-// Null for an argument the op binds itself: a list element, an accumulator or a row tag
-Value carriedColumnOf(BlockArgument argument) {
-    Region& region = *argument.getParentRegion();
-
-    RegionCarrySet carrySet;
-    if (!matchRegionCarrySet(region, carrySet)) {
-        return {};
-    }
-
-    const size_t argumentIndex = argument.getArgNumber();
-    const bool isCarried = argumentIndex >= carrySet._argumentOffset
-                        && argumentIndex < carrySet._argumentOffset + carrySet._count;
-    if (!isCarried) {
-        return {};
-    }
-
-    return region.getParentOp()->getOperand(carrySet._operandOffset + argumentIndex - carrySet._argumentOffset);
-}
-
-BlockArgument carriedArgument(Region& region, size_t carriedIndex) {
-    RegionCarrySet carrySet;
-    const bool carries = matchRegionCarrySet(region, carrySet);
-    bioassert(carries, "A region a column is carried into belongs to an op with a carry set");
-
-    return region.front().getArgument(static_cast<unsigned>(carrySet._argumentOffset + carriedIndex));
-}
-
-// The position of @param column in the carry set of @param op into its regions, appended to
-// the run where the op does not carry it yet: as an operand, and as an argument of every
-// region with a body
-size_t carryIntoRegions(Operation* op, Value column, mlir::RewriterBase& rewriter, bool& appended) {
-    ColumnCarrierOpInterface carrier = cast<ColumnCarrierOpInterface>(op);
-    Region& firstRegion = op->getRegion(0);
-
-    RegionCarrySet carrySet;
-    const bool carries = carrier.getRegionCarrySet(firstRegion, carrySet);
-    bioassert(carries, "An op a column is carried into carries columns into its regions");
-
-    const OperandRange carried = op->getOperands().slice(carrySet._operandOffset, carrySet._count);
-    const auto carriedIt = llvm::find(carried, column);
-
-    appended = carriedIt == carried.end();
-    if (!appended) {
-        return static_cast<size_t>(carriedIt - carried.begin());
-    }
-
-    llvm::SmallVector<std::pair<Block*, unsigned>, 2> argumentPositions;
-    for (Region& region : op->getRegions()) {
-        RegionCarrySet regionCarrySet;
-        const bool carriesIntoRegion = carrier.getRegionCarrySet(region, regionCarrySet);
-        bioassert(carriesIntoRegion, "An op carrying columns into a region carries them into all of them");
-
-        if (!region.empty()) {
-            argumentPositions.emplace_back(&region.front(), static_cast<unsigned>(regionCarrySet._argumentOffset + regionCarrySet._count));
-        }
-    }
-
-    rewriter.modifyOpInPlace(op, [&carrier, column, &argumentPositions] {
-        carrier.getRegionCarrySetMutable().append(column);
-
-        for (const auto& [body, position] : argumentPositions) {
-            body->insertArgument(position, column.getType(), column.getLoc());
-        }
-    });
-
-    return carrySet._count;
-}
-
-BlockArgument carryIntoRegion(Region& region, Value column, mlir::RewriterBase& rewriter) {
-    bool appended = false;
-    const size_t carriedIndex = carryIntoRegions(region.getParentOp(), column, rewriter, appended);
-
-    return carriedArgument(region, carriedIndex);
 }
 
 // The argument @param target, a region after @param source, takes @param column of
@@ -7288,43 +6975,6 @@ bool matchPropertiesWrite(Operation* op, bool& nodeProperty) {
     }
 
     return false;
-}
-
-// Widens an op's carry set by one column and hands back the result it comes out as. The
-// column ends the run of operands and the run of results the carry set spans; an op's
-// result count is fixed once built, hence the rebuild.
-Value appendCarriedColumn(Operation* op, Value column, mlir::RewriterBase& rewriter) {
-    CarrySet carrySet;
-    const bool carries = matchCarrySet(op, carrySet);
-    bioassert(carries, "A column is carried through an op with a carry set");
-
-    const size_t resultIndex = carrySet._resultOffset + carrySet._count;
-
-    llvm::SmallVector<Type> types;
-    llvm::append_range(types, op->getResultTypes());
-    types.insert(types.begin() + resultIndex, column.getType());
-
-    OperationState state(op->getLoc(), op->getName());
-    state.addOperands(op->getOperands());
-    state.addTypes(types);
-    state.addAttributes(op->getAttrs());
-
-    Operation* const widened = rebuildOp(op, state, rewriter);
-    rewriter.modifyOpInPlace(widened, [widened, column] {
-        cast<ColumnCarrierOpInterface>(widened).getCarrySetMutable().append(column);
-    });
-
-    const size_t resultCount = op->getNumResults();
-
-    llvm::SmallVector<Value> replacements;
-    for (size_t index = 0; index < resultCount; index++) {
-        const size_t widenedIndex = index < resultIndex ? index : index + 1;
-        replacements.push_back(widened->getResult(static_cast<unsigned>(widenedIndex)));
-    }
-
-    rewriter.replaceOp(op, replacements);
-
-    return widened->getResult(static_cast<unsigned>(resultIndex));
 }
 
 Value carryThrough(Operation* op, Value column, mlir::RewriterBase& rewriter) {
