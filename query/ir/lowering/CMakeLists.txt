@@ -4,6 +4,7 @@ set(ir_lowering_sources
     DBLoweringChunkTypes.cpp
     DBLoweringExpressions.cpp
     DBLoweringFunctionEmitters.cpp
+    DBLoweringFunctions.cpp
     DBLoweringHops.cpp
     DBLoweringLimits.cpp
     DBLoweringLists.cpp
