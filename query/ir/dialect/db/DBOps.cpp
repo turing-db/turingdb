@@ -10,6 +10,7 @@
 #include "DBColumnElement.h"
 #include "DBHeldTags.h"
 #include "DBColumnChecks.h"
+#include "DBRegionColumns.h"
 #include "DBRowCosts.h"
 #include "DBSpeculation.h"
 #include "IRConstantColumn.h"
@@ -136,33 +137,8 @@ size_t factorResultOffset(Region& leftFactor, Region& factor) {
     return leftYield.getColumns().size();
 }
 
-void fillTrailingRegionCarrySet(Operation* op, Region& region, size_t count, RegionCarrySet& carrySet) {
-    carrySet = RegionCarrySet {._operandOffset = op->getNumOperands() - count,
-                               ._argumentOffset = region.getNumArguments() - count,
-                               ._count = count};
-}
-
 constexpr size_t HOP_FIXED_RESULT_COUNT = 4;
 constexpr size_t PATH_FIXED_RESULT_COUNT = 3;
-
-void collectCarriedResult(Value value, size_t firstCarriedResult, ValueRange carriedColumns, llvm::SmallVectorImpl<Value>& carried) {
-    const OpResult result = dyn_cast<OpResult>(value);
-    if (!result || result.getResultNumber() < firstCarriedResult) {
-        return;
-    }
-
-    const size_t carriedIndex = result.getResultNumber() - firstCarriedResult;
-    if (carriedIndex < carriedColumns.size()) {
-        carried.push_back(carriedColumns[carriedIndex]);
-    }
-}
-
-void collectCarriedArgument(Value value, ValueRange carriedColumns, llvm::SmallVectorImpl<Value>& carried) {
-    const BlockArgument argument = dyn_cast<BlockArgument>(value);
-    if (argument && argument.getArgNumber() < carriedColumns.size()) {
-        carried.push_back(carriedColumns[argument.getArgNumber()]);
-    }
-}
 
 bool fillHopCarrySet(Operation* hop, CarrySet& carrySet) {
     carrySet = CarrySet {._operandOffset = 1, ._resultOffset = HOP_FIXED_RESULT_COUNT, ._count = hop->getNumOperands() - 1};
@@ -307,21 +283,6 @@ Output getBranchOutput(Region& branch) {
     }
 
     return dyn_cast_or_null<Output>(last);
-}
-
-// The db.yield that terminates a factor region, or a null Yield if the region
-// is empty or does not end with one. A factor's yield names the columns that
-// factor contributes to the product.
-Yield getFactorYield(Region& factor) {
-    Operation* terminator = nullptr;
-    if (!factor.empty()) {
-        Block& block = factor.front();
-        if (!block.empty()) {
-            terminator = &block.back();
-        }
-    }
-
-    return dyn_cast_or_null<Yield>(terminator);
 }
 
 // A branch feeding the results of the op holding it, rather than the result table, ends
