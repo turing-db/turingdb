@@ -44,8 +44,8 @@
 #include "PropertyScanLiteral.h"
 #include "BoundEntityIDs.h"
 #include "PathHopArguments.h"
-#include "NullLiteralType.h"
 #include "DBOps.h"
+#include "DBFilterUtils.h"
 #include "DBPassUtils.h"
 #include "DBPassWorklist.h"
 #include "DBRowCone.h"
@@ -135,9 +135,6 @@ Value productFactorColumn(CrossProduct product, size_t resultIndex) {
 }
 
 using ColumnEquality = std::pair<Value, Value>;
-
-void collectConjuncts(Value mask, llvm::SmallVectorImpl<Value>& conjuncts);
-bool isUntypedNullMask(Value mask);
 
 // Every equality of two node columns the filter requires: it keeps only the rows where they
 // agree, so below it anything reading one of them reads the other just as well. A filter
@@ -427,14 +424,6 @@ bool matchPushablePredicate(FilterOp filter,
     // two, so a write among them would no longer run on the rows the filter drops. A write the
     // producer holds has run on every row by then.
     return !order.writesBetween(pushable._anchors.front().getDefiningOp(), filter.getOperation());
-}
-
-void bypassFilter(FilterOp filter) {
-    const ResultRange filtered = filter.getFilteredColumns();
-    const Operation::operand_range carried = filter.getColumnsToFilter();
-    for (size_t index = 0; index < filtered.size(); index++) {
-        filtered[index].replaceAllUsesWith(carried[index]);
-    }
 }
 
 void pushDownPredicate(FilterOp filter, const PushablePredicate& pushable, mlir::OpBuilder& builder) {
@@ -2407,30 +2396,6 @@ bool matchProductCut(FilterOp filter, CrossProduct product, ConeCache& cache, Pr
     return pushes || cut._rotation._rotates;
 }
 
-bool isUntypedNullMask(Value mask) {
-    const auto columnType = dyn_cast<ColumnType>(mask.getType());
-
-    return columnType && isNullLiteralType(columnType.getType());
-}
-
-// An `and` holds a bool on every row, as codegen types it, but over two null literals, where it
-// is the null itself: a second one adds nothing to the mask
-Value conjoin(llvm::ArrayRef<Value> conjuncts, Location loc, mlir::RewriterBase& rewriter) {
-    const Type boolType = boolColumnType(rewriter.getContext());
-
-    Value mask = conjuncts.front();
-    for (const Value conjunct : conjuncts.drop_front()) {
-        const bool bothUnknown = isUntypedNullMask(mask) && isUntypedNullMask(conjunct);
-        if (bothUnknown) {
-            continue;
-        }
-
-        mask = rewriter.create<AndOp>(loc, boolType, mask, conjunct).getResult();
-    }
-
-    return mask;
-}
-
 void cutFactor(CrossProduct product,
                bool leftFactor,
                llvm::ArrayRef<Value> conjuncts,
@@ -2466,139 +2431,6 @@ void cutFactor(CrossProduct product,
     rewriter.modifyOpInPlace(yield, [&yield, &cut]() {
         yield->setOperands(cut.getResults());
     });
-}
-
-void eraseUnusedConjunction(Value mask, mlir::RewriterBase& rewriter) {
-    llvm::SmallPtrSet<Operation*, 8> erased;
-    llvm::SmallVector<Operation*> pending {mask.getDefiningOp()};
-    while (!pending.empty()) {
-        Operation* const op = pending.pop_back_val();
-        if (!op || erased.contains(op)) {
-            continue;
-        }
-
-        AndOp conjunction = dyn_cast<AndOp>(op);
-        const bool unusedConjunction = conjunction && conjunction.getResult().use_empty();
-        if (!unusedConjunction) {
-            continue;
-        }
-
-        pending.push_back(conjunction.getLhs().getDefiningOp());
-        pending.push_back(conjunction.getRhs().getDefiningOp());
-        erased.insert(op);
-        rewriter.eraseOp(conjunction);
-    }
-}
-
-// Drops a conjunct the filter's rows now hold without it from its mask, and the ops that
-// computed nothing else. The `and` holding it then holds what its other side does on every
-// row, so it gives way to that side. A conjunct read more than once, or a null literal on
-// that side, which could meet another in an `and`, leaves the others to be joined again.
-void dropConjunct(FilterOp filter, Value conjunct, mlir::RewriterBase& rewriter) {
-    const Value mask = filter.getMask();
-
-    AndOp conjunction = mask != conjunct && conjunct.hasOneUse() ? dyn_cast<AndOp>(*conjunct.getUsers().begin()) : AndOp();
-    const Value other = !conjunction ? Value() : (conjunction.getLhs() == conjunct ? conjunction.getRhs() : conjunction.getLhs());
-
-    if (other && !isUntypedNullMask(other)) {
-        rewriter.replaceAllUsesWith(conjunction.getResult(), other);
-        rewriter.eraseOp(conjunction);
-    } else {
-        llvm::SmallVector<Value, 4> kept;
-        collectConjuncts(mask, kept);
-        llvm::erase(kept, conjunct);
-
-        if (kept.empty()) {
-            bypassFilter(filter);
-            rewriter.eraseOp(filter);
-        } else {
-            rewriter.setInsertionPoint(filter);
-            const Value keptMask = conjoin(kept, filter.getLoc(), rewriter);
-
-            rewriter.modifyOpInPlace(filter, [&filter, keptMask]() {
-                filter.getMaskMutable().assign(keptMask);
-            });
-        }
-
-        eraseUnusedConjunction(mask, rewriter);
-    }
-
-    Operation* const conjunctDef = conjunct.getDefiningOp();
-    if (!conjunctDef) {
-        return;
-    }
-
-    eraseUnusedRowConeOf(conjunctDef, rewriter);
-}
-
-void dropConjuncts(FilterOp filter, llvm::ArrayRef<Value> conjuncts, mlir::RewriterBase& rewriter) {
-    llvm::SmallDenseSet<Value, 4> dropped;
-    for (const Value conjunct : conjuncts) {
-        if (dropped.insert(conjunct).second) {
-            dropConjunct(filter, conjunct, rewriter);
-        }
-    }
-}
-
-// Whether @param matchConjunct accepts a conjunct of @param filter's mask, tried in their order
-template <typename MatchConjunct>
-bool matchAConjunct(FilterOp filter, MatchConjunct matchConjunct) {
-    llvm::SmallVector<Value, 4> conjuncts;
-    collectConjuncts(filter.getMask(), conjuncts);
-
-    return llvm::any_of(conjuncts, matchConjunct);
-}
-
-// Whether nothing but @param filter reads the rows @param op makes, but the row computations
-// of its mask, so a rewrite cutting those rows changes what no other op sees. A computation
-// nothing reads is a reader of its own: it may raise on a row the cut takes away.
-bool readsOnlyIntoTheFilter(Operation* op, FilterOp filter) {
-    Operation* const filterOp = filter.getOperation();
-    Block* const block = filterOp->getBlock();
-
-    llvm::SmallVector<Operation*> pending(op->getUsers().begin(), op->getUsers().end());
-    llvm::SmallPtrSet<Operation*, 16> visited;
-    while (!pending.empty()) {
-        Operation* const reader = pending.pop_back_val();
-        if (reader == filterOp || !visited.insert(reader).second) {
-            continue;
-        }
-
-        const bool computesTheMask = reader->getBlock() == block && computesFromTheRow(reader) && !reader->use_empty();
-        if (!computesTheMask) {
-            return false;
-        }
-
-        llvm::append_range(pending, reader->getUsers());
-    }
-
-    return true;
-}
-
-using OpAnswers = llvm::SmallDenseMap<Operation*, bool, 2>;
-
-// The answer @param compute gives about @param op, worked out once however many conjuncts of
-// one mask ask about the same op
-template <typename Compute>
-bool answerOnce(OpAnswers& answers, Operation* op, Compute compute) {
-    const auto [found, inserted] = answers.try_emplace(op, false);
-    if (inserted) {
-        found->second = compute();
-    }
-
-    return found->second;
-}
-
-// The op making every column @param filter cuts, null when they come from more than one
-Operation* filteredSource(FilterOp filter) {
-    const Operation::operand_range columns = filter.getColumnsToFilter();
-    Operation* const source = columns.empty() ? nullptr : columns.front().getDefiningOp();
-
-    const bool makesEveryColumn = llvm::all_of(columns, [source](Value column) {
-        return column.getDefiningOp() == source;
-    });
-
-    return makesEveryColumn ? source : nullptr;
 }
 
 void cutFactors(ProductCut& cut, ConeCache& cache, mlir::RewriterBase& rewriter) {
@@ -3028,46 +2860,6 @@ Value nodeDisjunctionColumn(Value mask) {
     const Value column = disjunctionColumn(mask);
 
     return column && isNodeColumn(column) ? column : Value();
-}
-
-bool keepsTheSourceRows(Operation& op) {
-    ExplorePaths exploration = dyn_cast<ExplorePaths>(op);
-    const bool walksEachSeed = exploration && !exploration.getDistinct();
-
-    return isa<FilterOp>(op) || walksEachSeed || isEdgeHop(&op) || computesPerRow(&op);
-}
-
-// Whether the rows the source starts reach the filter only through ops keepsTheRows accepts,
-// with nothing else reading them before it
-bool rowsReachTheFilter(Operation* source, FilterOp filter, bool (*keepsTheRows)(Operation&)) {
-    llvm::SmallPtrSet<Operation*, 16> readers {source};
-
-    for (Operation& op : llvm::make_range(std::next(Block::iterator(source)), Block::iterator(filter.getOperation()))) {
-        const bool readsTheRows = llvm::any_of(op.getOperands(), [&readers](Value operand) {
-            Operation* const def = operand.getDefiningOp();
-            return def && readers.contains(def);
-        });
-
-        if (!readsTheRows) {
-            continue;
-        }
-
-        if (!keepsTheRows(op)) {
-            return false;
-        }
-
-        readers.insert(&op);
-    }
-
-    for (Operation* const reader : readers) {
-        for (Operation* const user : reader->getUsers()) {
-            if (user != filter.getOperation() && !readers.contains(user)) {
-                return false;
-            }
-        }
-    }
-
-    return true;
 }
 
 // A disjunction over the scanned node read after the hops and filters of the pattern
@@ -7586,22 +7378,6 @@ struct PropertyValueScanChain {
     Value _boundValue;
 };
 
-// The conjuncts of a mask, as an `and` tree spells them: the predicates that all have to
-// hold, one of which can become the fused scan while the others stay a filter.
-void collectConjuncts(Value mask, llvm::SmallVectorImpl<Value>& conjuncts) {
-    llvm::SmallVector<Value> pending {mask};
-    while (!pending.empty()) {
-        const Value conjunct = pending.pop_back_val();
-
-        if (AndOp conjunction = conjunct.getDefiningOp<AndOp>()) {
-            pending.push_back(conjunction.getRhs());
-            pending.push_back(conjunction.getLhs());
-        } else {
-            conjuncts.push_back(conjunct);
-        }
-    }
-}
-
 bool matchPropertyValueScanChain(FilterOp filter, PropertyValueScanChain& chain) {
     if (!matchSoleScanSource(filter, chain._source) || !readsOnlyIntoTheFilter(chain._source._op, filter)) {
         return false;
@@ -10450,17 +10226,6 @@ bool matchFetchNodesChain(Value nodes, Value ids, FetchNodesChain& chain) {
     }
 
     return true;
-}
-
-bool isEqualityOfTheFilter(EqOp equality, FilterOp filter) {
-    if (!equality) {
-        return false;
-    }
-
-    const bool readOnce = equality.getResult().hasOneUse();
-    const bool besideTheFilter = equality->getBlock() == filter->getBlock();
-
-    return readOnce && besideTheFilter;
 }
 
 // Whether @param conjunct is computed by row computations from the columns @param filter
