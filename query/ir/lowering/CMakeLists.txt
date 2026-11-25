@@ -18,7 +18,8 @@ set(ir_lowering_sources
     DBLoweringRowFlow.cpp
     DBLoweringRows.cpp
     DBLoweringScans.cpp
-    DBLoweringSources.cpp)
+    DBLoweringSources.cpp
+    DBLoweringSubqueries.cpp)
 
 add_library(turing_db_ir_lowering_s STATIC ${ir_lowering_sources})
 
