@@ -6,6 +6,7 @@ set(parser_sources
     CypherGrammarClauses.cpp
     CypherGrammarPatterns.cpp
     CypherGrammarExpressions.cpp
+    CypherGrammarAtoms.cpp
     CypherGrammarLiterals.cpp
     CypherGrammarLookahead.cpp
     CypherParser.cpp
