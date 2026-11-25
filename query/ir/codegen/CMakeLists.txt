@@ -15,6 +15,7 @@ set(cg_sources
   DBProgramGeneratorPaths.cpp
   DBProgramGeneratorPatterns.cpp
   DBProgramGeneratorProjection.cpp
+  DBProgramGeneratorProperties.cpp
   DBProgramGeneratorScope.cpp
   DBProgramGeneratorSegments.cpp
   DBProgramGeneratorSources.cpp
