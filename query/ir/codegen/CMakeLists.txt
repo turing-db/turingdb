@@ -4,6 +4,7 @@ set(cg_sources
   DBHiddenColumnNames.cpp
   DBPassPipeline.cpp
   DBProgramGenerator.cpp
+  DBProgramGeneratorAggregates.cpp
   DBProgramGeneratorExplain.cpp
   DBProgramGeneratorInFlightColumns.cpp
   DBProgramGeneratorMatch.cpp
