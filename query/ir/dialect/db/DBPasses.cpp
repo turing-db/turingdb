@@ -46,6 +46,7 @@
 #include "DBCarriedColumns.h"
 #include "DBCrossProducts.h"
 #include "DBFilterUtils.h"
+#include "DBKnownLabels.h"
 #include "DBLineageClimbs.h"
 #include "DBLookupPredicates.h"
 #include "DBPassUtils.h"
@@ -3220,38 +3221,6 @@ struct FuseScanInEdgesByLabel : public impl::FuseScanInEdgesByLabelBase<FuseScan
     }
 };
 
-// The labels an edge scan reads each endpoint by, null for an endpoint it reads every node
-// of, and whether the index it walks is keyed by the target's label set or the source's.
-struct EdgeScanLabels {
-    ArrayAttr _source;
-    ArrayAttr _target;
-    bool _indexedByTarget {false};
-};
-
-bool readEdgeScanLabels(Operation* op, EdgeScanLabels& scanLabels) {
-    if (isa<ScanEdges>(op)) {
-        return true;
-    } else if (isa<ScanOutEdgesByLabelSrc, ScanInEdgesByLabelSrc>(op)) {
-        scanLabels._source = op->getAttrOfType<ArrayAttr>("labels");
-        return true;
-    } else if (isa<ScanOutEdgesByLabelTgt, ScanInEdgesByLabelTgt>(op)) {
-        scanLabels._target = op->getAttrOfType<ArrayAttr>("labels");
-        scanLabels._indexedByTarget = true;
-        return true;
-    } else if (ScanOutEdgesByLabelSrcTgt scan = dyn_cast<ScanOutEdgesByLabelSrcTgt>(op)) {
-        scanLabels._source = scan.getSrcLabels();
-        scanLabels._target = scan.getTgtLabels();
-        return true;
-    } else if (ScanInEdgesByLabelSrcTgt scan = dyn_cast<ScanInEdgesByLabelSrcTgt>(op)) {
-        scanLabels._source = scan.getSrcLabels();
-        scanLabels._target = scan.getTgtLabels();
-        scanLabels._indexedByTarget = true;
-        return true;
-    }
-
-    return false;
-}
-
 // The label set a scan's label names stand for, resolved against the schema, and whether
 // the schema holds every one of them.
 bool collectScanLabels(ArrayAttr labelNames, const ::db::GraphMetadata& metadata, ::db::LabelSet& labels) {
@@ -3590,109 +3559,6 @@ struct FuseEdgesByEndpointLabel : public impl::FuseEdgesByEndpointLabelBase<Fuse
         runFilterWorklist<EndpointLabelledHop>(getOperation(), matchEndpointLabelledHop, fuseEdgesByEndpointLabel);
     }
 };
-
-// A label is known by its attribute: a name, or a parameter, which binds the same value
-// wherever the program writes it
-void addLabelNames(ArrayAttr names, llvm::DenseSet<Attribute>& labels) {
-    for (const Attribute name : names) {
-        labels.insert(name);
-    }
-}
-
-void addSharedLabelNames(ArrayAttr alternatives, llvm::DenseSet<Attribute>& labels) {
-    for (const Attribute label : cast<ArrayAttr>(alternatives[0])) {
-        const auto asksFor = [label](Attribute alternative) {
-            return llvm::is_contained(cast<ArrayAttr>(alternative), label);
-        };
-
-        if (llvm::all_of(alternatives, asksFor)) {
-            labels.insert(label);
-        }
-    }
-}
-
-void addFilterLabels(FilterOp filter, Value filtered, llvm::DenseSet<Attribute>& labels) {
-    llvm::SmallVector<Value, 4> conjuncts;
-    collectConjuncts(filter.getMask(), conjuncts);
-
-    for (const Value conjunct : conjuncts) {
-        CheckLabelConstraint check = conjunct.getDefiningOp<CheckLabelConstraint>();
-        if (!check) {
-            continue;
-        }
-
-        GetNodeLabelSet labelSet = check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
-        if (labelSet && labelSet.getInputNodes() == filtered) {
-            addSharedLabelNames(check.getAlternatives(), labels);
-        }
-    }
-}
-
-// The labels every node of a column carries, known from where its rows come from: the
-// by-label read that made them and each label filter they passed on the way.
-void collectKnownLabels(Value column, llvm::DenseSet<Attribute>& labels) {
-    constexpr size_t srcResultIndex = 0;
-    constexpr size_t tgtResultIndex = 3;
-
-    for (;;) {
-        Operation* const def = column.getDefiningOp();
-        if (!def) {
-            return;
-        }
-
-        const size_t resultIndex = cast<OpResult>(column).getResultNumber();
-
-        if (ScanNodesByLabel scan = dyn_cast<ScanNodesByLabel>(def)) {
-            addLabelNames(scan.getLabels(), labels);
-            return;
-        } else if (ScanNodesByPropertyValue scan = dyn_cast<ScanNodesByPropertyValue>(def)) {
-            if (const std::optional<ArrayAttr> scanLabels = scan.getLabels()) {
-                addLabelNames(*scanLabels, labels);
-            }
-            return;
-        } else if (EdgeScanLabels scanLabels; readEdgeScanLabels(def, scanLabels)) {
-            if (resultIndex == srcResultIndex && scanLabels._source) {
-                addLabelNames(scanLabels._source, labels);
-            } else if (resultIndex == tgtResultIndex && scanLabels._target) {
-                addLabelNames(scanLabels._target, labels);
-            }
-            return;
-        } else if (FilterOp filter = dyn_cast<FilterOp>(def)) {
-            const Value filtered = filter.getColumnsToFilter()[resultIndex];
-            addFilterLabels(filter, filtered, labels);
-            column = filtered;
-        } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(def)) {
-            const std::optional<ArrayAttr> endLabels = exploration.getEndLabels();
-            if (column == exploration.getTgtids() && endLabels) {
-                addLabelNames(*endLabels, labels);
-            }
-
-            const Value seed = seedColumnOf(exploration, column);
-            if (!seed) {
-                return;
-            }
-
-            column = seed;
-        } else if (isEdgeHop(def)) {
-            const size_t inputResultIndex = isReverseHop(def) ? tgtResultIndex : srcResultIndex;
-            const size_t reachedResultIndex = isReverseHop(def) ? srcResultIndex : tgtResultIndex;
-
-            if (resultIndex == inputResultIndex) {
-                column = def->getOperand(0);
-            } else if (resultIndex >= hopFixedResultCount) {
-                column = def->getOperand(1 + (resultIndex - hopFixedResultCount));
-            } else {
-                const ArrayAttr hopLabels = def->getAttrOfType<ArrayAttr>("labels");
-                if (resultIndex == reachedResultIndex && hopLabels) {
-                    addLabelNames(hopLabels, labels);
-                }
-                return;
-            }
-        } else {
-            return;
-        }
-    }
-}
 
 // A label check over nodes already known to carry every label of one of its alternatives
 // keeps every row.
