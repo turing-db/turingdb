@@ -2,6 +2,7 @@ set(analyzer_sources
     CypherAnalyzer.cpp
     ExprAnalyzer.cpp
     ExprAnalyzerFunctions.cpp
+    ExprAnalyzerLists.cpp
     ExprAnalyzerProperties.cpp
     BinaryOperatorTyping.cpp
     ReadStmtAnalyzer.cpp
