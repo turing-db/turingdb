@@ -1,6 +1,7 @@
 set(analyzer_sources
     CypherAnalyzer.cpp
     ExprAnalyzer.cpp
+    ExprAnalyzerFunctions.cpp
     ExprAnalyzerProperties.cpp
     BinaryOperatorTyping.cpp
     ReadStmtAnalyzer.cpp
