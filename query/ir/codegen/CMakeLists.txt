@@ -10,6 +10,7 @@ set(cg_sources
   DBProgramGeneratorExplain.cpp
   DBProgramGeneratorExpressions.cpp
   DBProgramGeneratorInFlightColumns.cpp
+  DBProgramGeneratorLists.cpp
   DBProgramGeneratorMatch.cpp
   DBProgramGeneratorOrderBy.cpp
   DBProgramGeneratorPaths.cpp
