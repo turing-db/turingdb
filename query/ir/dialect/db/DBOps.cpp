@@ -7,12 +7,11 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 
-#include "columns/CharacterArgument.h"
-
 #include "DBColumnElement.h"
 #include "DBHeldTags.h"
 #include "DBColumnChecks.h"
 #include "DBRowCosts.h"
+#include "DBSpeculation.h"
 #include "IRConstantColumn.h"
 #include "IRLiteralList.h"
 #include "IRRange.h"
@@ -64,10 +63,6 @@ bool isNumberColumn(Value column) {
     return isa<IntegerType, FloatType>(columnElement(column));
 }
 
-Speculation::Speculatability speculatableWhen(bool cannotRaise) {
-    return cannotRaise ? Speculation::Speculatable : Speculation::NotSpeculatable;
-}
-
 // Over numbers alone: a duration or an instant overflows, and a column of an unresolved
 // type may hold either
 Speculation::Speculatability speculatableOverNumbers(Operation* op) {
@@ -93,41 +88,9 @@ bool holdsIDsOf(Value column) {
     return mayHoldAnyType(column) || isa<IDType>(columnElement(column));
 }
 
-// An op reading values of some types raises on a value of another, which such an operand may hold
-Speculation::Speculatability speculatableOverKnownTypes(ValueRange operands) {
-    return speculatableWhen(llvm::none_of(operands, mayHoldAnyType));
-}
-
 template <typename... ElementTypes>
 Speculation::Speculatability speculatableOverElement(Value input) {
     return speculatableWhen(isa<ElementTypes...>(columnElement(input)));
-}
-
-bool matchIntegerLiteral(Value column, int64_t& value) {
-    ConstantOp constant = column.getDefiningOp<ConstantOp>();
-    const IntegerAttr integer = constant ? dyn_cast<IntegerAttr>(constant.getValue()) : IntegerAttr();
-    if (!integer) {
-        return false;
-    }
-
-    value = integer.getValue().getSExtValue();
-    return true;
-}
-
-bool isCharacterLiteral(Value argument) {
-    int64_t value = 0;
-
-    return matchIntegerLiteral(argument, value) && value >= 0 && value <= ::db::MAX_CHARACTER_ARGUMENT;
-}
-
-// A string function counting characters raises on a cell holding no string, and on a count
-// that is null, negative or past the largest it takes. Its first operand is the string, every
-// other one a count
-Speculation::Speculatability speculatableOverCharacters(Operation* op) {
-    const bool readsAString = isa<storage::StringType>(columnElement(op->getOperand(0)));
-    const bool countsLiterals = llvm::all_of(op->getOperands().drop_front(), isCharacterLiteral);
-
-    return speculatableWhen(readsAString && countsLiterals);
 }
 
 // A literal divisor no row raises on: not 0, and not the -1 that overflows the smallest
