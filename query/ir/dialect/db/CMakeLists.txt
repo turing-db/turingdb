@@ -31,6 +31,7 @@ set_source_files_properties(
   DBHopOps.cpp
   DBOps.cpp
   DBPathOps.cpp
+  DBPropertyOps.cpp
   DBRegionColumns.cpp
   DBScanOps.cpp
   DBSourceOps.cpp
@@ -61,6 +62,7 @@ add_mlir_library(turing_db_ir_dbdialect_s
   DBColumnChecks.cpp
   DBHopOps.cpp
   DBPathOps.cpp
+  DBPropertyOps.cpp
   DBRegionColumns.cpp
   DBScanOps.cpp
   DBSourceOps.cpp
