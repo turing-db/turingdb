@@ -39,6 +39,7 @@ add_mlir_library(turing_db_ir_dbdialect_s
   DBColumnElement.cpp
   DBCrossProducts.cpp
   DBDialect.cpp
+  DBExplorePasses.cpp
   DBFilterPasses.cpp
   DBFilterUtils.cpp
   DBHeldTags.cpp
