@@ -26,6 +26,7 @@ set_source_files_properties(
   NLListOps.cpp
   NLOps.cpp
   NLPathOps.cpp
+  NLRowOps.cpp
   NLScanOps.cpp
   NLSourceOps.cpp
   NLTypes.cpp
@@ -41,6 +42,7 @@ add_mlir_library(turing_db_ir_nldialect_s
   NLListOps.cpp
   NLOps.cpp
   NLPathOps.cpp
+  NLRowOps.cpp
   NLScanOps.cpp
   NLSourceOps.cpp
   NLTypes.cpp

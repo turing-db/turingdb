@@ -1,0 +1,340 @@
+#include "NLOps.h"
+
+#include <optional>
+
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVector.h"
+
+#include "NLChunkTypes.h"
+
+using namespace mlir;
+using namespace mlir::nl;
+
+namespace storage = mlir::storage;
+
+namespace {
+
+// A count bound when the query runs is an integer, null where an expression made it one, or a
+// cell the loop checks holds one when it starts
+LogicalResult verifyBoundCount(Operation* op, Value boundCount) {
+    const Type element = boundCount ? valueElementOf(boundCount.getType()) : Type();
+    if (element && !element.isSignlessInteger(64) && !isa<storage::AnyType>(element)) {
+        return op->emitOpError("requires a bound count of type i64 or !storage.any, got ") << element;
+    }
+
+    return success();
+}
+
+}
+
+void Yield::build(OpBuilder& builder, OperationState& state) {
+}
+
+LogicalResult EachRow::inferReturnTypes(MLIRContext* context,
+                                        std::optional<Location> location,
+                                        EachRow::Adaptor adaptor,
+                                        SmallVectorImpl<Type>& inferredReturnTypes) {
+    SmallVector<Type, 8> chunkTypes;
+
+    for (const Type columnType : adaptor.getColumns().getTypes()) {
+        chunkTypes.push_back(columnType);
+    }
+
+    inferredReturnTypes.push_back(IteratorType::get(context, chunkTypes));
+
+    return success();
+}
+
+// A truncate passes its columns through unchanged - only the row count is cut -
+// so each result keeps its input column's chunk type.
+LogicalResult LimitTruncate::inferReturnTypes(MLIRContext* context,
+                                              std::optional<Location> location,
+                                              LimitTruncate::Adaptor adaptor,
+                                              SmallVectorImpl<Type>& inferredReturnTypes) {
+    for (const Type columnType : adaptor.getColumns().getTypes()) {
+        inferredReturnTypes.push_back(columnType);
+    }
+
+    return success();
+}
+
+// A skip truncate, like a limit truncate, passes its columns through unchanged -
+// only the dropped prefix is removed - so each result keeps its input column's
+// chunk type.
+LogicalResult SkipTruncate::inferReturnTypes(MLIRContext* context,
+                                             std::optional<Location> location,
+                                             SkipTruncate::Adaptor adaptor,
+                                             SmallVectorImpl<Type>& inferredReturnTypes) {
+    for (const Type columnType : adaptor.getColumns().getTypes()) {
+        inferredReturnTypes.push_back(columnType);
+    }
+
+    return success();
+}
+
+LogicalResult Limit::verify() {
+    const Value boundCount = getBoundCount();
+    if (getCount().has_value() == static_cast<bool>(boundCount)) {
+        return emitOpError("requires either a count or a bound one");
+    }
+
+    return verifyBoundCount(getOperation(), boundCount);
+}
+
+LogicalResult Skip::verify() {
+    const Value boundCount = getBoundCount();
+    if (getCount().has_value() == static_cast<bool>(boundCount)) {
+        return emitOpError("requires either a count or a bound one");
+    }
+
+    return verifyBoundCount(getOperation(), boundCount);
+}
+
+// An nl.sort_buffer needs at least one key, and one direction per key: the two
+// arrays describe the same list of sort keys. The buffers' column count is not
+// known here (the types live on the feeding nl.sort_collect), so key indices are
+// range-checked during translation rather than at the buffer op.
+LogicalResult SortBuffer::verify() {
+    const ArrayRef<int64_t> keyColumns = getKeyColumns();
+    const ArrayRef<bool> keyAscending = getKeyAscending();
+
+    if (keyColumns.empty()) {
+        return emitOpError("requires at least one sort key");
+    }
+
+    if (keyColumns.size() != keyAscending.size()) {
+        return emitOpError("expects one ascending flag per key, but has ")
+               << keyColumns.size() << " keys and " << keyAscending.size() << " flags";
+    }
+
+    const Value boundTopK = getBoundTopK();
+    if (getTopK() && boundTopK) {
+        return emitOpError("requires at most one of a top-K count and a bound one");
+    }
+
+    return verifyBoundCount(getOperation(), boundTopK);
+}
+
+// An nl.sort_collect must append at least one column - an empty append could not
+// size the accumulated row set and there would be nothing to sort.
+LogicalResult SortCollect::verify() {
+    if (getColumns().empty()) {
+        return emitOpError("requires at least one column to collect");
+    }
+
+    return success();
+}
+
+// An nl.row_collect must append at least one column: the buffers' row count is read
+// from the first of them.
+LogicalResult RowCollect::verify() {
+    if (getColumns().empty()) {
+        return emitOpError("requires at least one column to collect");
+    }
+
+    return success();
+}
+
+// A distinct filter passes its columns through unchanged - only duplicate rows
+// are removed - so each result keeps its input column's chunk type, the same as
+// nl.limit_truncate.
+LogicalResult DistinctFilter::inferReturnTypes(MLIRContext* context,
+                                              std::optional<Location> location,
+                                              DistinctFilter::Adaptor adaptor,
+                                              SmallVectorImpl<Type>& inferredReturnTypes) {
+    for (const Type columnType : adaptor.getColumns().getTypes()) {
+        inferredReturnTypes.push_back(columnType);
+    }
+
+    return success();
+}
+
+// An nl.distinct_filter must filter at least one column - the columns together
+// are the dedup key, and an empty filter could not size the row set to dedup.
+LogicalResult DistinctFilter::verify() {
+    if (getColumns().empty()) {
+        return emitOpError("requires at least one column to filter");
+    }
+
+    return success();
+}
+
+void For::build(OpBuilder& builder, OperationState& state, Value iterator) {
+    For::build(builder, state, iterator, Value());
+}
+
+// Build a loop from the iterator value and an optional limit handle: the
+// iterator type carries the chunk types, which become the loop variables (the
+// body block arguments); a non-null limit handle is added as the second
+// operand, so the loop early-exits once that budget is spent. The body is
+// created with its implicit nl.yield terminator, ready for the caller to set
+// the insertion point into it.
+void For::build(OpBuilder& builder, OperationState& state, Value iterator, Value limit) {
+    const OpBuilder::InsertionGuard guard(builder);
+
+    state.addOperands(iterator);
+
+    // The limit handle is optional; a null value leaves the loop unbounded.
+    if (limit) {
+        state.addOperands(limit);
+    }
+
+    const auto iteratorType = cast<IteratorType>(iterator.getType());
+    const ArrayRef<Type> chunkTypes = iteratorType.getChunkTypes();
+    const llvm::SmallVector<Location> chunkLocations(chunkTypes.size(), state.location);
+
+    Region* bodyRegion = state.addRegion();
+    builder.createBlock(bodyRegion, bodyRegion->end(), chunkTypes, chunkLocations);
+    For::ensureTerminator(*bodyRegion, builder, state.location);
+}
+
+// Custom syntax, in the style of scf.for / LingoDB's dsa.for:
+//
+//   nl.for %chunk0, %chunk1, ... in %iterator : !nl.iter<...> { body }
+//
+// The loop variables are the entry block arguments of the body region. Their
+// types are not spelled out in the text: each variable takes the corresponding
+// chunk type of the iterator.
+ParseResult For::parse(OpAsmParser& parser, OperationState& result) {
+    llvm::SmallVector<OpAsmParser::Argument, 4> chunkArguments;
+    OpAsmParser::UnresolvedOperand iterator;
+
+    // Loop variables, `in` keyword, iterator operand
+    const bool headerFailed = parser.parseArgumentList(chunkArguments)
+                              || parser.parseKeyword("in")
+                              || parser.parseOperand(iterator);
+    if (headerFailed) {
+        return failure();
+    }
+
+    // Optional `limit %handle` between the iterator and its type, naming the
+    // loop's row-limit counter so it stops once the budget is spent
+    OpAsmParser::UnresolvedOperand limit;
+    const bool hasLimit = succeeded(parser.parseOptionalKeyword("limit"));
+    if (hasLimit && parser.parseOperand(limit)) {
+        return failure();
+    }
+
+    if (parser.parseColon()) {
+        return failure();
+    }
+
+    const llvm::SMLoc typeLocation = parser.getCurrentLocation();
+    Type iteratorType;
+    if (parser.parseType(iteratorType)) {
+        return failure();
+    }
+
+    const auto chunkIteratorType = dyn_cast<IteratorType>(iteratorType);
+    if (!chunkIteratorType) {
+        return parser.emitError(typeLocation, "expected an !nl.iter iterator type");
+    }
+
+    // Bind one loop variable per chunk produced by an iterator step
+    const ArrayRef<Type> chunkTypes = chunkIteratorType.getChunkTypes();
+    if (chunkArguments.size() != chunkTypes.size()) {
+        return parser.emitError(typeLocation, "expected one loop variable per iterator chunk");
+    }
+
+    for (size_t chunkIndex = 0; chunkIndex < chunkArguments.size(); chunkIndex++) {
+        chunkArguments[chunkIndex].type = chunkTypes[chunkIndex];
+    }
+
+    if (parser.resolveOperand(iterator, iteratorType, result.operands)) {
+        return failure();
+    }
+
+    // Resolve the optional limit operand after the iterator, so it lands at
+    // operand index 1; its type is the buildable !nl.limit_state handle.
+    if (hasLimit) {
+        const Type limitType = LimitStateType::get(parser.getContext());
+        if (parser.resolveOperand(limit, limitType, result.operands)) {
+            return failure();
+        }
+    }
+
+    // The body region, with the loop variables as entry block arguments
+    Region* bodyRegion = result.addRegion();
+    if (parser.parseRegion(*bodyRegion, chunkArguments)) {
+        return failure();
+    } else if (parser.parseOptionalAttrDict(result.attributes)) {
+        return failure();
+    }
+
+    // The nl.yield terminator may be left out in the text; insert it
+    For::ensureTerminator(*bodyRegion, parser.getBuilder(), result.location);
+
+    return success();
+}
+
+void For::print(OpAsmPrinter& printer) {
+    // Loop variables: the entry block arguments of the body region
+    printer << " ";
+    llvm::interleaveComma(getBody()->getArguments(), printer, [&](BlockArgument chunkArgument) {
+        printer << chunkArgument;
+    });
+
+    const Value iterator = getIterator();
+    printer << " in " << iterator;
+
+    // The optional limit handle prints between the iterator and its type,
+    // mirroring the parse order: `%vars in %iter limit %h : !nl.iter<...>`.
+    if (const Value limit = getLimit()) {
+        printer << " limit " << limit;
+    }
+
+    printer << " : " << iterator.getType() << " ";
+
+    // The loop variables are already printed in the loop header, and the
+    // implicit nl.yield terminator carries nothing: elide both.
+    printer.printRegion(getBodyRegion(), /*printEntryBlockArgs=*/false, /*printBlockTerminators=*/false);
+    printer.printOptionalAttrDict((*this)->getAttrs());
+}
+
+LogicalResult For::verify() {
+    const auto iteratorType = cast<IteratorType>(getIterator().getType());
+    const ArrayRef<Type> chunkTypes = iteratorType.getChunkTypes();
+    Block* body = getBody();
+
+    if (body->getNumArguments() != chunkTypes.size()) {
+        return emitOpError("expects the body to take one block argument per iterator chunk");
+    }
+
+    for (size_t chunkIndex = 0; chunkIndex < chunkTypes.size(); chunkIndex++) {
+        const Type argumentType = body->getArgument(static_cast<unsigned>(chunkIndex)).getType();
+        if (argumentType != chunkTypes[chunkIndex]) {
+            return emitOpError("body argument ") << chunkIndex
+                                                 << " must have the iterator chunk type "
+                                                 << chunkTypes[chunkIndex];
+        }
+    }
+
+    return success();
+}
+
+void Output::build(OpBuilder& builder,
+                   OperationState& state,
+                   ValueRange columns,
+                   Value limit,
+                   Value skip,
+                   Value cardinality) {
+    Output::build(builder, state, columns, limit, skip, cardinality, ArrayAttr());
+}
+
+// A folded output reads the budgeted prefix (limit) or the surviving suffix
+// (skip) off a single handle - the truncate adjacent to it - so at most one may
+// be present. The interpreter reads them as an if(skip)/else if(limit) chain,
+// which would silently ignore the limit if both were set; reject that here.
+LogicalResult Output::verify() {
+    if (getLimit() && getSkip()) {
+        return emitOpError("carries both a limit and a skip handle; a folded output takes at most one");
+    }
+
+    const ArrayAttr columnNames = getColumnNamesAttr();
+    if (columnNames && columnNames.size() != getColumns().size()) {
+        return emitOpError("names must give one name per output column, but has ")
+               << columnNames.size() << " names for " << getColumns().size() << " columns";
+    }
+
+    return success();
+}
