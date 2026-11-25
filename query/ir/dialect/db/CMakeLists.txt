@@ -58,6 +58,7 @@ add_mlir_library(turing_db_ir_dbdialect_s
   DBScanFusionPasses.cpp
   DBStagePlanner.cpp
   DBUnwindEqualityCross.cpp
+  DBUnwindPasses.cpp
   DBWrittenOrder.cpp
 
   DEPENDS
