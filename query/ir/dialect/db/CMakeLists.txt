@@ -50,6 +50,7 @@ add_mlir_library(turing_db_ir_dbdialect_s
   DBPasses.cpp
   DBRowCone.cpp
   DBStagePlanner.cpp
+  DBUnwindEqualityCross.cpp
   DBWrittenOrder.cpp
 
   DEPENDS
