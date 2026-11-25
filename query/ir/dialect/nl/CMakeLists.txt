@@ -25,6 +25,7 @@ set_source_files_properties(
   NLOps.cpp
   NLPathOps.cpp
   NLScanOps.cpp
+  NLSourceOps.cpp
   NLTypes.cpp
   PROPERTIES COMPILE_FLAGS "-Wno-uninitialized -Wno-ambiguous-reversed-operator"
 )
@@ -37,6 +38,7 @@ add_mlir_library(turing_db_ir_nldialect_s
   NLOps.cpp
   NLPathOps.cpp
   NLScanOps.cpp
+  NLSourceOps.cpp
   NLTypes.cpp
 
   DEPENDS
