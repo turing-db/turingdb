@@ -9,6 +9,7 @@ set(cg_sources
   DBProgramGeneratorCase.cpp
   DBProgramGeneratorExplain.cpp
   DBProgramGeneratorExpressions.cpp
+  DBProgramGeneratorFunctions.cpp
   DBProgramGeneratorInFlightColumns.cpp
   DBProgramGeneratorLists.cpp
   DBProgramGeneratorMatch.cpp
