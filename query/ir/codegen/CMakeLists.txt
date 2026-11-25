@@ -10,6 +10,7 @@ set(cg_sources
   DBProgramGeneratorPaths.cpp
   DBProgramGeneratorPatterns.cpp
   DBProgramGeneratorScope.cpp
+  DBProgramGeneratorSources.cpp
   DBSystemProgramGenerator.cpp
 )
 
