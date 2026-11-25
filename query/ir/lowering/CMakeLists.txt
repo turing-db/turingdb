@@ -5,6 +5,7 @@ set(ir_lowering_sources
     DBLoweringFunctionEmitters.cpp
     DBLoweringHops.cpp
     DBLoweringLimits.cpp
+    DBLoweringLists.cpp
     DBLoweringLoops.cpp
     DBLoweringPaths.cpp
     DBLoweringProperties.cpp
