@@ -1,6 +1,7 @@
 set(ast_sources
     CypherAST.cpp
     CypherASTDumper.cpp
+    CypherASTDumperExpressions.cpp
     CypherError.cpp
     SourceManager.cpp
     DiagnosticsManager.cpp
