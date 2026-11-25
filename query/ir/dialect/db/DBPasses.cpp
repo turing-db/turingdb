@@ -45,6 +45,7 @@
 #include "BoundEntityIDs.h"
 #include "PathHopArguments.h"
 #include "DBOps.h"
+#include "DBCrossProducts.h"
 #include "DBFilterUtils.h"
 #include "DBPassUtils.h"
 #include "DBPassWorklist.h"
@@ -115,23 +116,6 @@ void computeBoundValuesAhead(Operation* lookup) {
     const mlir::LogicalResult moved = mlir::moveValueDefinitions(rewriter, lookup->getOperands(), lookup);
 
     bioassert(mlir::succeeded(moved), "The bound values of a lookup are computed ahead of it");
-}
-
-// The columns a cross_product factor yields, in result order.
-Operation::operand_range factorYieldColumns(mlir::Region& factor) {
-    mlir::Block& factorBlock = factor.front();
-    Yield yield = cast<Yield>(factorBlock.getTerminator());
-
-    return yield.getColumns();
-}
-
-Value productFactorColumn(CrossProduct product, size_t resultIndex) {
-    const Operation::operand_range leftColumns = factorYieldColumns(product.getLeftFactor());
-    if (resultIndex < leftColumns.size()) {
-        return leftColumns[resultIndex];
-    }
-
-    return factorYieldColumns(product.getRightFactor())[resultIndex - leftColumns.size()];
 }
 
 using ColumnEquality = std::pair<Value, Value>;
@@ -1719,106 +1703,6 @@ struct SinkUnwindSource : public impl::SinkUnwindSourceBase<SinkUnwindSource> {
     }
 };
 
-size_t leftFactorWidth(CrossProduct product) {
-    return factorYieldColumns(product.getLeftFactor()).size();
-}
-
-void collectFactorTypes(Region& leftFactor, Region& rightFactor, llvm::SmallVectorImpl<Type>& types) {
-    llvm::append_range(types, factorYieldColumns(leftFactor).getTypes());
-    llvm::append_range(types, factorYieldColumns(rightFactor).getTypes());
-}
-
-struct FactorReads {
-    llvm::SmallVector<size_t, 4> _leftResults;
-    llvm::SmallVector<size_t, 4> _rightResults;
-    bool _readsElsewhere {false};
-};
-
-struct ConjunctCone {
-    MaskCone _cone;
-    FactorReads _reads;
-};
-
-// The cones and the factor reads the placement matchers derive from the IR, shared between
-// matches until a rewrite changes the IR under them
-class ConeCache {
-public:
-    bool yieldsConstantColumn(Value column) {
-        return ::db::yieldsConstantColumn(column, _constantColumns);
-    }
-
-    const ConjunctCone& getConjunctCone(Value conjunct, CrossProduct product);
-
-    // Each filter column climbs once, so the columns of a stack of N filters cost N steps
-    // in all rather than N per column
-    Value climbFilters(Value column);
-
-    void clear() {
-        _constantColumns.clear();
-        _conjunctCones.clear();
-        _climbedColumns.clear();
-    }
-
-private:
-    llvm::DenseMap<Value, bool> _constantColumns;
-    llvm::DenseMap<std::pair<Value, Operation*>, std::unique_ptr<ConjunctCone>> _conjunctCones;
-    llvm::DenseMap<Value, Value> _climbedColumns;
-};
-
-void collectFactorReads(const MaskCone& cone, CrossProduct product, ConeCache& cache, FactorReads& reads) {
-    const size_t leftWidth = leftFactorWidth(product);
-    for (const Value input : cone._inputs) {
-        if (cache.yieldsConstantColumn(input)) {
-            continue;
-        }
-
-        const Value column = cache.climbFilters(input);
-        if (column.getDefiningOp() != product.getOperation()) {
-            reads._readsElsewhere = true;
-            continue;
-        }
-
-        const size_t resultIndex = cast<OpResult>(column).getResultNumber();
-        if (resultIndex < leftWidth) {
-            reads._leftResults.push_back(resultIndex);
-        } else {
-            reads._rightResults.push_back(resultIndex);
-        }
-    }
-}
-
-const ConjunctCone& ConeCache::getConjunctCone(Value conjunct, CrossProduct product) {
-    std::unique_ptr<ConjunctCone>& cached = _conjunctCones[{conjunct, product.getOperation()}];
-    if (!cached) {
-        cached = std::make_unique<ConjunctCone>();
-        collectRowCone({conjunct}, product->getBlock(), cached->_cone);
-        collectFactorReads(cached->_cone, product, *this, cached->_reads);
-    }
-
-    return *cached;
-}
-
-Value ConeCache::climbFilters(Value column) {
-    llvm::SmallVector<Value> climbing;
-    Value climbed = column;
-    while (FilterOp filter = climbed.getDefiningOp<FilterOp>()) {
-        const auto climbedIt = _climbedColumns.find(climbed);
-        if (climbedIt != _climbedColumns.end()) {
-            climbed = climbedIt->second;
-            break;
-        }
-
-        climbing.push_back(climbed);
-        climbed = filter.getColumnsToFilter()[cast<OpResult>(climbed).getResultNumber()];
-    }
-
-    for (const Value filtered : climbing) {
-        _climbedColumns[filtered] = climbed;
-    }
-
-    return climbed;
-}
-
 void appendCone(const MaskCone& from, llvm::SmallPtrSetImpl<Operation*>& appended, MaskCone& cone) {
     for (Operation* const op : from._ops) {
         if (appended.insert(op).second) {
@@ -1942,90 +1826,6 @@ CrossProduct stackedProduct(FilterOp filter) {
 
     return product;
 }
-
-// The rows of a cross product, or of another op making rows, and of the filters stacked
-// over it, climbed one filter at a time. It answers matchFilterChain's question for each
-// filter of the stack, while following the readers of each level once rather than once per
-// filter above it.
-class FilterStack {
-public:
-    explicit FilterStack(Operation* rows)
-        : _block(rows->getBlock()),
-        _top(rows)
-    {
-        followReaders(rows);
-    }
-
-    FilterOp getReader() const {
-        if (_readElsewhere) {
-            return nullptr;
-        }
-
-        FilterOp reader = nullptr;
-        for (Operation* const user : _top->getUsers()) {
-            FilterOp filter = dyn_cast<FilterOp>(user);
-            if (!filter || filter == reader || !readsTheTop(filter)) {
-                continue;
-            } else if (reader) {
-                return nullptr;
-            }
-
-            reader = filter;
-        }
-
-        return reader;
-    }
-
-    // Whether nothing but the stack's filters and @param reader sees the rows of the stack
-    bool isExclusiveTo(FilterOp reader) const {
-        return !_readElsewhere && llvm::all_of(_pendingFilters, [&reader](Operation* filter) {
-            return filter == reader.getOperation();
-        });
-    }
-
-    void climbTo(FilterOp reader) {
-        _pendingFilters.erase(reader);
-        _top = reader;
-        followReaders(reader);
-    }
-
-private:
-    Block* _block {nullptr};
-    Operation* _top {nullptr};
-    llvm::SmallPtrSet<Operation*, 16> _visited;
-    llvm::SmallPtrSet<Operation*, 4> _pendingFilters;
-    bool _readElsewhere {false};
-
-    bool readsTheTop(FilterOp filter) const {
-        const Operation::operand_range columns = filter.getColumnsToFilter();
-        if (columns.empty() || filter->getBlock() != _block) {
-            return false;
-        }
-
-        return llvm::all_of(columns, [this](Value column) {
-            return column.getDefiningOp() == _top;
-        });
-    }
-
-    void followReaders(Operation* level) {
-        llvm::SmallVector<Operation*> pending(level->getUsers().begin(), level->getUsers().end());
-        while (!pending.empty()) {
-            Operation* const op = pending.pop_back_val();
-            if (!_visited.insert(op).second) {
-                continue;
-            }
-
-            const bool inTheBlock = op->getBlock() == _block;
-            if (inTheBlock && computesFromTheRow(op)) {
-                llvm::append_range(pending, op->getUsers());
-            } else if (inTheBlock && isa<FilterOp>(op)) {
-                _pendingFilters.insert(op);
-            } else {
-                _readElsewhere = true;
-            }
-        }
-    }
-};
 
 struct UnwindPlacement {
     Unwind _unwind {nullptr};
@@ -6639,11 +6439,6 @@ void eraseUnkeptYields(Yield yield, const llvm::SmallBitVector& keep, size_t fir
     yield->eraseOperands(erased);
 }
 
-// The db.yield ending a factor region of a two-factor op - db.cross_product, db.hash_join.
-Yield factorYield(Operation* op, unsigned factorIndex) {
-    return cast<Yield>(op->getRegion(factorIndex).front().getTerminator());
-}
-
 // The results a two-factor op has to keep: the ones something reads, the ones the op
 // itself matches on, and - since lowering sizes each side by a column of it - one
 // row-carrying column per factor. False when that is every result, so the caller leaves
@@ -8727,16 +8522,6 @@ struct CarryLabelAndTypeReads : public impl::CarryLabelAndTypeReadsBase<CarryLab
     }
 };
 
-// One side of a join: the factor supplying its key, the product column the key is read
-// from, the ops computing one from the other, and - once sunk - where the key sits in the
-// factor's yield.
-struct JoinKeySide {
-    Region* _factor {nullptr};
-    Value _key;
-    Value _column;
-    MaskCone _cone;
-};
-
 // A cross product cut by one equality between a column of each factor, and the filter
 // applying it: what a hash join is made of. _buildsTheLeftFactor says which way round the
 // two go into the join, whose right factor is the built side.
@@ -8748,15 +8533,6 @@ struct EqualityCross {
     JoinKeySide _right;
     bool _buildsTheLeftFactor {false};
 };
-
-// Whether a key's rows can be hashed. The two keys need not share a type: the join hashes
-// each side by its own and compares them as the equality does. A path has no value to hash,
-// as two paths are equal when they run through the same nodes and edges.
-bool isHashableKey(const JoinKeySide& side) {
-    const Type keyType = cast<ColumnType>(side._key.getType()).getType();
-
-    return !isa<storage::PathType, storage::PathRefType>(keyType);
-}
 
 // Reads into side the one product column a key is computed over, along with the ops
 // computing one from the other. False when the key reads no column, more than one, or one
