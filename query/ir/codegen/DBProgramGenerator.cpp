@@ -44,6 +44,7 @@
 #include "DBPasses.h"
 #include "DBTypes.h"
 #include "DBSystemProgramGenerator.h"
+#include "DBBoundColumns.h"
 #include "DBHiddenColumnNames.h"
 #include "DBSchemaNameAttributes.h"
 #include "StorageAttributes.h"
@@ -51,7 +52,6 @@
 #include "StorageEnums.h"
 #include "StorageTypes.h"
 #include "PathHopArguments.h"
-#include "NullLiteralType.h"
 #include "IRConstantColumn.h"
 #include "IRLiteralList.h"
 #include "IRValueTypes.h"
@@ -173,19 +173,6 @@ mlir::storage::UnicodeNormalForm toStorageNormalForm(UnicodeNormalForm form) {
     }
 }
 
-// Whether @param column is one @param reductionOp bound, or one computed from what it
-// bound: anything computed before it holds the matched rows the reduction consumed. A
-// column of another block is one the body being generated binds, which no reduction reduced
-bool boundAtOrAfter(mlir::Value column, mlir::Operation* reductionOp) {
-    mlir::Operation* const definingOp = column.getDefiningOp();
-
-    if (!definingOp || definingOp->getBlock() != reductionOp->getBlock()) {
-        return true;
-    }
-
-    return definingOp == reductionOp || reductionOp->isBeforeInBlock(definingOp);
-}
-
 // Whether @param lhs is computed before @param rhs in the block both are bound in: a block
 // argument comes before any result, then the order the ops were built in
 bool computedBefore(mlir::Value lhs, mlir::Value rhs) {
@@ -236,18 +223,6 @@ const VarDecl* projectedVariable(const Projection::ReturnItem& item) {
     }
 
     return itemExpr->getExprVarDecl();
-}
-
-// The untyped null column the null literal compiles to: nullable with no value type of
-// its own, so nothing about it says which column would carry a value
-bool isUntypedNullColumnType(mlir::Type type) {
-    const auto columnType = mlir::dyn_cast<mlir::db::ColumnType>(type);
-
-    return columnType && mlir::isNullLiteralType(columnType.getType());
-}
-
-bool isUntypedNullColumn(mlir::Value column) {
-    return isUntypedNullColumnType(column.getType());
 }
 
 // The branches of @param body when it is a UNION, and @param body itself otherwise
@@ -649,11 +624,6 @@ mlir::storage::PathDirection walkDirectionOf(EdgePattern::Direction direction, b
     throw FatalException("Uncaught edge pattern direction.");
 }
 
-bool isPathColumn(mlir::Value column) {
-    const auto columnType = mlir::dyn_cast<mlir::db::ColumnType>(column.getType());
-    return columnType && mlir::isa<mlir::storage::PathRefType>(columnType.getType());
-}
-
 const VarDecl* declOfReturnItem(const Projection::ReturnItem& item) {
     const auto declOf = [](auto&& projected) -> const VarDecl* {
         using Type = std::remove_cvref_t<decltype(projected)>;
@@ -782,15 +752,6 @@ mlir::Type sharedColumnElement(mlir::MLIRContext* context, llvm::ArrayRef<mlir::
     }
 
     return shared;
-}
-
-mlir::Value findVarOrThrow(const DBProgramGenerator::VariableIdentityMap& map,
-                        const VariableDependency* var) {
-    const auto findIt = map.find(var);
-    bioassert(findIt != map.end(), "Missing value for {}.", var->getName());
-    const DBProgramGenerator::VariableIdentities& identities = findIt->second;
-    bioassert(!identities.empty(), "Missing identity for {}.", var->getName());
-    return identities.back();
 }
 
 void flattenConjuncts(const Expr* expr, std::vector<const Expr*>& conjuncts) {
