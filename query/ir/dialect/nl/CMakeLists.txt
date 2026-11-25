@@ -22,6 +22,7 @@ set_source_files_properties(
   NLChunkTypes.cpp
   NLDialect.cpp
   NLHopOps.cpp
+  NLListOps.cpp
   NLOps.cpp
   NLPathOps.cpp
   NLScanOps.cpp
@@ -35,6 +36,7 @@ add_mlir_library(turing_db_ir_nldialect_s
   NLChunkTypes.cpp
   NLDialect.cpp
   NLHopOps.cpp
+  NLListOps.cpp
   NLOps.cpp
   NLPathOps.cpp
   NLScanOps.cpp
