@@ -3,6 +3,7 @@ set(ir_lowering_sources
     DBLoweringChunkConversions.cpp
     DBLoweringChunkTypes.cpp
     DBLoweringFunctionEmitters.cpp
+    DBLoweringLimits.cpp
     DBLoweringLoops.cpp
     DBLoweringRowAlignment.cpp
     DBLoweringRowFlow.cpp)
