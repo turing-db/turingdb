@@ -9670,6 +9670,39 @@ struct WalkKnowledge {
     llvm::DenseMap<Operation*, HopEdges> _hops;
     llvm::DenseMap<Value, Operation*> _reachingHops;
     llvm::DenseMap<Value, NodeSide> _lastSides;
+
+    // A result an op hands on holds values of the column its rows come from, so it is
+    // known as that column is: a filter keeps the labels of the nodes it reads
+    void handOn(Operation* op) {
+        ColumnCarrierOpInterface carrier = dyn_cast<ColumnCarrierOpInterface>(op);
+        if (!carrier) {
+            return;
+        }
+
+        for (const OpResult result : op->getResults()) {
+            if (const Value rowSource = carrier.getRowSource(result)) {
+                handOn(rowSource, result);
+            }
+        }
+    }
+
+    void handOn(Value rowSource, Value column) {
+        const auto labels = _labels.find(rowSource);
+        if (labels != _labels.end()) {
+            const ::db::LabelSet sourceLabels = labels->second;
+            _labels[column] = sourceLabels;
+        }
+
+        if (Operation* const reachingHop = _reachingHops.lookup(rowSource)) {
+            _reachingHops[column] = reachingHop;
+        }
+
+        const auto lastSide = _lastSides.find(rowSource);
+        if (lastSide != _lastSides.end()) {
+            const NodeSide sourceSide = lastSide->second;
+            _lastSides[column] = sourceSide;
+        }
+    }
 };
 
 // What a hop makes and reads per row it reads
@@ -10366,7 +10399,7 @@ double estimateFactorRows(Region& factor, const RowEstimator& estimator) {
         return column;
     };
 
-    factor.walk([&](Operation* op) {
+    const auto countRows = [&](Operation* op) {
         RegionRows nested;
         if (HashJoin join = dyn_cast<HashJoin>(op)) {
             const double leftRows = estimateRegionRows(regionRows.lookup(&join.getLeftFactor()));
@@ -10406,6 +10439,11 @@ double estimateFactorRows(Region& factor, const RowEstimator& estimator) {
         if (multiplier) {
             rows._rows *= *multiplier;
         }
+    };
+
+    factor.walk([&](Operation* op) {
+        countRows(op);
+        knowledge.handOn(op);
     });
 
     return estimateRegionRows(regionRows.lookup(&factor));
@@ -13546,6 +13584,8 @@ struct StageFilterConjuncts : public impl::StageFilterConjunctsBase<StageFilterC
             if (!seeded) {
                 estimateRowMultiplier(op, estimator, knowledge);
             }
+
+            knowledge.handOn(op);
         });
 
         ConeCache cache;
