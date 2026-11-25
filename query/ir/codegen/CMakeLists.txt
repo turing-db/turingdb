@@ -13,6 +13,7 @@ set(cg_sources
   DBProgramGeneratorPatterns.cpp
   DBProgramGeneratorProjection.cpp
   DBProgramGeneratorScope.cpp
+  DBProgramGeneratorSegments.cpp
   DBProgramGeneratorSources.cpp
   DBProgramGeneratorSubqueries.cpp
   DBProgramGeneratorWrites.cpp
