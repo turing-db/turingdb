@@ -26,6 +26,7 @@ mlir_tablegen(DBPasses.h.inc     -gen-pass-decls    -name DB -dialect db  EXTRA_
 add_public_tablegen_target(DBDialectIncGen)
 
 set_source_files_properties(
+  DBColumnChecks.cpp
   DBDialect.cpp
   DBOps.cpp
   DBTypes.cpp
@@ -51,6 +52,7 @@ add_mlir_library(turing_db_ir_dbdialect_s
   DBLineageClimbs.cpp
   DBLookupPredicates.cpp
   DBOps.cpp
+  DBColumnChecks.cpp
   DBTypes.cpp
   DBPassUtils.cpp
   DBPathPasses.cpp
