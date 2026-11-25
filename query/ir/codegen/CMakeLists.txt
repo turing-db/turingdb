@@ -11,6 +11,7 @@ set(cg_sources
   DBProgramGeneratorPatterns.cpp
   DBProgramGeneratorScope.cpp
   DBProgramGeneratorSources.cpp
+  DBProgramGeneratorWrites.cpp
   DBSystemProgramGenerator.cpp
 )
 
