@@ -1,5 +1,6 @@
 set(analyzer_sources
     CypherAnalyzer.cpp
+    CypherAnalyzerSubqueries.cpp
     CypherAnalyzerSystemCommands.cpp
     ExprAnalyzer.cpp
     ExprAnalyzerFunctions.cpp
