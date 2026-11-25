@@ -28,6 +28,7 @@ add_public_tablegen_target(DBDialectIncGen)
 set_source_files_properties(
   DBColumnChecks.cpp
   DBDialect.cpp
+  DBHopOps.cpp
   DBOps.cpp
   DBRegionColumns.cpp
   DBScanOps.cpp
@@ -56,6 +57,7 @@ add_mlir_library(turing_db_ir_dbdialect_s
   DBLookupPredicates.cpp
   DBOps.cpp
   DBColumnChecks.cpp
+  DBHopOps.cpp
   DBRegionColumns.cpp
   DBScanOps.cpp
   DBSpeculation.cpp
