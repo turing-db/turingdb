@@ -1,5 +1,6 @@
 set(ir_lowering_sources
     DBLowering.cpp
+    DBLoweringAggregates.cpp
     DBLoweringBranches.cpp
     DBLoweringChunkConversions.cpp
     DBLoweringChunkTypes.cpp
