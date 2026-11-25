@@ -21,6 +21,7 @@ add_public_tablegen_target(NLDialectIncGen)
 set_source_files_properties(
   NLChunkTypes.cpp
   NLDialect.cpp
+  NLExpressionOps.cpp
   NLHopOps.cpp
   NLListOps.cpp
   NLOps.cpp
@@ -35,6 +36,7 @@ set_source_files_properties(
 add_mlir_library(turing_db_ir_nldialect_s
   NLChunkTypes.cpp
   NLDialect.cpp
+  NLExpressionOps.cpp
   NLHopOps.cpp
   NLListOps.cpp
   NLOps.cpp
