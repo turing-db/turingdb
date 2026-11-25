@@ -6,7 +6,8 @@ set(ir_lowering_sources
     DBLoweringLimits.cpp
     DBLoweringLoops.cpp
     DBLoweringRowAlignment.cpp
-    DBLoweringRowFlow.cpp)
+    DBLoweringRowFlow.cpp
+    DBLoweringScans.cpp)
 
 add_library(turing_db_ir_lowering_s STATIC ${ir_lowering_sources})
 
