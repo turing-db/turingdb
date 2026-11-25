@@ -53,6 +53,7 @@ add_mlir_library(turing_db_ir_dbdialect_s
   DBPatternWalk.cpp
   DBRowCone.cpp
   DBRowEstimator.cpp
+  DBScanFusionPasses.cpp
   DBStagePlanner.cpp
   DBUnwindEqualityCross.cpp
   DBWrittenOrder.cpp
