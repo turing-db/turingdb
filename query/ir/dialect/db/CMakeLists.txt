@@ -40,6 +40,7 @@ add_mlir_library(turing_db_ir_dbdialect_s
   DBInterfaces.cpp
   DBOps.cpp
   DBTypes.cpp
+  DBPassUtils.cpp
   DBPasses.cpp
   DBRowCone.cpp
   DBStagePlanner.cpp
