@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <array>
-#include <memory>
 #include <mlir/IR/Location.h>
 #include <optional>
 #include <string>
@@ -10,17 +9,15 @@
 #include <type_traits>
 #include <unordered_map>
 
-#include <spdlog/fmt/fmt.h>
-
 #include "mlir/IR/Block.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Verifier.h"
-#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/SetVector.h"
 
 #include "NLOps.h"
+#include "DBLoweringChunkTypes.h"
 
 #include "DBColumnElement.h"
 #include "IRConstantColumn.h"
@@ -209,8 +206,6 @@ mlir::Value emitNLNormalFormFunction(mlir::OpBuilder& builder,
 
     return builder.create<NLOp>(loc, resultType, input, normalFormOp.getForm()).getResult();
 }
-
-bool isTaggedCellChunk(mlir::Type chunkType);
 
 // A number or a duration is its own unary plus, which the analyzer already checked. Only a
 // cell, whose type is the row's, is checked when the program runs.
@@ -608,21 +603,6 @@ NumericOperand numericOperand(mlir::Type chunkType) {
     return {.numeric = element, .nullable = nullable};
 }
 
-// The value element a chunk carries, with its nullability stripped and a mask read as the
-// i1 it holds: what two chunks are compared on to see whether they carry the same values.
-mlir::Type chunkValueElement(mlir::OpBuilder& builder, mlir::Type chunkType) {
-    mlir::Type element = mlir::cast<nl::ChunkType>(chunkType).getElementType();
-    if (const auto nullable = mlir::dyn_cast<storage::NullableType>(element)) {
-        element = nullable.getValueType();
-    }
-
-    if (mlir::isa<storage::BoolType>(element)) {
-        return builder.getI1Type();
-    }
-
-    return element;
-}
-
 bool isIntegerChunk(mlir::OpBuilder& builder, mlir::Type chunkType) {
     const auto integerType = mlir::dyn_cast<mlir::IntegerType>(chunkValueElement(builder, chunkType));
     return integerType && integerType.getWidth() == 64;
@@ -639,15 +619,6 @@ bool isNumericElement(mlir::Type element) {
     return integerType && integerType.getWidth() == 64;
 }
 
-bool isNullableChunk(mlir::Type chunkType) {
-    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
-    if (!chunk) {
-        throw IRException("Tried to check nullity of non-chunk.");
-    }
-
-    return mlir::isa<storage::NullableType>(chunk.getElementType());
-}
-
 // A node or edge ID chunk: the one plain chunk whose rows can be null, an OPTIONAL MATCH
 // leaving an invalid ID where the pattern missed.
 bool isEntityChunk(mlir::Type chunkType) {
@@ -662,21 +633,6 @@ bool isEntityChunk(mlir::Type chunkType) {
 bool isPathChunk(mlir::Type chunkType) {
     const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
     return chunk && mlir::isa<storage::PathType>(chunk.getElementType());
-}
-
-// A list column, read through the nullable a stored list wears: a property fetch produces
-// its values nullable, since a node carrying no list reads as absent there.
-bool isListChunk(mlir::Type chunkType) {
-    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
-    if (!chunk) {
-        return false;
-    }
-
-    const mlir::Type element = chunk.getElementType();
-    const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
-    const mlir::Type listed = nullable ? nullable.getValueType() : element;
-
-    return mlir::isa<storage::ListType>(listed);
 }
 
 // A map column, read through the nullable a stored map wears, as isListChunk reads a list
@@ -727,22 +683,6 @@ bool holdsAnEntityPerRow(mlir::Type chunkType) {
     return chunk && mlir::isa<storage::NodeIDType, storage::EdgeIDType>(chunk.getElementType());
 }
 
-// The element type an indexed list hands out, read through the nullable an optional list
-// wears. None when the indexed operand is a type-erased cell rather than a list.
-mlir::Type indexedListElementType(mlir::Type chunkType) {
-    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
-    if (!chunk) {
-        return {};
-    }
-
-    const mlir::Type element = chunk.getElementType();
-    const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
-    const mlir::Type indexed = nullable ? nullable.getValueType() : element;
-
-    const auto listType = mlir::dyn_cast<storage::ListType>(indexed);
-    return listType ? listType.getElementType() : mlir::Type {};
-}
-
 // The element types a list gathers entities under, which an index reads back out as the
 // entity column they came from.
 bool namesAnEntityType(mlir::Type element) {
@@ -783,26 +723,6 @@ mlir::Type listInternalType(mlir::Type chunkType) {
     return listType ? listType.getElementType() : mlir::Type {};
 }
 
-// The null literal's chunk: nullable with no value type of its own.
-bool isUntypedNullChunk(mlir::Type chunkType) {
-    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
-
-    return chunk && mlir::isNullLiteralType(chunk.getElementType());
-}
-
-bool isTaggedCellChunk(mlir::Type chunkType) {
-    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
-    return chunk && mlir::isa<storage::AnyType>(chunk.getElementType());
-}
-
-bool mayHoldANull(mlir::Type chunkType) {
-    return isNullableChunk(chunkType) || isTaggedCellChunk(chunkType);
-}
-
-mlir::Type promoteNumeric(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type rhs) {
-    return promotedNumberElement(builder.getContext(), lhs, rhs);
-}
-
 // The element of one column holding both @param lhs and @param rhs. A value of the column
 // is converted where it is chosen, so a number is promoted, which an element of a list
 // never is.
@@ -814,34 +734,6 @@ mlir::Type unifiedValueElement(mlir::OpBuilder& builder, mlir::Type lhs, mlir::T
     }
 
     return storage::joinedElementType(lhs, rhs);
-}
-
-// The element of one column the branches of a selection fill with values of @param lhs and
-// of @param rhs, each value keeping its type: theirs when they agree, the one integer type
-// Cypher has for two integers, the list two lists join to, and a null type when the column
-// holds each row's value as a tagged cell
-mlir::Type selectedValueElement(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type rhs) {
-    const auto lhsInteger = mlir::dyn_cast<mlir::IntegerType>(lhs);
-    const auto rhsInteger = mlir::dyn_cast<mlir::IntegerType>(rhs);
-    const bool bothIntegers = lhsInteger && rhsInteger && lhsInteger.getWidth() == 64 && rhsInteger.getWidth() == 64;
-
-    if (lhs == rhs) {
-        return lhs;
-    } else if (bothIntegers) {
-        return builder.getIntegerType(64);
-    } else if (mlir::isa<storage::ListType>(lhs) && mlir::isa<storage::ListType>(rhs)) {
-        return storage::joinedElementType(lhs, rhs);
-    }
-
-    return mlir::Type {};
-}
-
-// Whether a column can hold the null literal beside its values: in the optional a nullable
-// chunk wraps them in, or in a value of its own
-bool holdsItsNull(mlir::Type chunkType) {
-    const mlir::Type element = mlir::cast<nl::ChunkType>(chunkType).getElementType();
-
-    return mlir::isa<storage::NullableType>(element) || holdsItsOwnNull(element);
 }
 
 // Whether a value of @param element can be held as a tagged cell
@@ -1180,7 +1072,6 @@ bool keepsEveryRow(mlir::Operation* operation) {
         && !dropsRows(operation)
         && !reducesToOneRow(operation);
 }
-
 
 }
 
@@ -2099,7 +1990,6 @@ mlir::Value DBLowering::searchedValueChunk(mlir::Value bound) {
 
     return toAnyChunk(chunk, nl::ChunkType::get(context, storage::AnyType::get(context)));
 }
-
 
 void DBLowering::lowerUnwind(mlir::db::Unwind unwind) {
     llvm::SmallVector<mlir::Value, 4> carriedChunks;
