@@ -6,6 +6,7 @@ set(ir_lowering_sources
     DBLoweringHops.cpp
     DBLoweringLimits.cpp
     DBLoweringLoops.cpp
+    DBLoweringPaths.cpp
     DBLoweringRowAlignment.cpp
     DBLoweringRowFlow.cpp
     DBLoweringScans.cpp)
