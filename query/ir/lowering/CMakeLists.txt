@@ -13,6 +13,7 @@ set(ir_lowering_sources
     DBLoweringProperties.cpp
     DBLoweringRowAlignment.cpp
     DBLoweringRowFlow.cpp
+    DBLoweringRows.cpp
     DBLoweringScans.cpp
     DBLoweringSources.cpp)
 
