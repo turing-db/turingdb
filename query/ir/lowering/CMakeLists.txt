@@ -3,6 +3,7 @@ set(ir_lowering_sources
     DBLoweringChunkTypes.cpp
     DBLoweringFunctionEmitters.cpp
     DBLoweringLoops.cpp
+    DBLoweringRowAlignment.cpp
     DBLoweringRowFlow.cpp)
 
 add_library(turing_db_ir_lowering_s STATIC ${ir_lowering_sources})
