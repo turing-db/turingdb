@@ -45,6 +45,7 @@
 #include "DBTypes.h"
 #include "DBSystemProgramGenerator.h"
 #include "DBBoundColumns.h"
+#include "DBClauseItems.h"
 #include "DBHiddenColumnNames.h"
 #include "DBSchemaNameAttributes.h"
 #include "StorageAttributes.h"
@@ -207,22 +208,6 @@ void sortByProgramOrder(llvm::SmallVectorImpl<Key>& keys, const Map& columns) {
     std::ranges::stable_sort(keys, [&columns](const Key& lhs, const Key& rhs) {
         return computedBefore(columns.at(lhs), columns.at(rhs));
     });
-}
-
-// The variable a projection item publishes as it stands, or null for an item that computes
-// a value from one: only the first keeps an entity, the second leaves it behind. A wildcard
-// expands to the declarations themselves, anything written out to a bare symbol expression
-const VarDecl* projectedVariable(const Projection::ReturnItem& item) {
-    if (VarDecl* const* itemDecl = std::get_if<VarDecl*>(&item)) {
-        return *itemDecl;
-    }
-
-    const Expr* itemExpr = *std::get_if<Expr*>(&item);
-    if (itemExpr->getKind() != Expr::Kind::SYMBOL) {
-        return nullptr;
-    }
-
-    return itemExpr->getExprVarDecl();
 }
 
 // The branches of @param body when it is a UNION, and @param body itself otherwise
@@ -752,27 +737,6 @@ mlir::Type sharedColumnElement(mlir::MLIRContext* context, llvm::ArrayRef<mlir::
     }
 
     return shared;
-}
-
-void flattenConjuncts(const Expr* expr, std::vector<const Expr*>& conjuncts) {
-    if (expr->getKind() == Expr::Kind::LOGICAL) {
-        const LogicalExpr* logicalExpr = static_cast<const LogicalExpr*>(expr);
-
-        // Two links of a comparison chain read the same operand, so a filter standing
-        // between them would leave the second link reading a column laid out over rows the
-        // first one cut. The chain is one predicate and filters once
-        const bool splits = logicalExpr->getOperator() == LogicalOperator::And
-                            && !logicalExpr->isComparisonChain();
-
-        if (splits) {
-            for (const Expr* operand : logicalExpr->getOperands()) {
-                flattenConjuncts(operand, conjuncts);
-            }
-            return;
-        }
-    }
-
-    conjuncts.push_back(expr);
 }
 
 int64_t applyConstantUnary(const DiagnosticsManager* diagnostics,
