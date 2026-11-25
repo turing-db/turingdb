@@ -9,6 +9,7 @@ set(cg_sources
   DBProgramGeneratorMatch.cpp
   DBProgramGeneratorPaths.cpp
   DBProgramGeneratorPatterns.cpp
+  DBProgramGeneratorProjection.cpp
   DBProgramGeneratorScope.cpp
   DBProgramGeneratorSources.cpp
   DBProgramGeneratorWrites.cpp
