@@ -3,6 +3,7 @@ set(parser_sources
     CypherLexer.cpp
     CypherGrammar.cpp
     CypherGrammarQueries.cpp
+    CypherGrammarSystemCommands.cpp
     CypherGrammarClauses.cpp
     CypherGrammarPatterns.cpp
     CypherGrammarExpressions.cpp
