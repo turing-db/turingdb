@@ -36,6 +36,7 @@ set_source_files_properties(
 add_mlir_library(turing_db_ir_dbdialect_s
   DBColumnElement.cpp
   DBDialect.cpp
+  DBFilterUtils.cpp
   DBHeldTags.cpp
   DBInterfaces.cpp
   DBOps.cpp
