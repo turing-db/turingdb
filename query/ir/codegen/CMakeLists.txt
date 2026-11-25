@@ -7,6 +7,7 @@ set(cg_sources
   DBProgramGeneratorExplain.cpp
   DBProgramGeneratorInFlightColumns.cpp
   DBProgramGeneratorMatch.cpp
+  DBProgramGeneratorPatterns.cpp
   DBProgramGeneratorScope.cpp
   DBSystemProgramGenerator.cpp
 )
