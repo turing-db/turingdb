@@ -42,6 +42,7 @@ set(exec_sources
     NLPropertyValueScan.cpp
     NLTranslator.cpp
     NLFunctionSelectors.cpp
+    NLTranslatorAggregates.cpp
     NLTranslatorChunkTypes.cpp
     NLTranslatorColumnKernels.cpp
     NLTranslatorColumns.cpp
