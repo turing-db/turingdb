@@ -133,6 +133,7 @@ void CypherASTDumper::dump(std::ostream& out) {
 
             case QueryCommand::Kind::SHOW_VECTOR_INDEXES_QUERY:
                 out << "    script ||--o{ SHOW_VECTOR_INDEXES : \"\"\n";
+            break;
 
             case QueryCommand::Kind::LOAD_COMMIT_QUERY:
                 out << "    script ||--o{ LOAD_COMMIT : \"\"\n";
