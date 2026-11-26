@@ -27,6 +27,7 @@ set(exec_sources
     NLExecutorRows.cpp
     NLExecutorScans.cpp
     NLExecutorSources.cpp
+    NLExecutorSubqueries.cpp
     NLExecutorSubscripts.cpp
     NLExecutorTruth.cpp
     NLMergeExecutor.cpp
