@@ -62,6 +62,7 @@ set(exec_sources
     NLTranslatorSources.cpp
     NLTranslatorSubqueries.cpp
     NLTranslatorSubscripts.cpp
+    NLTranslatorWrites.cpp
     NLInterpreter.cpp
     NLSystemContext.cpp
     NLSystemExecutor.cpp
