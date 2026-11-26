@@ -15,6 +15,7 @@ set(exec_sources
     NLExecutor.cpp
     NLExecutorHops.cpp
     NLExecutorPaths.cpp
+    NLExecutorProperties.cpp
     NLExecutorScans.cpp
     NLExecutorSources.cpp
     NLMergeExecutor.cpp
