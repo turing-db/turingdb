@@ -52,6 +52,7 @@ set(exec_sources
     NLTranslatorScans.cpp
     NLTranslatorSchemaNames.cpp
     NLTranslatorSources.cpp
+    NLTranslatorSubscripts.cpp
     NLInterpreter.cpp
     NLSystemContext.cpp
     NLSystemExecutor.cpp
