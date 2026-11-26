@@ -185,6 +185,544 @@ Operation* mlir::db::findTypedHop(Value edgeTypes, llvm::function_ref<Value(Valu
     return owner;
 }
 
+void WalkKnowledge::handOn(Operation* op) {
+    ColumnCarrierOpInterface carrier = dyn_cast<ColumnCarrierOpInterface>(op);
+    if (!carrier) {
+        return;
+    }
+
+    for (const OpResult result : op->getResults()) {
+        if (const Value rowSource = carrier.getRowSource(result)) {
+            handOn(rowSource, result);
+        }
+    }
+}
+
+void WalkKnowledge::handOn(Value rowSource, Value column) {
+    const auto labels = _labels.find(rowSource);
+    if (labels != _labels.end()) {
+        const ::db::LabelSet sourceLabels = labels->second;
+        _labels[column] = sourceLabels;
+    }
+
+    if (Operation* const reachingHop = _reachingHops.lookup(rowSource)) {
+        _reachingHops[column] = reachingHop;
+    }
+
+    const auto lastSide = _lastSides.find(rowSource);
+    if (lastSide != _lastSides.end()) {
+        const NodeSide sourceSide = lastSide->second;
+        _lastSides[column] = sourceSide;
+    }
+}
+
+RowEstimator::RowEstimator(const ::db::GraphView& view)
+    : _metadata(view.metadata()),
+    _estimation(view),
+    _nodeCount(static_cast<double>(_estimation.estimateNodeCount(::db::LabelSet {}))),
+    _edgeCount(static_cast<double>(_estimation.estimateEdgeCount()))
+{
+}
+
+double RowEstimator::getLabelledNodes(const ::db::LabelSet& labels) const {
+    if (labels.empty()) {
+        return _nodeCount;
+    }
+
+    return static_cast<double>(_estimation.estimateNodeCount(labels));
+}
+
+double RowEstimator::scanNodes(Value nodes, ArrayAttr labelNames, WalkKnowledge& knowledge) const {
+    if (!labelNames) {
+        return _nodeCount;
+    }
+
+    ::db::LabelSet labels;
+    if (!collectScanLabels(labelNames, _metadata, labels)) {
+        return 0;
+    }
+
+    knowledge._labels[nodes] = labels;
+
+    return getLabelledNodes(labels);
+}
+
+double RowEstimator::scanNodesByPropertyValue(ScanNodesByPropertyValue scan, WalkKnowledge& knowledge) const {
+    const std::optional<ArrayAttr> labels = scan.getLabels();
+    const double scanned = scanNodes(scan.getResult(), labels ? *labels : ArrayAttr(), knowledge);
+
+    const TypedAttr value = scan.getValueAttr();
+    const Type element = value ? value.getType() : ::db::declaredColumnElement(scan.getBoundValue());
+
+    return scanned * getEqualityShare(getPropertyDistinctValues(element, scanned));
+}
+
+double RowEstimator::scanEdges(Operation* scan,
+                               ArrayAttr sourceNames,
+                               ArrayAttr targetNames,
+                               ArrayAttr typeNames,
+                               WalkKnowledge& knowledge) const {
+    HopEdges edges;
+    const bool resolvesSource = !sourceNames || collectScanLabels(sourceNames, _metadata, edges._near);
+    const bool resolvesTarget = !targetNames || collectScanLabels(targetNames, _metadata, edges._far);
+    if (typeNames) {
+        narrowTypes(typeNames, edges);
+    }
+
+    const Value sources = scan->getResult(0);
+    const Value targets = scan->getResult(EDGE_TARGETS_RESULT);
+
+    knowledge._labels[sources] = edges._near;
+    knowledge._labels[targets] = edges._far;
+    knowledge._hops[scan] = edges;
+    knowledge._reachingHops[targets] = scan;
+    knowledge._lastSides[sources] = NodeSide {._hop = scan, ._isOut = true};
+    knowledge._lastSides[targets] = NodeSide {._hop = scan, ._isOut = false};
+
+    if (!resolvesSource || !resolvesTarget) {
+        return 0;
+    }
+
+    return countHopEdges(edges);
+}
+
+HopEstimate RowEstimator::walkHop(Operation* hop,
+                                  bool walksBackward,
+                                  Value from,
+                                  Value to,
+                                  ArrayAttr keptTypes,
+                                  WalkKnowledge& knowledge) const {
+    HopEdges edges;
+    edges._near = knowledge._labels.lookup(from);
+    edges._far = knowledge._labels.lookup(to);
+    edges._leavesSource = isReverseHop(hop) == walksBackward;
+    edges._walksBoth = isa<GetEdges>(hop);
+
+    bool reachesLabelledNodes = true;
+    if (isEdgeHop(hop)) {
+        const ArrayAttr hopTypes = hop->getAttrOfType<ArrayAttr>("edge_types");
+        const ArrayAttr types = hopTypes ? hopTypes : keptTypes;
+        if (types) {
+            narrowTypes(types, edges);
+        }
+
+        const ArrayAttr reachedLabels = hop->getAttrOfType<ArrayAttr>("labels");
+        if (reachedLabels && !walksBackward) {
+            reachesLabelledNodes = collectScanLabels(reachedLabels, _metadata, edges._far);
+        }
+    }
+
+    HopEdges read;
+    read._near = edges._near;
+    read._leavesSource = edges._leavesSource;
+    read._walksBoth = edges._walksBoth;
+
+    const bool relatesToEarlierHops = isEdgeHop(hop) && !edges._walksBoth;
+
+    double rowsLift = 1;
+    double readLift = 1;
+    const auto previous = knowledge._lastSides.find(from);
+    if (relatesToEarlierHops && previous != knowledge._lastSides.end()) {
+        const NodeSide previousSide = previous->second;
+        const HopEdges& previousEdges = knowledge._hops.find(previousSide._hop)->second;
+        const ::db::DegreeSelection previousDegree = selectionOf(previousEdges, previousSide._isOut);
+
+        rowsLift = getDegreeLift(edges._near, previousDegree, selectionOf(edges, edges._leavesSource));
+        readLift = getDegreeLift(edges._near, previousDegree, selectionOf(read, read._leavesSource));
+    }
+
+    knowledge._labels[to] = edges._far;
+    knowledge._hops[hop] = edges;
+    knowledge._reachingHops[to] = hop;
+
+    if (relatesToEarlierHops) {
+        knowledge._lastSides[from] = NodeSide {._hop = hop, ._isOut = edges._leavesSource};
+        knowledge._lastSides[to] = NodeSide {._hop = hop, ._isOut = !edges._leavesSource};
+    } else {
+        knowledge._lastSides.erase(from);
+        knowledge._lastSides.erase(to);
+    }
+
+    const double nodes = getLabelledNodes(edges._near);
+    if (nodes == 0) {
+        return HopEstimate {};
+    }
+
+    HopEstimate estimate;
+    estimate._edgesRead = readLift * countHopEdges(read) / nodes;
+    if (reachesLabelledNodes) {
+        estimate._rows = rowsLift * countHopEdges(edges) / nodes;
+    }
+
+    return estimate;
+}
+
+double RowEstimator::keepLabelled(ArrayAttr alternatives, Value node, WalkKnowledge& knowledge) const {
+    const double kept = shareLabelled(alternatives, node, knowledge);
+
+    ::db::LabelSet shared;
+    addSharedLabels(alternatives, shared);
+    knowledge._labels[node].merge(shared);
+
+    const auto reaching = knowledge._reachingHops.find(node);
+    if (reaching != knowledge._reachingHops.end()) {
+        knowledge._hops[reaching->second]._far.merge(shared);
+    }
+
+    return kept;
+}
+
+double RowEstimator::getSelectivity(Value mask, llvm::function_ref<Value(Value)> nodeOf, WalkKnowledge& knowledge) const {
+    llvm::SmallVector<Value, 4> conjuncts;
+    collectConjuncts(mask, conjuncts);
+
+    double kept = 1;
+    for (const Value conjunct : conjuncts) {
+        const LabelCheck check = readLabelCheck(conjunct);
+        CheckEdgeTypeConstraint typeCheck = conjunct.getDefiningOp<CheckEdgeTypeConstraint>();
+
+        if (check._alternatives) {
+            kept *= keepLabelled(check._alternatives, nodeOf(check._nodes), knowledge);
+        } else if (typeCheck) {
+            kept *= keepTyped(typeCheck, nodeOf, knowledge);
+        } else {
+            kept *= getPredicateSelectivity(conjunct, nodeOf, knowledge);
+        }
+    }
+
+    return kept;
+}
+
+double RowEstimator::getPredicateSelectivity(Value predicate, llvm::function_ref<Value(Value)> nodeOf, const WalkKnowledge& knowledge) const {
+    llvm::DenseMap<Value, double> kept;
+    llvm::SmallVector<Value> pending {predicate};
+
+    while (!pending.empty()) {
+        const Value current = pending.back();
+        if (kept.count(current)) {
+            pending.pop_back();
+            continue;
+        }
+
+        Operation* const def = current.getDefiningOp();
+        if (!isa_and_nonnull<AndOp, OrOp, XorOp, NotOp>(def)) {
+            kept[current] = getLeafSelectivity(current, nodeOf, knowledge);
+            pending.pop_back();
+            continue;
+        }
+
+        bool operandsPending = false;
+        for (const Value operand : def->getOperands()) {
+            if (!kept.count(operand)) {
+                pending.push_back(operand);
+                operandsPending = true;
+            }
+        }
+
+        if (operandsPending) {
+            continue;
+        }
+
+        const double first = kept.lookup(def->getOperand(0));
+        const double second = def->getNumOperands() > 1 ? kept.lookup(def->getOperand(1)) : 0;
+
+        if (isa<AndOp>(def)) {
+            kept[current] = first * second;
+        } else if (isa<OrOp>(def)) {
+            kept[current] = first + second - first * second;
+        } else if (isa<XorOp>(def)) {
+            kept[current] = first + second - 2 * first * second;
+        } else {
+            kept[current] = 1 - first;
+        }
+
+        pending.pop_back();
+    }
+
+    return kept.lookup(predicate);
+}
+
+RowEstimator::LabelCheck RowEstimator::readLabelCheck(Value predicate) {
+    CheckLabelConstraint check = predicate.getDefiningOp<CheckLabelConstraint>();
+    if (!check) {
+        return {};
+    }
+
+    GetNodeLabelSet labelSet = check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
+    if (!labelSet) {
+        return {};
+    }
+
+    return LabelCheck {._alternatives = check.getAlternatives(), ._nodes = labelSet.getInputNodes()};
+}
+
+void RowEstimator::appendLabels(const ::db::LabelSet& labels, StatisticKey& key) {
+    for (const uint64_t word : labels.integers()) {
+        key.push_back(word);
+    }
+}
+
+void RowEstimator::appendDegree(const ::db::DegreeSelection& degree, StatisticKey& key) {
+    key.push_back(degree._isOut ? 1 : 0);
+    key.push_back(degree._isEveryType ? 1 : 0);
+    key.push_back(degree._edgeTypes.size());
+    for (const ::db::EdgeTypeID edgeType : degree._edgeTypes) {
+        key.push_back(edgeType.getValue());
+    }
+}
+
+double RowEstimator::countEdges(const ::db::LabelSet& source, const HopEdges& edges, const ::db::LabelSet& target) const {
+    StatisticKey key {EDGE_COUNT_KEY};
+    appendLabels(source, key);
+    appendLabels(target, key);
+    appendDegree(selectionOf(edges, true), key);
+
+    const auto [known, isNew] = _statistics.try_emplace(key, 0);
+    if (!isNew) {
+        return known->second;
+    }
+
+    double count = 0;
+    if (!edges._isTyped) {
+        count = static_cast<double>(_estimation.estimateEdgeCount(source, target));
+    } else {
+        for (const ::db::EdgeTypeID edgeType : edges._types) {
+            count += static_cast<double>(_estimation.estimateEdgeCount(source, edgeType, target));
+        }
+    }
+
+    known->second = count;
+
+    return count;
+}
+
+double RowEstimator::sumDegreeProducts(const ::db::LabelSet& labels,
+                                       const ::db::DegreeSelection& first,
+                                       const ::db::DegreeSelection& second) const {
+    StatisticKey key {DEGREE_PRODUCTS_KEY};
+    appendLabels(labels, key);
+    appendDegree(first, key);
+    appendDegree(second, key);
+
+    const auto [known, isNew] = _statistics.try_emplace(key, 0);
+    if (isNew) {
+        known->second = static_cast<double>(_estimation.estimateDegreeProducts(labels, first, second));
+    }
+
+    return known->second;
+}
+
+double RowEstimator::countHopEdges(const HopEdges& edges) const {
+    const ::db::LabelSet& source = edges._leavesSource ? edges._near : edges._far;
+    const ::db::LabelSet& target = edges._leavesSource ? edges._far : edges._near;
+
+    double count = countEdges(source, edges, target);
+    if (edges._walksBoth) {
+        count += countEdges(target, edges, source);
+    }
+
+    return count;
+}
+
+::db::DegreeSelection RowEstimator::selectionOf(const HopEdges& edges, bool isOut) {
+    return ::db::DegreeSelection {._edgeTypes = edges._types, ._isEveryType = !edges._isTyped, ._isOut = isOut};
+}
+
+double RowEstimator::countSelectedEdges(const ::db::LabelSet& labels, const ::db::DegreeSelection& degree) const {
+    HopEdges edges;
+    edges._near = labels;
+    edges._types.assign(degree._edgeTypes.begin(), degree._edgeTypes.end());
+    edges._isTyped = !degree._isEveryType;
+    edges._leavesSource = degree._isOut;
+
+    return countHopEdges(edges);
+}
+
+double RowEstimator::getDegreeLift(const ::db::LabelSet& labels,
+                                   const ::db::DegreeSelection& previous,
+                                   const ::db::DegreeSelection& next) const {
+    const double nodes = getLabelledNodes(labels);
+    const double previousEdges = countSelectedEdges(labels, previous);
+    const double nextEdges = countSelectedEdges(labels, next);
+    if (nodes == 0 || previousEdges == 0 || nextEdges == 0) {
+        return 1;
+    }
+
+    const double products = sumDegreeProducts(labels, previous, next);
+
+    return (products / previousEdges) / (nextEdges / nodes);
+}
+
+void RowEstimator::narrowTypes(ArrayAttr typeNames, HopEdges& edges) const {
+    llvm::SmallVector<::db::EdgeTypeID, 2> named;
+    collectEdgeTypes(typeNames, _metadata, named);
+
+    if (edges._isTyped) {
+        llvm::erase_if(edges._types, [&named](::db::EdgeTypeID edgeType) {
+            return !llvm::is_contained(named, edgeType);
+        });
+    } else {
+        edges._types.assign(named.begin(), named.end());
+        edges._isTyped = true;
+    }
+}
+
+void RowEstimator::addSharedLabels(ArrayAttr alternatives, ::db::LabelSet& labels) const {
+    llvm::DenseSet<Attribute> sharedNames;
+    addSharedLabelNames(alternatives, sharedNames);
+
+    const ::db::LabelMap& labelMap = _metadata.labels();
+    for (const Attribute name : sharedNames) {
+        const StringAttr nameAttr = dyn_cast<StringAttr>(name);
+        if (!nameAttr) {
+            continue;
+        }
+
+        const llvm::StringRef nameRef = nameAttr.getValue();
+        const std::optional<::db::LabelID> label = labelMap.get(std::string_view(nameRef.data(), nameRef.size()));
+        if (label) {
+            labels.set(*label);
+        }
+    }
+}
+
+double RowEstimator::shareLabelled(ArrayAttr alternatives, const ::db::LabelSet& known) const {
+    const double knownNodes = getLabelledNodes(known);
+    if (knownNodes == 0) {
+        return 0;
+    }
+
+    double kept = 0;
+    for (const Attribute alternative : alternatives) {
+        ::db::LabelSet labels;
+        if (collectScanLabels(cast<ArrayAttr>(alternative), _metadata, labels)) {
+            labels.merge(known);
+            kept += getLabelledNodes(labels);
+        }
+    }
+
+    return std::min(1.0, kept / knownNodes);
+}
+
+double RowEstimator::shareLabelled(ArrayAttr alternatives, Value node, const WalkKnowledge& knowledge) const {
+    const auto reaching = knowledge._reachingHops.find(node);
+    if (reaching == knowledge._reachingHops.end()) {
+        return shareLabelled(alternatives, knowledge._labels.lookup(node));
+    }
+
+    const HopEdges& edges = knowledge._hops.find(reaching->second)->second;
+    const double walked = countHopEdges(edges);
+    if (walked == 0) {
+        return 0;
+    }
+
+    double kept = 0;
+    for (const Attribute alternative : alternatives) {
+        HopEdges labelled = edges;
+        if (collectScanLabels(cast<ArrayAttr>(alternative), _metadata, labelled._far)) {
+            kept += countHopEdges(labelled);
+        }
+    }
+
+    return std::min(1.0, kept / walked);
+}
+
+double RowEstimator::shareTyped(CheckEdgeTypeConstraint check,
+                                llvm::function_ref<Value(Value)> nodeOf,
+                                const WalkKnowledge& knowledge) const {
+    Operation* const hop = findTypedHop(check.getEdgeTypeIds(), nodeOf);
+    const auto walkedEdges = hop ? knowledge._hops.find(hop) : knowledge._hops.end();
+
+    HopEdges edges = walkedEdges != knowledge._hops.end() ? walkedEdges->second : HopEdges {};
+    const double walked = countHopEdges(edges);
+    if (walked == 0) {
+        return 0;
+    }
+
+    narrowTypes(check.getEdgeTypes(), edges);
+
+    return countHopEdges(edges) / walked;
+}
+
+double RowEstimator::keepTyped(CheckEdgeTypeConstraint check,
+                               llvm::function_ref<Value(Value)> nodeOf,
+                               WalkKnowledge& knowledge) const {
+    const double kept = shareTyped(check, nodeOf, knowledge);
+
+    Operation* const hop = findTypedHop(check.getEdgeTypeIds(), nodeOf);
+    const auto walkedEdges = hop ? knowledge._hops.find(hop) : knowledge._hops.end();
+    if (walkedEdges != knowledge._hops.end()) {
+        narrowTypes(check.getEdgeTypes(), walkedEdges->second);
+    }
+
+    return kept;
+}
+
+double RowEstimator::getEqualityShare(double distinctValues) {
+    return distinctValues >= 1 ? 1 / distinctValues : 1 / DEFAULT_DISTINCT_VALUES;
+}
+
+double RowEstimator::getPropertyDistinctValues(Type element, double nodes) {
+    const bool isBoolean = element && (isa<storage::BoolType>(element) || element.isInteger(1));
+
+    return isBoolean ? BOOLEAN_DISTINCT_VALUES : std::min(DEFAULT_DISTINCT_VALUES, nodes);
+}
+
+double RowEstimator::getDistinctValues(Value side, llvm::function_ref<Value(Value)> nodeOf, const WalkKnowledge& knowledge) const {
+    const Value entityColumn = comparedEntityColumn(side);
+    GetNodeProperties propertyRead = nodeOf(side).getDefiningOp<GetNodeProperties>();
+
+    if (entityColumn && isNodeColumn(entityColumn)) {
+        return getLabelledNodes(knowledge._labels.lookup(nodeOf(entityColumn)));
+    } else if (propertyRead) {
+        const Value propertyColumn = propertyRead.getResult();
+        const double nodes = getLabelledNodes(knowledge._labels.lookup(nodeOf(propertyRead.getInputNodes())));
+
+        return getPropertyDistinctValues(::db::declaredColumnElement(propertyColumn), nodes);
+    }
+
+    return 0;
+}
+
+double RowEstimator::getEqualitySelectivity(Value lhs, Value rhs, llvm::function_ref<Value(Value)> nodeOf, const WalkKnowledge& knowledge) const {
+    const double lhsValues = getDistinctValues(lhs, nodeOf, knowledge);
+    const double rhsValues = getDistinctValues(rhs, nodeOf, knowledge);
+
+    return getEqualityShare(std::max(lhsValues, rhsValues));
+}
+
+double RowEstimator::getMembershipSelectivity(InOp membership, llvm::function_ref<Value(Value)> nodeOf, const WalkKnowledge& knowledge) const {
+    ConstantOp constant = membership.getRhs().getDefiningOp<ConstantOp>();
+    const ArrayAttr elements = constant ? dyn_cast<ArrayAttr>(constant.getValue()) : ArrayAttr();
+    if (!elements) {
+        return MEMBERSHIP_SELECTIVITY_CEILING;
+    }
+
+    const double elementShare = getEqualityShare(getDistinctValues(membership.getLhs(), nodeOf, knowledge));
+
+    return std::min(MEMBERSHIP_SELECTIVITY_CEILING, elementShare * static_cast<double>(elements.size()));
+}
+
+double RowEstimator::getLeafSelectivity(Value predicate, llvm::function_ref<Value(Value)> nodeOf, const WalkKnowledge& knowledge) const {
+    Operation* const def = predicate.getDefiningOp();
+
+    if (EqOp equality = dyn_cast_or_null<EqOp>(def)) {
+        return getEqualitySelectivity(equality.getLhs(), equality.getRhs(), nodeOf, knowledge);
+    } else if (NeqOp inequality = dyn_cast_or_null<NeqOp>(def)) {
+        return 1 - getEqualitySelectivity(inequality.getLhs(), inequality.getRhs(), nodeOf, knowledge);
+    } else if (isa_and_nonnull<GtOp, LtOp, GteOp, LteOp>(def)) {
+        return RANGE_SELECTIVITY;
+    } else if (InOp membership = dyn_cast_or_null<InOp>(def)) {
+        return getMembershipSelectivity(membership, nodeOf, knowledge);
+    } else if (CheckEdgeTypeConstraint typeCheck = dyn_cast_or_null<CheckEdgeTypeConstraint>(def)) {
+        return shareTyped(typeCheck, nodeOf, knowledge);
+    } else if (const LabelCheck check = readLabelCheck(predicate); check._alternatives) {
+        return shareLabelled(check._alternatives, nodeOf(check._nodes), knowledge);
+    }
+
+    return 1;
+}
+
 std::optional<double> mlir::db::estimateSourceRows(Operation* op, const RowEstimator& estimator, WalkKnowledge& knowledge) {
     if (ConstScanNodes constScan = dyn_cast<ConstScanNodes>(op)) {
         return estimateListedEntities(constScan.getNodeIDs().size(), constScan.getBoundIDs());
