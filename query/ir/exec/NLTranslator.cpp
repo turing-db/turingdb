@@ -824,7 +824,7 @@ ValueType nullableChunkValueType(mlir::Type chunkType) {
 
 // Whether a chunk holds a value that may be absent (!nl.chunk<!storage.nullable<T>>), as
 // opposed to a plain value column
-bool isNullableChunk(mlir::Type chunkType) {
+bool isNullableChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
 
     return chunk && mlir::isa<storage::NullableType>(chunk.getElementType());
@@ -832,7 +832,7 @@ bool isNullableChunk(mlir::Type chunkType) {
 
 // Whether a chunk carries the null literal, which has no value type of its own: a
 // !nl.chunk<!storage.nullable<none>>
-bool isUntypedNullChunk(mlir::Type chunkType) {
+bool isUntypedNullChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
 
     return chunk && mlir::isNullLiteralType(chunk.getElementType());
@@ -881,7 +881,7 @@ bool isNullableMap(mlir::Type elementType) {
 NLTruthColumnKind truthColumnKindFromChunkType(mlir::Type chunkType) {
     const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
 
-    if (isUntypedNullChunk(chunkType)) {
+    if (isUntypedNullChunkType(chunkType)) {
         return NLTruthColumnKind::UntypedNull;
     } else if (mlir::isa<storage::AnyType>(elementType)) {
         return NLTruthColumnKind::TaggedCells;
@@ -3223,7 +3223,7 @@ void NLTranslator::translateCheckLabelConstraint(nl::CheckLabelConstraint op, NL
     bioassert(lblsCol->getKind() == ColumnLabelSetIDs::staticKind(), "nl.check_label_constraint reads a chunk of label sets");
     const ColumnLabelSetIDs* input = static_cast<const ColumnLabelSetIDs*>(lblsCol);
 
-    const bool nullable = isNullableChunk(op.getResult().getType());
+    const bool nullable = isNullableChunkType(op.getResult().getType());
     Column* output = allocCheckMask(nullable);
     _valueSlots[op.getResult()] = output;
 
@@ -3295,7 +3295,7 @@ void NLTranslator::translateCheckEdgeTypeConstraint(nl::CheckEdgeTypeConstraint 
     bioassert(etypesCol->getKind() == ColumnEdgeTypes::staticKind(), "nl.check_edge_type_constraint reads a chunk of edge types");
     const ColumnEdgeTypes* input = static_cast<const ColumnEdgeTypes*>(etypesCol);
 
-    const bool nullable = isNullableChunk(op.getResult().getType());
+    const bool nullable = isNullableChunkType(op.getResult().getType());
     Column* output = allocCheckMask(nullable);
     _valueSlots[op.getResult()] = output;
 
@@ -3668,7 +3668,7 @@ void NLTranslator::translateMergeProperty(llvm::StringRef propName,
 }
 
 PropertyType NLTranslator::setPropertyType(llvm::StringRef propName, mlir::Type valueChunkType) const {
-    const bool typedAsItRuns = isUntypedNullChunk(valueChunkType) || isAnyChunk(valueChunkType);
+    const bool typedAsItRuns = isUntypedNullChunkType(valueChunkType) || isAnyChunk(valueChunkType);
     if (typedAsItRuns) {
         return PropertyType {};
     }
@@ -3698,7 +3698,7 @@ void NLTranslator::translateSetNodeProperty(nl::SetNodeProperty setNodeProperty,
         valueColumn);
 
     if (!propType.isValid()) {
-        const bool writesNull = isUntypedNullChunk(valueChunkType);
+        const bool writesNull = isUntypedNullChunkType(valueChunkType);
 
         data->setRuntimeProperty(_program->getRuntimeProperty(propName));
         data->setWritesNull(writesNull);
@@ -3737,7 +3737,7 @@ void NLTranslator::translateSetEdgeProperty(nl::SetEdgeProperty setEdgeProperty,
         valueColumn);
 
     if (!propType.isValid()) {
-        const bool writesNull = isUntypedNullChunk(valueChunkType);
+        const bool writesNull = isUntypedNullChunkType(valueChunkType);
 
         data->setRuntimeProperty(_program->getRuntimeProperty(propName));
         data->setWritesNull(writesNull);
@@ -3794,7 +3794,7 @@ void NLTranslator::translateSetProperties(SetPropertiesOp setProperties, mlir::V
                                                                              getColumn(value),
                                                                              setProperties.getReplaces());
 
-    data->setWritesNull(isUntypedNullChunk(value.getType()));
+    data->setWritesNull(isUntypedNullChunkType(value.getType()));
     data->setPending(getMaskColumn(setProperties.getPending()));
     data->setAllPending(setProperties.getAllPending() || isPendingValue(input, WRITES_NODES));
     data->setRows(getMaskColumn(setProperties.getRows()));
@@ -3930,7 +3930,7 @@ void NLTranslator::translateBroadcastConstant(nl::BroadcastConstant broadcast, N
     // its own container chunk rather than a nullable value one, so its fill repeats the one
     // view the constant holds instead of dispatching on a value type.
     const mlir::Type resultElement = mlir::cast<nl::ChunkType>(resultType).getElementType();
-    const bool isUntypedNull = isUntypedNullChunk(broadcast.getValue().getType());
+    const bool isUntypedNull = isUntypedNullChunkType(broadcast.getValue().getType());
     const bool isList = llvm::isa<storage::ListType>(resultElement);
     const bool isMap = llvm::isa<storage::MapType>(resultElement);
 
@@ -3956,7 +3956,7 @@ void NLTranslator::translateBroadcastConstant(nl::BroadcastConstant broadcast, N
 void NLTranslator::translateRowConstant(nl::RowConstant rowConstant, NLStmtContainer* body) {
     const mlir::Value rowValue = rowConstant.getRow();
 
-    if (isUntypedNullChunk(rowValue.getType())) {
+    if (isUntypedNullChunkType(rowValue.getType())) {
         _valueSlots[rowConstant.getResult()] = _memory->alloc<ColumnConst<PropertyNull>>();
         return;
     }
@@ -4038,7 +4038,7 @@ void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContaine
     // through: the result is one absent value per row, in the type it does name - what a
     // UNION branch spelling a column's value null hands the sink. An entity or a tagged
     // cell column holds its own null, in the invalid ID or in the tag.
-    if (isUntypedNullChunk(operandValue.getType())) {
+    if (isUntypedNullChunkType(operandValue.getType())) {
         translateNullLiteral(toNullable.getResult(), operand, body);
         return;
     }
@@ -4083,7 +4083,7 @@ void NLTranslator::translateCheckedCast(nl::CheckedCast checkedCast, NLStmtConta
 
     const nl::ChunkType resultChunk = mlir::cast<nl::ChunkType>(checkedCast.getResult().getType());
 
-    if (isUntypedNullChunk(operandValue.getType())) {
+    if (isUntypedNullChunkType(operandValue.getType())) {
         translateNullLiteral(checkedCast.getResult(), operand, body);
         return;
     }
@@ -4502,7 +4502,7 @@ void NLTranslator::translateStringEnd(StringEndOp stringEnd, NLStmtContainer* bo
 
     NLStringEndData* data = _program->allocFunctionData<NLStringEndData>(result, stringArgument, lengthArgument);
 
-    if (isNullableChunk(resultType)) {
+    if (isNullableChunkType(resultType)) {
         body->emplaceStmt(&NLExecutor::runStringEnd<Function, std::optional<types::String::Primitive>>, data);
     } else {
         body->emplaceStmt(&NLExecutor::runStringEnd<Function, types::String::Primitive>, data);
@@ -4530,7 +4530,7 @@ void NLTranslator::translateReplace(nl::Replace replace, NLStmtContainer* body) 
                                                                      searchArgument,
                                                                      replacementArgument);
 
-    if (isNullableChunk(resultType)) {
+    if (isNullableChunkType(resultType)) {
         body->emplaceStmt(&NLExecutor::runReplace<std::optional<types::String::Primitive>>, data);
     } else {
         body->emplaceStmt(&NLExecutor::runReplace<types::String::Primitive>, data);
@@ -4864,7 +4864,7 @@ void NLTranslator::translateToAny(nl::ToAny toAny, NLStmtContainer* body) {
         return;
     }
 
-    const bool readsANull = isUntypedNullChunk(operandValue.getType());
+    const bool readsANull = isUntypedNullChunkType(operandValue.getType());
     if (readsANull && yieldsConstantColumn(resultValue)) {
         ColumnConst<CellView>* const nullCell = _memory->alloc<ColumnConst<CellView>>();
         nullCell->set(CellView::nullElement());
@@ -4939,7 +4939,7 @@ NLCellWrite NLTranslator::selectCellWriteForChunkType(mlir::Type resultChunkType
                                                       mlir::Type valueChunkType) {
     if (!isAnyChunk(resultChunkType)) {
         return NLCellWrite {._write = selectCaseWriteForChunkType(resultChunkType, value, valueChunkType)};
-    } else if (isUntypedNullChunk(valueChunkType)) {
+    } else if (isUntypedNullChunkType(valueChunkType)) {
         return NLCellWrite {._write = NLExecutor::selectNullCellWrite()};
     }
 
@@ -4954,13 +4954,13 @@ NLCaseWriteFn NLTranslator::selectCaseWriteForChunkType(mlir::Type resultChunkTy
 
     if (holdsItsOwnNull(resultElement)) {
         return NLExecutor::selectOwnNullCaseWrite(chunkKindFromElementType(resultElement),
-                                                  isUntypedNullChunk(valueChunkType));
+                                                  isUntypedNullChunkType(valueChunkType));
     }
 
     return NLExecutor::selectCaseWrite(getNullableChunkKind(resultChunkType),
                                        value,
-                                       isNullableChunk(valueChunkType),
-                                       isUntypedNullChunk(valueChunkType));
+                                       isNullableChunkType(valueChunkType),
+                                       isUntypedNullChunkType(valueChunkType));
 }
 
 void NLTranslator::translateUnaryFunction(mlir::Operation* op, NLStmtContainer* body) {
@@ -7463,7 +7463,7 @@ const ColumnVector<CustomBool>* NLTranslator::getMaskColumn(mlir::Value chunkVal
 NLKeyAppendFunction NLTranslator::selectMergeKeyAppend(mlir::Type chunkType,
                                                       const Column* column,
                                                       ValueType keyType) {
-    if (isUntypedNullChunk(chunkType)) {
+    if (isUntypedNullChunkType(chunkType)) {
         return NLExecutor::selectNullMergeKeyAppendFunction();
     }
 
@@ -7765,7 +7765,7 @@ void NLTranslator::bindKernelResult(mlir::Value resultValue, Column* result) {
     bioassert(result, "The kernel allocated no result column");
 
     const mlir::Type resultType = resultValue.getType();
-    const bool declaredNullable = isNullableChunk(resultType);
+    const bool declaredNullable = isNullableChunkType(resultType);
 
     const mlir::Type resultElement = mlir::cast<nl::ChunkType>(resultType).getElementType();
     const bool declaredBooleans = mlir::isa<storage::BoolType>(resultElement) || resultElement.isInteger(1);
