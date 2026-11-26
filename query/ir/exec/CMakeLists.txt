@@ -44,6 +44,7 @@ set(exec_sources
     NLFunctionSelectors.cpp
     NLTranslatorAggregates.cpp
     NLTranslatorChunkTypes.cpp
+    NLTranslatorCollect.cpp
     NLTranslatorColumnKernels.cpp
     NLTranslatorColumns.cpp
     NLTranslatorComprehensions.cpp
