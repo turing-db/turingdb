@@ -42,9 +42,7 @@ struct ConjunctCone {
 // matches until a rewrite changes the IR under them
 class ConeCache {
 public:
-    bool yieldsConstantColumn(Value column) {
-        return ::db::yieldsConstantColumn(column, _constantColumns);
-    }
+    bool yieldsConstantColumn(Value column);
 
     const ConjunctCone& getConjunctCone(Value conjunct, CrossProduct product);
 
@@ -52,11 +50,7 @@ public:
     // in all rather than N per column
     Value climbFilters(Value column);
 
-    void clear() {
-        _constantColumns.clear();
-        _conjunctCones.clear();
-        _climbedColumns.clear();
-    }
+    void clear();
 
 private:
     llvm::DenseMap<Value, bool> _constantColumns;

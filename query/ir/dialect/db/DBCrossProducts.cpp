@@ -50,6 +50,10 @@ void mlir::db::collectFactorReads(const MaskCone& cone, CrossProduct product, Co
     }
 }
 
+bool ConeCache::yieldsConstantColumn(Value column) {
+    return ::db::yieldsConstantColumn(column, _constantColumns);
+}
+
 const ConjunctCone& ConeCache::getConjunctCone(Value conjunct, CrossProduct product) {
     std::unique_ptr<ConjunctCone>& cached = _conjunctCones[{conjunct, product.getOperation()}];
     if (!cached) {
@@ -80,6 +84,12 @@ Value ConeCache::climbFilters(Value column) {
     }
 
     return climbed;
+}
+
+void ConeCache::clear() {
+    _constantColumns.clear();
+    _conjunctCones.clear();
+    _climbedColumns.clear();
 }
 
 Yield mlir::db::factorYield(Operation* op, unsigned factorIndex) {
