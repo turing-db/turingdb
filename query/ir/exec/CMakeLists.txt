@@ -16,6 +16,7 @@ set(exec_sources
     NLExecutorComprehensions.cpp
     NLExecutorFunctions.cpp
     NLExecutorHops.cpp
+    NLExecutorJoins.cpp
     NLExecutorLists.cpp
     NLExecutorPaths.cpp
     NLExecutorProperties.cpp
