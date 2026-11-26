@@ -92,6 +92,75 @@ void ConeCache::clear() {
     _climbedColumns.clear();
 }
 
+FilterStack::FilterStack(Operation* rows)
+    : _block(rows->getBlock()),
+    _top(rows)
+{
+    followReaders(rows);
+}
+
+FilterOp FilterStack::getReader() const {
+    if (_readElsewhere) {
+        return nullptr;
+    }
+
+    FilterOp reader = nullptr;
+    for (Operation* const user : _top->getUsers()) {
+        FilterOp filter = dyn_cast<FilterOp>(user);
+        if (!filter || filter == reader || !readsTheTop(filter)) {
+            continue;
+        } else if (reader) {
+            return nullptr;
+        }
+
+        reader = filter;
+    }
+
+    return reader;
+}
+
+bool FilterStack::isExclusiveTo(FilterOp reader) const {
+    return !_readElsewhere && llvm::all_of(_pendingFilters, [&reader](Operation* filter) {
+        return filter == reader.getOperation();
+    });
+}
+
+void FilterStack::climbTo(FilterOp reader) {
+    _pendingFilters.erase(reader);
+    _top = reader;
+    followReaders(reader);
+}
+
+bool FilterStack::readsTheTop(FilterOp filter) const {
+    const Operation::operand_range columns = filter.getColumnsToFilter();
+    if (columns.empty() || filter->getBlock() != _block) {
+        return false;
+    }
+
+    return llvm::all_of(columns, [this](Value column) {
+        return column.getDefiningOp() == _top;
+    });
+}
+
+void FilterStack::followReaders(Operation* level) {
+    llvm::SmallVector<Operation*> pending(level->getUsers().begin(), level->getUsers().end());
+    while (!pending.empty()) {
+        Operation* const op = pending.pop_back_val();
+        if (!_visited.insert(op).second) {
+            continue;
+        }
+
+        const bool inTheBlock = op->getBlock() == _block;
+        if (inTheBlock && computesFromTheRow(op)) {
+            llvm::append_range(pending, op->getUsers());
+        } else if (inTheBlock && isa<FilterOp>(op)) {
+            _pendingFilters.insert(op);
+        } else {
+            _readElsewhere = true;
+        }
+    }
+}
+
 Yield mlir::db::factorYield(Operation* op, unsigned factorIndex) {
     return cast<Yield>(op->getRegion(factorIndex).front().getTerminator());
 }

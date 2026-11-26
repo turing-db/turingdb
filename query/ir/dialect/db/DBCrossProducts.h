@@ -66,45 +66,14 @@ void collectFactorReads(const MaskCone& cone, CrossProduct product, ConeCache& c
 // filter above it.
 class FilterStack {
 public:
-    explicit FilterStack(Operation* rows)
-        : _block(rows->getBlock()),
-        _top(rows)
-    {
-        followReaders(rows);
-    }
+    explicit FilterStack(Operation* rows);
 
-    FilterOp getReader() const {
-        if (_readElsewhere) {
-            return nullptr;
-        }
-
-        FilterOp reader = nullptr;
-        for (Operation* const user : _top->getUsers()) {
-            FilterOp filter = dyn_cast<FilterOp>(user);
-            if (!filter || filter == reader || !readsTheTop(filter)) {
-                continue;
-            } else if (reader) {
-                return nullptr;
-            }
-
-            reader = filter;
-        }
-
-        return reader;
-    }
+    FilterOp getReader() const;
 
     // Whether nothing but the stack's filters and @param reader sees the rows of the stack
-    bool isExclusiveTo(FilterOp reader) const {
-        return !_readElsewhere && llvm::all_of(_pendingFilters, [&reader](Operation* filter) {
-            return filter == reader.getOperation();
-        });
-    }
+    bool isExclusiveTo(FilterOp reader) const;
 
-    void climbTo(FilterOp reader) {
-        _pendingFilters.erase(reader);
-        _top = reader;
-        followReaders(reader);
-    }
+    void climbTo(FilterOp reader);
 
 private:
     Block* _block {nullptr};
@@ -113,35 +82,9 @@ private:
     llvm::SmallPtrSet<Operation*, 4> _pendingFilters;
     bool _readElsewhere {false};
 
-    bool readsTheTop(FilterOp filter) const {
-        const Operation::operand_range columns = filter.getColumnsToFilter();
-        if (columns.empty() || filter->getBlock() != _block) {
-            return false;
-        }
+    bool readsTheTop(FilterOp filter) const;
 
-        return llvm::all_of(columns, [this](Value column) {
-            return column.getDefiningOp() == _top;
-        });
-    }
-
-    void followReaders(Operation* level) {
-        llvm::SmallVector<Operation*> pending(level->getUsers().begin(), level->getUsers().end());
-        while (!pending.empty()) {
-            Operation* const op = pending.pop_back_val();
-            if (!_visited.insert(op).second) {
-                continue;
-            }
-
-            const bool inTheBlock = op->getBlock() == _block;
-            if (inTheBlock && computesFromTheRow(op)) {
-                llvm::append_range(pending, op->getUsers());
-            } else if (inTheBlock && isa<FilterOp>(op)) {
-                _pendingFilters.insert(op);
-            } else {
-                _readElsewhere = true;
-            }
-        }
-    }
+    void followReaders(Operation* level);
 };
 
 // The db.yield ending a factor region of a two-factor op - db.cross_product, db.hash_join.
