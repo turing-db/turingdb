@@ -42,34 +42,13 @@ void stepTowardLineageAnchor(Value column, LineageStep& step);
 // which a push never erases. A rewrite that replaces an anchor has to clear() them.
 class LineageClimbs {
 public:
-    Value anchorOf(Value column) {
-        computeClimb(column);
-        return _climbs.at(column)._anchor;
-    }
+    Value anchorOf(Value column);
 
-    Value climb(Value column, bool& crossedRowOp, llvm::SmallVectorImpl<ColumnEquality>& anchorEqualities) {
-        computeClimb(column);
+    Value climb(Value column, bool& crossedRowOp, llvm::SmallVectorImpl<ColumnEquality>& anchorEqualities);
 
-        const Climb& climb = _climbs.at(column);
-        crossedRowOp = crossedRowOp || climb._crossedRowOp;
+    void forget(Operation* op);
 
-        if (climb._equalities != NO_LIST) {
-            llvm::append_range(anchorEqualities, _equalityLists[climb._equalities]);
-        }
-
-        return climb._anchor;
-    }
-
-    void forget(Operation* op) {
-        for (const Value result : op->getResults()) {
-            _climbs.erase(result);
-        }
-    }
-
-    void clear() {
-        _climbs.clear();
-        _equalityLists.clear();
-    }
+    void clear();
 
 private:
     static constexpr size_t NO_LIST = SIZE_MAX;
@@ -85,78 +64,7 @@ private:
     llvm::DenseMap<Value, Climb> _climbs;
     std::vector<llvm::SmallVector<ColumnEquality, 2>> _equalityLists;
 
-    void computeClimb(Value column) {
-        llvm::SmallVector<Value> worklist {column};
-        llvm::SmallVector<ColumnEquality, 4> filterEqualities;
-
-        while (!worklist.empty()) {
-            const Value value = worklist.back();
-            if (_climbs.contains(value)) {
-                worklist.pop_back();
-                continue;
-            }
-
-            LineageStep step;
-            stepTowardLineageAnchor(value, step);
-
-            filterEqualities.clear();
-            if (FilterOp filter = value.getDefiningOp<FilterOp>()) {
-                collectColumnEqualities(filter, filterEqualities);
-            }
-
-            bool dependenciesPending = false;
-            const auto requireClimb = [this, &worklist, &dependenciesPending](Value dependency) {
-                if (dependency && !_climbs.contains(dependency)) {
-                    worklist.push_back(dependency);
-                    dependenciesPending = true;
-                }
-            };
-
-            requireClimb(step._next);
-            for (const ColumnEquality& equality : filterEqualities) {
-                requireClimb(equality.first);
-                requireClimb(equality.second);
-            }
-
-            if (dependenciesPending) {
-                continue;
-            }
-
-            Climb climb;
-            if (step._isAnchor) {
-                climb._anchor = value;
-            } else if (step._next) {
-                const Climb next = _climbs.at(step._next);
-                climb._anchor = next._anchor;
-                climb._crossedRowOp = next._crossedRowOp || step._crossesRowOp;
-                climb._equalities = next._equalities;
-
-                for (const ColumnEquality& equality : llvm::reverse(filterEqualities)) {
-                    const ColumnEquality anchors {_climbs.at(equality.first)._anchor, _climbs.at(equality.second)._anchor};
-                    const bool relatesTwoAnchors = anchors.first && anchors.second && anchors.first != anchors.second;
-                    if (!relatesTwoAnchors) {
-                        continue;
-                    }
-
-                    llvm::SmallVector<ColumnEquality, 2> equalities {anchors};
-                    if (climb._equalities != NO_LIST) {
-                        const llvm::SmallVector<ColumnEquality, 2>& held = _equalityLists[climb._equalities];
-                        if (llvm::is_contained(held, anchors)) {
-                            continue;
-                        }
-
-                        llvm::append_range(equalities, held);
-                    }
-
-                    _equalityLists.push_back(equalities);
-                    climb._equalities = _equalityLists.size() - 1;
-                }
-            }
-
-            _climbs[value] = climb;
-            worklist.pop_back();
-        }
-    }
+    void computeClimb(Value column);
 };
 
 }
