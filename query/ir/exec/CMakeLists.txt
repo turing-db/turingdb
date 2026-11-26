@@ -13,6 +13,7 @@ set(exec_sources
     NLEntityProperties.cpp
     NLPropertyFunctions.cpp
     NLExecutor.cpp
+    NLExecutorComprehensions.cpp
     NLExecutorHops.cpp
     NLExecutorLists.cpp
     NLExecutorPaths.cpp
