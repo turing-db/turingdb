@@ -6,8 +6,6 @@
 #include "DBOps.h"
 #include "DBLoweringChunkTypes.h"
 
-#include "DBColumnElement.h"
-
 using namespace db;
 
 namespace nl = mlir::nl;

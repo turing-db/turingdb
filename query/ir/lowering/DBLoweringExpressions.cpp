@@ -10,13 +10,9 @@
 #include "NLOps.h"
 #include "DBLoweringChunkTypes.h"
 
-#include "DBColumnElement.h"
-#include "IRRowAlignment.h"
 #include "NullLiteralType.h"
 
 #include "metadata/GraphMetadata.h"
-
-#include "IRValueTypes.h"
 
 #include "IRException.h"
 #include "llvm/Support/Casting.h"

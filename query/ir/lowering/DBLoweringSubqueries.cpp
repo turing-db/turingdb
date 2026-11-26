@@ -9,10 +9,6 @@
 #include "NLOps.h"
 #include "DBLoweringRowFlow.h"
 
-#include "DBColumnElement.h"
-
-#include "IRValueTypes.h"
-
 #include "IRException.h"
 #include "llvm/Support/Casting.h"
 

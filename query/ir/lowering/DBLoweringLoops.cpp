@@ -7,10 +7,7 @@
 
 #include "NLOps.h"
 
-#include "DBColumnElement.h"
 #include "IRConstantColumn.h"
-
-#include "IRValueTypes.h"
 
 #include "IRException.h"
 #include "llvm/ADT/SmallPtrSet.h"

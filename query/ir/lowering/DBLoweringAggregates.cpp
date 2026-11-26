@@ -9,10 +9,7 @@
 
 #include "NLOps.h"
 
-#include "DBColumnElement.h"
 #include "NullLiteralType.h"
-
-#include "IRValueTypes.h"
 
 #include "IRException.h"
 #include "llvm/Support/Casting.h"

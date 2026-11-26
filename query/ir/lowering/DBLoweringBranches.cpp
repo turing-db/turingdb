@@ -15,7 +15,6 @@
 #include "DBLoweringChunkTypes.h"
 #include "DBLoweringRowFlow.h"
 
-#include "DBColumnElement.h"
 #include "IRConstantColumn.h"
 
 #include "metadata/PropertyType.h"

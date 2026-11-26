@@ -10,14 +10,11 @@
 #include "NLOps.h"
 #include "DBLoweringChunkTypes.h"
 
-#include "DBColumnElement.h"
 #include "MergePatternShape.h"
 
 #include "views/GraphView.h"
 #include "metadata/GraphMetadata.h"
 #include "metadata/PropertyType.h"
-
-#include "IRValueTypes.h"
 
 #include "llvm/Support/Casting.h"
 

@@ -13,13 +13,10 @@
 #include "DBLoweringFunctionEmitters.h"
 #include "DBLoweringRowFlow.h"
 
-#include "DBColumnElement.h"
 #include "IRConstantColumn.h"
 #include "ProcedureManager.h"
 
 #include "views/GraphView.h"
-
-#include "IRValueTypes.h"
 
 #include "IRException.h"
 #include "llvm/Support/Casting.h"

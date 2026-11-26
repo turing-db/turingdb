@@ -11,7 +11,6 @@
 #include "NLOps.h"
 #include "DBLoweringChunkTypes.h"
 
-#include "DBColumnElement.h"
 #include "NullLiteralType.h"
 #include "Procedure.h"
 #include "ProcedureManager.h"

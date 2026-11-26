@@ -5,10 +5,6 @@
 
 #include "NLOps.h"
 
-#include "DBColumnElement.h"
-
-#include "IRValueTypes.h"
-
 using namespace db;
 
 namespace nl = mlir::nl;

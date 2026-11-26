@@ -8,12 +8,9 @@
 #include "NLOps.h"
 #include "DBLoweringRowFlow.h"
 
-#include "DBColumnElement.h"
 #include "IRConstantColumn.h"
 #include "IRRowAlignment.h"
 #include "NullLiteralType.h"
-
-#include "IRValueTypes.h"
 
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/Casting.h"
