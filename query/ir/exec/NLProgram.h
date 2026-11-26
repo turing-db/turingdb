@@ -52,6 +52,7 @@
 #include "versioning/CommitWriteBuffer.h"
 
 #include "NLWriteProperties.h"
+#include "NLFunctionData.h"
 
 #include "IRException.h"
 #include "StringHashMap.h"
@@ -60,7 +61,6 @@ namespace db {
 
 class NLRuntimeProperty;
 class NLExecutionContext;
-class NLFunctionData;
 struct NLMergeWorkingSet;
 class NLShortestPathLoopData;
 class Procedure;
@@ -289,34 +289,6 @@ void dispatchOptChunkKind(NLChunkKind kind, Handler&& handler) {
 // The kind of the column a property of @param valueType is laid out in
 NLChunkKind chunkKindFromValueType(ValueType valueType);
 
-// Type of function pointers implementing operations
-using NLHandlerFunction = void (*)(NLExecutionContext* context, NLFunctionData* data);
-
-// Function descriptor representing translated statements
-// It consists of a function pointer and function-specific data
-class NLFunctionDescriptor {
-public:
-    NLFunctionDescriptor(NLHandlerFunction function,
-                         NLFunctionData* data)
-        : _function(function),
-        _data(data)
-    {
-    }
-
-    NLHandlerFunction getFunction() const { return _function; }
-    NLFunctionData* getData() const { return _data; }
-
-private:
-    NLHandlerFunction _function {nullptr};
-    NLFunctionData* _data {nullptr};
-};
-
-// Base class of function-specific data
-class NLFunctionData {
-public:
-    virtual ~NLFunctionData() = default;
-};
-
 // Runtime state of one LIMIT: the remaining row budget and how many rows the
 // current innermost step should emit. nl.limit resets it, nl.limit_update is the
 // sole mutator (called once per innermost step before nl.output), and the loops
@@ -375,26 +347,6 @@ private:
     size_t _remaining {0};
     size_t _skipThisStep {0};
     size_t _emitThisStep {0};
-};
-
-// Holds the translated statements of a program or loop body
-class NLStmtContainer {
-public:
-    using Stmts = std::vector<NLFunctionDescriptor>;
-
-    const Stmts& stmts() const { return _stmts; }
-
-    void addStmt(const NLFunctionDescriptor& stmt) {
-        _stmts.push_back(stmt);
-    }
-
-    template <typename... Args>
-    void emplaceStmt(Args&&... args) {
-        _stmts.emplace_back(std::forward<Args>(args)...);
-    }
-
-private:
-    Stmts _stmts;
 };
 
 // Type of handles per column type that writes the input rows selected
