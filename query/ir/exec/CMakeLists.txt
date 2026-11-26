@@ -16,6 +16,7 @@ set(exec_sources
     NLExecutorHops.cpp
     NLExecutorPaths.cpp
     NLExecutorScans.cpp
+    NLExecutorSources.cpp
     NLMergeExecutor.cpp
     NLMergeWorkingSet.cpp
     NLPendingEdges.cpp
