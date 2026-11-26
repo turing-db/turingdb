@@ -45,6 +45,7 @@ set(exec_sources
     NLTranslatorChunkTypes.cpp
     NLTranslatorColumnKernels.cpp
     NLTranslatorColumns.cpp
+    NLTranslatorLists.cpp
     NLTranslatorParameters.cpp
     NLTranslatorPaths.cpp
     NLTranslatorProperties.cpp
