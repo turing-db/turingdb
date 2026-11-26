@@ -1,7 +1,6 @@
 #include "NLTranslator.h"
 
 #include <algorithm>
-#include <array>
 #include <optional>
 #include <vector>
 #include <span>
@@ -49,9 +48,6 @@
 #include "metadata/LabelSetMap.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
-#include "reader/GraphReader.h"
-#include "NumberOrder.h"
-#include "TypeUtils.h"
 #include "views/GraphView.h"
 #include "writers/MetadataBuilder.h"
 
@@ -59,6 +55,7 @@
 #include "NLExecutor.h"
 #include "NLSystemTranslator.h"
 #include "NLWriteProperties.h"
+#include "NLTranslatorChunkTypes.h"
 
 #include "LocalMemory.h"
 #include "IRException.h"
@@ -594,22 +591,6 @@ PathExplorationDir toPathExplorationDir(storage::PathDirection direction) {
     throw IRException("Unknown path direction");
 }
 
-ValueType valueTypeFromElementType(mlir::Type elementType) {
-    // A null literal carries no type of its own, and a column has to have one to be
-    // laid out: it is carried as a null integer, which every reader sees as the
-    // absent value it is - the count that skips it, the key that groups on it
-    if (mlir::isa<mlir::NoneType>(elementType)) {
-        return ValueType::Int64;
-    }
-
-    const ValueType valueType = elementTypeToValueType(elementType);
-    if (valueType == ValueType::Invalid) {
-        throw IRException("Unsupported nullable value chunk element type");
-    }
-
-    return valueType;
-}
-
 template <SupportedType T>
 typename T::Primitive constantValueAs(mlir::Attribute value) {
     if constexpr (std::same_as<T, types::Int64>) {
@@ -808,36 +789,6 @@ GroupAggregateKind toRuntimeGroupAggregateKind(storage::GroupAggregateKind kind)
     throw IRException("Unhandled group aggregate kind");
 }
 
-// The value type wrapped by a nullable value chunk (!nl.chunk<!storage.nullable<T>>).
-// Every chunk carrying scalar values is such a chunk - an aggregate's input and result,
-// a property fetch, a homogeneous unwind - so a chunk that is not one (an ID chunk) is
-// rejected.
-ValueType nullableChunkValueType(mlir::Type chunkType) {
-    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
-    const auto nullableType = mlir::dyn_cast<storage::NullableType>(chunk.getElementType());
-    if (!nullableType) {
-        throw IRException("Expected a nullable value chunk");
-    }
-
-    return valueTypeFromElementType(nullableType.getValueType());
-}
-
-// Whether a chunk holds a value that may be absent (!nl.chunk<!storage.nullable<T>>), as
-// opposed to a plain value column
-bool isNullableChunkType(mlir::Type chunkType) {
-    const auto chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
-
-    return chunk && mlir::isa<storage::NullableType>(chunk.getElementType());
-}
-
-// Whether a chunk carries the null literal, which has no value type of its own: a
-// !nl.chunk<!storage.nullable<none>>
-bool isUntypedNullChunkType(mlir::Type chunkType) {
-    const auto chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
-
-    return chunk && mlir::isNullLiteralType(chunk.getElementType());
-}
-
 ListPredicateKind listPredicateKind(storage::ListPredicateKind kind) {
     switch (kind) {
         case storage::ListPredicateKind::All:
@@ -858,49 +809,6 @@ ListPredicateKind listPredicateKind(storage::ListPredicateKind kind) {
     }
 
     return ListPredicateKind::All;
-}
-
-bool isAnyChunk(mlir::Type chunkType) {
-    const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
-
-    return mlir::isa<storage::AnyType>(elementType);
-}
-
-bool isNullableList(mlir::Type elementType) {
-    const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
-
-    return nullableType && mlir::isa<storage::ListType>(nullableType.getValueType());
-}
-
-bool isNullableMap(mlir::Type elementType) {
-    const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
-
-    return nullableType && mlir::isa<storage::MapType>(nullableType.getValueType());
-}
-
-NLTruthColumnKind truthColumnKindFromChunkType(mlir::Type chunkType) {
-    const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
-
-    if (isUntypedNullChunkType(chunkType)) {
-        return NLTruthColumnKind::UntypedNull;
-    } else if (mlir::isa<storage::AnyType>(elementType)) {
-        return NLTruthColumnKind::TaggedCells;
-    } else if (mlir::isa<storage::NullableType>(elementType)) {
-        return NLTruthColumnKind::NullableBooleans;
-    }
-
-    return NLTruthColumnKind::Booleans;
-}
-
-ValueType valueTypeFromChunkType(mlir::Type chunkType) {
-    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
-    const mlir::Type elementType = chunk.getElementType();
-
-    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        return valueTypeFromElementType(nullableType.getValueType());
-    }
-
-    return valueTypeFromElementType(elementType);
 }
 
 NLMergeDirection mergeDirectionFromValue(int64_t raw) {
@@ -963,54 +871,6 @@ void appendMergeNodeSignature(const LabelSet& labels,
     }
 
     appendMergePropertySignature(properties, signature);
-}
-
-bool isConstantColumn(const Column* column) {
-    return column->getContainerKind() == ContainerKind::code<ColumnConst>();
-}
-
-// A truth value is held in the rows its kind names, or in the constant standing for every
-// row. The null literal is read by no kernel, whatever column holds it.
-bool holdsTruthColumn(NLTruthColumnKind kind, const Column* column) {
-    const ColumnKind::Code columnKind = column->getKind();
-
-    switch (kind) {
-        case NLTruthColumnKind::Booleans:
-            return columnKind == ColumnVector<CustomBool>::staticKind() || columnKind == ColumnConst<CustomBool>::staticKind();
-        break;
-
-        case NLTruthColumnKind::NullableBooleans:
-            return columnKind == ColumnOptVector<CustomBool>::staticKind() || columnKind == ColumnConst<std::optional<CustomBool>>::staticKind();
-        break;
-
-        case NLTruthColumnKind::TaggedCells:
-            return columnKind == ColumnVector<CellView>::staticKind() || columnKind == ColumnConst<CellView>::staticKind();
-        break;
-
-        case NLTruthColumnKind::UntypedNull:
-            return true;
-        break;
-    }
-
-    return false;
-}
-
-// A chunk read as a truth value is read by the kernel its type names, so the column bound
-// to it must be the one that type names
-NLTruthColumnKind truthColumnKindOf(mlir::Type chunkType, const Column* column) {
-    const NLTruthColumnKind kind = truthColumnKindFromChunkType(chunkType);
-
-    if (!holdsTruthColumn(kind, column)) {
-        std::string chunkTypeText;
-        llvm::raw_string_ostream stream(chunkTypeText);
-        chunkType.print(stream);
-
-        throw IRException(fmt::format("A {} truth value is read out of a {}, not the column its type names",
-                                      chunkTypeText,
-                                      column->getTypeName()));
-    }
-
-    return kind;
 }
 
 template <template <typename> typename Container, size_t... Indices>
