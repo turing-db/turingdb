@@ -49,6 +49,7 @@ set(exec_sources
     NLTranslatorComprehensions.cpp
     NLTranslatorExpressions.cpp
     NLTranslatorFunctions.cpp
+    NLTranslatorGroupAggregates.cpp
     NLTranslatorJoins.cpp
     NLTranslatorLists.cpp
     NLTranslatorParameters.cpp
