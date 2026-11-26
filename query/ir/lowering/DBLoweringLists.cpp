@@ -12,8 +12,6 @@
 #include "NLOps.h"
 #include "DBLoweringChunkTypes.h"
 
-#include "DBColumnElement.h"
-
 #include "IRValueTypes.h"
 
 #include "IRException.h"

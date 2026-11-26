@@ -9,7 +9,6 @@
 
 #include "NLOps.h"
 
-#include "DBColumnElement.h"
 #include "PathHopArguments.h"
 
 #include "views/GraphView.h"
