@@ -13,6 +13,7 @@ set(exec_sources
     NLEntityProperties.cpp
     NLPropertyFunctions.cpp
     NLExecutor.cpp
+    NLExecutorHops.cpp
     NLExecutorScans.cpp
     NLMergeExecutor.cpp
     NLMergeWorkingSet.cpp
