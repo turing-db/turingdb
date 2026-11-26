@@ -103,6 +103,7 @@
 #include "NLBoundConstant.h"
 #include "NLColumnKernels.h"
 #include "NLLoopSteps.h"
+#include "NLSortOrder.h"
 
 #include "LocalMemory.h"
 #include "IRException.h"
@@ -2170,20 +2171,6 @@ void appendOwnedOptColumn(const Column* input, Column* buffer, NLValueStore& val
     const size_t firstRow = typedBuffer->size();
     typedBuffer->appendRows(*typedInput, 0, typedInput->size());
     values.ownRows(typedBuffer, firstRow);
-}
-
-template <typename Primitive>
-bool sortsBefore(const Primitive& lhs, const Primitive& rhs) {
-    return lhs < rhs;
-}
-
-// Cypher orders a NaN after every number, where < answers false against it
-bool sortsBefore(double lhs, double rhs) {
-    if (std::isnan(lhs)) {
-        return false;
-    }
-
-    return std::isnan(rhs) || lhs < rhs;
 }
 
 // 3-way compare two rows of a non-null orderable column (an ID column, or a plain scalar
