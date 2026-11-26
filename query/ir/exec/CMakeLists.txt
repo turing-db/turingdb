@@ -60,6 +60,7 @@ set(exec_sources
     NLTranslatorScans.cpp
     NLTranslatorSchemaNames.cpp
     NLTranslatorSources.cpp
+    NLTranslatorSubqueries.cpp
     NLTranslatorSubscripts.cpp
     NLInterpreter.cpp
     NLSystemContext.cpp
