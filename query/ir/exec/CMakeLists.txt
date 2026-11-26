@@ -46,6 +46,7 @@ set(exec_sources
     NLTranslatorColumnKernels.cpp
     NLTranslatorColumns.cpp
     NLTranslatorParameters.cpp
+    NLTranslatorPaths.cpp
     NLTranslatorScans.cpp
     NLTranslatorSchemaNames.cpp
     NLInterpreter.cpp
