@@ -43,6 +43,7 @@ set(exec_sources
     NLTranslator.cpp
     NLFunctionSelectors.cpp
     NLTranslatorChunkTypes.cpp
+    NLTranslatorColumnKernels.cpp
     NLTranslatorColumns.cpp
     NLInterpreter.cpp
     NLSystemContext.cpp
