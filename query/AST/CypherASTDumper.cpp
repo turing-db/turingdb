@@ -322,7 +322,11 @@ void CypherASTDumper::dumpQueryBody(std::ostream& out, const SinglePartQuery* qu
                     const CallSubqueryStmt* subquery = static_cast<const CallSubqueryStmt*>(stmt);
                     out << "    _" << std::hex << query << " ||--o{ _" << std::hex << subquery << " : \"\"\n";
                     out << "    _" << std::hex << subquery << " {\n";
-                    out << "        ASTType CALL_SUBQUERY\n";
+                    if (subquery->isOptional()) {
+                        out << "        ASTType OPTIONAL_CALL_SUBQUERY\n";
+                    } else {
+                        out << "        ASTType CALL_SUBQUERY\n";
+                    }
                     out << "    }\n";
                     dump(out, subquery->getBody());
                 }
@@ -549,9 +553,9 @@ void CypherASTDumper::dump(std::ostream& out, const CreateStmt* create) {
 void CypherASTDumper::dump(std::ostream& out, const CallStmt* call) {
     out << "    _" << std::hex << call << " {\n";
     if (call->isOptional()) {
-        out << "        ASTType CALL\n";
+        out << "        ASTType OPTIONAL_CALL\n";
     } else {
-        out << "        ASTType CALL OPTIONAL\n";
+        out << "        ASTType CALL\n";
     }
     out << "    }\n";
 
