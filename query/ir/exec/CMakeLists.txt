@@ -41,6 +41,7 @@ set(exec_sources
     NLPendingNodes.cpp
     NLPropertyValueScan.cpp
     NLTranslator.cpp
+    NLFunctionSelectors.cpp
     NLTranslatorChunkTypes.cpp
     NLInterpreter.cpp
     NLSystemContext.cpp
