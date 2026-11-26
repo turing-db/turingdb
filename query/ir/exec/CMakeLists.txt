@@ -19,6 +19,7 @@ set(exec_sources
     NLExecutorProperties.cpp
     NLExecutorScans.cpp
     NLExecutorSources.cpp
+    NLExecutorSubscripts.cpp
     NLMergeExecutor.cpp
     NLMergeWorkingSet.cpp
     NLPendingEdges.cpp
