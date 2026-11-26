@@ -19,6 +19,7 @@ set(exec_sources
     NLExecutorLists.cpp
     NLExecutorPaths.cpp
     NLExecutorProperties.cpp
+    NLExecutorRows.cpp
     NLExecutorScans.cpp
     NLExecutorSources.cpp
     NLExecutorSubscripts.cpp
