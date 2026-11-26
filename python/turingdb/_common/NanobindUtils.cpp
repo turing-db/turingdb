@@ -192,7 +192,11 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
             } else if constexpr (isNullableFloat) {
                 value = nullableFloatArray(static_cast<Column*>(col));
             } else if constexpr (isConst) {
-                value = repeatElement(toPyRowElement(column, 0, listVisitor), rowCount);
+                if (rowCount == 0) {
+                    value = repeatElement(Element {}, 0);
+                } else {
+                    value = repeatElement(toPyRowElement(column, 0, listVisitor), rowCount);
+                }
             } else if constexpr (std::is_arithmetic_v<Row>) {
                 value = wrapVectorAsNdarray(std::move(static_cast<Column*>(col)->getRaw()));
             } else if constexpr (std::is_same_v<Element, nb::object>) {

@@ -241,9 +241,13 @@ struct AppendObjectsFn {
 
     template <typename T>
     void appendObjects(PyColumnConst<T>* column) const {
-        const nb::object value = constObject(column->getValue(), *_converter);
         const std::span<PyObject*> block = _objects->addBlock(_rowCount);
 
+        if (block.empty()) {
+            return;
+        }
+
+        const nb::object value = constObject(column->getValue(), *_converter);
         for (size_t row = 0; row < block.size(); row++) {
             block[row] = value.inc_ref().ptr();
         }

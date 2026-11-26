@@ -100,7 +100,53 @@ add_turing_test(test_net_py_sink_decode PySinkDecodeTest.cpp)
 target_sources(test_net_py_sink_decode PRIVATE ProtoServerTest.cpp)
 target_link_libraries(test_net_py_sink_decode PRIVATE turing_py_sink_s)
 
+# The Python clients, run in an embedded interpreter
+find_package(Python 3.9 REQUIRED COMPONENTS Interpreter OPTIONAL_COMPONENTS Development.Embed)
+if (Python_Development.Embed_FOUND)
+    execute_process(COMMAND ${Python_EXECUTABLE} -c "import sys; print(sys.base_prefix, end='')"
+                    OUTPUT_VARIABLE PYTHON_HOME
+                    RESULT_VARIABLE PYTHON_HOME_RESULT)
+    if (NOT PYTHON_HOME_RESULT EQUAL 0)
+        message(FATAL_ERROR "${Python_EXECUTABLE} did not print its sys.base_prefix")
+    endif()
+
+    add_library(turing_test_embedded_python_s STATIC EmbeddedPython.cpp)
+    target_compile_definitions(turing_test_embedded_python_s PRIVATE PYTHON_HOME="${PYTHON_HOME}")
+    target_link_libraries(turing_test_embedded_python_s PUBLIC Python::Python)
+
+    add_turing_test(test_net_py_result_builder_empty_constant PyResultBuilderEmptyConstantTest.cpp)
+    nanobind_set_visibility(test_net_py_result_builder_empty_constant)
+    target_sources(test_net_py_result_builder_empty_constant PRIVATE
+        ProtoServerTest.cpp
+        ${CMAKE_SOURCE_DIR}/python/turingdb/_binary/PyObjectColumn.cpp
+        ${CMAKE_SOURCE_DIR}/python/turingdb/_binary/PyResultBuilder.cpp)
+    target_link_libraries(test_net_py_result_builder_empty_constant PRIVATE
+        turing_py_sink_s
+        turing_py_nanobind_utils
+        nanobind-static
+        turing_test_embedded_python_s)
+
+    add_turing_test(test_net_py_embedded_empty_constant PyEmbeddedEmptyConstantTest.cpp)
+    nanobind_set_visibility(test_net_py_embedded_empty_constant)
+    target_sources(test_net_py_embedded_empty_constant PRIVATE
+        ${CMAKE_SOURCE_DIR}/python/turingdb/_embedded/PyTuringEmbedded.cpp)
+    target_include_directories(test_net_py_embedded_empty_constant PRIVATE
+        ${CMAKE_SOURCE_DIR}/python/turingdb/_embedded)
+    target_link_libraries(test_net_py_embedded_empty_constant PRIVATE
+        turing_py_nanobind_utils
+        nanobind-static
+        turing_test_embedded_python_s)
+else()
+    message(STATUS "No embeddable libpython: the test_net_py_* client tests are not built")
+endif()
+
+add_turing_test(test_net_turing_client_empty_constant TuringClientEmptyConstantTest.cpp)
+target_sources(test_net_turing_client_empty_constant PRIVATE ProtoServerTest.cpp)
+
 if (TURINGDB_BUILD_WASM)
     add_turing_test(test_net_wasm_optional_column_decode WasmOptionalColumnDecodeTest.cpp)
     target_link_libraries(test_net_wasm_optional_column_decode PRIVATE turing_db_wasm_s)
+
+    add_turing_test(test_net_wasm_empty_constant_decode WasmEmptyConstantDecodeTest.cpp)
+    target_link_libraries(test_net_wasm_empty_constant_decode PRIVATE turing_db_wasm_s)
 endif()

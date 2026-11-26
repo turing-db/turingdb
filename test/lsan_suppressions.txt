@@ -3,3 +3,7 @@
 # libomp, through faiss: the OpenMP runtime allocates 176 bytes of global state once and
 # never frees it.
 leak:___kmp_allocate
+
+# CPython, embedded by the test_net_py_* tests: the interpreter is never finalized, and its
+# startup allocations are not all reachable from a root LSan scans.
+leak:Py_InitializeFromConfig
