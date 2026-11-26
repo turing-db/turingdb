@@ -16,6 +16,7 @@ set(exec_sources
     NLExecutorAggregateStates.cpp
     NLExecutorAggregates.cpp
     NLExecutorCollect.cpp
+    NLExecutorColumnKernels.cpp
     NLExecutorComprehensions.cpp
     NLExecutorFunctions.cpp
     NLExecutorGroupAggregates.cpp
