@@ -30,6 +30,7 @@ set(exec_sources
     NLExecutorSubqueries.cpp
     NLExecutorSubscripts.cpp
     NLExecutorTruth.cpp
+    NLExecutorWrites.cpp
     NLMergeExecutor.cpp
     NLMergeWorkingSet.cpp
     NLPendingEdges.cpp
