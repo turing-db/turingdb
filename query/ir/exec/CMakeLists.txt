@@ -23,6 +23,7 @@ set(exec_sources
     NLExecutorJoins.cpp
     NLExecutorKeys.cpp
     NLExecutorLists.cpp
+    NLExecutorOrdering.cpp
     NLExecutorPaths.cpp
     NLExecutorProperties.cpp
     NLExecutorRows.cpp
