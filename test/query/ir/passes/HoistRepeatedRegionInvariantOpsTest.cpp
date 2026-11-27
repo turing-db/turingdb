@@ -202,15 +202,27 @@ TEST_F(HoistRepeatedRegionInvariantOpsTest, testsAnOuterLabelOncePerRow) {
                              {"Martina", ""}, {"Suhas", ""}, {"Cyrus", ""}, {"Doruk", ""}});
 }
 
-TEST_F(HoistRepeatedRegionInvariantOpsTest, buildsAnInnerComprehensionReadingNoOuterElementOncePerRow) {
+TEST_F(HoistRepeatedRegionInvariantOpsTest, readsTheOuterPropertyOfAnInnerComprehensionOncePerRow) {
     const std::string_view query = "MATCH (n:Person) RETURN n.name, [x IN [1, 2] | [y IN [3] | n.age]]";
     expectPropertyReads(query, "age", 0, 1);
-    expectOps<mlir::db::ListComprehension>(query, 0, 2);
+    expectOps<mlir::db::ListComprehension>(query, 1, 2);
 
     expectSortedRows(query, {{"Remy", "[32], [32]"}, {"Adam", "[32], [32]"}, {"Maxime", "[null], [null]"},
                              {"Luc", "[null], [null]"}, {"Martina", "[null], [null]"},
                              {"Suhas", "[null], [null]"}, {"Cyrus", "[null], [null]"},
                              {"Doruk", "[null], [null]"}});
+}
+
+// The first row's list is empty, so the body runs no time for it. In front of the outer
+// comprehension, the op with a region would run for that row too.
+TEST_F(HoistRepeatedRegionInvariantOpsTest, keepsAnOpWithARegionInTheBody) {
+    const std::string_view comprehension = "UNWIND [[], [1, 2]] AS xs RETURN [x IN xs | [y IN range(1, 3) | size(xs)]] AS v";
+    expectOps<mlir::db::ListComprehension>(comprehension, 1, 2);
+    expectSortedRows(comprehension, {{""}, {"[2, 2, 2], [2, 2, 2]"}});
+
+    const std::string_view predicate = "UNWIND [[], [1, 2]] AS xs RETURN [x IN xs | any(y IN range(1, 3) WHERE y < size(xs))] AS v";
+    expectOps<mlir::db::ListPredicate>(predicate, 1, 1);
+    expectSortedRows(predicate, {{""}, {"true, true"}});
 }
 
 TEST_F(HoistRepeatedRegionInvariantOpsTest, keepsAReadOfTheElementInTheBody) {

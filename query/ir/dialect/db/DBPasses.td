@@ -243,7 +243,7 @@ def HoistUnconditionalRegions : Pass<"hoist_unconditional_regions"> {
 }
 
 def HoistRepeatedRegionInvariantOps : Pass<"hoist_repeated_region_invariant_ops"> {
-    let summary = "Compute an op of a region run more than once per row - the body of a list comprehension, a list predicate, a reduce or an allReduce, or the hop region of a walk - that reads only the columns carried in and constants, and raises on no value, once per row in front of the op holding the region, as a column it carries in";
+    let summary = "Compute an op of a region run more than once per row - the body of a list comprehension, a list predicate, a reduce or an allReduce, or the hop region of a walk - that reads only the columns carried in and constants, raises on no value and holds no region of its own, once per row in front of the op holding the region, as a column it carries in";
     let dependentDialects = ["mlir::db::DB"];
 }
 

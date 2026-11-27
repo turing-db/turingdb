@@ -1413,11 +1413,14 @@ struct RegionInvariantOp {
 };
 
 // In front of the op holding its region, an op also runs on rows the region runs no time for,
-// as a row whose list is empty, so one that may raise or has an effect stays in the region
+// as a row whose list is empty. One that may raise or has an effect stays in the region, and so
+// does one with a region of its own, whose cost per row has no bound: [y IN range(1, 50000) | i]
+// would build 50000 elements for each row whose list is empty.
 bool matchRegionInvariantOp(Operation* op, ConstantColumnCache& cache, RegionInvariantOp& invariant) {
     const bool computesOneValuePerRow = computesAValuePerRow(op) && op->getNumResults() == 1;
+    const bool holdsNoRegion = op->getNumRegions() == 0;
     const bool isRead = !op->use_empty();
-    if (!computesOneValuePerRow || !isRead) {
+    if (!computesOneValuePerRow || !holdsNoRegion || !isRead) {
         return false;
     }
 
