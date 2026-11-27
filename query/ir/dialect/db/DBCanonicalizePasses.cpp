@@ -198,15 +198,17 @@ bool foldConstantMapKey(DynamicMapKey mapKey, mlir::RewriterBase& rewriter) {
     // A key laid out over rows carries them: a read of a constant map alone would keep a row
     // the WHERE after the key's WITH dropped
     const bool mapCarriesTheRows = !::db::yieldsConstantColumn(map) || ::db::yieldsConstantColumn(keyColumn);
-    if (!mapCarriesTheRows || !holdsOnlyKeyedValues(map)) {
+    const bool foldsToTheDottedForm = mapCarriesTheRows && holdsOnlyKeyedValues(map);
+    if (!foldsToTheDottedForm) {
         return false;
     }
 
     ConstantOp keyConstant = keyColumn.getDefiningOp<ConstantOp>();
     const StringAttr keyName = rewriter.getStringAttr(key.getValue());
+    const Value read = mapKey.getResult();
 
     rewriter.setInsertionPoint(mapKey);
-    rewriter.replaceOpWithNewOp<StaticMapKey>(mapKey, mapKey.getResult().getType(), map, keyName);
+    rewriter.replaceOpWithNewOp<StaticMapKey>(mapKey, read.getType(), map, keyName);
 
     eraseIfUnused(keyConstant.getOperation(), rewriter);
 

@@ -336,9 +336,13 @@ Speculation::Speculatability ContainerIndex::getSpeculatability() {
     const Value index = getIndex();
 
     const bool readsAnElement = holdsOnlyLists(base) && holdsOnlyIntegers(index);
+    if (readsAnElement) {
+        return Speculation::Speculatable;
+    }
+
     const bool readsAKey = holdsOnlyKeyedValues(base) && ::db::holdsOnlyNullOr(index, {::db::CellTag::String});
 
-    return speculatableWhen(readsAnElement || readsAKey);
+    return speculatableWhen(readsAKey);
 }
 
 double MakeList::getRowCost() {

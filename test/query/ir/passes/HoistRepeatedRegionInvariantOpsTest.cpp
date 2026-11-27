@@ -99,17 +99,19 @@ protected:
     }
 
     // Prints the first row that differs rather than every row
-    void expectSortedRows(std::string_view query, Rows expected) {
+    void expectSortedRows(std::string_view query, const Rows& expected) {
         StringRowSink sink;
         runQuery(query, sink);
 
         Rows rows;
         sink.sortedRows(rows);
-        std::sort(expected.begin(), expected.end());
 
-        ASSERT_EQ(rows.size(), expected.size()) << "query: " << query;
+        Rows sortedExpected = expected;
+        std::sort(sortedExpected.begin(), sortedExpected.end());
 
-        const auto [actualIt, expectedIt] = std::mismatch(rows.begin(), rows.end(), expected.begin());
+        ASSERT_EQ(rows.size(), sortedExpected.size()) << "query: " << query;
+
+        const auto [actualIt, expectedIt] = std::mismatch(rows.begin(), rows.end(), sortedExpected.begin());
         if (actualIt != rows.end()) {
             EXPECT_EQ(*actualIt, *expectedIt) << "query: " << query;
         }

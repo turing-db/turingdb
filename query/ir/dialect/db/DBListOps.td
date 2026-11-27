@@ -556,7 +556,8 @@ def ContainerIndex : BinaryOp<"container_index", [MayRaise, DeclareOpInterfaceMe
     Row r reads what db.list_index reads where row r's base holds a list and its index an
     integer, and what db.dynamic_map_key reads where the base holds a map, a node or an edge
     and the index a string. A null base or a null index reads null. Any other pair raises,
-    so the op is speculatable only where every row holds one of those two pairs, nulls aside.
+    so the op is speculatable only where every row holds the same one of those two pairs,
+    nulls aside.
 
     A list hands its elements out as db.list_index does, and any other base a tagged cell.
     Lowering resolves the result type.

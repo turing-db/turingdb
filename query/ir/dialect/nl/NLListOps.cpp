@@ -129,10 +129,6 @@ LogicalResult StaticMapKey::verify() {
         return emitOpError("reads a chunk of maps or of tagged cells, optionally nullable");
     }
 
-    if (getKey().empty()) {
-        return emitOpError("reads a key, which cannot be empty");
-    }
-
     return success();
 }
 

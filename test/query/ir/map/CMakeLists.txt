@@ -118,3 +118,5 @@ add_ir_tests(test_query_ir_unwound_map_property UnwoundMapPropertyTest.cpp)
 add_ir_tests(test_query_ir_properties_function PropertiesFunctionTest.cpp)
 
 add_ir_tests(test_query_ir_map_keyword_key MapKeywordKeyTest.cpp)
+
+add_ir_tests(test_query_ir_empty_map_key EmptyMapKeyTest.cpp)

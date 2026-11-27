@@ -225,10 +225,12 @@ private:
         }
 
         const int64_t count = static_cast<int64_t>(elements.size());
-        const int64_t position = step._position.getValue().getSExtValue();
+        const llvm::APInt positionBits = step._position.getValue();
+        const int64_t position = positionBits.getSExtValue();
         const int64_t fromStart = position < 0 ? count + position : position;
 
-        if (fromStart >= 0 && fromStart < count) {
+        const bool withinTheList = fromStart >= 0 && fromStart < count;
+        if (withinTheList) {
             reach(elements[static_cast<size_t>(fromStart)], step._rest);
         }
     }

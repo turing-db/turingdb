@@ -101,9 +101,17 @@ func.func @main(%integer: !integers, %string: !strings, %list: !lists, %map: !ma
         EXPECT_GT(index, loop) << program;
     }
 
-    void expectRaises(std::string_view query) {
-        StringRowSink sink;
-        EXPECT_THROW(runQuery(query, sink), TuringException) << "query: " << query;
+    void expectRaises(std::string_view query, std::string_view message) {
+        try {
+            StringRowSink sink;
+            runQuery(query, sink);
+        } catch (const TuringException& error) {
+            const std::string raised = error.what();
+            EXPECT_TRUE(contains(raised, message)) << "query: " << query << "\nerror: " << raised;
+            return;
+        }
+
+        ADD_FAILURE() << "query raised nothing: " << query;
     }
 };
 
@@ -235,7 +243,8 @@ TEST_F(ContainerIndexSpeculatabilityTest, keepsAKeyReadOffAListPerRow) {
 
     expectComputedPerRow(query);
     expectRows(query, {});
-    expectRaises("UNWIND [1] AS r RETURN r, [10, 20, 30][['a', 1][0]]");
+    expectRaises("UNWIND [1] AS r RETURN r, [10, 20, 30][['a', 1][0]]",
+                 "A list index expression must be an integer, not 'String'");
 }
 
 TEST_F(ContainerIndexSpeculatabilityTest, keepsAPositionReadOffAMapPerRow) {
@@ -243,7 +252,8 @@ TEST_F(ContainerIndexSpeculatabilityTest, keepsAPositionReadOffAMapPerRow) {
 
     expectComputedPerRow(query);
     expectRows(query, {});
-    expectRaises("UNWIND [1] AS r RETURN r, {a: 5}[[0, 'a'][0]]");
+    expectRaises("UNWIND [1] AS r RETURN r, {a: 5}[[0, 'a'][0]]",
+                 "A map is indexed by a string key, not by 'Integer'");
 }
 
 TEST_F(ContainerIndexSpeculatabilityTest, keepsAnIndexReadOffTheHeadOrTheLastPerRow) {
@@ -251,13 +261,15 @@ TEST_F(ContainerIndexSpeculatabilityTest, keepsAnIndexReadOffTheHeadOrTheLastPer
 
     expectComputedPerRow(headQuery);
     expectRows(headQuery, {});
-    expectRaises("UNWIND [1] AS r RETURN r, [10, 20, 30][head(['a', 1])]");
+    expectRaises("UNWIND [1] AS r RETURN r, [10, 20, 30][head(['a', 1])]",
+                 "A list index expression must be an integer, not 'String'");
 
     const std::string_view lastQuery = "UNWIND [] AS r RETURN r, [10, 20, 30][last([1, 'a'])]";
 
     expectComputedPerRow(lastQuery);
     expectRows(lastQuery, {});
-    expectRaises("UNWIND [1] AS r RETURN r, [10, 20, 30][last([1, 'a'])]");
+    expectRaises("UNWIND [1] AS r RETURN r, [10, 20, 30][last([1, 'a'])]",
+                 "A list index expression must be an integer, not 'String'");
 }
 
 // Sorted on k, the first map is {k: 1, v: 'a'}, though the list it sorts starts with
@@ -269,5 +281,6 @@ TEST_F(ContainerIndexSpeculatabilityTest, keepsAnIndexReadAtAPositionOfASortedLi
     expectComputedPerRow(query);
     expectRows(query, {});
     expectRaises("UNWIND [1] AS r "
-                 "RETURN r, [10, 20, 30][coll.sortMulti([{k: 2, v: 1}, {k: 1, v: 'a'}], ['^k'])[0].v]");
+                 "RETURN r, [10, 20, 30][coll.sortMulti([{k: 2, v: 1}, {k: 1, v: 'a'}], ['^k'])[0].v]",
+                 "A list index expression must be an integer, not 'String'");
 }
