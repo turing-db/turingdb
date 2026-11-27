@@ -684,3 +684,22 @@ or title.
 
 For a stack of PRs, explain the ones a reviewer has to understand on their own. A stack
 of near-identical mechanical changes does not need one comment each.
+
+### Certify the PRs you open
+
+**A PR merges into `main` only with a passing review certificate.** Run `/certify` on the
+PR, or `/converge` on its branch, which posts one after its commit. Either dispatches the
+`Review Certificate` workflow (`scripts/review_certificate.py`), which posts the certificate
+as github-actions[bot] and sets the `review-certificate/<base>` status, of which `main`
+requires `review-certificate/main`. The script needs git 2.43 or later. A bot comment counts
+only when a dispatched run of that workflow on `main`, by someone with write access, vouches
+for its exact content. It passes when the certificate covers the PR's current diff by patch
+ID and every correctness or efficiency finding is fixed, rejected or filed. A filed finding
+names its Linear ticket (`TUR-123`), and is one that "Triaging review findings" above files
+rather than fixes now. Other categories (simplification, test coverage, style) are shown
+but do not block. Any change to the diff
+needs a new certificate. A rebase keeps it only when it leaves the diff unchanged, context
+lines included: a change on `main` within 3 lines of a hunk needs a new one. The newest
+certificate that covers the PR's current diff decides the status. Writers are trusted:
+anyone with write access can dispatch a certificate or set the status, so the check guards
+against mistakes and outside contributors, not against a writer.
