@@ -19,7 +19,8 @@ using namespace db;
 namespace {
 
 void TuringDBCommitInfo() {
-    std::cout << "TuringDB - " << TOSTRING(HEAD_COMMIT_HASH)
+    std::cout << "TuringDB " << TOSTRING(TURINGDB_VERSION)
+              << " - " << TOSTRING(HEAD_COMMIT_HASH)
               << " - " << formatUnixTime(BUILD_TIMESTAMP) << "\n\n";
 }
 
@@ -34,6 +35,8 @@ int main(int argc, const char** argv) {
     const std::unordered_set<std::string_view> passthrough = {
         "-h",
         "--help",
+        "-v",
+        "--version",
     };
 
     std::vector<const char*> args(argv, argv + argc);
@@ -45,7 +48,7 @@ int main(int argc, const char** argv) {
         args.insert(args.begin() + 1, "start");
     }
 
-    argparse::ArgumentParser rootParser("turingdb", "1.0", argparse::default_arguments::help);
+    argparse::ArgumentParser rootParser("turingdb", TURINGDB_VERSION_STRING,argparse::default_arguments::help);
 
     std::unique_ptr<StartCmd> startCmd = StartCmd::create();
     std::unique_ptr<StopCmd> stopCmd = StopCmd::create();
