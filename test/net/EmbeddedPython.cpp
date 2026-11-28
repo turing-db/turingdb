@@ -7,6 +7,17 @@ void turing::test::initializeEmbeddedPython() {
         return;
     }
 
+    // pymalloc keeps objects in mmap'd arenas, which LeakSanitizer does not scan, so every
+    // block referenced only from a Python object would read as a leak.
+    PyPreConfig preConfig;
+    PyPreConfig_InitIsolatedConfig(&preConfig);
+    preConfig.allocator = PYMEM_ALLOCATOR_MALLOC;
+
+    const PyStatus preInitStatus = Py_PreInitialize(&preConfig);
+    if (PyStatus_Exception(preInitStatus)) {
+        Py_ExitStatusException(preInitStatus);
+    }
+
     PyConfig config;
     PyConfig_InitIsolatedConfig(&config);
 

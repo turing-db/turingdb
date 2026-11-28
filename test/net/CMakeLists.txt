@@ -114,6 +114,9 @@ if (Python_Development.Embed_FOUND)
     target_compile_definitions(turing_test_embedded_python_s PRIVATE PYTHON_HOME="${PYTHON_HOME}")
     target_link_libraries(turing_test_embedded_python_s PUBLIC Python::Python)
 
+    add_turing_test(test_net_embedded_python EmbeddedPythonTest.cpp)
+    target_link_libraries(test_net_embedded_python PRIVATE turing_test_embedded_python_s)
+
     add_turing_test(test_net_py_result_builder_empty_constant PyResultBuilderEmptyConstantTest.cpp)
     nanobind_set_visibility(test_net_py_result_builder_empty_constant)
     target_sources(test_net_py_result_builder_empty_constant PRIVATE
